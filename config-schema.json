@@ -1,0 +1,272 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Evaluation Config",
+  "description": "Configuration schema for MCP evaluation scenarios",
+  "type": "object",
+  "required": ["servers", "agents", "scenarios"],
+  "properties": {
+    "servers": {
+      "type": "object",
+      "description": "MCP server configurations",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["transport", "url"],
+        "properties": {
+          "transport": {
+            "type": "string",
+            "enum": ["http"],
+            "description": "Transport protocol (currently only 'http' supported)"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "MCP server URL endpoint"
+          },
+          "auth": {
+            "type": "object",
+            "description": "Authentication configuration",
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["type", "env"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "bearer"
+                  },
+                  "env": {
+                    "type": "string",
+                    "description": "Environment variable name containing the bearer token"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "oauth_client_credentials"
+                  },
+                  "token_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "OAuth token endpoint URL"
+                  },
+                  "client_id_env": {
+                    "type": "string",
+                    "description": "Environment variable name containing client ID"
+                  },
+                  "client_secret_env": {
+                    "type": "string",
+                    "description": "Environment variable name containing client secret"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "OAuth scope"
+                  },
+                  "audience": {
+                    "type": "string",
+                    "description": "OAuth audience"
+                  },
+                  "token_params": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Additional token request parameters"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "LLM agent configurations",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["provider", "model"],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["openai", "anthropic", "azure_openai"],
+            "description": "LLM provider"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model identifier",
+            "examples": [
+              "gpt-4o",
+              "gpt-4o-mini",
+              "gpt-4-turbo",
+              "claude-3-5-sonnet-20241022",
+              "claude-3-5-haiku-20241022",
+              "claude-3-opus-20240229"
+            ]
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 0,
+            "description": "Sampling temperature"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Maximum tokens in response"
+          },
+          "system": {
+            "type": "string",
+            "description": "System prompt"
+          }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Evaluation scenarios",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "agent", "servers", "prompt"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "description": "Unique scenario identifier (kebab-case)"
+          },
+          "agent": {
+            "type": "string",
+            "description": "Agent name (must reference an agent defined in 'agents')"
+          },
+          "servers": {
+            "type": "array",
+            "description": "List of server names to use (must reference servers defined in 'servers')",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Evaluation prompt for the agent"
+          },
+          "eval": {
+            "type": "object",
+            "description": "Evaluation criteria",
+            "properties": {
+              "tool_constraints": {
+                "type": "object",
+                "description": "Tool usage constraints",
+                "properties": {
+                  "required_tools": {
+                    "type": "array",
+                    "description": "Tools that must be called",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "forbidden_tools": {
+                    "type": "array",
+                    "description": "Tools that must not be called",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "tool_sequence": {
+                "type": "object",
+                "description": "Tool sequence rules",
+                "properties": {
+                  "allow": {
+                    "type": "array",
+                    "description": "Allowed tool call sequences",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "response_assertions": {
+                "type": "array",
+                "description": "Assertions on final response",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["type", "pattern"],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "regex"
+                        },
+                        "pattern": {
+                          "type": "string",
+                          "description": "Regular expression pattern"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["type", "path"],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "jsonpath"
+                        },
+                        "path": {
+                          "type": "string",
+                          "description": "JSONPath expression"
+                        },
+                        "equals": {
+                          "oneOf": [
+                            { "type": "string" },
+                            { "type": "number" },
+                            { "type": "boolean" }
+                          ],
+                          "description": "Expected value"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "extract": {
+            "type": "array",
+            "description": "Value extraction rules",
+            "items": {
+              "type": "object",
+              "required": ["name", "from", "regex"],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name of extracted value"
+                },
+                "from": {
+                  "type": "string",
+                  "enum": ["final_text"],
+                  "description": "Source to extract from"
+                },
+                "regex": {
+                  "type": "string",
+                  "description": "Regular expression with named capture group 'value'"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
