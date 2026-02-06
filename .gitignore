@@ -1,0 +1,11 @@
+node_modules/
+dist/
+packages/*/dist/
+runs/
+.DS_Store
+
+.env
+
+.agents
+.claude
+.idea
