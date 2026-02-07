@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, MoreHorizontal, Eye, Download, Trash2 } from "lucide-react";
+import { Clock, MoreHorizontal, Eye, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,6 +12,17 @@ import type { EvalResult } from "@/types/eval";
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls">("timestamp");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (next: typeof sortBy) => {
+    if (sortBy === next) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(next);
+    setSortDir(next === "timestamp" ? "desc" : "asc");
+  };
 
   useEffect(() => {
     let active = true;
@@ -23,10 +34,23 @@ const Results = () => {
     };
   }, [source]);
 
-  const sorted = useMemo(
-    () => [...results].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
-    [results],
-  );
+  const sorted = useMemo(() => {
+    const next = [...results].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "id") cmp = a.id.localeCompare(b.id);
+      if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (sortBy === "passRate") cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === "scenarios") cmp = a.totalScenarios - b.totalScenarios;
+      if (sortBy === "avgToolCalls") cmp = a.avgToolCalls - b.avgToolCalls;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return next;
+  }, [results, sortBy, sortDir]);
+
+  const sortIcon = (key: typeof sortBy) => {
+    if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+  };
 
   return (
     <div className="space-y-6">
@@ -40,11 +64,36 @@ const Results = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Run ID</TableHead>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Pass Rate</TableHead>
-                <TableHead>Scenarios</TableHead>
-                <TableHead>Avg Tool Calls</TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("id")}>
+                    Run ID
+                    {sortIcon("id")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
+                    Timestamp
+                    {sortIcon("timestamp")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
+                    Pass Rate
+                    {sortIcon("passRate")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
+                    Scenarios
+                    {sortIcon("scenarios")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("avgToolCalls")}>
+                    Avg Tool Calls
+                    {sortIcon("avgToolCalls")}
+                  </button>
+                </TableHead>
                 <TableHead>Config Hash</TableHead>
                 <TableHead className="w-10" />
               </TableRow>

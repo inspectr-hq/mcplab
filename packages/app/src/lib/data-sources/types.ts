@@ -138,6 +138,8 @@ export interface EvalDataSource {
     configPath: string;
     runsPerScenario: number;
     scenarioId?: string;
+    agents?: string[];
   }) => Promise<{ jobId: string }>;
+  stopRun: (jobId: string) => Promise<void>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
 }

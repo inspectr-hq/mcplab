@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { GitCompare } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +15,8 @@ const Compare = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     let active = true;
@@ -26,6 +28,15 @@ const Compare = () => {
     };
   }, [source]);
 
+  const toggleSort = (next: typeof sortBy) => {
+    if (sortBy === next) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(next);
+    setSortDir(next === "timestamp" ? "desc" : "asc");
+  };
+
   const toggle = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -34,7 +45,23 @@ const Compare = () => {
     });
   };
 
-  const selectedRuns = results.filter((r) => selected.has(r.id));
+  const sortedResults = useMemo(() => {
+    const next = [...results].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "id") cmp = a.id.localeCompare(b.id);
+      if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (sortBy === "passRate") cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === "scenarios") cmp = a.totalScenarios - b.totalScenarios;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return next;
+  }, [results, sortBy, sortDir]);
+
+  const selectedRuns = sortedResults.filter((r) => selected.has(r.id));
+  const sortIcon = (key: typeof sortBy) => {
+    if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+  };
 
   // All scenario IDs across selected runs
   const allScenarioIds = [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))];
@@ -53,14 +80,34 @@ const Compare = () => {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10" />
-                <TableHead>Run ID</TableHead>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Pass Rate</TableHead>
-                <TableHead>Scenarios</TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("id")}>
+                    Run ID
+                    {sortIcon("id")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
+                    Timestamp
+                    {sortIcon("timestamp")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
+                    Pass Rate
+                    {sortIcon("passRate")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
+                    Scenarios
+                    {sortIcon("scenarios")}
+                  </button>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {results.map((r) => (
+              {sortedResults.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
                     <Checkbox

@@ -181,6 +181,14 @@ const ResultDetail = () => {
                                       </Badge>
                                     ))}
                                   </div>
+                                  <div className="rounded-md border bg-muted/20 p-2">
+                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Final answer
+                                    </p>
+                                    <p className="text-xs text-foreground whitespace-pre-wrap">
+                                      {run.finalAnswer || "No final answer captured."}
+                                    </p>
+                                  </div>
                                   {run.failureReasons.length > 0 && (
                                     <p className="text-xs text-destructive">{run.failureReasons.join(", ")}</p>
                                   )}

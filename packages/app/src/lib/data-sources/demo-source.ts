@@ -40,6 +40,9 @@ export const demoSource: EvalDataSource = {
   async startRun() {
     return { jobId: `demo-${Date.now()}` };
   },
+  async stopRun() {
+    // no-op
+  },
   subscribeRunJob(_jobId: string, onEvent: (event: RunJobEvent) => void) {
     const timeout = window.setTimeout(() => {
       onEvent({

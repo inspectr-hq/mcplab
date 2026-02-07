@@ -55,6 +55,9 @@ export const workspaceSource: EvalDataSource = {
   async startRun(params) {
     return workspaceApiClient.startRun(params);
   },
+  async stopRun(jobId) {
+    await workspaceApiClient.stopRun(jobId);
+  },
   subscribeRunJob(jobId, onEvent) {
     return workspaceApiClient.subscribeRunJob(jobId, onEvent);
   }

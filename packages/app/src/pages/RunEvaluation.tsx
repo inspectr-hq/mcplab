@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { Play, Square, CheckCircle2 } from "lucide-react";
+import { Play, Square, CheckCircle2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -35,17 +36,28 @@ const logMessages = [
 
 const RunEvaluation = () => {
   const [configId, setConfigId] = useState("");
-  const [varianceRuns, setVarianceRuns] = useState("3");
+  const [varianceRuns, setVarianceRuns] = useState("1");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
   const [runId, setRunId] = useState<string>("");
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
-  const { configs } = useConfigs();
+  const { configs, reload } = useConfigs();
   const { source, mode } = useDataSource();
+  const selectedConfig = configs.find((item) => item.id === configId);
+
+  useEffect(() => {
+    if (!selectedConfig) {
+      setSelectedAgentIds([]);
+      return;
+    }
+    setSelectedAgentIds(selectedConfig.agents.map((agent) => agent.id));
+  }, [selectedConfig?.id]);
 
   const runDemo = () => {
     setRunning(true);
@@ -69,9 +81,13 @@ const RunEvaluation = () => {
   };
 
   const startWorkspaceRun = async () => {
-    const selectedConfig = configs.find((item) => item.id === configId);
     if (!selectedConfig?.sourcePath) {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`]);
+      return;
+    }
+    const selectedAgents = selectedConfig.agents.filter((agent) => selectedAgentIds.includes(agent.id));
+    if (selectedAgents.length === 0) {
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one agent.`]);
       return;
     }
     setRunning(true);
@@ -83,7 +99,9 @@ const RunEvaluation = () => {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario: Number(varianceRuns),
+        agents: selectedAgents.map((agent) => agent.name || agent.id),
       });
+      setActiveJobId(jobId);
       unsubscribeRef.current?.();
       unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
         if (event.type === "started") {
@@ -97,6 +115,7 @@ const RunEvaluation = () => {
           setRunning(false);
           setDone(true);
           setRunId(nextRunId);
+          setActiveJobId(null);
           unsubscribeRef.current?.();
           unsubscribeRef.current = null;
         }
@@ -105,6 +124,7 @@ const RunEvaluation = () => {
           setRunning(false);
           setDone(false);
           setProgress(0);
+          setActiveJobId(null);
           unsubscribeRef.current?.();
           unsubscribeRef.current = null;
         }
@@ -113,6 +133,7 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${error?.message ?? String(error)}`]);
       setRunning(false);
       setProgress(0);
+      setActiveJobId(null);
     }
   };
 
@@ -126,8 +147,12 @@ const RunEvaluation = () => {
 
   const stopRun = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    if (mode === "workspace" && activeJobId) {
+      void source.stopRun(activeJobId);
+    }
     unsubscribeRef.current?.();
     unsubscribeRef.current = null;
+    setActiveJobId(null);
     setRunning(false);
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
   };
@@ -141,6 +166,17 @@ const RunEvaluation = () => {
     unsubscribeRef.current?.();
   }, []);
 
+  useEffect(() => {
+    void reload();
+    const handleFocus = () => {
+      void reload();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [reload]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -153,20 +189,66 @@ const RunEvaluation = () => {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Configuration</Label>
-              <Select value={configId} onValueChange={setConfigId}>
-                <SelectTrigger><SelectValue placeholder="Select a config" /></SelectTrigger>
-                <SelectContent>
-                  {configs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={configId} onValueChange={setConfigId}>
+                  <SelectTrigger><SelectValue placeholder="Select a config" /></SelectTrigger>
+                  <SelectContent>
+                    {configs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 shrink-0"
+                  onClick={() => void reload()}
+                  aria-label="Refresh configs"
+                  title="Refresh configs"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Variance Runs</Label>
               <Input type="number" min="1" max="10" value={varianceRuns} onChange={(e) => setVarianceRuns(e.target.value)} />
             </div>
           </div>
+          {selectedConfig && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Agents</Label>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setSelectedAgentIds(selectedConfig.agents.map((agent) => agent.id))}
+                >
+                  Select all
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {selectedConfig.agents.map((agent) => {
+                  const checked = selectedAgentIds.includes(agent.id);
+                  return (
+                    <label key={agent.id} className="flex items-center gap-2 text-sm rounded-md border p-2">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          const isChecked = value === true;
+                          setSelectedAgentIds((prev) =>
+                            isChecked ? [...prev, agent.id] : prev.filter((id) => id !== agent.id),
+                          );
+                        }}
+                      />
+                      <span>{agent.name || agent.id}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
-            <Button onClick={startRun} disabled={running || !configId}>
+            <Button onClick={startRun} disabled={running || !configId || (selectedConfig?.agents.length ?? 0) > 0 && selectedAgentIds.length === 0}>
               <Play className="mr-2 h-4 w-4" />Run
             </Button>
             {running && (

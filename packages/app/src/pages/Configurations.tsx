@@ -1,5 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,8 +9,30 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { toast } from "@/hooks/use-toast";
 
 const Configurations = () => {
-  const { configs, deleteConfig, cloneConfig, loading } = useConfigs();
+  const { configs, deleteConfig, cloneConfig, loading, reload } = useConfigs();
   const navigate = useNavigate();
+  const [sortBy, setSortBy] = useState<"name" | "scenarios" | "agents" | "updatedAt">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (next: typeof sortBy) => {
+    if (sortBy === next) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(next);
+    setSortDir(next === "updatedAt" ? "desc" : "asc");
+  };
+
+  useEffect(() => {
+    void reload();
+    const handleFocus = () => {
+      void reload();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [reload]);
 
   const handleDelete = async (id: string, name: string) => {
     await deleteConfig(id);
@@ -22,6 +45,23 @@ const Configurations = () => {
     navigate(`/configs/${cloned.id}`);
   };
 
+  const sortedConfigs = useMemo(() => {
+    const sorted = [...configs].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "name") cmp = a.name.localeCompare(b.name);
+      if (sortBy === "scenarios") cmp = a.scenarios.length - b.scenarios.length;
+      if (sortBy === "agents") cmp = a.agents.length - b.agents.length;
+      if (sortBy === "updatedAt") cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [configs, sortBy, sortDir]);
+
+  const sortIcon = (key: typeof sortBy) => {
+    if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -30,6 +70,9 @@ const Configurations = () => {
           <p className="text-sm text-muted-foreground">Manage your evaluation configurations</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void reload()}>
+            <RefreshCw className="mr-2 h-4 w-4" />Refresh
+          </Button>
           <Button variant="outline" size="sm">
             <Upload className="mr-2 h-4 w-4" />Import YAML
           </Button>
@@ -44,15 +87,35 @@ const Configurations = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Scenarios</TableHead>
-                <TableHead>Agents</TableHead>
-                <TableHead>Last Updated</TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("name")}>
+                    Name
+                    {sortIcon("name")}
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
+                    Scenarios
+                    {sortIcon("scenarios")}
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("agents")}>
+                    Agents
+                    {sortIcon("agents")}
+                  </button>
+                </TableHead>
+                <TableHead className="text-right">
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("updatedAt")}>
+                    Last Updated
+                    {sortIcon("updatedAt")}
+                  </button>
+                </TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {configs.map((cfg) => (
+              {sortedConfigs.map((cfg) => (
                 <TableRow key={cfg.id}>
                   <TableCell>
                     <div>
@@ -60,9 +123,9 @@ const Configurations = () => {
                       {cfg.description && <p className="text-xs text-muted-foreground mt-0.5">{cfg.description}</p>}
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{cfg.scenarios.length}</TableCell>
-                  <TableCell className="font-mono text-sm">{cfg.agents.length}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-right font-mono text-sm">{cfg.scenarios.length}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{cfg.agents.length}</TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">
                     {new Date(cfg.updatedAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>

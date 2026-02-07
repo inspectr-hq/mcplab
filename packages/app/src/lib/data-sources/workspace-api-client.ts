@@ -54,10 +54,19 @@ export const workspaceApiClient = {
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   getRunTrace: (runId: string) =>
     request<{ runId: string; events: TraceToolEvent[] }>(`/api/runs/${runId}/trace`),
-  startRun: (params: { configPath: string; runsPerScenario: number; scenarioId?: string }) =>
+  startRun: (params: {
+    configPath: string;
+    runsPerScenario: number;
+    scenarioId?: string;
+    agents?: string[];
+  }) =>
     request<{ jobId: string }>('/api/runs', {
       method: 'POST',
       body: JSON.stringify(params)
+    }),
+  stopRun: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
+      method: 'POST'
     }),
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {
     const source = new EventSource(`${BASE}/api/runs/jobs/${jobId}/events`);
