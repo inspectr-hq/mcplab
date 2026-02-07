@@ -524,7 +524,7 @@ Shows:
 ### Project Structure
 
 ```
-mcp-evaluation/
+mcp-lab/
 ├── packages/
 │   ├── cli/           # CLI tool (run, watch, report commands)
 │   ├── core/          # Evaluation engine, agent adapters, MCP client

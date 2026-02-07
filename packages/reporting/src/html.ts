@@ -1,4 +1,4 @@
-import type { ResultsJson } from '@mcp-eval/core';
+import type { ResultsJson } from '@mcp-lab/core';
 
 function escapeHtml(value: string | number | boolean | null | undefined): string {
   // Convert value to string first
@@ -143,7 +143,7 @@ export function renderHtml(results: ResultsJson): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>mcp-eval report</title>
+  <title>MCPLab Report</title>
   <style>
     :root {
       color-scheme: light;
@@ -253,7 +253,7 @@ export function renderHtml(results: ResultsJson): string {
 </head>
 <body>
   <header>
-    <h1>mcp-eval report</h1>
+    <h1>MCPLab Report</h1>
     <div class="meta">
       Run ID: ${escapeHtml(results.metadata.run_id)}<br />
       Timestamp: ${escapeHtml(results.metadata.timestamp)}<br />
