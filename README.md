@@ -67,8 +67,11 @@ cp .env.example .env
 ### 3. Run your first evaluation
 
 ```bash
-# Run the example evaluation
-mcplab run -c examples/eval-agent.yaml
+# Run the app (frontend + local API bridge)
+mcplab app --configs-dir configs --runs-dir runs --open
+
+# Run an evaluation from config files
+mcplab run -c configs/eval.yaml
 
 # View the results
 open runs/$(ls -t runs | head -1)/report.html
@@ -267,13 +270,27 @@ scenarios:
 
 ```bash
 # Run all scenarios
-mcplab run -c examples/eval.yaml
+mcplab run -c configs/eval.yaml
 
 # Run specific scenario
-mcplab run -c examples/eval.yaml -s basic-test
+mcplab run -c configs/eval.yaml -s basic-test
 
 # Run with variance testing (5 iterations)
-mcplab run -c examples/eval.yaml -n 5
+mcplab run -c configs/eval.yaml -n 5
+```
+
+### App Mode
+
+Serve the web app and local API in one process:
+
+```bash
+mcplab app --configs-dir configs --runs-dir runs --port 8787 --open
+```
+
+Optional development mode (proxy frontend to Vite, keep API local):
+
+```bash
+mcplab app --dev
 ```
 
 ### Multi-LLM Testing

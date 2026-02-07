@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, MoreHorizontal, Eye, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -5,10 +6,27 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PassRateBadge } from "@/components/PassRateBadge";
-import { mockResults } from "@/data/mock-data";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import type { EvalResult } from "@/types/eval";
 
 const Results = () => {
-  const sorted = [...mockResults].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const { source } = useDataSource();
+  const [results, setResults] = useState<EvalResult[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    source.listResults().then((next) => {
+      if (active) setResults(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [source]);
+
+  const sorted = useMemo(
+    () => [...results].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [results],
+  );
 
   return (
     <div className="space-y-6">

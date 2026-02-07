@@ -11,25 +11,42 @@ export interface McpToolInfo {
 export class McpClientManager {
   private clients = new Map<string, Client>();
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
+  private static readonly MAX_CONNECT_RETRIES = 3;
 
   async connectAll(servers: Record<string, ServerConfig>): Promise<void> {
     for (const [name, server] of Object.entries(servers)) {
       if (server.transport !== 'http') {
         throw new Error(`Unsupported transport for server ${name}: ${server.transport}`);
       }
-      try {
-        const client = new Client({
-          name: `mcp-eval-${name}`,
-          version: '0.1.0'
-        });
-        const headers = await this.getAuthHeaders(name, server);
-        const transport = new StreamableHTTPClientTransport(new URL(server.url), {
-          requestInit: { headers }
-        });
-        await client.connect(transport);
-        this.clients.set(name, client);
-      } catch (err: any) {
-        throw new Error(formatMcpError(`Failed to connect to MCP server '${name}'`, server.url, err));
+      let lastError: any;
+      for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
+        try {
+          const client = new Client({
+            name: `mcp-eval-${name}`,
+            version: '0.1.0'
+          });
+          const headers = await this.getAuthHeaders(name, server);
+          const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+            requestInit: { headers }
+          });
+          await client.connect(transport);
+          this.clients.set(name, client);
+          lastError = undefined;
+          break;
+        } catch (err: any) {
+          lastError = err;
+          if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
+          await sleep(250 * (attempt + 1));
+        }
+      }
+      if (lastError) {
+        throw new Error(
+          formatMcpError(
+            `Failed to connect to MCP server '${name}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
+            server.url,
+            lastError
+          )
+        );
       }
     }
   }
@@ -46,14 +63,20 @@ export class McpClientManager {
     const client = this.getClient(serverName);
     try {
       const result: any = await client.listTools();
-      const tools = Array.isArray(result?.tools) ? result.tools : Array.isArray(result) ? result : [];
+      const tools = Array.isArray(result?.tools)
+        ? result.tools
+        : Array.isArray(result)
+          ? result
+          : [];
       return tools.map((tool: any) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input
       }));
     } catch (err: any) {
-      throw new Error(formatMcpError(`Failed to list tools for server '${serverName}'`, undefined, err));
+      throw new Error(
+        formatMcpError(`Failed to list tools for server '${serverName}'`, undefined, err)
+      );
     }
   }
 
@@ -66,11 +89,16 @@ export class McpClientManager {
       });
       return result;
     } catch (err: any) {
-      throw new Error(formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err));
+      throw new Error(
+        formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err)
+      );
     }
   }
 
-  private async getAuthHeaders(serverName: string, server: ServerConfig): Promise<Record<string, string>> {
+  private async getAuthHeaders(
+    serverName: string,
+    server: ServerConfig
+  ): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
     if (!server.auth) return headers;
 
@@ -146,7 +174,11 @@ export class McpClientManager {
       return accessToken;
     } catch (err: any) {
       throw new Error(
-        formatMcpError(`Failed to fetch OAuth token for server '${serverName}'`, server.auth.token_url, err)
+        formatMcpError(
+          `Failed to fetch OAuth token for server '${serverName}'`,
+          server.auth.token_url,
+          err
+        )
       );
     }
   }
@@ -170,4 +202,8 @@ async function safeReadText(response: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

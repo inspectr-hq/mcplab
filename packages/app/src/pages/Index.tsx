@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Settings, Play, BarChart3, Clock, Activity, Layers, Timer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,16 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { PassRateBadge } from "@/components/PassRateBadge";
-import { mockConfigs, mockResults } from "@/data/mock-data";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { useConfigs } from "@/contexts/ConfigContext";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import type { EvalResult } from "@/types/eval";
 
 const Dashboard = () => {
-  const totalConfigs = mockConfigs.length;
-  const totalRuns = mockResults.length;
-  const overallPassRate = mockResults.reduce((s, r) => s + r.overallPassRate, 0) / mockResults.length;
-  const avgLatency = Math.round(mockResults.reduce((s, r) => s + r.avgLatency, 0) / mockResults.length);
+  const { configs } = useConfigs();
+  const { source } = useDataSource();
+  const [results, setResults] = useState<EvalResult[]>([]);
 
-  const recentRuns = [...mockResults].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  useEffect(() => {
+    let active = true;
+    source.listResults().then((next) => {
+      if (active) setResults(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [source]);
+
+  const totalConfigs = configs.length;
+  const totalRuns = results.length;
+  const overallPassRate = totalRuns === 0 ? 0 : results.reduce((s, r) => s + r.overallPassRate, 0) / totalRuns;
+  const avgLatency = totalRuns === 0 ? 0 : Math.round(results.reduce((s, r) => s + r.avgLatency, 0) / totalRuns);
+
+  const recentRuns = useMemo(
+    () => [...results].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    [results],
+  );
 
   const chartData = [...recentRuns].reverse().map((r) => ({
     date: new Date(r.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),

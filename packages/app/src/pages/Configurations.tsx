@@ -8,16 +8,16 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { toast } from "@/hooks/use-toast";
 
 const Configurations = () => {
-  const { configs, deleteConfig, cloneConfig } = useConfigs();
+  const { configs, deleteConfig, cloneConfig, loading } = useConfigs();
   const navigate = useNavigate();
 
-  const handleDelete = (id: string, name: string) => {
-    deleteConfig(id);
+  const handleDelete = async (id: string, name: string) => {
+    await deleteConfig(id);
     toast({ title: "Deleted", description: `"${name}" has been removed.` });
   };
 
-  const handleClone = (id: string) => {
-    const cloned = cloneConfig(id);
+  const handleClone = async (id: string) => {
+    const cloned = await cloneConfig(id);
     toast({ title: "Cloned", description: `Created "${cloned.name}".` });
     navigate(`/configs/${cloned.id}`);
   };
@@ -76,11 +76,11 @@ const Configurations = () => {
                         <DropdownMenuItem onClick={() => navigate(`/configs/${cfg.id}`)}>
                           <Pencil className="mr-2 h-3.5 w-3.5" />Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleClone(cfg.id)}>
+                        <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
                           <Copy className="mr-2 h-3.5 w-3.5" />Clone
                         </DropdownMenuItem>
                         <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Download YAML</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(cfg.id, cfg.name)}>
+                        <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, cfg.name)}>
                           <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -88,10 +88,17 @@ const Configurations = () => {
                   </TableCell>
                 </TableRow>
               ))}
-              {configs.length === 0 && (
+              {!loading && configs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
                     No configurations yet. Create your first one to get started.
+                  </TableCell>
+                </TableRow>
+              )}
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                    Loading configurations...
                   </TableCell>
                 </TableRow>
               )}

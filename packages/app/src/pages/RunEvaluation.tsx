@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mockConfigs } from "@/data/mock-data";
 import { Link } from "react-router-dom";
+import { useConfigs } from "@/contexts/ConfigContext";
+import { useDataSource } from "@/contexts/DataSourceContext";
 
 const logMessages = [
   "Initializing evaluation runner...",
@@ -39,12 +40,17 @@ const RunEvaluation = () => {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const [runId, setRunId] = useState<string>("");
   const logRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const { configs } = useConfigs();
+  const { source, mode } = useDataSource();
 
-  const startRun = () => {
+  const runDemo = () => {
     setRunning(true);
     setDone(false);
+    setRunId("");
     setLogs([]);
     setProgress(0);
     let idx = 0;
@@ -57,12 +63,71 @@ const RunEvaluation = () => {
         clearInterval(intervalRef.current!);
         setRunning(false);
         setDone(true);
+        setRunId("run-a1b2c3");
       }
     }, 400);
   };
 
+  const startWorkspaceRun = async () => {
+    const selectedConfig = configs.find((item) => item.id === configId);
+    if (!selectedConfig?.sourcePath) {
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`]);
+      return;
+    }
+    setRunning(true);
+    setDone(false);
+    setRunId("");
+    setLogs([`[${new Date().toLocaleTimeString()}] Starting evaluation run...`]);
+    setProgress(10);
+    try {
+      const { jobId } = await source.startRun({
+        configPath: selectedConfig.sourcePath,
+        runsPerScenario: Number(varianceRuns),
+      });
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
+        if (event.type === "started") {
+          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Run started.`]);
+          setProgress(30);
+        }
+        if (event.type === "completed") {
+          const nextRunId = String(event.payload.runId ?? "");
+          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Run completed.`]);
+          setProgress(100);
+          setRunning(false);
+          setDone(true);
+          setRunId(nextRunId);
+          unsubscribeRef.current?.();
+          unsubscribeRef.current = null;
+        }
+        if (event.type === "error") {
+          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Error: ${String(event.payload.message ?? "Unknown error")}`]);
+          setRunning(false);
+          setDone(false);
+          setProgress(0);
+          unsubscribeRef.current?.();
+          unsubscribeRef.current = null;
+        }
+      });
+    } catch (error: any) {
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${error?.message ?? String(error)}`]);
+      setRunning(false);
+      setProgress(0);
+    }
+  };
+
+  const startRun = () => {
+    if (mode === "workspace") {
+      void startWorkspaceRun();
+      return;
+    }
+    runDemo();
+  };
+
   const stopRun = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
     setRunning(false);
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
   };
@@ -71,7 +136,10 @@ const RunEvaluation = () => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
-  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
+  useEffect(() => () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    unsubscribeRef.current?.();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -88,7 +156,7 @@ const RunEvaluation = () => {
               <Select value={configId} onValueChange={setConfigId}>
                 <SelectTrigger><SelectValue placeholder="Select a config" /></SelectTrigger>
                 <SelectContent>
-                  {mockConfigs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  {configs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -141,7 +209,7 @@ const RunEvaluation = () => {
                 <p className="text-sm text-muted-foreground">All scenarios have been evaluated successfully.</p>
               </div>
               <Button asChild className="ml-auto">
-                <Link to="/results/run-a1b2c3">View Results</Link>
+                <Link to={`/results/${runId || "run-a1b2c3"}`}>View Results</Link>
               </Button>
             </div>
           </CardContent>

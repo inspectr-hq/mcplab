@@ -1,17 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GitCompare } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassRateBadge } from "@/components/PassRateBadge";
-import { mockResults } from "@/data/mock-data";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import type { EvalResult } from "@/types/eval";
 
 const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)", "hsl(280, 60%, 50%)", "hsl(0, 72%, 51%)"];
 
 const Compare = () => {
+  const { source } = useDataSource();
+  const [results, setResults] = useState<EvalResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let active = true;
+    source.listResults().then((next) => {
+      if (active) setResults(next);
+    });
+    return () => {
+      active = false;
+    };
+  }, [source]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -21,7 +34,7 @@ const Compare = () => {
     });
   };
 
-  const selectedRuns = mockResults.filter((r) => selected.has(r.id));
+  const selectedRuns = results.filter((r) => selected.has(r.id));
 
   // All scenario IDs across selected runs
   const allScenarioIds = [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))];
@@ -47,7 +60,7 @@ const Compare = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockResults.map((r) => (
+              {results.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
                     <Checkbox

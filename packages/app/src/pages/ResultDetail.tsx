@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,17 +7,35 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { PassRateBadge } from "@/components/PassRateBadge";
-import { mockResults } from "@/data/mock-data";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { useState } from "react";
 import { generateHtmlReport } from "@/lib/generate-html-report";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import type { EvalResult } from "@/types/eval";
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const result = mockResults.find((r) => r.id === id);
+  const { source } = useDataSource();
+  const [result, setResult] = useState<EvalResult | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
 
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    setLoading(true);
+    source.getResult(id).then((next) => {
+      if (active) {
+        setResult(next);
+        setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [id, source]);
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
   const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
@@ -60,7 +79,7 @@ const ResultDetail = () => {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `mcp-eval-report-${result.id}.html`;
+          a.download = `mcplab-report-${result.id}.html`;
           a.click();
           URL.revokeObjectURL(url);
         }}>
@@ -155,7 +174,11 @@ const ResultDetail = () => {
                                   </div>
                                   <div className="flex flex-wrap gap-1">
                                     {run.toolCalls.map((tc, i) => (
-                                      <Badge key={i} variant="outline" className="font-mono text-xs">{tc.name} <span className="ml-1 text-muted-foreground">{tc.duration}ms</span></Badge>
+                                      <Badge key={i} variant="outline" className="font-mono text-xs">
+                                        <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                        {tc.name}
+                                        <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                      </Badge>
                                     ))}
                                   </div>
                                   {run.failureReasons.length > 0 && (

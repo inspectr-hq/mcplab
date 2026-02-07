@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Save, Server, Bot, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ const emptyConfig = (): EvalConfig => ({
 const ConfigEditor = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getConfig, addConfig, updateConfig } = useConfigs();
+  const { getConfig, addConfig, updateConfig, loading } = useConfigs();
 
   const isNew = id === "new";
   const isView = !isNew && !!id;
@@ -40,23 +40,31 @@ const ConfigEditor = () => {
     existing ? structuredClone(existing) : emptyConfig()
   );
 
+  useEffect(() => {
+    if (existing && !editing) {
+      setConfig(structuredClone(existing));
+    }
+  }, [existing, editing]);
+
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
   const readOnly = !editing;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!config.name.trim()) {
       toast({ title: "Validation Error", description: "Configuration name is required.", variant: "destructive" });
       return;
     }
-    config.updatedAt = new Date().toISOString();
+    const nextConfig = { ...config, updatedAt: new Date().toISOString() };
     if (isNew) {
-      addConfig(config);
-      toast({ title: "Configuration Created", description: `"${config.name}" has been saved.` });
-      navigate(`/configs/${config.id}`);
+      const created = await addConfig(nextConfig);
+      setConfig(created);
+      toast({ title: "Configuration Created", description: `"${created.name}" has been saved.` });
+      navigate(`/configs/${created.id}`);
     } else {
-      updateConfig(config.id, config);
-      toast({ title: "Configuration Updated", description: `"${config.name}" has been updated.` });
+      const updated = await updateConfig(config.id, nextConfig);
+      setConfig(updated);
+      toast({ title: "Configuration Updated", description: `"${updated.name}" has been updated.` });
       setEditing(false);
     }
   };
@@ -73,7 +81,13 @@ const ConfigEditor = () => {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            {isNew ? "Create a new evaluation configuration" : existing ? `Last updated ${new Date(config.updatedAt).toLocaleDateString()}` : "Configuration not found"}
+            {isNew
+              ? "Create a new evaluation configuration"
+              : loading
+                ? "Loading configuration..."
+                : existing
+                  ? `Last updated ${new Date(config.updatedAt).toLocaleDateString()}`
+                  : "Configuration not found"}
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -85,9 +99,9 @@ const ConfigEditor = () => {
               {!isNew && (
                 <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); }}>Cancel</Button>
               )}
-              <Button size="sm" onClick={handleSave}>
-                <Save className="mr-1.5 h-3.5 w-3.5" />Save
-              </Button>
+                <Button size="sm" onClick={() => void handleSave()}>
+                  <Save className="mr-1.5 h-3.5 w-3.5" />Save
+                </Button>
             </>
           )}
         </div>

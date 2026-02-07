@@ -36,7 +36,7 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="text-sm font-semibold text-sidebar-foreground">mcp-eval</span>
+              <span className="text-sm font-semibold text-sidebar-foreground">MCPLab</span>
               <span className="text-xs text-muted-foreground">Evaluation Manager</span>
             </div>
           )}

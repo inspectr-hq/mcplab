@@ -1,20 +1,20 @@
-// Core mcp-eval types
+// Core mcp-lab types
 
 export interface ServerConfig {
   id: string;
   name: string;
-  transport: "stdio" | "sse" | "streamable-http";
+  transport: 'stdio' | 'sse' | 'streamable-http';
   url?: string;
   command?: string;
   args?: string[];
-  authType?: "none" | "bearer" | "api-key";
+  authType?: 'none' | 'bearer' | 'api-key';
   authValue?: string;
 }
 
 export interface AgentConfig {
   id: string;
   name: string;
-  provider: "openai" | "anthropic" | "azure" | "google" | "custom";
+  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
   model: string;
   temperature: number;
   maxTokens: number;
@@ -22,7 +22,7 @@ export interface AgentConfig {
 }
 
 export interface EvalRule {
-  type: "required_tool" | "forbidden_tool" | "response_contains" | "response_not_contains";
+  type: 'required_tool' | 'forbidden_tool' | 'response_contains' | 'response_not_contains';
   value: string;
 }
 
@@ -45,6 +45,7 @@ export interface EvalConfig {
   id: string;
   name: string;
   description?: string;
+  sourcePath?: string;
   servers: ServerConfig[];
   agents: AgentConfig[];
   scenarios: Scenario[];

@@ -13,12 +13,14 @@ export interface RunOptions {
   configHash: string;
   gitCommit?: string;
   cliVersion: string;
+  signal?: AbortSignal;
 }
 
 export async function runAll(
   config: EvalConfig,
   options: RunOptions
 ): Promise<{ runDir: string; results: ResultsJson }> {
+  throwIfAborted(options.signal);
   const runId = createRunId();
   const runDir = join(process.cwd(), 'runs', runId);
   mkdirSync(runDir, { recursive: true });
@@ -33,7 +35,7 @@ export async function runAll(
   });
 
   const mcp = new McpClientManager();
-  await mcp.connectAll(config.servers);
+  await mcp.connectAll(config.servers, options.signal);
 
   const scenarioRuns: Array<{
     scenario_id: string;
@@ -43,6 +45,7 @@ export async function runAll(
   }> = [];
 
   for (const scenario of config.scenarios) {
+    throwIfAborted(options.signal);
     const agent = config.agents[scenario.agent];
     if (!agent) {
       throw new Error(`Agent not found: ${scenario.agent}`);
@@ -50,6 +53,7 @@ export async function runAll(
     const runs: ScenarioRunResult[] = [];
 
     for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
+      throwIfAborted(options.signal);
       trace.write({
         type: 'scenario_started',
         scenario_id: scenario.id,
@@ -57,7 +61,7 @@ export async function runAll(
         ts: new Date().toISOString()
       });
 
-      const runResult = await runAgentScenario({ scenario, agent, mcp, trace });
+      const runResult = await runAgentScenario({ scenario, agent, mcp, trace, signal: options.signal });
       const evalResult = evaluateScenario(
         runResult.finalText,
         runResult.toolSequence,
@@ -137,4 +141,10 @@ function createRunId(): string {
     pad(now.getMinutes()),
     pad(now.getSeconds())
   ].join('');
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new Error('Run aborted by user');
+  }
 }

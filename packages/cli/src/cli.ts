@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import 'dotenv/config';
 import { Command } from 'commander';
 import kleur from 'kleur';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -9,9 +9,13 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../package.json' with { type: 'json' };
 import { execSync } from 'node:child_process';
 import chokidar from 'chokidar';
+import { startAppServer } from './app-server.js';
 
 const program = new Command();
-program.name('mcplab').description('Laboratory for testing Model Context Protocol servers').version(pkg.version);
+program
+  .name('mcplab')
+  .description('Laboratory for testing Model Context Protocol servers')
+  .version(pkg.version);
 
 program
   .command('run')
@@ -19,7 +23,10 @@ program
   .requiredOption('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
-  .option('--agents <agents>', 'Comma-separated list of agents to test (runs each scenario with each agent)')
+  .option(
+    '--agents <agents>',
+    'Comma-separated list of agents to test (runs each scenario with each agent)'
+  )
   .action(async (options) => {
     try {
       let { config, hash } = loadConfig(resolve(options.config));
@@ -30,7 +37,9 @@ program
         const missingAgents = requestedAgents.filter((a: string) => !config.agents[a]);
 
         if (missingAgents.length > 0) {
-          throw new Error(`Unknown agents: ${missingAgents.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`);
+          throw new Error(
+            `Unknown agents: ${missingAgents.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
+          );
         }
 
         const baseScenarios = config.scenarios;
@@ -51,7 +60,11 @@ program
           scenarios: expandedScenarios
         };
 
-        console.log(kleur.cyan(`📊 Testing ${baseScenarios.length} scenarios × ${requestedAgents.length} agents = ${expandedScenarios.length} total tests`));
+        console.log(
+          kleur.cyan(
+            `📊 Testing ${baseScenarios.length} scenarios × ${requestedAgents.length} agents = ${expandedScenarios.length} total tests`
+          )
+        );
       }
 
       const selected = selectScenarios(config, options.scenario);
@@ -73,13 +86,15 @@ program
       // If multi-agent test, show comparison
       if (options.agents) {
         console.log(kleur.cyan(`\n📈 Run comparison script:`));
-        console.log(kleur.gray(`   node scripts/compare-llm-results.mjs ${join(runDir, 'results.json')}`));
+        console.log(
+          kleur.gray(`   node scripts/compare-llm-results.mjs ${join(runDir, 'results.json')}`)
+        );
       }
     } catch (err: any) {
       const message = err?.message ?? String(err);
-      const hint = message.includes("fetch failed")
-        ? " Hint: verify the MCP server is running, the SSE URL is correct, and any bearer token env var is set."
-        : "";
+      const hint = message.includes('fetch failed')
+        ? ' Hint: verify the MCP server is running, the SSE URL is correct, and any bearer token env var is set.'
+        : '';
       console.error(kleur.red(`Error: ${message}${hint}`));
       process.exit(1);
     }
@@ -98,6 +113,36 @@ program
       const html = renderReport(results);
       writeFileSync(reportPath, html, 'utf8');
       console.log(kleur.green(`Report regenerated: ${reportPath}`));
+    } catch (err: any) {
+      const message = err?.message ?? String(err);
+      console.error(kleur.red(`Error: ${message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('app')
+  .description('Serve MCPLab app frontend and local API bridge')
+  .option('--configs-dir <path>', 'Directory for YAML configs', 'configs')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'runs')
+  .option('--port <number>', 'Port to bind', '8787')
+  .option('--host <host>', 'Host to bind', '127.0.0.1')
+  .option('--open', 'Open browser after startup')
+  .option('--dev', 'Proxy frontend requests to Vite dev server (API remains local)')
+  .action(async (options) => {
+    try {
+      const port = Number(options.port);
+      if (Number.isNaN(port) || port <= 0) {
+        throw new Error('Port must be a positive number');
+      }
+      await startAppServer({
+        host: options.host,
+        port,
+        configsDir: resolve(options.configsDir),
+        runsDir: resolve(options.runsDir),
+        dev: Boolean(options.dev),
+        open: Boolean(options.open)
+      });
     } catch (err: any) {
       const message = err?.message ?? String(err);
       console.error(kleur.red(`Error: ${message}`));
@@ -153,9 +198,9 @@ program
         console.log(kleur.green(`✅ Run completed: ${runDir}`));
       } catch (err: any) {
         const message = err?.message ?? String(err);
-        const hint = message.includes("fetch failed")
-          ? " Hint: verify the MCP server is running, the SSE URL is correct, and any bearer token env var is set."
-          : "";
+        const hint = message.includes('fetch failed')
+          ? ' Hint: verify the MCP server is running, the SSE URL is correct, and any bearer token env var is set.'
+          : '';
         console.error(kleur.red(`❌ Error: ${message}${hint}`));
       } finally {
         running = false;

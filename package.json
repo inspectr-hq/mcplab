@@ -8,6 +8,9 @@
   "scripts": {
     "build": "tsc -b && node scripts/copy-cli.mjs",
     "dev": "tsx packages/cli/src/cli.ts",
+    "app": "node dist/cli.js app",
+    "app:dev": "tsx packages/cli/src/cli.ts app --dev",
+    "app:dev:ui": "npm run dev -w @inspectr/mcplab-app",
     "clean": "rm -rf dist packages/*/dist",
     "format": "npx prettier --write \"packages/**/*.{ts,jsx,css}\" --config ./.prettierrc",
     "test": "echo 'test completed'"
