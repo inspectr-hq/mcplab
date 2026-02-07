@@ -1,5 +1,5 @@
 {
-  "name": "@mcp-lab/cli",
+  "name": "@inspectr/mcplab",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/cli.js",
@@ -11,8 +11,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@mcp-lab/core": "0.1.0",
-    "@mcp-lab/reporting": "0.1.0",
+    "@inspectr/mcplab-core": "0.1.0",
+    "@inspectr/mcplab-reporting": "0.1.0",
     "chokidar": "^5.0.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",

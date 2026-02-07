@@ -1,5 +1,5 @@
 {
-  "name": "@mcp-lab/reporting",
+  "name": "@inspectr/mcplab-reporting",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -11,6 +11,6 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@mcp-lab/core": "0.1.0"
+    "@inspectr/mcplab-core": "0.1.0"
   }
 }

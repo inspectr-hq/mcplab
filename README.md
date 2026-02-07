@@ -1,6 +1,6 @@
 # MCPLab 🧪
 
-> **Laboratory for testing Model Context Protocol servers**
+> **Lab for testing Model Context Protocol servers with LLMs**
 
 Test how well LLM agents use your MCP tools, compare different models, and track quality over time with automated testing and detailed reports.
 
@@ -68,7 +68,7 @@ cp .env.example .env
 
 ```bash
 # Run the example evaluation
-mcplab run -c examples/eval-trendminer.yaml
+mcplab run -c examples/eval-agent.yaml
 
 # View the results
 open runs/$(ls -t runs | head -1)/report.html

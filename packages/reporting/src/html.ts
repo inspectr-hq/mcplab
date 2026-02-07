@@ -1,4 +1,4 @@
-import type { ResultsJson } from '@mcp-lab/core';
+import type { ResultsJson } from '@inspectr/mcplab-core';
 
 function escapeHtml(value: string | number | boolean | null | undefined): string {
   // Convert value to string first
