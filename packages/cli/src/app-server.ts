@@ -70,9 +70,10 @@ interface JobEvent {
 
 interface RunJob {
   id: string;
-  status: 'running' | 'completed' | 'error';
+  status: 'running' | 'completed' | 'error' | 'stopped';
   events: JobEvent[];
   clients: Set<ServerResponse>;
+  abortController: AbortController;
 }
 
 function asJson(res: ServerResponse, code: number, body: unknown) {
@@ -262,6 +263,30 @@ function addJobEvent(job: RunJob, event: JobEvent) {
   for (const client of job.clients) {
     sendSseEvent(client, event);
   }
+}
+
+function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): EvalConfig {
+  if (!requestedAgents || requestedAgents.length === 0) return config;
+  const missing = requestedAgents.filter((agent) => !config.agents[agent]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
+    );
+  }
+  const expandedScenarios = [];
+  for (const scenario of config.scenarios) {
+    for (const agent of requestedAgents) {
+      expandedScenarios.push({
+        ...scenario,
+        id: `${scenario.id}-${agent}`,
+        agent
+      });
+    }
+  }
+  return {
+    ...config,
+    scenarios: expandedScenarios
+  };
 }
 
 function startBrowser(url: string) {
@@ -504,6 +529,28 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      if (
+        pathname.startsWith('/api/runs/jobs/') &&
+        pathname.endsWith('/stop') &&
+        method === 'POST'
+      ) {
+        const jobId = pathname.split('/')[4];
+        const job = jobs.get(jobId);
+        if (!job) {
+          asJson(res, 404, { error: 'Job not found' });
+          return;
+        }
+        if (job.status !== 'running') {
+          asJson(res, 200, { ok: true, status: job.status });
+          return;
+        }
+        job.abortController.abort();
+        job.status = 'stopped';
+        activeJobId = null;
+        asJson(res, 200, { ok: true, status: 'stopped' });
+        return;
+      }
+
       if (pathname === '/api/runs' && method === 'POST') {
         if (activeJobId) {
           asJson(res, 409, { error: 'Another run is already active', jobId: activeJobId });
@@ -513,6 +560,9 @@ export async function startAppServer(options: AppServerOptions) {
         const configPathRaw = String(body.configPath ?? '');
         const runsPerScenario = Number(body.runsPerScenario ?? 1);
         const scenarioId = body.scenarioId ? String(body.scenarioId) : undefined;
+        const requestedAgents = Array.isArray(body.agents)
+          ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
+          : undefined;
 
         if (!configPathRaw) {
           asJson(res, 400, { error: 'configPath is required' });
@@ -532,27 +582,40 @@ export async function startAppServer(options: AppServerOptions) {
         }
 
         const jobId = `${Date.now()}`;
-        const job: RunJob = { id: jobId, status: 'running', events: [], clients: new Set() };
+        const job: RunJob = {
+          id: jobId,
+          status: 'running',
+          events: [],
+          clients: new Set(),
+          abortController: new AbortController()
+        };
         jobs.set(jobId, job);
         activeJobId = jobId;
 
         addJobEvent(job, {
           type: 'started',
           ts: new Date().toISOString(),
-          payload: { configPath, runsPerScenario, scenarioId: scenarioId ?? null }
+          payload: {
+            configPath,
+            runsPerScenario,
+            scenarioId: scenarioId ?? null,
+            agents: requestedAgents ?? null
+          }
         });
 
         void (async () => {
           try {
             const loaded = loadConfig(configPath);
+            const expandedConfig = expandConfigForAgents(loaded.config, requestedAgents);
             const cwdBefore = process.cwd();
             process.chdir(settings.workspaceRoot);
             try {
-              const { runDir, results } = await runAll(loaded.config, {
+              const { runDir, results } = await runAll(expandedConfig, {
                 runsPerScenario,
                 scenarioId,
                 configHash: loaded.hash,
-                cliVersion: pkg.version
+                cliVersion: pkg.version,
+                signal: job.abortController.signal
               });
               writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
               addJobEvent(job, {
@@ -569,12 +632,13 @@ export async function startAppServer(options: AppServerOptions) {
               process.chdir(cwdBefore);
             }
           } catch (error: any) {
+            const aborted = job.abortController.signal.aborted || job.status === 'stopped';
             addJobEvent(job, {
               type: 'error',
               ts: new Date().toISOString(),
-              payload: { message: error?.message ?? String(error) }
+              payload: { message: aborted ? 'Run aborted by user' : error?.message ?? String(error) }
             });
-            job.status = 'error';
+            job.status = aborted ? 'stopped' : 'error';
           } finally {
             activeJobId = null;
             for (const client of job.clients) {

@@ -13,8 +13,10 @@ export class McpClientManager {
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
   private static readonly MAX_CONNECT_RETRIES = 3;
 
-  async connectAll(servers: Record<string, ServerConfig>): Promise<void> {
+  async connectAll(servers: Record<string, ServerConfig>, signal?: AbortSignal): Promise<void> {
+    throwIfAborted(signal);
     for (const [name, server] of Object.entries(servers)) {
+      throwIfAborted(signal);
       if (server.transport !== 'http') {
         throw new Error(`Unsupported transport for server ${name}: ${server.transport}`);
       }
@@ -34,9 +36,10 @@ export class McpClientManager {
           lastError = undefined;
           break;
         } catch (err: any) {
+          throwIfAborted(signal);
           lastError = err;
           if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
-          await sleep(250 * (attempt + 1));
+          await sleep(250 * (attempt + 1), signal);
         }
       }
       if (lastError) {
