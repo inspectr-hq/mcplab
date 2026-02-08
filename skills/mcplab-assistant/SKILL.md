@@ -24,19 +24,31 @@ Stay in operator scope only. Do not include repository build/setup instructions.
 - Error diagnosis: `references/troubleshooting.md`
 - Example selection: `references/examples-map.md`
 
+## Response Template
+
+Always structure responses in this order when helping with MCPLab operations:
+
+1. `Intent`: one line stating what is being done (configing, running, debugging, analysis).
+2. `Actions`: exact commands or config edits to apply.
+3. `Verification`: how to confirm success (expected files, output lines, or pass metrics).
+4. `If It Fails`: the next diagnostic step and exact artifact to inspect.
+
+Use concrete file paths and command lines. Avoid generic advice.
+
 ## Config Workflow
 
 1. Start from the smallest valid skeleton (`servers`, `agents`, `scenarios`).
-2. Add server definitions and auth mode (`bearer` or `oauth_client_credentials`).
-3. Add one working agent, then add variants if needed.
-4. Add scenarios with:
+2. Apply the schema contract from `references/config-recipes.md` ("Schema Contract").
+3. Add server definitions and auth mode (`bearer` or `oauth_client_credentials`).
+4. Add one working agent, then add variants if needed.
+5. Add scenarios with:
 - unique kebab-case `id`
 - valid `agent` key reference
 - at least one `servers` entry
 - `prompt`
-5. Add optional `eval` and `extract` blocks after baseline run succeeds.
-6. Validate references and shape against `config-schema.json`.
-7. Prefer minimal deterministic edits over large rewrites.
+6. Add optional `eval` and `extract` blocks after baseline run succeeds.
+7. Validate references and shape against `config-schema.json`.
+8. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
 
@@ -78,3 +90,35 @@ Stay in operator scope only. Do not include repository build/setup instructions.
 - CLI contract: `packages/cli/src/cli.ts`
 - Config schema: `config-schema.json`
 - Usage examples: `examples/*.yaml` and `README.md`
+
+## Concrete Request Patterns
+
+### Pattern 1: OAuth Config Request
+
+User request:
+"Help me write mcplab eval YAML with OAuth auth."
+
+Assistant behavior:
+1. Provide minimal valid YAML with `servers`, `agents`, and `scenarios`.
+2. Use `auth.type: oauth_client_credentials` with `token_url`, `client_id_env`, and `client_secret_env`.
+3. List required env var names and provide one `mcplab run -c ...` verification command.
+
+### Pattern 2: CLI Comparison Request
+
+User request:
+"How do I run watch mode and compare agents?"
+
+Assistant behavior:
+1. Clarify that comparison uses `mcplab run --agents ...`, not `watch`.
+2. Provide one `watch` command for iterative single-agent config tuning.
+3. Provide one `run --agents` command for comparison and one follow-up analysis step (`results.json`/`report.html`).
+
+### Pattern 3: Failure Triage Request
+
+User request:
+"My run fails with fetch failed."
+
+Assistant behavior:
+1. Ask for exact command, relevant server config block, and error text.
+2. Check URL reachability, auth env variable names, and server auth mode match.
+3. Provide smallest retry command (`mcplab run -c ... -s ... -n 1`) and next artifact to inspect (`trace.jsonl`).
