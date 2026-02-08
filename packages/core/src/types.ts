@@ -67,9 +67,10 @@ export interface ExtractRule {
 
 export interface Scenario {
   id: string;
-  agent: string;
+  agent?: string;
   servers: string[];
   prompt: string;
+  snapshot_eval_enabled?: boolean;
   test?: {
     mode?: 'total' | 'per_step';
     steps?: string[];
@@ -78,10 +79,19 @@ export interface Scenario {
   extract?: ExtractRule[];
 }
 
+export interface SnapshotEvalPolicy {
+  enabled: boolean;
+  mode: 'warn' | 'fail_on_drift';
+  baseline_snapshot_id?: string;
+  baseline_source_run_id?: string;
+  last_updated_at?: string;
+}
+
 export interface EvalConfig {
   servers: Record<string, ServerConfig>;
   agents: Record<string, AgentConfig>;
   scenarios: Scenario[];
+  snapshot_eval?: SnapshotEvalPolicy;
 }
 
 export interface ToolDef {
@@ -215,6 +225,15 @@ export interface ResultsJson {
     git_commit?: string;
     config_hash: string;
     cli_version: string;
+    snapshot_eval?: {
+      applied: boolean;
+      mode: 'warn' | 'fail_on_drift';
+      baseline_snapshot_id: string;
+      baseline_source_run_id?: string;
+      overall_score: number;
+      status: 'Match' | 'Warn' | 'Drift';
+      impacted_scenarios: string[];
+    };
   };
   summary: {
     total_scenarios: number;

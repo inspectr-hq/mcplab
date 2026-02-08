@@ -2,6 +2,8 @@ import type {
   CoreEvalConfig,
   CoreResultsJson,
   RunJobEvent,
+  SnapshotComparison,
+  SnapshotRecord,
   TraceUiEvent,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
@@ -35,17 +37,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const workspaceApiClient = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
   getSettings: () =>
-    request<{ workspaceRoot: string; configsDir: string; runsDir: string }>('/api/settings'),
+    request<{ workspaceRoot: string; configsDir: string; runsDir: string; snapshotsDir: string }>('/api/settings'),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
     request<WorkspaceConfigRecord>('/api/configs', {
       method: 'POST',
       body: JSON.stringify({ fileName, config })
     }),
-  updateConfig: (id: string, config: CoreEvalConfig) =>
+  updateConfig: (id: string, config: CoreEvalConfig, fileName?: string) =>
     request<WorkspaceConfigRecord>(`/api/configs/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ config })
+      body: JSON.stringify({ config, fileName })
     }),
   deleteConfig: (id: string) =>
     request<{ ok: boolean }>(`/api/configs/${id}`, { method: 'DELETE' }),
@@ -54,11 +56,42 @@ export const workspaceApiClient = {
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   getRunTrace: (runId: string) =>
     request<{ runId: string; events: TraceUiEvent[] }>(`/api/runs/${runId}/trace`),
+  listSnapshots: () => request<SnapshotRecord[]>('/api/snapshots'),
+  createSnapshotFromRun: (runId: string, name?: string) =>
+    request<SnapshotRecord>('/api/snapshots', {
+      method: 'POST',
+      body: JSON.stringify({ runId, name })
+    }),
+  getSnapshot: (id: string) => request<SnapshotRecord>(`/api/snapshots/${id}`),
+  compareSnapshot: (snapshotId: string, runId: string) =>
+    request<SnapshotComparison>(`/api/snapshots/${snapshotId}/compare`, {
+      method: 'POST',
+      body: JSON.stringify({ runId })
+    }),
+  generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
+    request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>('/api/snapshots/generate-eval', {
+      method: 'POST',
+      body: JSON.stringify({ runId, configId, name })
+    }),
+  updateSnapshotPolicy: (
+    configId: string,
+    policy: {
+      enabled: boolean;
+      mode: 'warn' | 'fail_on_drift';
+      baselineSnapshotId?: string;
+      baselineSourceRunId?: string;
+    }
+  ) =>
+    request<WorkspaceConfigRecord>(`/api/configs/${configId}/snapshot-policy`, {
+      method: 'POST',
+      body: JSON.stringify(policy)
+    }),
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;
     scenarioId?: string;
     agents?: string[];
+    applySnapshotEval?: boolean;
   }) =>
     request<{ jobId: string }>('/api/runs', {
       method: 'POST',

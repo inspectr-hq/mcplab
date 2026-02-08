@@ -11,6 +11,10 @@ function configFileName(config: EvalConfig): string {
   return config.name || `config-${Date.now()}`;
 }
 
+function configFileNameFromName(name: string): string {
+  return name || `config-${Date.now()}`;
+}
+
 export const workspaceSource: EvalDataSource = {
   async listConfigs() {
     const records = await workspaceApiClient.listConfigs();
@@ -24,7 +28,11 @@ export const workspaceSource: EvalDataSource = {
     return fromCoreConfigYaml(record);
   },
   async updateConfig(config) {
-    const record = await workspaceApiClient.updateConfig(config.id, toCoreConfigYaml(config));
+    const record = await workspaceApiClient.updateConfig(
+      config.id,
+      toCoreConfigYaml(config),
+      configFileNameFromName(config.name)
+    );
     return fromCoreConfigYaml(record);
   },
   async deleteConfig(id) {
@@ -60,5 +68,32 @@ export const workspaceSource: EvalDataSource = {
   },
   subscribeRunJob(jobId, onEvent) {
     return workspaceApiClient.subscribeRunJob(jobId, onEvent);
+  },
+  async listSnapshots() {
+    return workspaceApiClient.listSnapshots();
+  },
+  async createSnapshotFromRun(runId, name) {
+    return workspaceApiClient.createSnapshotFromRun(runId, name);
+  },
+  async getSnapshot(id) {
+    try {
+      return await workspaceApiClient.getSnapshot(id);
+    } catch {
+      return undefined;
+    }
+  },
+  async compareSnapshot(snapshotId, runId) {
+    return workspaceApiClient.compareSnapshot(snapshotId, runId);
+  },
+  async generateSnapshotEvalBaseline(runId, configId, name) {
+    const response = await workspaceApiClient.generateSnapshotEvalBaseline(runId, configId, name);
+    return {
+      snapshot: response.snapshot,
+      config: fromCoreConfigYaml(response.config)
+    };
+  },
+  async updateSnapshotPolicy(configId, policy) {
+    const record = await workspaceApiClient.updateSnapshotPolicy(configId, policy);
+    return fromCoreConfigYaml(record);
   }
 };

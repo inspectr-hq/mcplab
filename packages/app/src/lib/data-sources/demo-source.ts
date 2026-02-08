@@ -52,5 +52,23 @@ export const demoSource: EvalDataSource = {
       });
     }, 1200);
     return () => window.clearTimeout(timeout);
+  },
+  async listSnapshots() {
+    return [];
+  },
+  async createSnapshotFromRun() {
+    throw new Error('Snapshots are only available in workspace mode.');
+  },
+  async getSnapshot() {
+    return undefined;
+  },
+  async compareSnapshot() {
+    throw new Error('Snapshots are only available in workspace mode.');
+  },
+  async generateSnapshotEvalBaseline() {
+    throw new Error('Snapshot eval is only available in workspace mode.');
+  },
+  async updateSnapshotPolicy() {
+    throw new Error('Snapshot eval is only available in workspace mode.');
   }
 };

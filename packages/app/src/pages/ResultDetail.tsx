@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { PassRateBadge } from "@/components/PassRateBadge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import type { ConversationItem, EvalResult } from "@/types/eval";
+import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +22,10 @@ const ResultDetail = () => {
   const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -35,6 +41,21 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source]);
+
+  useEffect(() => {
+    let active = true;
+    source
+      .listSnapshots()
+      .then((records) => {
+        if (active) setSnapshots(records);
+      })
+      .catch(() => {
+        if (active) setSnapshots([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [source]);
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
@@ -70,6 +91,21 @@ const ResultDetail = () => {
   };
 
   const runKey = (scenarioId: string, runIndex: number) => `${scenarioId}:${runIndex}`;
+  const scenarioKey = (scenarioId: string, agent: string) => `${scenarioId}::${agent}`;
+  const comparisonByScenario = new Map(
+    (snapshotComparison?.scenario_results ?? []).map((item) => [scenarioKey(item.scenario_id, item.agent), item])
+  );
+
+  const compareWithSnapshot = async () => {
+    if (!result || !selectedSnapshotId) return;
+    setComparing(true);
+    try {
+      const comparison = await source.compareSnapshot(selectedSnapshotId, result.id);
+      setSnapshotComparison(comparison);
+    } finally {
+      setComparing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -79,10 +115,20 @@ const ResultDetail = () => {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
             <PassRateBadge rate={result.overallPassRate} />
+            {result.snapshotEval?.applied && (
+              <Badge variant="outline" className="text-xs">
+                Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
           </p>
+          {result.snapshotEval?.applied && (
+            <p className="text-xs text-muted-foreground">
+              Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
           const html = generateHtmlReport(result);
@@ -143,6 +189,37 @@ const ResultDetail = () => {
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Scenarios</CardTitle></CardHeader>
         <CardContent className="p-0">
+          <div className="flex flex-wrap items-end gap-2 border-b p-3">
+            <div className="min-w-60 space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
+              <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
+                <SelectTrigger className="h-8">
+                  <SelectValue placeholder="Select snapshot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {snapshots.map((snapshot) => (
+                    <SelectItem key={snapshot.id} value={snapshot.id}>
+                      {snapshot.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!selectedSnapshotId || comparing}
+              onClick={() => void compareWithSnapshot()}
+            >
+              {comparing ? "Comparing..." : "Compare Snapshot"}
+            </Button>
+            {snapshotComparison && (
+              <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
+                Overall snapshot score: {snapshotComparison.overall_score}
+              </Badge>
+            )}
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -152,6 +229,7 @@ const ResultDetail = () => {
                 <TableHead>Runs</TableHead>
                 <TableHead>Pass Rate</TableHead>
                 <TableHead>Avg Tool Calls</TableHead>
+                <TableHead>Snapshot</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -166,12 +244,43 @@ const ResultDetail = () => {
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                         <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
                         <TableCell className="font-mono text-sm">{sc.avgToolCalls.toFixed(1)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const row = comparisonByScenario.get(scenarioKey(sc.scenarioId, sc.agentName));
+                            if (!row) return <span className="text-xs text-muted-foreground">—</span>;
+                            const className =
+                              row.status === "Match"
+                                ? "bg-success/15 text-success"
+                                : row.status === "Warn"
+                                  ? "bg-amber-500/15 text-amber-600"
+                                  : "bg-destructive/15 text-destructive";
+                            return (
+                              <Badge variant="outline" className={`text-xs ${className}`}>
+                                {row.status} · {row.score}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
                       </TableRow>
                     </CollapsibleTrigger>
                     <CollapsibleContent asChild>
                       <tr>
-                        <td colSpan={6} className="p-0">
+                        <td colSpan={7} className="p-0">
                           <div className="bg-muted/30 p-4 space-y-2">
+                            {(() => {
+                              const row = comparisonByScenario.get(scenarioKey(sc.scenarioId, sc.agentName));
+                              if (!row || row.reasons.length === 0) return null;
+                              return (
+                                <div className="rounded-md border bg-card p-2">
+                                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Snapshot reasons</p>
+                                  <ul className="space-y-1 text-xs text-muted-foreground">
+                                    {row.reasons.map((reason, index) => (
+                                      <li key={index}>• {reason}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })()}
                             {sc.runs.map((run) => (
                               <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
                                 <div className="mt-0.5">

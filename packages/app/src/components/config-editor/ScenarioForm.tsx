@@ -2,6 +2,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,11 @@ interface ScenarioFormProps {
   scenarios: Scenario[];
   agents: AgentConfig[];
   servers: ServerConfig[];
+  snapshotEval?: {
+    enabled: boolean;
+    mode: "warn" | "fail_on_drift";
+    baselineSnapshotId?: string;
+  };
   onChange: (scenarios: Scenario[]) => void;
   readOnly?: boolean;
 }
@@ -29,7 +35,7 @@ const emptyScenario = (): Scenario => ({
   extractRules: [],
 });
 
-export function ScenarioForm({ scenarios, agents, servers, onChange, readOnly }: ScenarioFormProps) {
+export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChange, readOnly }: ScenarioFormProps) {
   const update = (index: number, patch: Partial<Scenario>) => {
     const next = scenarios.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
@@ -49,7 +55,7 @@ export function ScenarioForm({ scenarios, agents, servers, onChange, readOnly }:
         )}
       </div>
       {scenarios.map((sc, i) => (
-        <ScenarioCard key={sc.id} scenario={sc} index={i} agents={agents} servers={servers} onUpdate={(patch) => update(i, patch)} onRemove={() => remove(i)} readOnly={readOnly} />
+        <ScenarioCard key={sc.id} scenario={sc} index={i} agents={agents} servers={servers} snapshotEval={snapshotEval} onUpdate={(patch) => update(i, patch)} onRemove={() => remove(i)} readOnly={readOnly} />
       ))}
       {scenarios.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-6">No scenarios configured. Add one to get started.</p>
@@ -58,8 +64,9 @@ export function ScenarioForm({ scenarios, agents, servers, onChange, readOnly }:
   );
 }
 
-function ScenarioCard({ scenario, index, agents, servers, onUpdate, onRemove, readOnly }: {
+function ScenarioCard({ scenario, index, agents, servers, snapshotEval, onUpdate, onRemove, readOnly }: {
   scenario: Scenario; index: number; agents: AgentConfig[]; servers: ServerConfig[];
+  snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
   onUpdate: (patch: Partial<Scenario>) => void; onRemove: () => void; readOnly?: boolean;
 }) {
   const [newRuleType, setNewRuleType] = useState<EvalRule["type"]>("required_tool");
@@ -160,56 +167,96 @@ function ScenarioCard({ scenario, index, agents, servers, onUpdate, onRemove, re
           <Textarea value={scenario.prompt} onChange={(e) => onUpdate({ prompt: e.target.value })} disabled={readOnly} placeholder="The prompt to send to the agent..." rows={3} className="text-xs" />
         </div>
 
-        {/* Eval Rules */}
-        <div className="space-y-2">
-          <Label className="text-xs">Eval Rules</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {scenario.evalRules.map((rule, ri) => (
-              <Badge key={ri} variant="outline" className={`text-xs gap-1 ${ruleTypeColor[rule.type]}`}>
-                <span className="font-semibold">{ruleTypeLabel[rule.type]}:</span> {rule.value}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Card className="border bg-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Evaluation</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Define deterministic checks for tools and response content.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-xs">Eval Rules</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {scenario.evalRules.map((rule, ri) => (
+                    <Badge key={ri} variant="outline" className={`text-xs gap-1 ${ruleTypeColor[rule.type]}`}>
+                      <span className="font-semibold">{ruleTypeLabel[rule.type]}:</span> {rule.value}
+                      {!readOnly && (
+                        <X className="h-3 w-3 cursor-pointer ml-0.5" onClick={() => removeRule(ri)} />
+                      )}
+                    </Badge>
+                  ))}
+                </div>
                 {!readOnly && (
-                  <X className="h-3 w-3 cursor-pointer ml-0.5" onClick={() => removeRule(ri)} />
+                  <div className="flex gap-2 items-end">
+                    <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as EvalRule["type"])}>
+                      <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="required_tool">Required Tool</SelectItem>
+                        <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+                        <SelectItem value="response_contains">Response Contains</SelectItem>
+                        <SelectItem value="response_not_contains">Not Contains</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} placeholder="Value" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())} />
+                    <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addRule}>Add</Button>
+                  </div>
                 )}
-              </Badge>
-            ))}
-          </div>
-          {!readOnly && (
-            <div className="flex gap-2 items-end">
-              <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as EvalRule["type"])}>
-                <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="required_tool">Required Tool</SelectItem>
-                  <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                  <SelectItem value="response_contains">Response Contains</SelectItem>
-                  <SelectItem value="response_not_contains">Not Contains</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} placeholder="Value" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())} />
-              <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addRule}>Add</Button>
-            </div>
-          )}
-        </div>
+              </div>
 
-        {/* Extract Rules */}
-        <div className="space-y-2">
-          <Label className="text-xs">Extract Rules</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {scenario.extractRules.map((rule, ri) => (
-              <Badge key={ri} variant="outline" className="text-xs gap-1">
-                <span className="font-semibold">{rule.name}:</span> <code className="font-mono">{rule.pattern}</code>
+              <div className="space-y-2">
+                <Label className="text-xs">Extract Rules</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {scenario.extractRules.map((rule, ri) => (
+                    <Badge key={ri} variant="outline" className="text-xs gap-1">
+                      <span className="font-semibold">{rule.name}:</span> <code className="font-mono">{rule.pattern}</code>
+                      {!readOnly && (
+                        <X className="h-3 w-3 cursor-pointer ml-0.5" onClick={() => removeExtract(ri)} />
+                      )}
+                    </Badge>
+                  ))}
+                </div>
                 {!readOnly && (
-                  <X className="h-3 w-3 cursor-pointer ml-0.5" onClick={() => removeExtract(ri)} />
+                  <div className="flex gap-2 items-end">
+                    <Input value={newExtractName} onChange={(e) => setNewExtractName(e.target.value)} placeholder="Name" className="h-8 text-xs w-28" />
+                    <Input value={newExtractPattern} onChange={(e) => setNewExtractPattern(e.target.value)} placeholder="Regex pattern" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtract())} />
+                    <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addExtract}>Add</Button>
+                  </div>
                 )}
-              </Badge>
-            ))}
-          </div>
-          {!readOnly && (
-            <div className="flex gap-2 items-end">
-              <Input value={newExtractName} onChange={(e) => setNewExtractName(e.target.value)} placeholder="Name" className="h-8 text-xs w-28" />
-              <Input value={newExtractPattern} onChange={(e) => setNewExtractPattern(e.target.value)} placeholder="Regex pattern" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addExtract())} />
-              <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addExtract}>Add</Button>
-            </div>
-          )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border bg-amber-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Snapshot Evaluation</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Per-scenario toggle for config baseline drift checks.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between rounded-md border bg-white/60 px-2 py-1.5">
+                <span>Enabled for this scenario</span>
+                <Switch
+                  checked={scenario.snapshotEvalEnabled !== false}
+                  disabled={readOnly}
+                  onCheckedChange={(checked) => onUpdate({ snapshotEvalEnabled: checked })}
+                />
+              </div>
+              <p>
+                Baseline snapshot:{" "}
+                <span className="font-mono">
+                  {snapshotEval?.baselineSnapshotId ?? "Not configured"}
+                </span>
+              </p>
+              <p>
+                Policy:{" "}
+                <span className="font-mono">{snapshotEval?.mode ?? "warn"}</span> · config-level switch{" "}
+                <span className="font-mono">{snapshotEval?.enabled ? "on" : "off"}</span>
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </CardContent>
     </Card>

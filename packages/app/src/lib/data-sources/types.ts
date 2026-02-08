@@ -33,9 +33,10 @@ export interface CoreAgentConfig {
 
 export interface CoreScenario {
   id: string;
-  agent: string;
+  agent?: string;
   servers: string[];
   prompt: string;
+  snapshot_eval_enabled?: boolean;
   test?: {
     mode?: 'total' | 'per_step';
     steps?: string[];
@@ -57,6 +58,13 @@ export interface CoreEvalConfig {
   servers: Record<string, CoreServerConfig>;
   agents: Record<string, CoreAgentConfig>;
   scenarios: CoreScenario[];
+  snapshot_eval?: {
+    enabled: boolean;
+    mode: 'warn' | 'fail_on_drift';
+    baseline_snapshot_id?: string;
+    baseline_source_run_id?: string;
+    last_updated_at?: string;
+  };
 }
 
 export interface CoreScenarioRun {
@@ -84,6 +92,15 @@ export interface CoreResultsJson {
     run_id: string;
     timestamp: string;
     config_hash: string;
+    snapshot_eval?: {
+      applied: boolean;
+      mode: 'warn' | 'fail_on_drift';
+      baseline_snapshot_id: string;
+      baseline_source_run_id?: string;
+      overall_score: number;
+      status: 'Match' | 'Warn' | 'Drift';
+      impacted_scenarios: string[];
+    };
   };
   summary: {
     total_scenarios: number;
@@ -175,6 +192,55 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
 }
 
+export interface SnapshotItem {
+  scenario_id: string;
+  agent: string;
+  required_tools: string[];
+  forbidden_tools: string[];
+  allowed_sequences: string[][];
+  baseline_tools: string[];
+  extracted_values: Record<string, string | number | boolean | null>;
+  final_answer_features: {
+    normalized: string;
+    token_set: string[];
+  };
+}
+
+export interface SnapshotRecord {
+  schema_version: 1;
+  id: string;
+  name: string;
+  created_at: string;
+  source_run_id: string;
+  config_hash: string;
+  source_summary: {
+    total_scenarios: number;
+    total_runs: number;
+    pass_rate: number;
+  };
+  items: SnapshotItem[];
+}
+
+export interface SnapshotScenarioComparison {
+  scenario_id: string;
+  agent: string;
+  score: number;
+  status: 'Match' | 'Warn' | 'Drift';
+  components: {
+    tools: number;
+    extracts: number;
+    semantics: number;
+  };
+  reasons: string[];
+}
+
+export interface SnapshotComparison {
+  snapshot_id: string;
+  run_id: string;
+  overall_score: number;
+  scenario_results: SnapshotScenarioComparison[];
+}
+
 export interface RunJobEvent {
   type: 'started' | 'log' | 'completed' | 'error';
   ts: string;
@@ -193,7 +259,26 @@ export interface EvalDataSource {
     runsPerScenario: number;
     scenarioId?: string;
     agents?: string[];
+    applySnapshotEval?: boolean;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
+  listSnapshots: () => Promise<SnapshotRecord[]>;
+  createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;
+  getSnapshot: (id: string) => Promise<SnapshotRecord | undefined>;
+  compareSnapshot: (snapshotId: string, runId: string) => Promise<SnapshotComparison>;
+  generateSnapshotEvalBaseline: (
+    runId: string,
+    configId: string,
+    name?: string
+  ) => Promise<{ snapshot: SnapshotRecord; config: EvalConfig }>;
+  updateSnapshotPolicy: (
+    configId: string,
+    policy: {
+      enabled: boolean;
+      mode: 'warn' | 'fail_on_drift';
+      baselineSnapshotId?: string;
+      baselineSourceRunId?: string;
+    }
+  ) => Promise<EvalConfig>;
 }

@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   statSync,
   unlinkSync,
   writeFileSync
@@ -16,12 +17,21 @@ import type { EvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core'
 import { loadConfig, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../package.json' with { type: 'json' };
+import {
+  applySnapshotPolicyToRunResult,
+  buildSnapshotFromRun,
+  compareRunToSnapshot,
+  listSnapshots,
+  loadSnapshot,
+  saveSnapshot
+} from './snapshot.js';
 
 export interface AppServerOptions {
   host: string;
   port: number;
   configsDir: string;
   runsDir: string;
+  snapshotsDir: string;
   dev: boolean;
   open: boolean;
 }
@@ -30,6 +40,7 @@ interface AppSettings {
   workspaceRoot: string;
   configsDir: string;
   runsDir: string;
+  snapshotsDir: string;
 }
 
 interface ConfigRecord {
@@ -429,10 +440,12 @@ export async function startAppServer(options: AppServerOptions) {
   const settings: AppSettings = {
     workspaceRoot,
     configsDir: resolve(options.configsDir),
-    runsDir: resolve(options.runsDir)
+    runsDir: resolve(options.runsDir),
+    snapshotsDir: resolve(options.snapshotsDir)
   };
   mkdirSync(settings.configsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
+  mkdirSync(settings.snapshotsDir, { recursive: true });
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
@@ -474,7 +487,93 @@ export async function startAppServer(options: AppServerOptions) {
           settings.runsDir = resolve(String(body.runsDir));
           mkdirSync(settings.runsDir, { recursive: true });
         }
+        if (body.snapshotsDir) {
+          settings.snapshotsDir = resolve(String(body.snapshotsDir));
+          mkdirSync(settings.snapshotsDir, { recursive: true });
+        }
         asJson(res, 200, settings);
+        return;
+      }
+
+      if (pathname === '/api/snapshots' && method === 'GET') {
+        asJson(res, 200, listSnapshots(settings.snapshotsDir));
+        return;
+      }
+
+      if (pathname === '/api/snapshots' && method === 'POST') {
+        const body = await parseBody(req);
+        const runId = String(body.runId ?? '').trim();
+        const name = body.name ? String(body.name) : undefined;
+        if (!runId) {
+          asJson(res, 400, { error: 'runId is required' });
+          return;
+        }
+        const results = getRunResults(runId, settings.runsDir);
+        const snapshot = buildSnapshotFromRun(results, name);
+        saveSnapshot(snapshot, settings.snapshotsDir);
+        asJson(res, 201, snapshot);
+        return;
+      }
+
+      if (pathname === '/api/snapshots/generate-eval' && method === 'POST') {
+        const body = await parseBody(req);
+        const runId = String(body.runId ?? '').trim();
+        const configId = String(body.configId ?? '').trim();
+        const name = body.name ? String(body.name) : undefined;
+        if (!runId) {
+          asJson(res, 400, { error: 'runId is required' });
+          return;
+        }
+        if (!configId) {
+          asJson(res, 400, { error: 'configId is required' });
+          return;
+        }
+        const results = getRunResults(runId, settings.runsDir);
+        const snapshot = buildSnapshotFromRun(results, name);
+        saveSnapshot(snapshot, settings.snapshotsDir);
+
+        const configPath = decodeConfigId(configId, settings.configsDir);
+        const { config } = loadConfig(configPath);
+        const nextConfig: EvalConfig = {
+          ...config,
+          snapshot_eval: {
+            enabled: true,
+            mode: config.snapshot_eval?.mode ?? 'warn',
+            baseline_snapshot_id: snapshot.id,
+            baseline_source_run_id: runId,
+            last_updated_at: new Date().toISOString()
+          }
+        };
+        writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+        asJson(res, 201, {
+          snapshot,
+          config: readConfigRecord(configPath, settings.configsDir)
+        });
+        return;
+      }
+
+      if (pathname.startsWith('/api/snapshots/') && method === 'GET') {
+        const snapshotId = pathname.replace('/api/snapshots/', '');
+        asJson(res, 200, loadSnapshot(snapshotId, settings.snapshotsDir));
+        return;
+      }
+
+      if (
+        pathname.startsWith('/api/snapshots/') &&
+        pathname.endsWith('/compare') &&
+        method === 'POST'
+      ) {
+        const snapshotId = pathname.split('/')[3];
+        const body = await parseBody(req);
+        const runId = String(body.runId ?? '').trim();
+        if (!runId) {
+          asJson(res, 400, { error: 'runId is required' });
+          return;
+        }
+        const snapshot = loadSnapshot(snapshotId, settings.snapshotsDir);
+        const run = getRunResults(runId, settings.runsDir);
+        const comparison = compareRunToSnapshot(run, snapshot);
+        asJson(res, 200, comparison);
         return;
       }
 
@@ -515,10 +614,53 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
-      if (pathname.startsWith('/api/configs/') && method === 'PUT') {
-        const id = pathname.replace('/api/configs/', '');
+      if (pathname.startsWith('/api/configs/') && pathname.endsWith('/snapshot-policy') && method === 'POST') {
+        const id = pathname.replace('/api/configs/', '').replace('/snapshot-policy', '');
         const filePath = decodeConfigId(id, settings.configsDir);
         if (!existsSync(filePath)) {
+          asJson(res, 404, { error: 'Config not found' });
+          return;
+        }
+        const body = await parseBody(req);
+        const enabled = Boolean(body.enabled);
+        const mode = String(body.mode ?? 'warn');
+        if (mode !== 'warn' && mode !== 'fail_on_drift') {
+          asJson(res, 400, { error: 'mode must be warn or fail_on_drift' });
+          return;
+        }
+        const { config } = loadConfig(filePath);
+        const nextSnapshotEval: NonNullable<EvalConfig['snapshot_eval']> = {
+          enabled,
+          mode,
+          baseline_snapshot_id:
+            body.baselineSnapshotId !== undefined
+              ? String(body.baselineSnapshotId || '')
+              : config.snapshot_eval?.baseline_snapshot_id,
+          baseline_source_run_id:
+            body.baselineSourceRunId !== undefined
+              ? String(body.baselineSourceRunId || '')
+              : config.snapshot_eval?.baseline_source_run_id,
+          last_updated_at: new Date().toISOString()
+        };
+        if (!nextSnapshotEval.baseline_snapshot_id) {
+          delete nextSnapshotEval.baseline_snapshot_id;
+        }
+        if (!nextSnapshotEval.baseline_source_run_id) {
+          delete nextSnapshotEval.baseline_source_run_id;
+        }
+        const nextConfig: EvalConfig = {
+          ...config,
+          snapshot_eval: nextSnapshotEval
+        };
+        writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+        asJson(res, 200, readConfigRecord(filePath, settings.configsDir));
+        return;
+      }
+
+      if (pathname.startsWith('/api/configs/') && method === 'PUT') {
+        const id = pathname.replace('/api/configs/', '');
+        const currentPath = decodeConfigId(id, settings.configsDir);
+        if (!existsSync(currentPath)) {
           asJson(res, 404, { error: 'Config not found' });
           return;
         }
@@ -528,8 +670,30 @@ export async function startAppServer(options: AppServerOptions) {
           asJson(res, 400, { error: 'Missing config object' });
           return;
         }
-        writeFileSync(filePath, `${stringifyYaml(config)}\n`, 'utf8');
-        asJson(res, 200, readConfigRecord(filePath, settings.configsDir));
+        let targetPath = currentPath;
+        const nextFileName = String(body.fileName ?? '').trim();
+        if (nextFileName) {
+          const baseName = safeFileName(nextFileName);
+          const desiredPath = ensureInsideRoot(
+            settings.configsDir,
+            join(settings.configsDir, `${baseName}.yaml`)
+          );
+          if (desiredPath !== currentPath) {
+            let uniquePath = desiredPath;
+            let suffix = 1;
+            while (existsSync(uniquePath)) {
+              uniquePath = ensureInsideRoot(
+                settings.configsDir,
+                join(settings.configsDir, `${baseName}-${suffix}.yaml`)
+              );
+              suffix += 1;
+            }
+            renameSync(currentPath, uniquePath);
+            targetPath = uniquePath;
+          }
+        }
+        writeFileSync(targetPath, `${stringifyYaml(config)}\n`, 'utf8');
+        asJson(res, 200, readConfigRecord(targetPath, settings.configsDir));
         return;
       }
 
@@ -621,6 +785,7 @@ export async function startAppServer(options: AppServerOptions) {
         const requestedAgents = Array.isArray(body.agents)
           ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
           : undefined;
+        const applySnapshotEval = body.applySnapshotEval !== false;
 
         if (!configPathRaw) {
           asJson(res, 400, { error: 'configPath is required' });
@@ -675,6 +840,31 @@ export async function startAppServer(options: AppServerOptions) {
                 cliVersion: pkg.version,
                 signal: job.abortController.signal
               });
+              if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
+                const policy = expandedConfig.snapshot_eval;
+                if (policy.baseline_snapshot_id) {
+                  const snapshot = loadSnapshot(policy.baseline_snapshot_id, settings.snapshotsDir);
+                  const comparison = compareRunToSnapshot(results, snapshot);
+                  const enabledScenarioIds = new Set(
+                    expandedConfig.scenarios
+                      .filter((scenario) => scenario.snapshot_eval_enabled !== false)
+                      .map((scenario) => scenario.id)
+                  );
+                  applySnapshotPolicyToRunResult({
+                    results,
+                    comparison,
+                    policy,
+                    enabledScenarioIds
+                  });
+                } else {
+                  addJobEvent(job, {
+                    type: 'log',
+                    ts: new Date().toISOString(),
+                    payload: { message: 'Snapshot eval enabled but baseline_snapshot_id is missing.' }
+                  });
+                }
+              }
+              writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
               writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
               addJobEvent(job, {
                 type: 'completed',
@@ -682,7 +872,8 @@ export async function startAppServer(options: AppServerOptions) {
                 payload: {
                   runId: results.metadata.run_id,
                   runDir,
-                  summary: results.summary
+                  summary: results.summary,
+                  snapshotEval: results.metadata.snapshot_eval ?? null
                 }
               });
               job.status = 'completed';

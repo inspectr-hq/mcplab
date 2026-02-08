@@ -337,6 +337,40 @@ mcplab watch -c examples/eval.yaml \
   --agents claude-haiku,gpt-4o-mini
 ```
 
+### Snapshot Baselines
+
+Create a smart baseline from a fully passing run, then compare later runs against it:
+
+```bash
+# Create a snapshot (source run must be fully passing)
+mcplab snapshot create --run 20260208-140213 --name "trendminer-baseline-v1"
+
+# List snapshots
+mcplab snapshot list
+
+# Compare run against snapshot
+mcplab snapshot compare --id <snapshotId> --run 20260208-150045
+```
+
+Optional: compare immediately after a run:
+
+```bash
+mcplab run -c configs/eval.yaml --compare-snapshot <snapshotId>
+```
+
+Config-first snapshot eval workflow:
+
+```bash
+# Initialize snapshot eval policy in a config from a fully passing run
+mcplab snapshot eval-init --config configs/eval.yaml --run 20260208-140213 --name "baseline-v1"
+
+# Update snapshot eval policy mode
+mcplab snapshot eval-policy --config configs/eval.yaml --enabled true --mode fail_on_drift
+
+# Apply config snapshot policy during run (warn or fail_on_drift)
+mcplab run -c configs/eval.yaml --snapshot-eval
+```
+
 ### Generate Reports
 
 ```bash

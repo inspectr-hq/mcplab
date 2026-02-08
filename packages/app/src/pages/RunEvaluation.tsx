@@ -7,9 +7,10 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { toast } from "@/hooks/use-toast";
 
 const logMessages = [
   "Initializing evaluation runner...",
@@ -35,6 +36,7 @@ const logMessages = [
 ];
 
 const RunEvaluation = () => {
+  const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState("");
   const [varianceRuns, setVarianceRuns] = useState("1");
   const [running, setRunning] = useState(false);
@@ -44,12 +46,21 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [snapshotName, setSnapshotName] = useState("");
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const { configs, reload } = useConfigs();
   const { source, mode } = useDataSource();
   const selectedConfig = configs.find((item) => item.id === configId);
+  const requestedConfigId = searchParams.get("configId");
+
+  useEffect(() => {
+    if (!requestedConfigId) return;
+    if (!configs.some((config) => config.id === requestedConfigId)) return;
+    setConfigId(requestedConfigId);
+  }, [requestedConfigId, configs]);
 
   useEffect(() => {
     if (!selectedConfig) {
@@ -100,6 +111,7 @@ const RunEvaluation = () => {
         configPath: selectedConfig.sourcePath,
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.name || agent.id),
+        applySnapshotEval: true,
       });
       setActiveJobId(jobId);
       unsubscribeRef.current?.();
@@ -111,6 +123,18 @@ const RunEvaluation = () => {
         if (event.type === "completed") {
           const nextRunId = String(event.payload.runId ?? "");
           setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Run completed.`]);
+          if (event.payload.snapshotEval && typeof event.payload.snapshotEval === "object") {
+            const snapshotEval = event.payload.snapshotEval as {
+              mode?: string;
+              baseline_snapshot_id?: string;
+              overall_score?: number;
+              status?: string;
+            };
+            setLogs((prev) => [
+              ...prev,
+              `[${new Date(event.ts).toLocaleTimeString()}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`
+            ]);
+          }
           setProgress(100);
           setRunning(false);
           setDone(true);
@@ -155,6 +179,29 @@ const RunEvaluation = () => {
     setActiveJobId(null);
     setRunning(false);
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
+  };
+
+  const saveSnapshot = async () => {
+    if (!runId) return;
+    setSavingSnapshot(true);
+    try {
+      const record = await source.createSnapshotFromRun(runId, snapshotName.trim() || undefined);
+      toast({
+        title: "Snapshot saved",
+        description: `Created ${record.name} (${record.id})`,
+      });
+      if (!snapshotName.trim()) {
+        setSnapshotName(record.name);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could not save snapshot",
+        description: String(error?.message ?? error),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingSnapshot(false);
+    }
   };
 
   useEffect(() => {
@@ -216,6 +263,12 @@ const RunEvaluation = () => {
           </div>
           {selectedConfig && (
             <div className="space-y-2">
+              {selectedConfig.snapshotEval?.enabled && (
+                <div className="rounded-md border bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+                  Snapshot eval active ({selectedConfig.snapshotEval.mode}) · baseline:{" "}
+                  <span className="font-mono">{selectedConfig.snapshotEval.baselineSnapshotId ?? "none"}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <button
@@ -294,6 +347,28 @@ const RunEvaluation = () => {
                 <Link to={`/results/${runId || "run-a1b2c3"}`}>View Results</Link>
               </Button>
             </div>
+            {mode === "workspace" && runId && (
+              <div className="mt-4 flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Snapshot name (optional)</Label>
+                  <Input
+                    value={snapshotName}
+                    onChange={(e) => setSnapshotName(e.target.value)}
+                    placeholder="e.g. baseline-v1"
+                    className="h-8 w-64"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void saveSnapshot()}
+                  disabled={savingSnapshot}
+                >
+                  {savingSnapshot ? "Saving..." : "Save Snapshot"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

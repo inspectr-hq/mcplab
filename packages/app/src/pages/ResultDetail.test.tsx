@@ -6,9 +6,11 @@ import type { EvalResult } from '@/types/eval';
 
 const { getResultMock, sourceMock } = vi.hoisted(() => {
   const getResult = vi.fn();
+  const listSnapshots = vi.fn().mockResolvedValue([]);
+  const compareSnapshot = vi.fn();
   return {
     getResultMock: getResult,
-    sourceMock: { getResult }
+    sourceMock: { getResult, listSnapshots, compareSnapshot }
   };
 });
 

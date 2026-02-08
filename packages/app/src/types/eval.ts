@@ -37,10 +37,19 @@ export interface Scenario {
   agentId: string;
   serverIds: string[];
   prompt: string;
+  snapshotEvalEnabled?: boolean;
   testMode: 'total' | 'per_step';
   steps: string[];
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
+}
+
+export interface SnapshotEvalPolicy {
+  enabled: boolean;
+  mode: 'warn' | 'fail_on_drift';
+  baselineSnapshotId?: string;
+  baselineSourceRunId?: string;
+  lastUpdatedAt?: string;
 }
 
 export interface EvalConfig {
@@ -51,6 +60,7 @@ export interface EvalConfig {
   servers: ServerConfig[];
   agents: AgentConfig[];
   scenarios: Scenario[];
+  snapshotEval?: SnapshotEvalPolicy;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +118,15 @@ export interface EvalResult {
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
+  snapshotEval?: {
+    applied: boolean;
+    mode: 'warn' | 'fail_on_drift';
+    baselineSnapshotId: string;
+    baselineSourceRunId?: string;
+    overallScore: number;
+    status: 'Match' | 'Warn' | 'Drift';
+    impactedScenarios: string[];
+  };
 }
 
 // App state

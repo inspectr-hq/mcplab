@@ -3,11 +3,13 @@ import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import type { EvalResult } from "@/types/eval";
+import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
 const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)", "hsl(280, 60%, 50%)", "hsl(0, 72%, 51%)"];
 
@@ -17,12 +19,32 @@ const Compare = () => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [mode, setMode] = useState<"runs" | "snapshot">("runs");
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [snapshotId, setSnapshotId] = useState("");
+  const [runId, setRunId] = useState("");
+  const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
 
   useEffect(() => {
     let active = true;
     source.listResults().then((next) => {
       if (active) setResults(next);
     });
+    return () => {
+      active = false;
+    };
+  }, [source]);
+
+  useEffect(() => {
+    let active = true;
+    source
+      .listSnapshots()
+      .then((next) => {
+        if (active) setSnapshots(next);
+      })
+      .catch(() => {
+        if (active) setSnapshots([]);
+      });
     return () => {
       active = false;
     };
@@ -73,6 +95,30 @@ const Compare = () => {
         <p className="text-sm text-muted-foreground">Select 2–5 runs to compare</p>
       </div>
 
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={mode === "runs" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("runs")}
+            >
+              Run vs Run
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "snapshot" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("snapshot")}
+            >
+              Run vs Snapshot
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {mode === "runs" && (
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-base">Select Runs</CardTitle></CardHeader>
         <CardContent className="p-0">
@@ -126,8 +172,9 @@ const Compare = () => {
           </Table>
         </CardContent>
       </Card>
+      )}
 
-      {selectedRuns.length >= 2 && (
+      {mode === "runs" && selectedRuns.length >= 2 && (
         <>
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Summary Comparison</CardTitle></CardHeader>
@@ -190,6 +237,78 @@ const Compare = () => {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {mode === "snapshot" && (
+        <Card>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Run vs Snapshot</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Run</p>
+                <Select value={runId} onValueChange={setRunId}>
+                  <SelectTrigger><SelectValue placeholder="Select run" /></SelectTrigger>
+                  <SelectContent>
+                    {results.map((run) => (
+                      <SelectItem key={run.id} value={run.id}>{run.id}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
+                <Select value={snapshotId} onValueChange={setSnapshotId}>
+                  <SelectTrigger><SelectValue placeholder="Select snapshot" /></SelectTrigger>
+                  <SelectContent>
+                    {snapshots.map((snapshot) => (
+                      <SelectItem key={snapshot.id} value={snapshot.id}>{snapshot.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!runId || !snapshotId}
+              onClick={() => {
+                source.compareSnapshot(snapshotId, runId).then(setSnapshotComparison);
+              }}
+            >
+              Compare
+            </Button>
+            {snapshotComparison && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Overall score: {snapshotComparison.overall_score}</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Scenario</TableHead>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Score</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Reasons</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {snapshotComparison.scenario_results.map((row) => (
+                      <TableRow key={`${row.scenario_id}:${row.agent}`}>
+                        <TableCell>{row.scenario_id}</TableCell>
+                        <TableCell>{row.agent}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.score}</TableCell>
+                        <TableCell>{row.status}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {row.reasons.slice(0, 2).join("; ") || "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );

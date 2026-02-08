@@ -156,6 +156,10 @@
             "type": "string",
             "description": "Evaluation prompt for the agent"
           },
+          "snapshot_eval_enabled": {
+            "type": "boolean",
+            "description": "Override config-level snapshot eval for this scenario"
+          },
           "test": {
             "type": "object",
             "description": "Scenario execution mode",
@@ -284,6 +288,32 @@
               }
             }
           }
+        }
+      }
+    }
+    ,
+    "snapshot_eval": {
+      "type": "object",
+      "description": "Config-level snapshot evaluation policy",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["warn", "fail_on_drift"],
+          "default": "warn"
+        },
+        "baseline_snapshot_id": {
+          "type": "string"
+        },
+        "baseline_source_run_id": {
+          "type": "string"
+        },
+        "last_updated_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }
