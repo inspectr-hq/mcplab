@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { useLibraries } from "@/contexts/LibraryContext";
 import { ServerForm } from "@/components/config-editor/ServerForm";
 import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
@@ -34,6 +35,7 @@ const ConfigEditor = () => {
   const navigate = useNavigate();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { mode, source } = useDataSource();
+  const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
 
   const isNew = id === "new";
   const isView = !isNew && !!id;
@@ -50,6 +52,9 @@ const ConfigEditor = () => {
   const [snapshotRunIsFullyPassing, setSnapshotRunIsFullyPassing] = useState<boolean | null>(null);
   const [updatingSnapshotPolicy, setUpdatingSnapshotPolicy] = useState(false);
   const [generatingBaseline, setGeneratingBaseline] = useState(false);
+  const [selectedLibraryServerId, setSelectedLibraryServerId] = useState("");
+  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
+  const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
 
   useEffect(() => {
     if (existing && !editing) {
@@ -187,6 +192,86 @@ const ConfigEditor = () => {
   };
 
   const title = isNew ? "New Configuration" : editing ? `Editing: ${config.name}` : config.name;
+
+  const importServerFromLibrary = () => {
+    const template = libServers.find((item) => item.id === selectedLibraryServerId);
+    if (!template) return;
+    const name = template.name || template.id;
+    if (config.servers.some((srv) => (srv.name || srv.id) === name)) {
+      toast({ title: "Server already exists in config" });
+      return;
+    }
+    patch({
+      servers: [...config.servers, { ...structuredClone(template), id: `srv-${Date.now()}` }]
+    });
+    setSelectedLibraryServerId("");
+  };
+
+  const importAgentFromLibrary = () => {
+    const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
+    if (!template) return;
+    const name = template.name || template.id;
+    if (config.agents.some((agent) => (agent.name || agent.id) === name)) {
+      toast({ title: "Agent already exists in config" });
+      return;
+    }
+    patch({
+      agents: [...config.agents, { ...structuredClone(template), id: `agt-${Date.now()}` }]
+    });
+    setSelectedLibraryAgentId("");
+  };
+
+  const importScenarioFromLibrary = () => {
+    const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
+    if (!template) return;
+    const nextAgents = [...config.agents];
+    const nextServers = [...config.servers];
+    let mappedAgentId: string | undefined = undefined;
+
+    if (template.agentId) {
+      const templateAgent = libAgents.find((item) => item.id === template.agentId);
+      if (templateAgent) {
+        const templateAgentName = templateAgent.name || templateAgent.id;
+        const existingAgent = nextAgents.find((item) => (item.name || item.id) === templateAgentName);
+        if (existingAgent) {
+          mappedAgentId = existingAgent.id;
+        } else {
+          const imported = { ...structuredClone(templateAgent), id: `agt-${Date.now()}` };
+          nextAgents.push(imported);
+          mappedAgentId = imported.id;
+        }
+      }
+    }
+
+    const mappedServerIds: string[] = [];
+    for (const templateServerId of template.serverIds) {
+      const templateServer = libServers.find((item) => item.id === templateServerId);
+      if (!templateServer) continue;
+      const templateServerName = templateServer.name || templateServer.id;
+      const existingServer = nextServers.find((item) => (item.name || item.id) === templateServerName);
+      if (existingServer) {
+        mappedServerIds.push(existingServer.id);
+        continue;
+      }
+      const imported = { ...structuredClone(templateServer), id: `srv-${Date.now()}-${mappedServerIds.length}` };
+      nextServers.push(imported);
+      mappedServerIds.push(imported.id);
+    }
+
+    const importedScenario = {
+      ...structuredClone(template),
+      id: `scn-${Date.now()}`,
+      agentId: mappedAgentId,
+      serverIds: mappedServerIds.length > 0 ? mappedServerIds : []
+    };
+
+    patch({
+      agents: nextAgents,
+      servers: nextServers,
+      scenarios: [...config.scenarios, importedScenario]
+    });
+    setSelectedLibraryScenarioId("");
+  };
 
   return (
     <div className="space-y-6">
@@ -407,14 +492,71 @@ const ConfigEditor = () => {
         </TabsList>
 
         <TabsContent value="servers">
+          <Card className="mb-4">
+            <CardContent className="pt-4">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Select value={selectedLibraryServerId} onValueChange={setSelectedLibraryServerId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Import server from library" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {libServers.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={importServerFromLibrary}>
+                  Import
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <ServerForm servers={config.servers} onChange={(servers) => patch({ servers })} readOnly={readOnly} />
         </TabsContent>
 
         <TabsContent value="agents">
+          <Card className="mb-4">
+            <CardContent className="pt-4">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Select value={selectedLibraryAgentId} onValueChange={setSelectedLibraryAgentId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Import agent from library" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {libAgents.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibrary}>
+                  Import
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <AgentForm agents={config.agents} onChange={(agents) => patch({ agents })} readOnly={readOnly} />
         </TabsContent>
 
         <TabsContent value="scenarios">
+          <Card className="mb-4">
+            <CardContent className="pt-4">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Import scenario from library" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {libScenarios.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
+                  Import
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <ScenarioForm
             scenarios={config.scenarios}
             agents={config.agents}

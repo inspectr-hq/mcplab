@@ -71,10 +71,6 @@ export interface Scenario {
   servers: string[];
   prompt: string;
   snapshot_eval_enabled?: boolean;
-  test?: {
-    mode?: 'total' | 'per_step';
-    steps?: string[];
-  };
   eval?: EvalRules;
   extract?: ExtractRule[];
 }

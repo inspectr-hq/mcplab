@@ -81,16 +81,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     return {
       id: scenario.id || toId('scn', index),
       name: scenario.id || `Scenario ${index + 1}`,
-      agentId: agentIdByName.get(scenario.agent) ?? '',
+      agentId: scenario.agent ? agentIdByName.get(scenario.agent) ?? undefined : undefined,
       serverIds: scenario.servers
         .map((name) => serverIdByName.get(name))
         .filter(Boolean) as string[],
       prompt: scenario.prompt,
       snapshotEvalEnabled: scenario.snapshot_eval_enabled,
-      testMode: (scenario.test?.mode === 'per_step' ? 'per_step' : 'total') as
-        | 'total'
-        | 'per_step',
-      steps: (scenario.test?.steps ?? []).map((step) => String(step)).filter(Boolean),
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,
@@ -118,6 +114,31 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     createdAt: record.mtime,
     updatedAt: record.mtime,
     sourcePath: record.path
+  };
+}
+
+export function fromCoreLibraries(libraries: {
+  servers: CoreEvalConfig['servers'];
+  agents: CoreEvalConfig['agents'];
+  scenarios: CoreEvalConfig['scenarios'];
+}): Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'> {
+  const record: WorkspaceConfigRecord = {
+    id: 'library',
+    name: 'library',
+    path: 'library',
+    mtime: new Date(0).toISOString(),
+    hash: '',
+    config: {
+      servers: libraries.servers,
+      agents: libraries.agents,
+      scenarios: libraries.scenarios
+    }
+  };
+  const mapped = fromCoreConfigYaml(record);
+  return {
+    servers: mapped.servers,
+    agents: mapped.agents,
+    scenarios: mapped.scenarios
   };
 }
 
@@ -170,14 +191,10 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
 
     return {
       id: scenario.id,
-      agent: agentNameById.get(scenario.agentId) || '',
+      agent: scenario.agentId ? (agentNameById.get(scenario.agentId) || undefined) : undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
       snapshot_eval_enabled: scenario.snapshotEvalEnabled,
-      test: {
-        mode: scenario.testMode,
-        steps: scenario.steps.filter((step) => step.trim().length > 0)
-      },
       eval: {
         tool_constraints: {
           required_tools,
@@ -206,6 +223,28 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
           last_updated_at: config.snapshotEval.lastUpdatedAt
         }
       : undefined
+  };
+}
+
+export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>): {
+  servers: CoreEvalConfig['servers'];
+  agents: CoreEvalConfig['agents'];
+  scenarios: CoreEvalConfig['scenarios'];
+} {
+  const core = toCoreConfigYaml({
+    id: 'library',
+    name: 'library',
+    description: '',
+    servers: input.servers,
+    agents: input.agents,
+    scenarios: input.scenarios,
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString()
+  });
+  return {
+    servers: core.servers,
+    agents: core.agents,
+    scenarios: core.scenarios
   };
 }
 

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, Play, BarChart3, GitCompare } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -17,6 +17,9 @@ import {
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Configurations", url: "/configs", icon: Settings },
+  { title: "Manage Servers", url: "/libraries/servers", icon: Database },
+  { title: "Manage Agents", url: "/libraries/agents", icon: Bot },
+  { title: "Manage Scenarios", url: "/libraries/scenarios", icon: FileCode },
   { title: "Run Evaluation", url: "/run", icon: Play },
   { title: "Results", url: "/results", icon: BarChart3 },
   { title: "Compare", url: "/compare", icon: GitCompare },

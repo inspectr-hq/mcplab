@@ -37,10 +37,6 @@ export interface CoreScenario {
   servers: string[];
   prompt: string;
   snapshot_eval_enabled?: boolean;
-  test?: {
-    mode?: 'total' | 'per_step';
-    steps?: string[];
-  };
   eval?: {
     tool_constraints?: {
       required_tools?: string[];
@@ -281,4 +277,14 @@ export interface EvalDataSource {
       baselineSourceRunId?: string;
     }
   ) => Promise<EvalConfig>;
+  getLibraries: () => Promise<{
+    servers: EvalConfig['servers'];
+    agents: EvalConfig['agents'];
+    scenarios: EvalConfig['scenarios'];
+  }>;
+  saveLibraries: (libraries: {
+    servers: EvalConfig['servers'];
+    agents: EvalConfig['agents'];
+    scenarios: EvalConfig['scenarios'];
+  }) => Promise<void>;
 }

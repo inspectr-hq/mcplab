@@ -12,7 +12,7 @@ import {
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { basename, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core';
 import { loadConfig, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -32,6 +32,7 @@ export interface AppServerOptions {
   configsDir: string;
   runsDir: string;
   snapshotsDir: string;
+  librariesDir: string;
   dev: boolean;
   open: boolean;
 }
@@ -41,6 +42,7 @@ interface AppSettings {
   configsDir: string;
   runsDir: string;
   snapshotsDir: string;
+  librariesDir: string;
 }
 
 interface ConfigRecord {
@@ -212,6 +214,77 @@ function listRuns(runsDir: string): RunSummary[] {
   );
 }
 
+function readYamlFile<T>(path: string, fallback: T): T {
+  if (!existsSync(path)) return fallback;
+  try {
+    const raw = readFileSync(path, 'utf8');
+    const parsed = parseYaml(raw) as T;
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function readLibraries(librariesDir: string): {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+  scenarios: EvalConfig['scenarios'];
+} {
+  const root = resolve(librariesDir);
+  const scenariosDir = join(root, 'scenarios');
+  const servers = readYamlFile<EvalConfig['servers']>(join(root, 'servers.yaml'), {});
+  const agents = readYamlFile<EvalConfig['agents']>(join(root, 'agents.yaml'), {});
+  const scenarios: EvalConfig['scenarios'] = [];
+  if (existsSync(scenariosDir)) {
+    const files = readdirSync(scenariosDir)
+      .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+      .sort((a, b) => a.localeCompare(b));
+    for (const file of files) {
+      const scenarioPath = ensureInsideRoot(scenariosDir, join(scenariosDir, file));
+      const parsed = readYamlFile<EvalConfig['scenarios'][number] | null>(scenarioPath, null);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const id = String(parsed.id ?? basename(file, extname(file)));
+      scenarios.push({ ...parsed, id });
+    }
+  }
+  return { servers, agents, scenarios };
+}
+
+function writeLibraries(
+  librariesDir: string,
+  libraries: {
+    servers: EvalConfig['servers'];
+    agents: EvalConfig['agents'];
+    scenarios: EvalConfig['scenarios'];
+  }
+) {
+  const root = resolve(librariesDir);
+  const scenariosDir = join(root, 'scenarios');
+  mkdirSync(root, { recursive: true });
+  mkdirSync(scenariosDir, { recursive: true });
+
+  writeFileSync(join(root, 'servers.yaml'), `${stringifyYaml(libraries.servers ?? {})}\n`, 'utf8');
+  writeFileSync(join(root, 'agents.yaml'), `${stringifyYaml(libraries.agents ?? {})}\n`, 'utf8');
+
+  const desired = new Set<string>();
+  for (const scenario of libraries.scenarios ?? []) {
+    const scenarioId = safeFileName(String(scenario.id ?? `scenario-${Date.now()}`));
+    desired.add(`${scenarioId}.yaml`);
+    const scenarioPath = ensureInsideRoot(scenariosDir, join(scenariosDir, `${scenarioId}.yaml`));
+    writeFileSync(
+      scenarioPath,
+      `${stringifyYaml({ ...scenario, id: String(scenario.id ?? scenarioId) })}\n`,
+      'utf8'
+    );
+  }
+
+  for (const file of readdirSync(scenariosDir)) {
+    if (!(file.endsWith('.yaml') || file.endsWith('.yml'))) continue;
+    if (desired.has(file)) continue;
+    unlinkSync(ensureInsideRoot(scenariosDir, join(scenariosDir, file)));
+  }
+}
+
 function getRunResults(runId: string, runsDir: string): ResultsJson {
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const resultsPath = ensureInsideRoot(runsDir, join(runDir, 'results.json'));
@@ -335,8 +408,9 @@ function addJobEvent(job: RunJob, event: JobEvent) {
 }
 
 function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): EvalConfig {
-  if (!requestedAgents || requestedAgents.length === 0) return config;
-  const missing = requestedAgents.filter((agent) => !config.agents[agent]);
+  const selectedAgents =
+    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
+  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
   if (missing.length > 0) {
     throw new Error(
       `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
@@ -344,7 +418,13 @@ function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): 
   }
   const expandedScenarios = [];
   for (const scenario of config.scenarios) {
-    for (const agent of requestedAgents) {
+    const pinnedAgent = scenario.agent?.trim();
+    const targetAgents = pinnedAgent
+      ? selectedAgents.includes(pinnedAgent)
+        ? [pinnedAgent]
+        : []
+      : selectedAgents;
+    for (const agent of targetAgents) {
       expandedScenarios.push({
         ...scenario,
         id: `${scenario.id}-${agent}`,
@@ -441,11 +521,14 @@ export async function startAppServer(options: AppServerOptions) {
     workspaceRoot,
     configsDir: resolve(options.configsDir),
     runsDir: resolve(options.runsDir),
-    snapshotsDir: resolve(options.snapshotsDir)
+    snapshotsDir: resolve(options.snapshotsDir),
+    librariesDir: resolve(options.librariesDir)
   };
   mkdirSync(settings.configsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   mkdirSync(settings.snapshotsDir, { recursive: true });
+  mkdirSync(settings.librariesDir, { recursive: true });
+  mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
@@ -491,7 +574,28 @@ export async function startAppServer(options: AppServerOptions) {
           settings.snapshotsDir = resolve(String(body.snapshotsDir));
           mkdirSync(settings.snapshotsDir, { recursive: true });
         }
+        if (body.librariesDir) {
+          settings.librariesDir = resolve(String(body.librariesDir));
+          mkdirSync(settings.librariesDir, { recursive: true });
+          mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+        }
         asJson(res, 200, settings);
+        return;
+      }
+
+      if (pathname === '/api/libraries' && method === 'GET') {
+        asJson(res, 200, readLibraries(settings.librariesDir));
+        return;
+      }
+
+      if (pathname === '/api/libraries' && method === 'PUT') {
+        const body = await parseBody(req);
+        writeLibraries(settings.librariesDir, {
+          servers: (body.servers as EvalConfig['servers']) ?? {},
+          agents: (body.agents as EvalConfig['agents']) ?? {},
+          scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
+        });
+        asJson(res, 200, { ok: true });
         return;
       }
 
@@ -937,6 +1041,8 @@ export async function startAppServer(options: AppServerOptions) {
   console.log(`  configs: ${settings.configsDir}`);
   // eslint-disable-next-line no-console
   console.log(`  runs:    ${settings.runsDir}`);
+  // eslint-disable-next-line no-console
+  console.log(`  libs:    ${settings.librariesDir}`);
 
   if (options.open) {
     startBrowser(url);

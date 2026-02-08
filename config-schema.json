@@ -133,7 +133,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "agent", "servers", "prompt"],
+        "required": ["id", "servers", "prompt"],
         "properties": {
           "id": {
             "type": "string",
@@ -142,7 +142,7 @@
           },
           "agent": {
             "type": "string",
-            "description": "Agent name (must reference an agent defined in 'agents')"
+            "description": "Optional pinned agent name. If omitted, scenario can run against selected agents at runtime."
           },
           "servers": {
             "type": "array",

@@ -3,6 +3,7 @@ import type { EvalConfig, EvalResult } from '@/types/eval';
 import type { EvalDataSource, RunJobEvent } from './types';
 
 const STORAGE_KEY = 'mcp-eval-configs';
+const LIBRARY_STORAGE_KEY = 'mcplab:libraries:v1';
 
 function readConfigs(): EvalConfig[] {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -11,6 +12,39 @@ function readConfigs(): EvalConfig[] {
 
 function writeConfigs(configs: EvalConfig[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+}
+
+function readLibraries(): {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+  scenarios: EvalConfig['scenarios'];
+} {
+  const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
+  if (!stored) {
+    return { servers: [], agents: [], scenarios: [] };
+  }
+  try {
+    const parsed = JSON.parse(stored) as {
+      servers?: EvalConfig['servers'];
+      agents?: EvalConfig['agents'];
+      scenarios?: EvalConfig['scenarios'];
+    };
+    return {
+      servers: parsed.servers ?? [],
+      agents: parsed.agents ?? [],
+      scenarios: parsed.scenarios ?? []
+    };
+  } catch {
+    return { servers: [], agents: [], scenarios: [] };
+  }
+}
+
+function writeLibraries(libraries: {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+  scenarios: EvalConfig['scenarios'];
+}) {
+  localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(libraries));
 }
 
 export const demoSource: EvalDataSource = {
@@ -70,5 +104,11 @@ export const demoSource: EvalDataSource = {
   },
   async updateSnapshotPolicy() {
     throw new Error('Snapshot eval is only available in workspace mode.');
+  },
+  async getLibraries() {
+    return readLibraries();
+  },
+  async saveLibraries(libraries) {
+    writeLibraries(libraries);
   }
 };

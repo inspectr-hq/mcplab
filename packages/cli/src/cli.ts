@@ -44,38 +44,16 @@ program
     try {
       let { config, hash } = loadConfig(resolve(options.config));
 
-      // If --agents is specified, duplicate scenarios for each agent
-      if (options.agents) {
-        const requestedAgents = options.agents.split(',').map((a: string) => a.trim());
-        const missingAgents = requestedAgents.filter((a: string) => !config.agents[a]);
-
-        if (missingAgents.length > 0) {
-          throw new Error(
-            `Unknown agents: ${missingAgents.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
-          );
-        }
-
-        const baseScenarios = config.scenarios;
-        const expandedScenarios = [];
-
-        for (const scenario of baseScenarios) {
-          for (const agent of requestedAgents) {
-            expandedScenarios.push({
-              ...scenario,
-              id: `${scenario.id}-${agent}`,
-              agent: agent
-            });
-          }
-        }
-
-        config = {
-          ...config,
-          scenarios: expandedScenarios
-        };
-
+      const requestedAgents = options.agents
+        ? options.agents.split(',').map((a: string) => a.trim()).filter(Boolean)
+        : undefined;
+      const beforeExpandCount = config.scenarios.length;
+      config = expandConfigForAgents(config, requestedAgents);
+      if (config.scenarios.length !== beforeExpandCount || requestedAgents?.length) {
+        const agentCount = requestedAgents?.length ?? Object.keys(config.agents).length;
         console.log(
           kleur.cyan(
-            `📊 Testing ${baseScenarios.length} scenarios × ${requestedAgents.length} agents = ${expandedScenarios.length} total tests`
+            `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${config.scenarios.length} total tests`
           )
         );
       }
@@ -348,6 +326,7 @@ program
   .option('--configs-dir <path>', 'Directory for YAML configs', 'configs')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'snapshots')
+  .option('--libraries-dir <path>', 'Directory for reusable libraries', 'libraries')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
@@ -364,6 +343,7 @@ program
         configsDir: resolve(options.configsDir),
         runsDir: resolve(options.runsDir),
         snapshotsDir: resolve(options.snapshotsDir),
+        librariesDir: resolve(options.librariesDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)
       });
@@ -409,7 +389,8 @@ program
 
       try {
         const { config, hash } = loadConfig(configPath);
-        const selected = selectScenarios(config, options.scenario);
+        const expanded = expandConfigForAgents(config);
+        const selected = selectScenarios(expanded, options.scenario);
         const { runDir, results } = await runAll(selected, {
           runsPerScenario,
           scenarioId: options.scenario,
@@ -466,6 +447,33 @@ program
   });
 
 program.parse();
+
+function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): EvalConfig {
+  const selectedAgents =
+    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
+  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
+    );
+  }
+
+  const scenarios = config.scenarios.flatMap((scenario) => {
+    const pinnedAgent = scenario.agent?.trim();
+    const targetAgents = pinnedAgent
+      ? selectedAgents.includes(pinnedAgent)
+        ? [pinnedAgent]
+        : []
+      : selectedAgents;
+    return targetAgents.map((agent) => ({
+      ...scenario,
+      id: `${scenario.id}-${agent}`,
+      agent
+    }));
+  });
+
+  return { ...config, scenarios };
+}
 
 function getGitCommit(): string | undefined {
   try {

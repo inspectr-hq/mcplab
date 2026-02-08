@@ -1,5 +1,5 @@
 import type { EvalConfig } from '@/types/eval';
-import { fromCoreConfigYaml, fromCoreResultsJson, toCoreConfigYaml } from './adapters';
+import { fromCoreConfigYaml, fromCoreLibraries, fromCoreResultsJson, toCoreConfigYaml, toCoreLibraries } from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
 import type { EvalDataSource } from './types';
 
@@ -95,5 +95,12 @@ export const workspaceSource: EvalDataSource = {
   async updateSnapshotPolicy(configId, policy) {
     const record = await workspaceApiClient.updateSnapshotPolicy(configId, policy);
     return fromCoreConfigYaml(record);
+  },
+  async getLibraries() {
+    const libraries = await workspaceApiClient.getLibraries();
+    return fromCoreLibraries(libraries);
+  },
+  async saveLibraries(libraries) {
+    await workspaceApiClient.saveLibraries(toCoreLibraries(libraries));
   }
 };

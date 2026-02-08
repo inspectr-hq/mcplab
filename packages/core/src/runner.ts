@@ -46,6 +46,9 @@ export async function runAll(
 
   for (const scenario of config.scenarios) {
     throwIfAborted(options.signal);
+    if (!scenario.agent) {
+      throw new Error(`Scenario '${scenario.id}' has no agent. Provide --agents or set scenario.agent.`);
+    }
     const agent = config.agents[scenario.agent];
     if (!agent) {
       throw new Error(`Agent not found: ${scenario.agent}`);

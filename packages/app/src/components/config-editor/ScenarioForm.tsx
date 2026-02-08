@@ -26,11 +26,9 @@ interface ScenarioFormProps {
 const emptyScenario = (): Scenario => ({
   id: `scn-${Date.now()}`,
   name: "",
-  agentId: "",
+  agentId: undefined,
   serverIds: [],
   prompt: "",
-  testMode: "total",
-  steps: [],
   evalRules: [],
   extractRules: [],
 });
@@ -133,10 +131,11 @@ function ScenarioCard({ scenario, index, agents, servers, snapshotEval, onUpdate
             <Input value={scenario.name} onChange={(e) => onUpdate({ name: e.target.value })} disabled={readOnly} placeholder="e.g. List directory" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Agent</Label>
-            <Select value={scenario.agentId} onValueChange={(v) => onUpdate({ agentId: v })} disabled={readOnly}>
+            <Label className="text-xs">Agent Scope</Label>
+            <Select value={scenario.agentId || "__run_selected__"} onValueChange={(v) => onUpdate({ agentId: v === "__run_selected__" ? undefined : v })} disabled={readOnly}>
               <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="__run_selected__">Run-selected agents (cross-compare)</SelectItem>
                 {agents.map((a) => (
                   <SelectItem key={a.id} value={a.id}>{a.name || a.id}</SelectItem>
                 ))}

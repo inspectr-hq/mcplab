@@ -392,6 +392,17 @@ runs/20260206-212239/
 └── report.html        # Interactive HTML report (self-contained)
 ```
 
+Reusable libraries are stored in a bundled folder:
+
+```
+libraries/
+├── servers.yaml
+├── agents.yaml
+└── scenarios/
+    ├── scenario-a.yaml
+    └── scenario-b.yaml
+```
+
 ### Trace Format (JSONL)
 
 ```jsonl

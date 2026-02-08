@@ -45,6 +45,18 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Run Evaluation" });
     return crumbs;
   }
+  if (matchPath("/libraries/servers", pathname)) {
+    crumbs.push({ label: "Manage Servers" });
+    return crumbs;
+  }
+  if (matchPath("/libraries/agents", pathname)) {
+    crumbs.push({ label: "Manage Agents" });
+    return crumbs;
+  }
+  if (matchPath("/libraries/scenarios", pathname)) {
+    crumbs.push({ label: "Manage Scenarios" });
+    return crumbs;
+  }
   if (matchPath("/compare", pathname)) {
     crumbs.push({ label: "Compare" });
     return crumbs;

@@ -34,12 +34,10 @@ export interface ExtractRule {
 export interface Scenario {
   id: string;
   name: string;
-  agentId: string;
+  agentId?: string;
   serverIds: string[];
   prompt: string;
   snapshotEvalEnabled?: boolean;
-  testMode: 'total' | 'per_step';
-  steps: string[];
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
 }

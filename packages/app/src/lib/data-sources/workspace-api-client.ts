@@ -37,7 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const workspaceApiClient = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
   getSettings: () =>
-    request<{ workspaceRoot: string; configsDir: string; runsDir: string; snapshotsDir: string }>('/api/settings'),
+    request<{ workspaceRoot: string; configsDir: string; runsDir: string; snapshotsDir: string; librariesDir: string }>('/api/settings'),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
     request<WorkspaceConfigRecord>('/api/configs', {
@@ -85,6 +85,21 @@ export const workspaceApiClient = {
     request<WorkspaceConfigRecord>(`/api/configs/${configId}/snapshot-policy`, {
       method: 'POST',
       body: JSON.stringify(policy)
+    }),
+  getLibraries: () =>
+    request<{
+      servers: CoreEvalConfig['servers'];
+      agents: CoreEvalConfig['agents'];
+      scenarios: CoreEvalConfig['scenarios'];
+    }>('/api/libraries'),
+  saveLibraries: (libraries: {
+    servers: CoreEvalConfig['servers'];
+    agents: CoreEvalConfig['agents'];
+    scenarios: CoreEvalConfig['scenarios'];
+  }) =>
+    request<{ ok: boolean }>('/api/libraries', {
+      method: 'PUT',
+      body: JSON.stringify(libraries)
     }),
   startRun: (params: {
     configPath: string;
