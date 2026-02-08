@@ -13,6 +13,7 @@ export interface RunOptions {
   configHash: string;
   gitCommit?: string;
   cliVersion: string;
+  runsDir?: string;
   signal?: AbortSignal;
 }
 
@@ -22,7 +23,8 @@ export async function runAll(
 ): Promise<{ runDir: string; results: ResultsJson }> {
   throwIfAborted(options.signal);
   const runId = createRunId();
-  const runDir = join(process.cwd(), 'runs', runId);
+  const runRoot = options.runsDir?.trim() || 'runs';
+  const runDir = join(process.cwd(), runRoot, runId);
   mkdirSync(runDir, { recursive: true });
 
   const tracePath = join(runDir, 'trace.jsonl');

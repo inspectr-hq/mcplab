@@ -39,7 +39,8 @@ program
   )
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
-  .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
+  .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .action(async (options) => {
     try {
       let { config, hash } = loadConfig(resolve(options.config));
@@ -68,7 +69,8 @@ program
         scenarioId: options.scenario,
         configHash: hash,
         gitCommit: getGitCommit(),
-        cliVersion: pkg.version
+        cliVersion: pkg.version,
+        runsDir: String(options.runsDir)
       });
       let shouldFailOnDrift = false;
       const useSnapshotEval = Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
@@ -147,8 +149,8 @@ program
       .description('Create snapshot from a run (only fully passing runs)')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
           const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');
@@ -240,7 +242,7 @@ program
   .addCommand(
     new Command('list')
       .description('List snapshots')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
           const snapshots = listSnapshots(resolve(options.snapshotsDir));
@@ -263,7 +265,7 @@ program
     new Command('show')
       .description('Show snapshot JSON')
       .requiredOption('--id <snapshotId>', 'Snapshot id')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
           const snapshot = loadSnapshot(String(options.id), resolve(options.snapshotsDir));
@@ -280,8 +282,8 @@ program
       .requiredOption('--id <snapshotId>', 'Snapshot id')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--format <format>', 'Output format: table|json', 'table')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
           const snapshot = loadSnapshot(String(options.id), resolve(options.snapshotsDir));
@@ -323,10 +325,10 @@ program
 program
   .command('app')
   .description('Serve MCPLab app frontend and local API bridge')
-  .option('--configs-dir <path>', 'Directory for YAML configs', 'configs')
-  .option('--runs-dir <path>', 'Directory for run artifacts', 'runs')
-  .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'snapshots')
-  .option('--libraries-dir <path>', 'Directory for reusable libraries', 'libraries')
+  .option('--configs-dir <path>', 'Directory for YAML configs', 'mcplab/configs')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
+  .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
+  .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
@@ -360,6 +362,7 @@ program
   .requiredOption('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
   .option('--debounce <ms>', 'Debounce delay in milliseconds', '500')
   .action(async (options) => {
     const configPath = resolve(options.config);
@@ -396,7 +399,8 @@ program
           scenarioId: options.scenario,
           configHash: hash,
           gitCommit: getGitCommit(),
-          cliVersion: pkg.version
+          cliVersion: pkg.version,
+          runsDir: String(options.runsDir)
         });
         const reportPath = join(runDir, 'report.html');
         writeFileSync(reportPath, renderReport(results), 'utf8');
