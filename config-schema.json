@@ -156,6 +156,25 @@
             "type": "string",
             "description": "Evaluation prompt for the agent"
           },
+          "test": {
+            "type": "object",
+            "description": "Scenario execution mode",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["total", "per_step"],
+                "default": "total",
+                "description": "Run full prompt once or execute each step separately"
+              },
+              "steps": {
+                "type": "array",
+                "description": "Step prompts to execute when mode=per_step",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "eval": {
             "type": "object",
             "description": "Evaluation criteria",

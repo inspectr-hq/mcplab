@@ -61,7 +61,21 @@ export async function runAll(
         ts: new Date().toISOString()
       });
 
-      const runResult = await runAgentScenario({ scenario, agent, mcp, trace, signal: options.signal });
+      const prompts = buildScenarioPrompts(scenario);
+      const partialRuns = [];
+      for (const prompt of prompts) {
+        throwIfAborted(options.signal);
+        partialRuns.push(
+          await runAgentScenario({
+            scenario: { ...scenario, prompt },
+            agent,
+            mcp,
+            trace,
+            signal: options.signal
+          })
+        );
+      }
+      const runResult = combinePartialRuns(partialRuns);
       const evalResult = evaluateScenario(
         runResult.finalText,
         runResult.toolSequence,
@@ -147,4 +161,30 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error('Run aborted by user');
   }
+}
+
+function buildScenarioPrompts(scenario: EvalConfig['scenarios'][number]): string[] {
+  if (scenario.test?.mode !== 'per_step') {
+    return [scenario.prompt];
+  }
+  const steps = (scenario.test.steps ?? []).map((step) => step.trim()).filter(Boolean);
+  if (steps.length > 0) {
+    return steps;
+  }
+  return [scenario.prompt];
+}
+
+function combinePartialRuns(
+  partialRuns: Array<{ finalText: string; toolSequence: string[]; toolDurationsMs: number[] }>
+): { finalText: string; toolSequence: string[]; toolDurationsMs: number[] } {
+  if (partialRuns.length === 1) {
+    return partialRuns[0];
+  }
+  return {
+    finalText: partialRuns
+      .map((run, index) => `Step ${index + 1}:\n${run.finalText}`.trim())
+      .join('\n\n'),
+    toolSequence: partialRuns.flatMap((run) => run.toolSequence),
+    toolDurationsMs: partialRuns.flatMap((run) => run.toolDurationsMs)
+  };
 }

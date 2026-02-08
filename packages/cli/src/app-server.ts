@@ -53,14 +53,22 @@ interface RunSummary {
   avgLatencyMs: number;
 }
 
-interface TraceToolEvent {
-  scenario_id?: string;
-  tool: string;
-  args?: unknown;
-  duration_ms?: number;
-  ts_start?: string;
-  ts_end?: string;
-}
+type TraceUiEvent =
+  | { type: 'scenario_started'; scenario_id: string; ts: string }
+  | { type: 'llm_request'; messages_summary: string; ts: string }
+  | { type: 'llm_response'; raw_or_summary: string; ts: string }
+  | { type: 'tool_call'; scenario_id?: string; tool: string; args?: unknown; ts_start?: string }
+  | {
+      type: 'tool_result';
+      scenario_id?: string;
+      tool: string;
+      ok: boolean;
+      result_summary: string;
+      duration_ms?: number;
+      ts_end?: string;
+    }
+  | { type: 'final_answer'; scenario_id?: string; text: string; ts: string }
+  | { type: 'scenario_finished'; scenario_id: string; pass: boolean; ts: string };
 
 interface JobEvent {
   type: 'started' | 'log' | 'completed' | 'error';
@@ -221,16 +229,44 @@ function getTraceEvents(runId: string, runsDir: string): TraceEvent[] {
   return events;
 }
 
-function toTraceToolEvents(events: TraceEvent[]): TraceToolEvent[] {
-  const toolEvents: TraceToolEvent[] = [];
+function toTraceUiEvents(events: TraceEvent[]): TraceUiEvent[] {
+  const normalized: TraceUiEvent[] = [];
   let activeScenarioId: string | undefined;
-  let pending: TraceToolEvent | undefined;
+  let pending: { scenario_id?: string; tool: string; args?: unknown; ts_start?: string } | undefined;
+
   for (const event of events) {
     if (event.type === 'scenario_started') {
       activeScenarioId = event.scenario_id;
+      normalized.push({
+        type: 'scenario_started',
+        scenario_id: event.scenario_id,
+        ts: event.ts
+      });
+      continue;
+    }
+    if (event.type === 'llm_request') {
+      normalized.push({
+        type: 'llm_request',
+        messages_summary: event.messages_summary,
+        ts: event.ts
+      });
+      continue;
+    }
+    if (event.type === 'llm_response') {
+      normalized.push({
+        type: 'llm_response',
+        raw_or_summary: event.raw_or_summary,
+        ts: event.ts
+      });
       continue;
     }
     if (event.type === 'scenario_finished') {
+      normalized.push({
+        type: 'scenario_finished',
+        scenario_id: event.scenario_id,
+        pass: event.pass,
+        ts: event.ts
+      });
       activeScenarioId = undefined;
       continue;
     }
@@ -241,16 +277,38 @@ function toTraceToolEvents(events: TraceEvent[]): TraceToolEvent[] {
         args: event.args,
         ts_start: event.ts_start
       };
+      normalized.push({
+        type: 'tool_call',
+        scenario_id: activeScenarioId,
+        tool: event.tool,
+        args: event.args,
+        ts_start: event.ts_start
+      });
       continue;
     }
     if (event.type === 'tool_result' && pending && pending.tool === event.tool) {
-      pending.duration_ms = event.duration_ms;
-      pending.ts_end = event.ts_end;
-      toolEvents.push(pending);
+      normalized.push({
+        type: 'tool_result',
+        scenario_id: pending.scenario_id,
+        tool: event.tool,
+        ok: event.ok,
+        result_summary: event.result_summary,
+        duration_ms: event.duration_ms,
+        ts_end: event.ts_end
+      });
       pending = undefined;
+      continue;
+    }
+    if (event.type === 'final_answer') {
+      normalized.push({
+        type: 'final_answer',
+        scenario_id: activeScenarioId,
+        text: event.text,
+        ts: event.ts
+      });
     }
   }
-  return toolEvents;
+  return normalized;
 }
 
 function sendSseEvent(res: ServerResponse, event: JobEvent) {
@@ -494,7 +552,7 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname.startsWith('/api/runs/') && pathname.endsWith('/trace') && method === 'GET') {
         const runId = pathname.split('/')[3];
-        const normalized = toTraceToolEvents(getTraceEvents(runId, settings.runsDir));
+        const normalized = toTraceUiEvents(getTraceEvents(runId, settings.runsDir));
         asJson(res, 200, { runId, events: normalized });
         return;
       }

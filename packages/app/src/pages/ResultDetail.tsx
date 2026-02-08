@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
-import type { EvalResult } from "@/types/eval";
+import type { ConversationItem, EvalResult } from "@/types/eval";
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +19,7 @@ const ResultDetail = () => {
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
+  const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!id) return;
@@ -59,6 +60,16 @@ const ResultDetail = () => {
       return next;
     });
   };
+
+  const toggleConversation = (key: string) => {
+    setOpenConversations((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const runKey = (scenarioId: string, runIndex: number) => `${scenarioId}:${runIndex}`;
 
   return (
     <div className="space-y-6">
@@ -189,6 +200,28 @@ const ResultDetail = () => {
                                       {run.finalAnswer || "No final answer captured."}
                                     </p>
                                   </div>
+                                  <div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
+                                    >
+                                      {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
+                                    </Button>
+                                  </div>
+                                  {openConversations.has(runKey(sc.scenarioId, run.runIndex)) && (
+                                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                      {run.conversation.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
+                                      ) : (
+                                        run.conversation.map((item) => (
+                                          <ConversationRow key={item.id} item={item} />
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
                                   {run.failureReasons.length > 0 && (
                                     <p className="text-xs text-destructive">{run.failureReasons.join(", ")}</p>
                                   )}
@@ -209,5 +242,117 @@ const ResultDetail = () => {
     </div>
   );
 };
+
+function ConversationRow({ item }: { item: ConversationItem }) {
+  if (item.kind === "tool_call") {
+    return (
+      <ToolEventRow
+        variant="call"
+        title={`Tool call · ${item.toolName || "unknown"}`}
+        text={item.text}
+      />
+    );
+  }
+  if (item.kind === "tool_result") {
+    const statusIcon = item.ok ? (
+      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
+    ) : (
+      <XCircle className="h-3.5 w-3.5 text-rose-700 dark:text-rose-300" />
+    );
+    return (
+      <ToolEventRow
+        variant={item.ok ? "result_ok" : "result_error"}
+        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}`}
+        text={item.text}
+        icon={statusIcon}
+      />
+    );
+  }
+
+  const isUser = item.kind === "user_prompt";
+  const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Assistant final" : "Assistant";
+  const Icon = isUser ? User : Bot;
+  return (
+    <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
+      {!isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+      <div className={`max-w-[90%] rounded-md p-2 ${isUser ? "bg-primary/10" : "bg-muted/50"}`}>
+        <p className={`mb-1 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>{label}</p>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{item.text}</p>
+        ) : (
+          <ExpandableText text={item.text} maxLength={500} className="whitespace-pre-wrap" />
+        )}
+      </div>
+      {isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolEventRow({
+  variant,
+  title,
+  text,
+  icon
+}: {
+  variant: "call" | "result_ok" | "result_error";
+  title: string;
+  text: string;
+  icon?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const styleByVariant = {
+    call: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    result_ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    result_error: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+  } as const;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className={`rounded-md border p-2 text-xs ${styleByVariant[variant]}`}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className="flex w-full items-center justify-between gap-2 text-left">
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              {icon ?? <Wrench className="h-3.5 w-3.5" />}
+              <span>{title}</span>
+            </div>
+            <span className="text-[11px] font-semibold">{open ? "Hide content" : "Show content"}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+function ExpandableText({ text, maxLength, className }: { text: string; maxLength: number; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > maxLength;
+  const display = expanded || !isLong ? text : `${text.slice(0, maxLength)}...`;
+
+  return (
+    <div>
+      <p className={className}>{display}</p>
+      {isLong && (
+        <button
+          type="button"
+          className="mt-1 text-[11px] font-medium text-primary hover:underline"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? "Show less" : "Show all"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default ResultDetail;

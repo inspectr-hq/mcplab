@@ -36,6 +36,10 @@ export interface CoreScenario {
   agent: string;
   servers: string[];
   prompt: string;
+  test?: {
+    mode?: 'total' | 'per_step';
+    steps?: string[];
+  };
   eval?: {
     tool_constraints?: {
       required_tools?: string[];
@@ -91,14 +95,64 @@ export interface CoreResultsJson {
   scenarios: CoreScenarioAggregate[];
 }
 
-export interface TraceToolEvent {
+export interface TraceUiScenarioStartedEvent {
+  type: 'scenario_started';
+  scenario_id: string;
+  ts: string;
+}
+
+export interface TraceUiLlmRequestEvent {
+  type: 'llm_request';
+  messages_summary: string;
+  ts: string;
+}
+
+export interface TraceUiLlmResponseEvent {
+  type: 'llm_response';
+  raw_or_summary: string;
+  ts: string;
+}
+
+export interface TraceUiToolCallEvent {
+  type: 'tool_call';
   scenario_id?: string;
   tool: string;
   args?: unknown;
-  duration_ms?: number;
   ts_start?: string;
+}
+
+export interface TraceUiToolResultEvent {
+  type: 'tool_result';
+  scenario_id?: string;
+  tool: string;
+  ok: boolean;
+  result_summary: string;
+  duration_ms?: number;
   ts_end?: string;
 }
+
+export interface TraceUiFinalAnswerEvent {
+  type: 'final_answer';
+  scenario_id?: string;
+  text: string;
+  ts: string;
+}
+
+export interface TraceUiScenarioFinishedEvent {
+  type: 'scenario_finished';
+  scenario_id: string;
+  pass: boolean;
+  ts: string;
+}
+
+export type TraceUiEvent =
+  | TraceUiScenarioStartedEvent
+  | TraceUiLlmRequestEvent
+  | TraceUiLlmResponseEvent
+  | TraceUiToolCallEvent
+  | TraceUiToolResultEvent
+  | TraceUiFinalAnswerEvent
+  | TraceUiScenarioFinishedEvent;
 
 export interface WorkspaceConfigRecord {
   id: string;

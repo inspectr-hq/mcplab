@@ -2,7 +2,7 @@ import type {
   CoreEvalConfig,
   CoreResultsJson,
   RunJobEvent,
-  TraceToolEvent,
+  TraceUiEvent,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
 } from './types';
@@ -53,7 +53,7 @@ export const workspaceApiClient = {
   getRun: (runId: string) =>
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   getRunTrace: (runId: string) =>
-    request<{ runId: string; events: TraceToolEvent[] }>(`/api/runs/${runId}/trace`),
+    request<{ runId: string; events: TraceUiEvent[] }>(`/api/runs/${runId}/trace`),
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;

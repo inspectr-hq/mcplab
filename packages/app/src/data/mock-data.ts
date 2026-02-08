@@ -32,6 +32,8 @@ export const mockConfigs: EvalConfig[] = [
         agentId: 'agt-1',
         serverIds: ['srv-1'],
         prompt: 'List all files in the /tmp directory',
+        testMode: 'total',
+        steps: [],
         evalRules: [{ type: 'required_tool', value: 'list_directory' }],
         extractRules: [{ name: 'fileCount', pattern: '\\d+ files' }]
       },
@@ -41,6 +43,8 @@ export const mockConfigs: EvalConfig[] = [
         agentId: 'agt-1',
         serverIds: ['srv-1'],
         prompt: 'Read the contents of /tmp/test.txt',
+        testMode: 'total',
+        steps: [],
         evalRules: [
           { type: 'required_tool', value: 'read_file' },
           { type: 'forbidden_tool', value: 'write_file' }
@@ -90,6 +94,8 @@ export const mockConfigs: EvalConfig[] = [
         agentId: 'agt-2',
         serverIds: ['srv-2'],
         prompt: 'Search for the latest TypeScript release version',
+        testMode: 'total',
+        steps: [],
         evalRules: [
           { type: 'required_tool', value: 'brave_web_search' },
           { type: 'response_contains', value: 'TypeScript' }
@@ -102,6 +108,8 @@ export const mockConfigs: EvalConfig[] = [
         agentId: 'agt-3',
         serverIds: ['srv-2'],
         prompt: 'Search for the latest TypeScript release version',
+        testMode: 'total',
+        steps: [],
         evalRules: [
           { type: 'required_tool', value: 'brave_web_search' },
           { type: 'response_contains', value: 'TypeScript' }
@@ -143,6 +151,8 @@ export const mockConfigs: EvalConfig[] = [
         agentId: 'agt-4',
         serverIds: ['srv-3'],
         prompt: 'List all users in the database',
+        testMode: 'total',
+        steps: [],
         evalRules: [{ type: 'required_tool', value: 'query' }],
         extractRules: [{ name: 'userCount', pattern: '\\d+ users?' }]
       }
@@ -163,6 +173,7 @@ function makeRuns(passed: boolean[], toolNames: string[][]): EvalResult['scenari
       timestamp: new Date(Date.now() - (toolNames[i].length - j) * 1000).toISOString()
     })),
     finalAnswer: p ? 'Task completed successfully.' : 'I was unable to complete the task.',
+    conversation: [],
     duration: Math.floor(Math.random() * 5000) + 1000,
     extractedValues: {},
     failureReasons: p ? [] : ['Required tool not called']

@@ -37,6 +37,8 @@ export interface Scenario {
   agentId: string;
   serverIds: string[];
   prompt: string;
+  testMode: 'total' | 'per_step';
+  steps: string[];
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
 }
@@ -63,11 +65,22 @@ export interface ToolCall {
   timestamp: string;
 }
 
+export interface ConversationItem {
+  id: string;
+  kind: 'user_prompt' | 'assistant_thought' | 'tool_call' | 'tool_result' | 'assistant_final';
+  text: string;
+  toolName?: string;
+  ok?: boolean;
+  durationMs?: number;
+  timestamp?: string;
+}
+
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
   toolCalls: ToolCall[];
   finalAnswer: string;
+  conversation: ConversationItem[];
   duration: number;
   extractedValues: Record<string, string>;
   failureReasons: string[];

@@ -23,6 +23,8 @@ const emptyScenario = (): Scenario => ({
   agentId: "",
   serverIds: [],
   prompt: "",
+  testMode: "total",
+  steps: [],
   evalRules: [],
   extractRules: [],
 });
@@ -157,6 +159,48 @@ function ScenarioCard({ scenario, index, agents, servers, onUpdate, onRemove, re
           <Label className="text-xs">Prompt</Label>
           <Textarea value={scenario.prompt} onChange={(e) => onUpdate({ prompt: e.target.value })} disabled={readOnly} placeholder="The prompt to send to the agent..." rows={3} className="text-xs" />
         </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Test Mode</Label>
+            <Select value={scenario.testMode} onValueChange={(v) => onUpdate({ testMode: v as Scenario["testMode"] })} disabled={readOnly}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="total">Total scenario</SelectItem>
+                <SelectItem value="per_step">Per step</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Execution</Label>
+            <p className="rounded-md border bg-muted/20 px-2 py-2 text-xs text-muted-foreground">
+              {scenario.testMode === "per_step"
+                ? "Each step is executed independently in order."
+                : "Single run using the scenario prompt."}
+            </p>
+          </div>
+        </div>
+
+        {scenario.testMode === "per_step" && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Steps (one per line)</Label>
+            <Textarea
+              value={scenario.steps.join("\n")}
+              onChange={(e) =>
+                onUpdate({
+                  steps: e.target.value
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0),
+                })
+              }
+              disabled={readOnly}
+              placeholder="Step 1&#10;Step 2&#10;Step 3"
+              rows={4}
+              className="text-xs"
+            />
+          </div>
+        )}
 
         {/* Eval Rules */}
         <div className="space-y-2">

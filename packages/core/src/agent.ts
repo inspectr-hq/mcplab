@@ -27,6 +27,7 @@ export async function runAgentScenario(params: {
   mcp: McpClientManager;
   trace: TraceWriter;
   maxTurns?: number;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp, trace } = params;
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
@@ -414,7 +415,7 @@ function summarizeResponse(response: LlmResponse): string {
 }
 
 function summarizeToolResult(result: unknown): string {
-  return truncate(stringifySafe(result), 200);
+  return stringifySafe(result);
 }
 
 function stringifySafe(value: unknown): string {

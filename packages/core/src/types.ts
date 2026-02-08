@@ -70,6 +70,10 @@ export interface Scenario {
   agent: string;
   servers: string[];
   prompt: string;
+  test?: {
+    mode?: 'total' | 'per_step';
+    steps?: string[];
+  };
   eval?: EvalRules;
   extract?: ExtractRule[];
 }
