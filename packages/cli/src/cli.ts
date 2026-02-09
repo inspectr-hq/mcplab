@@ -171,8 +171,8 @@ program
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .requiredOption('--config <path>', 'Path to eval.yaml')
       .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'snapshots')
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
           const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');

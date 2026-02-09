@@ -71,10 +71,10 @@ cp .env.example .env
 mcplab app --configs-dir configs --runs-dir runs --open
 
 # Run an evaluation from config files
-mcplab run -c configs/eval.yaml
+mcplab run -c mcplab/configs/eval.yaml
 
 # View the results
-open runs/$(ls -t runs | head -1)/report.html
+open mcplab/runs/$(ls -t mcplab/runs | head -1)/report.html
 ```
 
 ### 4. Create your own test
@@ -270,13 +270,13 @@ scenarios:
 
 ```bash
 # Run all scenarios
-mcplab run -c configs/eval.yaml
+mcplab run -c mcplab/configs/eval.yaml
 
 # Run specific scenario
-mcplab run -c configs/eval.yaml -s basic-test
+mcplab run -c mcplab/configs/eval.yaml -s basic-test
 
 # Run with variance testing (5 iterations)
-mcplab run -c configs/eval.yaml -n 5
+mcplab run -c mcplab/configs/eval.yaml -n 5
 ```
 
 ### App Mode
@@ -306,7 +306,7 @@ mcplab run -c examples/eval.yaml \
 # 3 scenarios × 3 agents = 9 tests
 
 # Compare results
-node scripts/compare-llm-results.mjs runs/LATEST/results.json
+node scripts/compare-llm-results.mjs mcplab/runs/LATEST/results.json
 ```
 
 Output:
@@ -355,27 +355,27 @@ mcplab snapshot compare --id <snapshotId> --run 20260208-150045
 Optional: compare immediately after a run:
 
 ```bash
-mcplab run -c configs/eval.yaml --compare-snapshot <snapshotId>
+mcplab run -c mcplab/configs/eval.yaml --compare-snapshot <snapshotId>
 ```
 
 Config-first snapshot eval workflow:
 
 ```bash
 # Initialize snapshot eval policy in a config from a fully passing run
-mcplab snapshot eval-init --config configs/eval.yaml --run 20260208-140213 --name "baseline-v1"
+mcplab snapshot eval-init --config mcplab/configs/eval.yaml --run 20260208-140213 --name "baseline-v1"
 
 # Update snapshot eval policy mode
-mcplab snapshot eval-policy --config configs/eval.yaml --enabled true --mode fail_on_drift
+mcplab snapshot eval-policy --config mcplab/configs/eval.yaml --enabled true --mode fail_on_drift
 
 # Apply config snapshot policy during run (warn or fail_on_drift)
-mcplab run -c configs/eval.yaml --snapshot-eval
+mcplab run -c mcplab/configs/eval.yaml --snapshot-eval
 ```
 
 ### Generate Reports
 
 ```bash
 # Regenerate HTML report from previous run
-mcplab report --input runs/20260206-212239
+mcplab report --input mcplab/runs/20260206-212239
 ```
 
 ---
@@ -385,7 +385,7 @@ mcplab report --input runs/20260206-212239
 Each evaluation run creates a timestamped directory:
 
 ```
-runs/20260206-212239/
+mcplab/runs/20260206-212239/
 ├── trace.jsonl        # Detailed execution log (every tool call, LLM response)
 ├── results.json       # Structured results (pass/fail, metrics, aggregates)
 ├── summary.md         # Human-readable summary table
@@ -395,7 +395,10 @@ runs/20260206-212239/
 Reusable libraries are stored in a bundled folder:
 
 ```
-libraries/
+mcplab/
+├── configs/
+├── runs/
+├── snapshots/
 ├── servers.yaml
 ├── agents.yaml
 └── scenarios/
@@ -524,7 +527,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: evaluation-results
-          path: runs/
+          path: mcplab/runs/
 ```
 
 ---
@@ -539,7 +542,7 @@ Analyze results with custom logic:
 // my-analysis.mjs
 import { readFileSync } from 'fs';
 
-const results = JSON.parse(readFileSync('runs/LATEST/results.json'));
+const results = JSON.parse(readFileSync('mcplab/runs/LATEST/results.json'));
 
 // Calculate custom metrics
 for (const scenario of results.scenarios) {
@@ -562,7 +565,7 @@ node scripts/generate-multi-llm-config.mjs examples/eval-trendminer.yaml
 Built-in comparison script:
 
 ```bash
-node scripts/compare-llm-results.mjs runs/20260206-212239/results.json
+node scripts/compare-llm-results.mjs mcplab/runs/20260206-212239/results.json
 ```
 
 Shows:
@@ -593,7 +596,7 @@ mcp-lab/
 │   └── reporting/     # HTML report generation
 ├── examples/          # Example evaluation configs
 ├── scripts/           # Utility scripts (multi-LLM, comparison)
-├── runs/              # Evaluation results (gitignored)
+├── mcplab/runs/       # Evaluation results (gitignored)
 └── .claude/           # Claude Code skills (optional)
 ```
 

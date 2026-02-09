@@ -942,6 +942,7 @@ export async function startAppServer(options: AppServerOptions) {
                 scenarioId,
                 configHash: loaded.hash,
                 cliVersion: pkg.version,
+                runsDir: settings.runsDir,
                 signal: job.abortController.signal
               });
               if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
