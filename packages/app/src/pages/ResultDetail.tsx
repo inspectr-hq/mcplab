@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +12,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { useConfigs } from "@/contexts/ConfigContext";
+import { toast } from "@/hooks/use-toast";
 import type { ConversationItem, EvalResult } from "@/types/eval";
 import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { source } = useDataSource();
+  const { configs } = useConfigs();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
@@ -26,6 +30,9 @@ const ResultDetail = () => {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
   const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
   const [comparing, setComparing] = useState(false);
+  const [targetConfigId, setTargetConfigId] = useState("");
+  const [acceptSnapshotName, setAcceptSnapshotName] = useState("");
+  const [acceptingBaseline, setAcceptingBaseline] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -56,6 +63,30 @@ const ResultDetail = () => {
       active = false;
     };
   }, [source]);
+
+  const requestedConfigId = searchParams.get("configId") ?? "";
+  const inferredConfigId = useMemo(() => {
+    if (!result?.snapshotEval?.baselineSnapshotId) return "";
+    const matches = configs.filter(
+      (config) => config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
+    );
+    return matches.length === 1 ? matches[0].id : "";
+  }, [configs, result?.snapshotEval?.baselineSnapshotId]);
+
+  useEffect(() => {
+    if (!result?.snapshotEval?.baselineSnapshotId) return;
+    setSelectedSnapshotId((prev) => prev || result.snapshotEval!.baselineSnapshotId);
+  }, [result?.snapshotEval?.baselineSnapshotId]);
+
+  useEffect(() => {
+    if (requestedConfigId && configs.some((config) => config.id === requestedConfigId)) {
+      setTargetConfigId(requestedConfigId);
+      return;
+    }
+    if (inferredConfigId) {
+      setTargetConfigId((prev) => prev || inferredConfigId);
+    }
+  }, [requestedConfigId, configs, inferredConfigId]);
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
@@ -107,6 +138,64 @@ const ResultDetail = () => {
     }
   };
 
+  const reviewDrift = async () => {
+    const baselineId = result.snapshotEval?.baselineSnapshotId;
+    if (!baselineId) return;
+    setSelectedSnapshotId(baselineId);
+    setComparing(true);
+    try {
+      const comparison = await source.compareSnapshot(baselineId, result.id);
+      setSnapshotComparison(comparison);
+    } catch (error: any) {
+      toast({
+        title: "Could not review drift",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setComparing(false);
+    }
+  };
+
+  const acceptAsNewBaseline = async () => {
+    if (!targetConfigId) {
+      toast({
+        title: "Select a configuration",
+        description: "Choose which config should receive the new baseline.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setAcceptingBaseline(true);
+    try {
+      const response = await source.generateSnapshotEvalBaseline(
+        result.id,
+        targetConfigId,
+        acceptSnapshotName.trim() || undefined
+      );
+      setSnapshots((prev) => [response.snapshot, ...prev.filter((item) => item.id !== response.snapshot.id)]);
+      setSelectedSnapshotId(response.snapshot.id);
+      toast({
+        title: "Baseline updated",
+        description: `${response.snapshot.name} is now linked to the selected config.`
+      });
+      if (!acceptSnapshotName.trim()) {
+        setAcceptSnapshotName(response.snapshot.name);
+      }
+      if (result.snapshotEval?.applied) {
+        void reviewDrift();
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could not accept new baseline",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setAcceptingBaseline(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -130,6 +219,19 @@ const ResultDetail = () => {
             </p>
           )}
         </div>
+        {result.snapshotEval?.applied && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => void reviewDrift()}
+            disabled={comparing}
+          >
+            <GitCompare className="h-3.5 w-3.5" />
+            {comparing ? "Reviewing drift..." : "Review Drift"}
+          </Button>
+        )}
         <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
           const html = generateHtmlReport(result);
           const blob = new Blob([html], { type: "text/html" });
@@ -143,6 +245,89 @@ const ResultDetail = () => {
           <Download className="h-3.5 w-3.5" />Download Report
         </Button>
       </div>
+
+      {result.snapshotEval?.applied && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="outline">Mode: {result.snapshotEval.mode}</Badge>
+              <Badge variant="outline">Status: {result.snapshotEval.status}</Badge>
+              <Badge variant="outline">Overall score: {result.snapshotEval.overallScore}</Badge>
+              <Badge variant="outline" className="font-mono">
+                Baseline: {result.snapshotEval.baselineSnapshotId}
+              </Badge>
+            </div>
+            {result.snapshotEval.impactedScenarios.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Impacted scenarios: {result.snapshotEval.impactedScenarios.join(", ")}
+              </p>
+            )}
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] items-end">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Target config for baseline update</p>
+                <Select value={targetConfigId} onValueChange={setTargetConfigId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Select config to update" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {configs.map((config) => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!targetConfigId && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Tip: open results from the Run page to prefill the config automatically.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">New snapshot name (optional)</p>
+                <div className="relative">
+                  <input
+                    value={acceptSnapshotName}
+                    onChange={(e) => setAcceptSnapshotName(e.target.value)}
+                    placeholder={`Snapshot ${result.id}`}
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => void reviewDrift()}
+                  disabled={comparing}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${comparing ? "animate-spin" : ""}`} />
+                  Review Drift
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => void acceptAsNewBaseline()}
+                  disabled={acceptingBaseline || result.overallPassRate !== 1}
+                >
+                  {acceptingBaseline ? "Accepting..." : "Accept as New Baseline"}
+                </Button>
+              </div>
+            </div>
+            {result.overallPassRate !== 1 && (
+              <p className="text-xs text-muted-foreground">
+                Baseline updates require a fully passing run (same rule as snapshot creation).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard title="Scenarios" value={result.totalScenarios} icon={Layers} />
