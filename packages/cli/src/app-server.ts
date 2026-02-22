@@ -33,7 +33,6 @@ export interface AppServerOptions {
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;
-  runPresetsDir: string;
   dev: boolean;
   open: boolean;
 }
@@ -44,7 +43,6 @@ interface AppSettings {
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;
-  runPresetsDir: string;
 }
 
 interface ConfigRecord {
@@ -67,18 +65,6 @@ interface RunSummary {
   passRate: number;
   avgToolCalls: number;
   avgLatencyMs: number;
-}
-
-interface RunPresetRecord {
-  id: string;
-  name: string;
-  config_path: string;
-  agents: string[];
-  scenario_ids: string[];
-  runs_per_scenario: number;
-  apply_snapshot_eval: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
 interface ProviderModelsResponse {
@@ -437,157 +423,6 @@ function writeLibraries(
   }
 }
 
-function encodeRunPresetId(absPath: string, rootDir: string): string {
-  const rel = absPath.slice(resolve(rootDir).length + 1);
-  return Buffer.from(rel, 'utf8').toString('base64url');
-}
-
-function decodeRunPresetId(id: string, rootDir: string): string {
-  const rel = Buffer.from(id, 'base64url').toString('utf8');
-  return ensureInsideRoot(rootDir, join(rootDir, rel));
-}
-
-function normalizeRunPresetRecord(
-  value: unknown,
-  filePath: string,
-  configsDir: string
-): RunPresetRecord | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const raw = value as Record<string, unknown>;
-  const name = String(raw.name ?? '').trim();
-  const configPath = String(raw.config_path ?? '').trim();
-  const runsPerScenario = Number(raw.runs_per_scenario ?? 1);
-  if (!name || !configPath || Number.isNaN(runsPerScenario) || runsPerScenario <= 0) return null;
-
-  let safeConfigPath: string;
-  try {
-    safeConfigPath = ensureInsideRoot(configsDir, configPath);
-  } catch {
-    return null;
-  }
-
-  const stat = statSync(filePath);
-  const now = new Date().toISOString();
-  return {
-    id: String(raw.id ?? encodeRunPresetId(filePath, dirname(filePath))),
-    name,
-    config_path: safeConfigPath,
-    agents: Array.isArray(raw.agents)
-      ? raw.agents.map((v) => String(v).trim()).filter(Boolean)
-      : [],
-    scenario_ids: Array.isArray(raw.scenario_ids)
-      ? raw.scenario_ids.map((v) => String(v).trim()).filter(Boolean)
-      : [],
-    runs_per_scenario: Math.max(1, Math.floor(runsPerScenario)),
-    apply_snapshot_eval: raw.apply_snapshot_eval !== false,
-    created_at: typeof raw.created_at === 'string' ? raw.created_at : stat.mtime.toISOString(),
-    updated_at: typeof raw.updated_at === 'string' ? raw.updated_at : now
-  };
-}
-
-function readRunPresetRecord(
-  absPath: string,
-  presetsDir: string,
-  configsDir: string
-): RunPresetRecord {
-  const parsed = readYamlFile<unknown>(absPath, null);
-  const record = normalizeRunPresetRecord(parsed, absPath, configsDir);
-  if (!record) {
-    throw new Error(`Invalid run preset: ${absPath}`);
-  }
-  return {
-    ...record,
-    id: encodeRunPresetId(absPath, presetsDir)
-  };
-}
-
-function listRunPresets(presetsDir: string, configsDir: string): RunPresetRecord[] {
-  if (!existsSync(presetsDir)) return [];
-  const files = readdirSync(presetsDir)
-    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-    .map((name) => ensureInsideRoot(presetsDir, join(presetsDir, name)));
-  const out: RunPresetRecord[] = [];
-  for (const file of files) {
-    try {
-      out.push(readRunPresetRecord(file, presetsDir, configsDir));
-    } catch {
-      // Ignore malformed preset files to keep UI usable.
-    }
-  }
-  return out.sort((a, b) => {
-    const timeDiff = new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-    return timeDiff !== 0 ? timeDiff : a.name.localeCompare(b.name);
-  });
-}
-
-function createOrUpdateRunPresetFile(
-  presetsDir: string,
-  configsDir: string,
-  body: unknown,
-  currentPath?: string
-): { path: string; record: RunPresetRecord } {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new Error('Missing preset object');
-  }
-  const raw = body as Record<string, unknown>;
-  const name = String(raw.name ?? '').trim();
-  const configPath = String(raw.config_path ?? '').trim();
-  const runsPerScenario = Number(raw.runs_per_scenario ?? 1);
-  if (!name) throw new Error('Preset name is required');
-  if (!configPath) throw new Error('config_path is required');
-  if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
-    throw new Error('runs_per_scenario must be a positive number');
-  }
-  const safeConfigPath = ensureInsideRoot(configsDir, configPath);
-  const agents = Array.isArray(raw.agents)
-    ? raw.agents.map((v) => String(v).trim()).filter(Boolean)
-    : [];
-  const scenarioIds = Array.isArray(raw.scenario_ids)
-    ? raw.scenario_ids.map((v) => String(v).trim()).filter(Boolean)
-    : [];
-  const now = new Date().toISOString();
-
-  mkdirSync(presetsDir, { recursive: true });
-  let targetPath = currentPath;
-  if (!targetPath) {
-    const baseName = safeFileName(name);
-    targetPath = ensureInsideRoot(presetsDir, join(presetsDir, `${baseName}.yaml`));
-    let suffix = 1;
-    while (existsSync(targetPath)) {
-      targetPath = ensureInsideRoot(presetsDir, join(presetsDir, `${baseName}-${suffix}.yaml`));
-      suffix += 1;
-    }
-  }
-
-  const existing =
-    targetPath && existsSync(targetPath)
-      ? readYamlFile<Record<string, unknown>>(targetPath, {})
-      : {};
-  const record: RunPresetRecord = {
-    id:
-      typeof existing.id === 'string' && existing.id.trim()
-        ? existing.id.trim()
-        : `run-preset-${Date.now()}`,
-    name,
-    config_path: safeConfigPath,
-    agents,
-    scenario_ids: scenarioIds,
-    runs_per_scenario: Math.floor(runsPerScenario),
-    apply_snapshot_eval: raw.apply_snapshot_eval !== false,
-    created_at:
-      typeof existing.created_at === 'string' && existing.created_at.trim()
-        ? existing.created_at
-        : now,
-    updated_at: now
-  };
-
-  writeFileSync(targetPath!, `${stringifyYaml(record)}\n`, 'utf8');
-  return {
-    path: targetPath!,
-    record: readRunPresetRecord(targetPath!, presetsDir, configsDir)
-  };
-}
-
 function getRunResults(runId: string, runsDir: string): ResultsJson {
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const resultsPath = ensureInsideRoot(runsDir, join(runDir, 'results.json'));
@@ -843,15 +678,13 @@ export async function startAppServer(options: AppServerOptions) {
     configsDir: resolve(options.configsDir),
     runsDir: resolve(options.runsDir),
     snapshotsDir: resolve(options.snapshotsDir),
-    librariesDir: resolve(options.librariesDir),
-    runPresetsDir: resolve(options.runPresetsDir)
+    librariesDir: resolve(options.librariesDir)
   };
   mkdirSync(settings.configsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
-  mkdirSync(settings.runPresetsDir, { recursive: true });
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
@@ -916,10 +749,6 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(settings.librariesDir, { recursive: true });
           mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
         }
-        if (body.runPresetsDir) {
-          settings.runPresetsDir = resolve(String(body.runPresetsDir));
-          mkdirSync(settings.runPresetsDir, { recursive: true });
-        }
         asJson(res, 200, settings);
         return;
       }
@@ -936,63 +765,6 @@ export async function startAppServer(options: AppServerOptions) {
           agents: (body.agents as EvalConfig['agents']) ?? {},
           scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
         });
-        asJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (pathname === '/api/run-presets' && method === 'GET') {
-        asJson(res, 200, listRunPresets(settings.runPresetsDir, settings.configsDir));
-        return;
-      }
-
-      if (pathname === '/api/run-presets' && method === 'POST') {
-        const body = await parseBody(req);
-        const { record } = createOrUpdateRunPresetFile(
-          settings.runPresetsDir,
-          settings.configsDir,
-          body.preset ?? body
-        );
-        asJson(res, 201, record);
-        return;
-      }
-
-      if (pathname.startsWith('/api/run-presets/') && method === 'GET') {
-        const id = pathname.replace('/api/run-presets/', '');
-        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
-        asJson(
-          res,
-          200,
-          readRunPresetRecord(filePath, settings.runPresetsDir, settings.configsDir)
-        );
-        return;
-      }
-
-      if (pathname.startsWith('/api/run-presets/') && method === 'PUT') {
-        const id = pathname.replace('/api/run-presets/', '');
-        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
-        if (!existsSync(filePath)) {
-          asJson(res, 404, { error: 'Run preset not found' });
-          return;
-        }
-        const body = await parseBody(req);
-        const { record } = createOrUpdateRunPresetFile(
-          settings.runPresetsDir,
-          settings.configsDir,
-          body.preset ?? body,
-          filePath
-        );
-        asJson(res, 200, record);
-        return;
-      }
-
-      if (pathname.startsWith('/api/run-presets/') && method === 'DELETE') {
-        const id = pathname.replace('/api/run-presets/', '');
-        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
-        if (!existsSync(filePath)) {
-          asJson(res, 404, { error: 'Run preset not found' });
-          return;
-        }
-        unlinkSync(filePath);
         asJson(res, 200, { ok: true });
         return;
       }

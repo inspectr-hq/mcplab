@@ -350,7 +350,6 @@ program
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
   .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
-  .option('--run-presets-dir <path>', 'Directory for saved run presets', 'mcplab/run-presets')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
@@ -368,7 +367,6 @@ program
         runsDir: resolve(options.runsDir),
         snapshotsDir: resolve(options.snapshotsDir),
         librariesDir: resolve(options.librariesDir),
-        runPresetsDir: resolve(options.runPresetsDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)
       });

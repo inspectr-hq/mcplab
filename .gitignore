@@ -13,3 +13,6 @@ runs/
 mcplab/
 packages/app/tsconfig.app.tsbuildinfo
 packages/app/tsconfig.node.tsbuildinfo
+packages/app/tsconfig.node.tsbuildinfo
+packages/reporting/tsconfig.node.tsbuildinfo
+tsconfig.tsbuildinfo

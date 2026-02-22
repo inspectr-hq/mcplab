@@ -12,7 +12,6 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
-import type { RunPresetRecord } from "@/lib/data-sources/types";
 
 const logMessages = [
   "Initializing evaluation runner...",
@@ -50,16 +49,11 @@ const RunEvaluation = () => {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
-  const [runPresets, setRunPresets] = useState<RunPresetRecord[]>([]);
-  const [presetId, setPresetId] = useState<string>("");
-  const [presetNameDraft, setPresetNameDraft] = useState("");
-  const [presetWarning, setPresetWarning] = useState<string>("");
   const [snapshotName, setSnapshotName] = useState("");
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
-  const pendingPresetRef = useRef<RunPresetRecord | null>(null);
   const { configs, reload } = useConfigs();
   const { source, mode } = useDataSource();
   const { agents: libraryAgents, scenarios: libraryScenarios } = useLibraries();
@@ -94,55 +88,6 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
-  const selectedPreset = useMemo(
-    () => runPresets.find((preset) => preset.id === presetId),
-    [runPresets, presetId]
-  );
-  const formPresetPayload = useMemo(() => {
-    if (!selectedConfig?.sourcePath) return null;
-    const selectedAgentNames = availableAgents
-      .filter((agent) => selectedAgentIds.includes(agent.id))
-      .map((agent) => agent.name || agent.id)
-      .filter(Boolean);
-    return {
-      name: presetNameDraft.trim() || selectedPreset?.name || "Run preset",
-      config_path: selectedConfig.sourcePath,
-      agents: selectedAgentNames,
-      scenario_ids: selectedScenarioIds,
-      runs_per_scenario: Math.max(1, Number(varianceRuns) || 1),
-      apply_snapshot_eval: applySnapshotEval
-    };
-  }, [
-    selectedConfig?.sourcePath,
-    availableAgents,
-    selectedAgentIds,
-    selectedScenarioIds,
-    varianceRuns,
-    applySnapshotEval,
-    presetNameDraft,
-    selectedPreset?.name
-  ]);
-  const presetDirty = useMemo(() => {
-    if (!selectedPreset || !formPresetPayload) return false;
-    const norm = (items: string[]) => [...items].sort();
-    return (
-      selectedPreset.name !== formPresetPayload.name ||
-      selectedPreset.config_path !== formPresetPayload.config_path ||
-      JSON.stringify(norm(selectedPreset.agents)) !== JSON.stringify(norm(formPresetPayload.agents)) ||
-      JSON.stringify(norm(selectedPreset.scenario_ids)) !== JSON.stringify(norm(formPresetPayload.scenario_ids)) ||
-      selectedPreset.runs_per_scenario !== formPresetPayload.runs_per_scenario ||
-      selectedPreset.apply_snapshot_eval !== formPresetPayload.apply_snapshot_eval
-    );
-  }, [selectedPreset, formPresetPayload]);
-
-  const loadPresets = async () => {
-    try {
-      setRunPresets(await source.listRunPresets());
-    } catch {
-      setRunPresets([]);
-    }
-  };
-
   useEffect(() => {
     if (!requestedConfigId) return;
     if (!configs.some((config) => config.id === requestedConfigId)) return;
@@ -150,33 +95,6 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   useEffect(() => {
-    const pending = pendingPresetRef.current;
-    if (pending && selectedConfig?.sourcePath === pending.config_path) {
-      const agentIds = availableAgents
-        .filter((agent) => pending.agents.includes(agent.name || agent.id))
-        .map((agent) => agent.id);
-      const scenarioIds = availableScenarios
-        .filter((scenario) => pending.scenario_ids.includes(scenario.id))
-        .map((scenario) => scenario.id);
-      const missingAgents = pending.agents.filter(
-        (name) => !availableAgents.some((agent) => (agent.name || agent.id) === name)
-      );
-      const missingScenarios = pending.scenario_ids.filter(
-        (id) => !availableScenarios.some((scenario) => scenario.id === id)
-      );
-      setSelectedAgentIds(agentIds);
-      setSelectedScenarioIds(scenarioIds);
-      setVarianceRuns(String(pending.runs_per_scenario));
-      setApplySnapshotEval(pending.apply_snapshot_eval);
-      setPresetNameDraft(pending.name);
-      setPresetWarning(
-        missingAgents.length || missingScenarios.length
-          ? `Preset is partially out of date. Missing agents: ${missingAgents.join(", ") || "-"}; missing tests: ${missingScenarios.join(", ") || "-"}.`
-          : ""
-      );
-      pendingPresetRef.current = null;
-      return;
-    }
     if (!selectedConfig) {
       setSelectedAgentIds([]);
       setSelectedScenarioIds([]);
@@ -185,7 +103,6 @@ const RunEvaluation = () => {
     setSelectedAgentIds(availableAgents.map((agent) => agent.id));
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setApplySnapshotEval(true);
-    setPresetWarning("");
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
   const runDemo = () => {
@@ -346,79 +263,6 @@ const RunEvaluation = () => {
     }
   };
 
-  const applyPreset = (preset: RunPresetRecord) => {
-    pendingPresetRef.current = preset;
-    setPresetId(preset.id);
-    setPresetNameDraft(preset.name);
-    const matchingConfig = configs.find((config) => config.sourcePath === preset.config_path);
-    if (matchingConfig) {
-      setConfigId(matchingConfig.id);
-    } else {
-      setPresetWarning(`Preset config not found in current config list: ${preset.config_path}`);
-    }
-  };
-
-  const savePreset = async (mode: "save" | "saveAs") => {
-    if (!formPresetPayload) {
-      toast({ title: "Cannot save preset", description: "Select a config first.", variant: "destructive" });
-      return;
-    }
-    if (formPresetPayload.agents.length === 0 || formPresetPayload.scenario_ids.length === 0) {
-      toast({
-        title: "Cannot save preset",
-        description: "Select at least one model and one test.",
-        variant: "destructive",
-      });
-      return;
-    }
-    let name = formPresetPayload.name;
-    if (mode === "saveAs" || !presetId) {
-      const prompted = window.prompt("Preset name", name);
-      if (!prompted?.trim()) return;
-      name = prompted.trim();
-      setPresetNameDraft(name);
-    }
-    const payload = { ...formPresetPayload, name };
-    try {
-      const next =
-        mode === "save" && presetId
-          ? await source.updateRunPreset(presetId, payload)
-          : await source.createRunPreset(payload);
-      await loadPresets();
-      setPresetId(next.id);
-      setPresetNameDraft(next.name);
-      setPresetWarning("");
-      toast({ title: "Preset saved", description: next.name });
-    } catch (error: any) {
-      toast({
-        title: "Failed to save preset",
-        description: String(error?.message ?? error),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const deletePreset = async () => {
-    if (!presetId) return;
-    const target = runPresets.find((preset) => preset.id === presetId);
-    if (!target) return;
-    if (!window.confirm(`Delete preset "${target.name}"?`)) return;
-    try {
-      await source.deleteRunPreset(target.id);
-      await loadPresets();
-      setPresetId("");
-      setPresetNameDraft("");
-      setPresetWarning("");
-      toast({ title: "Preset deleted", description: target.name });
-    } catch (error: any) {
-      toast({
-        title: "Failed to delete preset",
-        description: String(error?.message ?? error),
-        variant: "destructive",
-      });
-    }
-  };
-
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
@@ -430,16 +274,14 @@ const RunEvaluation = () => {
 
   useEffect(() => {
     void reload();
-    void loadPresets();
     const handleFocus = () => {
       void reload();
-      void loadPresets();
     };
     window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
-  }, [reload, source]);
+  }, [reload]);
 
   return (
     <div className="space-y-6">
@@ -478,46 +320,6 @@ const RunEvaluation = () => {
               <Input type="number" min="1" max="10" value={varianceRuns} onChange={(e) => setVarianceRuns(e.target.value)} />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-[1.5fr_auto_auto_auto] items-end">
-            <div className="space-y-2">
-              <Label>Run Preset</Label>
-              <Select
-                value={presetId || "__none__"}
-                onValueChange={(value) => {
-                  if (value === "__none__") {
-                    setPresetId("");
-                    setPresetNameDraft("");
-                    setPresetWarning("");
-                    return;
-                  }
-                  const preset = runPresets.find((item) => item.id === value);
-                  if (preset) applyPreset(preset);
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder="Select a preset" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No preset</SelectItem>
-                  {runPresets.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="button" variant="outline" onClick={() => void savePreset(presetId ? "save" : "saveAs")} disabled={!formPresetPayload}>
-              {presetId ? "Save" : "Save As"}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void savePreset("saveAs")} disabled={!formPresetPayload}>
-              Save As
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void deletePreset()} disabled={!presetId}>
-              Delete
-            </Button>
-          </div>
-          {(presetWarning || (presetId && presetDirty)) && (
-            <p className="text-xs text-muted-foreground">
-              {presetWarning || "Unsaved changes to selected preset."}
-            </p>
-          )}
           {selectedConfig && (
             <div className="space-y-2">
               {selectedConfig.snapshotEval?.enabled && (
@@ -666,7 +468,7 @@ const RunEvaluation = () => {
                 <p className="text-sm text-muted-foreground">All scenarios have been evaluated successfully.</p>
               </div>
               <Button asChild className="ml-auto">
-                <Link to={`/results/${runId || "run-a1b2c3"}`}>View Results</Link>
+                <Link to={`/results/${runId || "run-a1b2c3"}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
               </Button>
             </div>
             {mode === "workspace" && runId && (

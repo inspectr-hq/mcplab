@@ -5,7 +5,6 @@ import type {
   SnapshotComparison,
   SnapshotRecord,
   TraceUiEvent,
-  RunPresetRecord,
   ProviderModelsResponse,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
@@ -45,7 +44,6 @@ export const workspaceApiClient = {
       runsDir: string;
       snapshotsDir: string;
       librariesDir: string;
-      runPresetsDir: string;
     }>('/api/settings'),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
@@ -125,22 +123,6 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(params)
     }),
-  listRunPresets: () => request<RunPresetRecord[]>('/api/run-presets'),
-  createRunPreset: (preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>) =>
-    request<RunPresetRecord>('/api/run-presets', {
-      method: 'POST',
-      body: JSON.stringify({ preset })
-    }),
-  updateRunPreset: (
-    id: string,
-    preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>
-  ) =>
-    request<RunPresetRecord>(`/api/run-presets/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ preset })
-    }),
-  deleteRunPreset: (id: string) =>
-    request<{ ok: boolean }>(`/api/run-presets/${id}`, { method: 'DELETE' }),
   listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
     request<ProviderModelsResponse>(`/api/providers/models?provider=${encodeURIComponent(provider)}`),
   stopRun: (jobId: string) =>

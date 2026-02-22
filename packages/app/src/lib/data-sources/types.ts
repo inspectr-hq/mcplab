@@ -247,18 +247,6 @@ export interface RunJobEvent {
   payload: Record<string, unknown>;
 }
 
-export interface RunPresetRecord {
-  id: string;
-  name: string;
-  config_path: string;
-  agents: string[];
-  scenario_ids: string[];
-  runs_per_scenario: number;
-  apply_snapshot_eval: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';
   items: string[];
@@ -311,14 +299,5 @@ export interface EvalDataSource {
     agents: EvalConfig['agents'];
     scenarios: EvalConfig['scenarios'];
   }) => Promise<void>;
-  listRunPresets: () => Promise<RunPresetRecord[]>;
-  createRunPreset: (
-    preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>
-  ) => Promise<RunPresetRecord>;
-  updateRunPreset: (
-    id: string,
-    preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>
-  ) => Promise<RunPresetRecord>;
-  deleteRunPreset: (id: string) => Promise<void>;
   listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') => Promise<ProviderModelsResponse>;
 }

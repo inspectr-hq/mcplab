@@ -4,7 +4,6 @@ import type { EvalDataSource, RunJobEvent } from './types';
 
 const STORAGE_KEY = 'mcp-eval-configs';
 const LIBRARY_STORAGE_KEY = 'mcplab:libraries:v1';
-const RUN_PRESET_STORAGE_KEY = 'mcplab:run-presets:v1';
 
 function readConfigs(): EvalConfig[] {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -111,49 +110,6 @@ export const demoSource: EvalDataSource = {
   },
   async saveLibraries(libraries) {
     writeLibraries(libraries);
-  },
-  async listRunPresets() {
-    const raw = localStorage.getItem(RUN_PRESET_STORAGE_KEY);
-    if (!raw) return [];
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
-  },
-  async createRunPreset(preset) {
-    const now = new Date().toISOString();
-    const record = {
-      ...preset,
-      id: `preset-${Date.now()}`,
-      created_at: now,
-      updated_at: now
-    };
-    const all = await this.listRunPresets();
-    localStorage.setItem(RUN_PRESET_STORAGE_KEY, JSON.stringify([record, ...all]));
-    return record;
-  },
-  async updateRunPreset(id, preset) {
-    const all = await this.listRunPresets();
-    const existing = all.find((item: any) => item.id === id);
-    const record = {
-      ...preset,
-      id,
-      created_at: existing?.created_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    localStorage.setItem(
-      RUN_PRESET_STORAGE_KEY,
-      JSON.stringify(all.map((item: any) => (item.id === id ? record : item)))
-    );
-    return record;
-  },
-  async deleteRunPreset(id) {
-    const all = await this.listRunPresets();
-    localStorage.setItem(
-      RUN_PRESET_STORAGE_KEY,
-      JSON.stringify(all.filter((item: any) => item.id !== id))
-    );
   },
   async listProviderModels(provider) {
     const items =
