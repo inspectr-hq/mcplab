@@ -105,6 +105,14 @@ interface RunJob {
   abortController: AbortController;
 }
 
+interface DevMcpServerRuntime {
+  host: string;
+  port: number;
+  path: string;
+  targetBaseUrl: string;
+  stop: () => void;
+}
+
 function asJson(res: ServerResponse, code: number, body: unknown) {
   res.statusCode = code;
   res.setHeader('content-type', 'application/json; charset=utf-8');
@@ -115,6 +123,58 @@ function asText(res: ServerResponse, code: number, body: string) {
   res.statusCode = code;
   res.setHeader('content-type', 'text/plain; charset=utf-8');
   res.end(body);
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function maybeStartDevMcpServer(workspaceRoot: string, enabled: boolean): DevMcpServerRuntime | null {
+  if (!enabled) return null;
+  if (String(process.env.MCPLAB_APP_DEV_START_MCP ?? '1') === '0') return null;
+
+  const host = process.env.MCP_HOST || '127.0.0.1';
+  const port = parsePositiveInt(process.env.MCP_PORT, 3011);
+  const path = process.env.MCP_PATH || '/mcp';
+  const sourceEntry = resolve(workspaceRoot, 'packages', 'mcp-server', 'src', 'index.ts');
+  const distEntry = resolve(workspaceRoot, 'packages', 'mcp-server', 'dist', 'index.js');
+  const useTsx = existsSync(sourceEntry);
+  const command = useTsx ? 'tsx' : process.execPath;
+  const args = useTsx ? [sourceEntry] : [distEntry];
+
+  const child = spawn(command, args, {
+    cwd: workspaceRoot,
+    env: {
+      ...process.env,
+      MCP_HOST: host,
+      MCP_PORT: String(port),
+      MCP_PATH: path
+    },
+    stdio: 'inherit'
+  });
+
+  child.on('error', (error) => {
+    // eslint-disable-next-line no-console
+    console.error(`[mcplab app] failed to start MCP server child: ${error.message}`);
+  });
+  child.on('exit', (code, signal) => {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[mcplab app] MCP server child exited (${signal ? `signal ${signal}` : `code ${code ?? 0}`})`
+    );
+  });
+
+  return {
+    host,
+    port,
+    path,
+    targetBaseUrl: `http://${host}:${port}`,
+    stop: () => {
+      if (child.killed || child.exitCode !== null) return;
+      child.kill('SIGTERM');
+    }
+  };
 }
 
 async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
@@ -688,6 +748,7 @@ export async function startAppServer(options: AppServerOptions) {
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
+  const devMcp = maybeStartDevMcpServer(workspaceRoot, options.dev);
   const jobs = new Map<string, RunJob>();
   let activeJobId: string | null = null;
 
@@ -695,7 +756,10 @@ export async function startAppServer(options: AppServerOptions) {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader(
+        'Access-Control-Allow-Headers',
+        'Content-Type, MCP-Session-Id, Last-Event-ID, Accept'
+      );
       if (req.method === 'OPTIONS') {
         res.statusCode = 204;
         res.end();
@@ -706,8 +770,24 @@ export async function startAppServer(options: AppServerOptions) {
       const pathname = url.pathname;
       const method = req.method ?? 'GET';
 
+      if (devMcp && pathname === devMcp.path && (method === 'GET' || method === 'POST' || method === 'DELETE')) {
+        await proxyToVite(req, res, devMcp.targetBaseUrl, pathname, url.search);
+        return;
+      }
+
       if (pathname === '/api/health' && method === 'GET') {
-        asJson(res, 200, { ok: true, version: pkg.version });
+        asJson(res, 200, {
+          ok: true,
+          version: pkg.version,
+          mcp: devMcp
+            ? {
+                enabled: true,
+                transport: 'streamable-http',
+                endpoint: `http://${options.host}:${options.port}${devMcp.path}`,
+                upstream: `${devMcp.targetBaseUrl}${devMcp.path}`
+              }
+            : { enabled: false }
+        });
         return;
       }
 
@@ -1229,6 +1309,10 @@ export async function startAppServer(options: AppServerOptions) {
     server.listen(options.port, options.host, () => resolveReady());
   });
 
+  server.on('close', () => {
+    devMcp?.stop();
+  });
+
   const url = `http://${options.host}:${options.port}`;
   // eslint-disable-next-line no-console
   console.log(`mcplab app running at ${url}`);
@@ -1238,6 +1322,10 @@ export async function startAppServer(options: AppServerOptions) {
   console.log(`  runs:    ${settings.runsDir}`);
   // eslint-disable-next-line no-console
   console.log(`  libs:    ${settings.librariesDir}`);
+  if (devMcp) {
+    // eslint-disable-next-line no-console
+    console.log(`  mcp:     ${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);
+  }
 
   if (options.open) {
     startBrowser(url);
