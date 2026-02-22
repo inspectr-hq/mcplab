@@ -10,7 +10,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { basename, extname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core';
@@ -33,6 +33,7 @@ export interface AppServerOptions {
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;
+  runPresetsDir: string;
   dev: boolean;
   open: boolean;
 }
@@ -43,6 +44,7 @@ interface AppSettings {
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;
+  runPresetsDir: string;
 }
 
 interface ConfigRecord {
@@ -52,6 +54,7 @@ interface ConfigRecord {
   mtime: string;
   hash: string;
   config: EvalConfig;
+  error?: string;
 }
 
 interface RunSummary {
@@ -64,6 +67,25 @@ interface RunSummary {
   passRate: number;
   avgToolCalls: number;
   avgLatencyMs: number;
+}
+
+interface RunPresetRecord {
+  id: string;
+  name: string;
+  config_path: string;
+  agents: string[];
+  scenario_ids: string[];
+  runs_per_scenario: number;
+  apply_snapshot_eval: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ProviderModelsResponse {
+  provider: 'anthropic' | 'openai' | 'azure';
+  items: string[];
+  kind: 'models' | 'deployments';
+  source: string;
 }
 
 type TraceUiEvent =
@@ -107,6 +129,69 @@ function asText(res: ServerResponse, code: number, body: string) {
   res.statusCode = code;
   res.setHeader('content-type', 'text/plain; charset=utf-8');
   res.end(body);
+}
+
+async function fetchProviderModels(provider: string): Promise<ProviderModelsResponse> {
+  if (provider === 'anthropic') {
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
+    const response = await fetch('https://api.anthropic.com/v1/models', {
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`Anthropic model discovery failed (${response.status}): ${text}`);
+    }
+    const parsed = JSON.parse(text) as { data?: Array<{ id?: string }> };
+    const items = (parsed.data ?? [])
+      .map((item) => String(item.id ?? '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return { provider: 'anthropic', items, kind: 'models', source: 'anthropic /v1/models' };
+  }
+
+  if (provider === 'openai') {
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
+    const response = await fetch('https://api.openai.com/v1/models', {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`OpenAI model discovery failed (${response.status}): ${text}`);
+    }
+    const parsed = JSON.parse(text) as { data?: Array<{ id?: string }> };
+    const items = (parsed.data ?? [])
+      .map((item) => String(item.id ?? '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    return { provider: 'openai', items, kind: 'models', source: 'openai /v1/models' };
+  }
+
+  if (provider === 'azure') {
+    const envCandidates = [
+      process.env.AZURE_OPENAI_DEPLOYMENTS,
+      process.env.AZURE_OPENAI_DEPLOYMENT,
+      process.env.AZURE_OPENAI_DEPLOYMENT_NAME
+    ]
+      .flatMap((value) => (value ?? '').split(','))
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const items = Array.from(new Set(envCandidates)).sort((a, b) => a.localeCompare(b));
+    if (items.length === 0) {
+      throw new Error(
+        'Azure OpenAI discovery uses deployment names. Set AZURE_OPENAI_DEPLOYMENTS (comma-separated) or AZURE_OPENAI_DEPLOYMENT.'
+      );
+    }
+    return { provider: 'azure', items, kind: 'deployments', source: 'environment variables' };
+  }
+
+  throw new Error(`Unsupported provider for model discovery: ${provider}`);
 }
 
 function parseBody(req: IncomingMessage): Promise<any> {
@@ -159,8 +244,8 @@ function safeFileName(name: string): string {
   );
 }
 
-function readConfigRecord(absPath: string, configsDir: string): ConfigRecord {
-  const { config, hash } = loadConfig(absPath);
+function readConfigRecord(absPath: string, configsDir: string, bundleRoot?: string): ConfigRecord {
+  const { config: _resolvedConfig, sourceConfig, hash } = loadConfig(absPath, { bundleRoot });
   const stat = statSync(absPath);
   const name = basename(absPath, extname(absPath));
   return {
@@ -169,18 +254,85 @@ function readConfigRecord(absPath: string, configsDir: string): ConfigRecord {
     path: absPath,
     mtime: stat.mtime.toISOString(),
     hash,
-    config
+    config: sourceConfig
   };
 }
 
-function listConfigs(configsDir: string): ConfigRecord[] {
+function emptySourceConfig(): EvalConfig {
+  return {
+    servers: {},
+    server_refs: [],
+    agents: {},
+    agent_refs: [],
+    scenarios: [],
+    scenario_refs: []
+  };
+}
+
+function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
+  try {
+    const raw = readFileSync(absPath, 'utf8');
+    const parsed = parseYaml(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return emptySourceConfig();
+    }
+    const obj = parsed as Record<string, unknown>;
+    return {
+      servers:
+        obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)
+          ? (obj.servers as EvalConfig['servers'])
+          : {},
+      server_refs: Array.isArray(obj.server_refs)
+        ? obj.server_refs.map((v) => String(v))
+        : [],
+      agents:
+        obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)
+          ? (obj.agents as EvalConfig['agents'])
+          : {},
+      agent_refs: Array.isArray(obj.agent_refs)
+        ? obj.agent_refs.map((v) => String(v))
+        : [],
+      scenarios: Array.isArray(obj.scenarios)
+        ? (obj.scenarios as EvalConfig['scenarios'])
+        : [],
+      scenario_refs: Array.isArray(obj.scenario_refs)
+        ? obj.scenario_refs.map((v) => String(v))
+        : [],
+      snapshot_eval:
+        obj.snapshot_eval && typeof obj.snapshot_eval === 'object' && !Array.isArray(obj.snapshot_eval)
+          ? (obj.snapshot_eval as EvalConfig['snapshot_eval'])
+          : undefined
+    };
+  } catch {
+    return emptySourceConfig();
+  }
+}
+
+function readConfigRecordOrInvalid(absPath: string, configsDir: string, bundleRoot?: string): ConfigRecord {
+  try {
+    return readConfigRecord(absPath, configsDir, bundleRoot);
+  } catch (error) {
+    const stat = statSync(absPath);
+    const name = basename(absPath, extname(absPath));
+    return {
+      id: encodeConfigId(absPath, configsDir),
+      name,
+      path: absPath,
+      mtime: stat.mtime.toISOString(),
+      hash: '',
+      config: parseSourceConfigForInvalidRecord(absPath),
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function listConfigs(configsDir: string, bundleRoot?: string): ConfigRecord[] {
   if (!existsSync(configsDir)) return [];
   const files = readdirSync(configsDir)
     .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
     .map((name) => ensureInsideRoot(configsDir, join(configsDir, name)));
-  return files
-    .map((path) => readConfigRecord(path, configsDir))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const records = files.map((path) => readConfigRecordOrInvalid(path, configsDir, bundleRoot));
+  return records.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function listRuns(runsDir: string): RunSummary[] {
@@ -285,6 +437,157 @@ function writeLibraries(
   }
 }
 
+function encodeRunPresetId(absPath: string, rootDir: string): string {
+  const rel = absPath.slice(resolve(rootDir).length + 1);
+  return Buffer.from(rel, 'utf8').toString('base64url');
+}
+
+function decodeRunPresetId(id: string, rootDir: string): string {
+  const rel = Buffer.from(id, 'base64url').toString('utf8');
+  return ensureInsideRoot(rootDir, join(rootDir, rel));
+}
+
+function normalizeRunPresetRecord(
+  value: unknown,
+  filePath: string,
+  configsDir: string
+): RunPresetRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const name = String(raw.name ?? '').trim();
+  const configPath = String(raw.config_path ?? '').trim();
+  const runsPerScenario = Number(raw.runs_per_scenario ?? 1);
+  if (!name || !configPath || Number.isNaN(runsPerScenario) || runsPerScenario <= 0) return null;
+
+  let safeConfigPath: string;
+  try {
+    safeConfigPath = ensureInsideRoot(configsDir, configPath);
+  } catch {
+    return null;
+  }
+
+  const stat = statSync(filePath);
+  const now = new Date().toISOString();
+  return {
+    id: String(raw.id ?? encodeRunPresetId(filePath, dirname(filePath))),
+    name,
+    config_path: safeConfigPath,
+    agents: Array.isArray(raw.agents)
+      ? raw.agents.map((v) => String(v).trim()).filter(Boolean)
+      : [],
+    scenario_ids: Array.isArray(raw.scenario_ids)
+      ? raw.scenario_ids.map((v) => String(v).trim()).filter(Boolean)
+      : [],
+    runs_per_scenario: Math.max(1, Math.floor(runsPerScenario)),
+    apply_snapshot_eval: raw.apply_snapshot_eval !== false,
+    created_at: typeof raw.created_at === 'string' ? raw.created_at : stat.mtime.toISOString(),
+    updated_at: typeof raw.updated_at === 'string' ? raw.updated_at : now
+  };
+}
+
+function readRunPresetRecord(
+  absPath: string,
+  presetsDir: string,
+  configsDir: string
+): RunPresetRecord {
+  const parsed = readYamlFile<unknown>(absPath, null);
+  const record = normalizeRunPresetRecord(parsed, absPath, configsDir);
+  if (!record) {
+    throw new Error(`Invalid run preset: ${absPath}`);
+  }
+  return {
+    ...record,
+    id: encodeRunPresetId(absPath, presetsDir)
+  };
+}
+
+function listRunPresets(presetsDir: string, configsDir: string): RunPresetRecord[] {
+  if (!existsSync(presetsDir)) return [];
+  const files = readdirSync(presetsDir)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .map((name) => ensureInsideRoot(presetsDir, join(presetsDir, name)));
+  const out: RunPresetRecord[] = [];
+  for (const file of files) {
+    try {
+      out.push(readRunPresetRecord(file, presetsDir, configsDir));
+    } catch {
+      // Ignore malformed preset files to keep UI usable.
+    }
+  }
+  return out.sort((a, b) => {
+    const timeDiff = new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    return timeDiff !== 0 ? timeDiff : a.name.localeCompare(b.name);
+  });
+}
+
+function createOrUpdateRunPresetFile(
+  presetsDir: string,
+  configsDir: string,
+  body: unknown,
+  currentPath?: string
+): { path: string; record: RunPresetRecord } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('Missing preset object');
+  }
+  const raw = body as Record<string, unknown>;
+  const name = String(raw.name ?? '').trim();
+  const configPath = String(raw.config_path ?? '').trim();
+  const runsPerScenario = Number(raw.runs_per_scenario ?? 1);
+  if (!name) throw new Error('Preset name is required');
+  if (!configPath) throw new Error('config_path is required');
+  if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
+    throw new Error('runs_per_scenario must be a positive number');
+  }
+  const safeConfigPath = ensureInsideRoot(configsDir, configPath);
+  const agents = Array.isArray(raw.agents)
+    ? raw.agents.map((v) => String(v).trim()).filter(Boolean)
+    : [];
+  const scenarioIds = Array.isArray(raw.scenario_ids)
+    ? raw.scenario_ids.map((v) => String(v).trim()).filter(Boolean)
+    : [];
+  const now = new Date().toISOString();
+
+  mkdirSync(presetsDir, { recursive: true });
+  let targetPath = currentPath;
+  if (!targetPath) {
+    const baseName = safeFileName(name);
+    targetPath = ensureInsideRoot(presetsDir, join(presetsDir, `${baseName}.yaml`));
+    let suffix = 1;
+    while (existsSync(targetPath)) {
+      targetPath = ensureInsideRoot(presetsDir, join(presetsDir, `${baseName}-${suffix}.yaml`));
+      suffix += 1;
+    }
+  }
+
+  const existing =
+    targetPath && existsSync(targetPath)
+      ? readYamlFile<Record<string, unknown>>(targetPath, {})
+      : {};
+  const record: RunPresetRecord = {
+    id:
+      typeof existing.id === 'string' && existing.id.trim()
+        ? existing.id.trim()
+        : `run-preset-${Date.now()}`,
+    name,
+    config_path: safeConfigPath,
+    agents,
+    scenario_ids: scenarioIds,
+    runs_per_scenario: Math.floor(runsPerScenario),
+    apply_snapshot_eval: raw.apply_snapshot_eval !== false,
+    created_at:
+      typeof existing.created_at === 'string' && existing.created_at.trim()
+        ? existing.created_at
+        : now,
+    updated_at: now
+  };
+
+  writeFileSync(targetPath!, `${stringifyYaml(record)}\n`, 'utf8');
+  return {
+    path: targetPath!,
+    record: readRunPresetRecord(targetPath!, presetsDir, configsDir)
+  };
+}
+
 function getRunResults(runId: string, runsDir: string): ResultsJson {
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const resultsPath = ensureInsideRoot(runsDir, join(runDir, 'results.json'));
@@ -292,6 +595,22 @@ function getRunResults(runId: string, runsDir: string): ResultsJson {
     throw new Error(`Run not found: ${runId}`);
   }
   return JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+}
+
+function selectScenarioIds(config: EvalConfig, requestedScenarioIds?: string[]): EvalConfig {
+  if (!requestedScenarioIds || requestedScenarioIds.length === 0) return config;
+  const requested = requestedScenarioIds.map((id) => id.trim()).filter(Boolean);
+  if (requested.length === 0) return config;
+  const requestedSet = new Set(requested);
+  const scenarios = config.scenarios.filter((scenario) => requestedSet.has(scenario.id));
+  const foundSet = new Set(scenarios.map((scenario) => scenario.id));
+  const missing = requested.filter((id) => !foundSet.has(id));
+  if (missing.length > 0) {
+    throw new Error(
+      `Unknown scenarios: ${missing.join(', ')}. Available: ${config.scenarios.map((s) => s.id).join(', ')}`
+    );
+  }
+  return { ...config, scenarios };
 }
 
 function getTraceEvents(runId: string, runsDir: string): TraceEvent[] {
@@ -316,7 +635,9 @@ function getTraceEvents(runId: string, runsDir: string): TraceEvent[] {
 function toTraceUiEvents(events: TraceEvent[]): TraceUiEvent[] {
   const normalized: TraceUiEvent[] = [];
   let activeScenarioId: string | undefined;
-  let pending: { scenario_id?: string; tool: string; args?: unknown; ts_start?: string } | undefined;
+  let pending:
+    | { scenario_id?: string; tool: string; args?: unknown; ts_start?: string }
+    | undefined;
 
   for (const event of events) {
     if (event.type === 'scenario_started') {
@@ -522,13 +843,15 @@ export async function startAppServer(options: AppServerOptions) {
     configsDir: resolve(options.configsDir),
     runsDir: resolve(options.runsDir),
     snapshotsDir: resolve(options.snapshotsDir),
-    librariesDir: resolve(options.librariesDir)
+    librariesDir: resolve(options.librariesDir),
+    runPresetsDir: resolve(options.runPresetsDir)
   };
   mkdirSync(settings.configsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+  mkdirSync(settings.runPresetsDir, { recursive: true });
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
@@ -552,6 +875,20 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/health' && method === 'GET') {
         asJson(res, 200, { ok: true, version: pkg.version });
+        return;
+      }
+
+      if (pathname === '/api/providers/models' && method === 'GET') {
+        const provider = String(url.searchParams.get('provider') ?? '').trim();
+        if (!provider) {
+          asJson(res, 400, { error: 'provider is required (anthropic|openai|azure)' });
+          return;
+        }
+        try {
+          asJson(res, 200, await fetchProviderModels(provider));
+        } catch (error: any) {
+          asJson(res, 400, { error: error?.message ?? String(error) });
+        }
         return;
       }
 
@@ -579,6 +916,10 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(settings.librariesDir, { recursive: true });
           mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
         }
+        if (body.runPresetsDir) {
+          settings.runPresetsDir = resolve(String(body.runPresetsDir));
+          mkdirSync(settings.runPresetsDir, { recursive: true });
+        }
         asJson(res, 200, settings);
         return;
       }
@@ -595,6 +936,63 @@ export async function startAppServer(options: AppServerOptions) {
           agents: (body.agents as EvalConfig['agents']) ?? {},
           scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
         });
+        asJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === '/api/run-presets' && method === 'GET') {
+        asJson(res, 200, listRunPresets(settings.runPresetsDir, settings.configsDir));
+        return;
+      }
+
+      if (pathname === '/api/run-presets' && method === 'POST') {
+        const body = await parseBody(req);
+        const { record } = createOrUpdateRunPresetFile(
+          settings.runPresetsDir,
+          settings.configsDir,
+          body.preset ?? body
+        );
+        asJson(res, 201, record);
+        return;
+      }
+
+      if (pathname.startsWith('/api/run-presets/') && method === 'GET') {
+        const id = pathname.replace('/api/run-presets/', '');
+        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
+        asJson(
+          res,
+          200,
+          readRunPresetRecord(filePath, settings.runPresetsDir, settings.configsDir)
+        );
+        return;
+      }
+
+      if (pathname.startsWith('/api/run-presets/') && method === 'PUT') {
+        const id = pathname.replace('/api/run-presets/', '');
+        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
+        if (!existsSync(filePath)) {
+          asJson(res, 404, { error: 'Run preset not found' });
+          return;
+        }
+        const body = await parseBody(req);
+        const { record } = createOrUpdateRunPresetFile(
+          settings.runPresetsDir,
+          settings.configsDir,
+          body.preset ?? body,
+          filePath
+        );
+        asJson(res, 200, record);
+        return;
+      }
+
+      if (pathname.startsWith('/api/run-presets/') && method === 'DELETE') {
+        const id = pathname.replace('/api/run-presets/', '');
+        const filePath = decodeRunPresetId(id, settings.runPresetsDir);
+        if (!existsSync(filePath)) {
+          asJson(res, 404, { error: 'Run preset not found' });
+          return;
+        }
+        unlinkSync(filePath);
         asJson(res, 200, { ok: true });
         return;
       }
@@ -637,12 +1035,12 @@ export async function startAppServer(options: AppServerOptions) {
         saveSnapshot(snapshot, settings.snapshotsDir);
 
         const configPath = decodeConfigId(configId, settings.configsDir);
-        const { config } = loadConfig(configPath);
+        const { sourceConfig } = loadConfig(configPath, { bundleRoot: settings.librariesDir });
         const nextConfig: EvalConfig = {
-          ...config,
+          ...sourceConfig,
           snapshot_eval: {
             enabled: true,
-            mode: config.snapshot_eval?.mode ?? 'warn',
+            mode: sourceConfig.snapshot_eval?.mode ?? 'warn',
             baseline_snapshot_id: snapshot.id,
             baseline_source_run_id: runId,
             last_updated_at: new Date().toISOString()
@@ -651,7 +1049,7 @@ export async function startAppServer(options: AppServerOptions) {
         writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
         asJson(res, 201, {
           snapshot,
-          config: readConfigRecord(configPath, settings.configsDir)
+          config: readConfigRecord(configPath, settings.configsDir, settings.librariesDir)
         });
         return;
       }
@@ -682,7 +1080,7 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (pathname === '/api/configs' && method === 'GET') {
-        asJson(res, 200, listConfigs(settings.configsDir));
+        asJson(res, 200, listConfigs(settings.configsDir, settings.librariesDir));
         return;
       }
 
@@ -707,18 +1105,22 @@ export async function startAppServer(options: AppServerOptions) {
           suffix += 1;
         }
         writeFileSync(filePath, `${stringifyYaml(config)}\n`, 'utf8');
-        asJson(res, 201, readConfigRecord(filePath, settings.configsDir));
+        asJson(res, 201, readConfigRecord(filePath, settings.configsDir, settings.librariesDir));
         return;
       }
 
       if (pathname.startsWith('/api/configs/') && method === 'GET') {
         const id = pathname.replace('/api/configs/', '');
         const filePath = decodeConfigId(id, settings.configsDir);
-        asJson(res, 200, readConfigRecord(filePath, settings.configsDir));
+        asJson(res, 200, readConfigRecordOrInvalid(filePath, settings.configsDir, settings.librariesDir));
         return;
       }
 
-      if (pathname.startsWith('/api/configs/') && pathname.endsWith('/snapshot-policy') && method === 'POST') {
+      if (
+        pathname.startsWith('/api/configs/') &&
+        pathname.endsWith('/snapshot-policy') &&
+        method === 'POST'
+      ) {
         const id = pathname.replace('/api/configs/', '').replace('/snapshot-policy', '');
         const filePath = decodeConfigId(id, settings.configsDir);
         if (!existsSync(filePath)) {
@@ -732,18 +1134,18 @@ export async function startAppServer(options: AppServerOptions) {
           asJson(res, 400, { error: 'mode must be warn or fail_on_drift' });
           return;
         }
-        const { config } = loadConfig(filePath);
+        const { sourceConfig } = loadConfig(filePath, { bundleRoot: settings.librariesDir });
         const nextSnapshotEval: NonNullable<EvalConfig['snapshot_eval']> = {
           enabled,
           mode,
           baseline_snapshot_id:
             body.baselineSnapshotId !== undefined
               ? String(body.baselineSnapshotId || '')
-              : config.snapshot_eval?.baseline_snapshot_id,
+              : sourceConfig.snapshot_eval?.baseline_snapshot_id,
           baseline_source_run_id:
             body.baselineSourceRunId !== undefined
               ? String(body.baselineSourceRunId || '')
-              : config.snapshot_eval?.baseline_source_run_id,
+              : sourceConfig.snapshot_eval?.baseline_source_run_id,
           last_updated_at: new Date().toISOString()
         };
         if (!nextSnapshotEval.baseline_snapshot_id) {
@@ -753,11 +1155,11 @@ export async function startAppServer(options: AppServerOptions) {
           delete nextSnapshotEval.baseline_source_run_id;
         }
         const nextConfig: EvalConfig = {
-          ...config,
+          ...sourceConfig,
           snapshot_eval: nextSnapshotEval
         };
         writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-        asJson(res, 200, readConfigRecord(filePath, settings.configsDir));
+        asJson(res, 200, readConfigRecord(filePath, settings.configsDir, settings.librariesDir));
         return;
       }
 
@@ -797,7 +1199,7 @@ export async function startAppServer(options: AppServerOptions) {
           }
         }
         writeFileSync(targetPath, `${stringifyYaml(config)}\n`, 'utf8');
-        asJson(res, 200, readConfigRecord(targetPath, settings.configsDir));
+        asJson(res, 200, readConfigRecord(targetPath, settings.configsDir, settings.librariesDir));
         return;
       }
 
@@ -886,6 +1288,9 @@ export async function startAppServer(options: AppServerOptions) {
         const configPathRaw = String(body.configPath ?? '');
         const runsPerScenario = Number(body.runsPerScenario ?? 1);
         const scenarioId = body.scenarioId ? String(body.scenarioId) : undefined;
+        const scenarioIds = Array.isArray(body.scenarioIds)
+          ? body.scenarioIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+          : undefined;
         const requestedAgents = Array.isArray(body.agents)
           ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
           : undefined;
@@ -926,14 +1331,23 @@ export async function startAppServer(options: AppServerOptions) {
             configPath,
             runsPerScenario,
             scenarioId: scenarioId ?? null,
+            scenarioIds: scenarioIds ?? null,
             agents: requestedAgents ?? null
           }
         });
 
         void (async () => {
           try {
-            const loaded = loadConfig(configPath);
-            const expandedConfig = expandConfigForAgents(loaded.config, requestedAgents);
+            const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+            const selectedBaseScenarios = selectScenarioIds(
+              loaded.config,
+              scenarioIds && scenarioIds.length > 0
+                ? scenarioIds
+                : scenarioId
+                  ? [scenarioId]
+                  : undefined
+            );
+            const expandedConfig = expandConfigForAgents(selectedBaseScenarios, requestedAgents);
             const cwdBefore = process.cwd();
             process.chdir(settings.workspaceRoot);
             try {
@@ -965,11 +1379,17 @@ export async function startAppServer(options: AppServerOptions) {
                   addJobEvent(job, {
                     type: 'log',
                     ts: new Date().toISOString(),
-                    payload: { message: 'Snapshot eval enabled but baseline_snapshot_id is missing.' }
+                    payload: {
+                      message: 'Snapshot eval enabled but baseline_snapshot_id is missing.'
+                    }
                   });
                 }
               }
-              writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+              writeFileSync(
+                join(runDir, 'results.json'),
+                `${JSON.stringify(results, null, 2)}\n`,
+                'utf8'
+              );
               writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
               addJobEvent(job, {
                 type: 'completed',
@@ -990,7 +1410,9 @@ export async function startAppServer(options: AppServerOptions) {
             addJobEvent(job, {
               type: 'error',
               ts: new Date().toISOString(),
-              payload: { message: aborted ? 'Run aborted by user' : error?.message ?? String(error) }
+              payload: {
+                message: aborted ? 'Run aborted by user' : (error?.message ?? String(error))
+              }
             });
             job.status = aborted ? 'stopped' : 'error';
           } finally {

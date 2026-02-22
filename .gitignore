@@ -11,3 +11,5 @@ runs/
 .idea
 
 mcplab/
+packages/app/tsconfig.app.tsbuildinfo
+packages/app/tsconfig.node.tsbuildinfo

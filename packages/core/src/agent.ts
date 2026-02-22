@@ -261,8 +261,7 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.client.messages.create({
-      model: options.model,
+    const response = await this.createWithModelFallback(options.model, {
       temperature: options.temperature,
       max_tokens: options.max_tokens ?? 1024,
       system,
@@ -292,6 +291,63 @@ class AnthropicAdapter implements LlmAdapter {
       raw: response
     };
   }
+
+  private async createWithModelFallback(
+    model: string,
+    payload: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, 'model'>
+  ): Promise<Anthropic.Messages.Message> {
+    const candidates = anthropicModelCandidates(model);
+    let lastError: unknown;
+
+    for (const candidate of candidates) {
+      try {
+        return await this.client.messages.create({
+          model: candidate,
+          stream: false,
+          ...payload
+        });
+      } catch (error) {
+        lastError = error;
+        if (!isModelNotFound(error) || candidate === candidates[candidates.length - 1]) {
+          break;
+        }
+      }
+    }
+
+    if (isModelNotFound(lastError)) {
+      const tried = candidates.join(', ');
+      throw new Error(
+        `Anthropic model not found: '${model}' (tried: ${tried}). Your API key is authenticated, but this model is not enabled/available for that Anthropic account. Update the agent model in Manage Agents/Config Editor to one your account can access.`
+      );
+    }
+    throw lastError;
+  }
+}
+
+function anthropicModelCandidates(model: string): string[] {
+  const trimmed = model.trim();
+  const out = [trimmed];
+  const legacyWithDate = /^(claude-[\w.-]+)-\d{8}$/;
+  const match = trimmed.match(legacyWithDate);
+  if (match) {
+    out.push(`${match[1]}-latest`);
+  }
+  return Array.from(new Set(out));
+}
+
+function isModelNotFound(error: unknown): boolean {
+  if (!error) return false;
+  const anyErr = error as {
+    status?: number;
+    message?: string;
+    error?: { type?: string; message?: string };
+  };
+  const statusNotFound = anyErr.status === 404;
+  const typeNotFound = anyErr.error?.type === 'not_found_error';
+  const msg = `${anyErr.message ?? ''} ${anyErr.error?.message ?? ''}`.toLowerCase();
+  return (
+    statusNotFound || typeNotFound || (msg.includes('not_found_error') && msg.includes('model'))
+  );
 }
 
 function toOpenAiTool(tool: ToolDef) {

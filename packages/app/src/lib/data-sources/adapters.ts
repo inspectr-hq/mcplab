@@ -81,7 +81,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     return {
       id: scenario.id || toId('scn', index),
       name: scenario.id || `Scenario ${index + 1}`,
-      agentId: scenario.agent ? agentIdByName.get(scenario.agent) ?? undefined : undefined,
+      agentId: scenario.agent ? (agentIdByName.get(scenario.agent) ?? undefined) : undefined,
       serverIds: scenario.servers
         .map((name) => serverIdByName.get(name))
         .filter(Boolean) as string[],
@@ -99,9 +99,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     id: record.id,
     name: record.name,
     description: record.path,
+    loadError: record.error,
     servers,
+    serverRefs: record.config.server_refs ?? [],
     agents,
+    agentRefs: record.config.agent_refs ?? [],
     scenarios,
+    scenarioRefs: record.config.scenario_refs ?? [],
     snapshotEval: record.config.snapshot_eval
       ? {
           enabled: record.config.snapshot_eval.enabled,
@@ -191,7 +195,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
 
     return {
       id: scenario.id,
-      agent: scenario.agentId ? (agentNameById.get(scenario.agentId) || undefined) : undefined,
+      agent: scenario.agentId ? agentNameById.get(scenario.agentId) || undefined : undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
       snapshot_eval_enabled: scenario.snapshotEvalEnabled,
@@ -212,8 +216,11 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
 
   return {
     servers,
+    server_refs: config.serverRefs ?? [],
     agents,
+    agent_refs: config.agentRefs ?? [],
     scenarios,
+    scenario_refs: config.scenarioRefs ?? [],
     snapshot_eval: config.snapshotEval
       ? {
           enabled: config.snapshotEval.enabled,
@@ -236,8 +243,11 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
     name: 'library',
     description: '',
     servers: input.servers,
+    serverRefs: [],
     agents: input.agents,
+    agentRefs: [],
     scenarios: input.scenarios,
+    scenarioRefs: [],
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString()
   });
@@ -296,7 +306,10 @@ function toConversationItems(events: TraceUiEvent[]): ConversationItem[] {
   const items: ConversationItem[] = [];
   let sawPrompt = false;
   const finalAnswers = events
-    .filter((event): event is Extract<TraceUiEvent, { type: 'final_answer' }> => event.type === 'final_answer')
+    .filter(
+      (event): event is Extract<TraceUiEvent, { type: 'final_answer' }> =>
+        event.type === 'final_answer'
+    )
     .map((event) => normalizeText(event.text))
     .filter(Boolean);
   const finalAnswerSet = new Set(finalAnswers);

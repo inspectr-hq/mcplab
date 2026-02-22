@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Play, Square, CheckCircle2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Link, useSearchParams } from "react-router-dom";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
+import type { RunPresetRecord } from "@/lib/data-sources/types";
 
 const logMessages = [
   "Initializing evaluation runner...",
@@ -46,15 +48,100 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
+  const [applySnapshotEval, setApplySnapshotEval] = useState(true);
+  const [runPresets, setRunPresets] = useState<RunPresetRecord[]>([]);
+  const [presetId, setPresetId] = useState<string>("");
+  const [presetNameDraft, setPresetNameDraft] = useState("");
+  const [presetWarning, setPresetWarning] = useState<string>("");
   const [snapshotName, setSnapshotName] = useState("");
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const pendingPresetRef = useRef<RunPresetRecord | null>(null);
   const { configs, reload } = useConfigs();
   const { source, mode } = useDataSource();
+  const { agents: libraryAgents, scenarios: libraryScenarios } = useLibraries();
   const selectedConfig = configs.find((item) => item.id === configId);
   const requestedConfigId = searchParams.get("configId");
+  const availableAgents = useMemo(() => {
+    if (!selectedConfig) return [];
+    const byName = new Map<string, (typeof selectedConfig.agents)[number]>();
+    for (const agent of selectedConfig.agents) {
+      const key = agent.name || agent.id;
+      if (!byName.has(key)) byName.set(key, agent);
+    }
+    for (const ref of selectedConfig.agentRefs ?? []) {
+      if (byName.has(ref)) continue;
+      const fromLibrary = libraryAgents.find((agent) => (agent.name || agent.id) === ref);
+      if (fromLibrary) {
+        byName.set(ref, fromLibrary);
+      }
+    }
+    return Array.from(byName.values());
+  }, [selectedConfig, libraryAgents]);
+  const availableScenarios = useMemo(() => {
+    if (!selectedConfig) return [];
+    const byId = new Map<string, (typeof selectedConfig.scenarios)[number]>();
+    for (const scenario of selectedConfig.scenarios) {
+      if (!byId.has(scenario.id)) byId.set(scenario.id, scenario);
+    }
+    for (const ref of selectedConfig.scenarioRefs ?? []) {
+      if (byId.has(ref)) continue;
+      const fromLibrary = libraryScenarios.find((scenario) => scenario.id === ref || scenario.name === ref);
+      if (fromLibrary) byId.set(ref, fromLibrary);
+    }
+    return Array.from(byId.values());
+  }, [selectedConfig, libraryScenarios]);
+  const selectedPreset = useMemo(
+    () => runPresets.find((preset) => preset.id === presetId),
+    [runPresets, presetId]
+  );
+  const formPresetPayload = useMemo(() => {
+    if (!selectedConfig?.sourcePath) return null;
+    const selectedAgentNames = availableAgents
+      .filter((agent) => selectedAgentIds.includes(agent.id))
+      .map((agent) => agent.name || agent.id)
+      .filter(Boolean);
+    return {
+      name: presetNameDraft.trim() || selectedPreset?.name || "Run preset",
+      config_path: selectedConfig.sourcePath,
+      agents: selectedAgentNames,
+      scenario_ids: selectedScenarioIds,
+      runs_per_scenario: Math.max(1, Number(varianceRuns) || 1),
+      apply_snapshot_eval: applySnapshotEval
+    };
+  }, [
+    selectedConfig?.sourcePath,
+    availableAgents,
+    selectedAgentIds,
+    selectedScenarioIds,
+    varianceRuns,
+    applySnapshotEval,
+    presetNameDraft,
+    selectedPreset?.name
+  ]);
+  const presetDirty = useMemo(() => {
+    if (!selectedPreset || !formPresetPayload) return false;
+    const norm = (items: string[]) => [...items].sort();
+    return (
+      selectedPreset.name !== formPresetPayload.name ||
+      selectedPreset.config_path !== formPresetPayload.config_path ||
+      JSON.stringify(norm(selectedPreset.agents)) !== JSON.stringify(norm(formPresetPayload.agents)) ||
+      JSON.stringify(norm(selectedPreset.scenario_ids)) !== JSON.stringify(norm(formPresetPayload.scenario_ids)) ||
+      selectedPreset.runs_per_scenario !== formPresetPayload.runs_per_scenario ||
+      selectedPreset.apply_snapshot_eval !== formPresetPayload.apply_snapshot_eval
+    );
+  }, [selectedPreset, formPresetPayload]);
+
+  const loadPresets = async () => {
+    try {
+      setRunPresets(await source.listRunPresets());
+    } catch {
+      setRunPresets([]);
+    }
+  };
 
   useEffect(() => {
     if (!requestedConfigId) return;
@@ -63,12 +150,43 @@ const RunEvaluation = () => {
   }, [requestedConfigId, configs]);
 
   useEffect(() => {
-    if (!selectedConfig) {
-      setSelectedAgentIds([]);
+    const pending = pendingPresetRef.current;
+    if (pending && selectedConfig?.sourcePath === pending.config_path) {
+      const agentIds = availableAgents
+        .filter((agent) => pending.agents.includes(agent.name || agent.id))
+        .map((agent) => agent.id);
+      const scenarioIds = availableScenarios
+        .filter((scenario) => pending.scenario_ids.includes(scenario.id))
+        .map((scenario) => scenario.id);
+      const missingAgents = pending.agents.filter(
+        (name) => !availableAgents.some((agent) => (agent.name || agent.id) === name)
+      );
+      const missingScenarios = pending.scenario_ids.filter(
+        (id) => !availableScenarios.some((scenario) => scenario.id === id)
+      );
+      setSelectedAgentIds(agentIds);
+      setSelectedScenarioIds(scenarioIds);
+      setVarianceRuns(String(pending.runs_per_scenario));
+      setApplySnapshotEval(pending.apply_snapshot_eval);
+      setPresetNameDraft(pending.name);
+      setPresetWarning(
+        missingAgents.length || missingScenarios.length
+          ? `Preset is partially out of date. Missing agents: ${missingAgents.join(", ") || "-"}; missing tests: ${missingScenarios.join(", ") || "-"}.`
+          : ""
+      );
+      pendingPresetRef.current = null;
       return;
     }
-    setSelectedAgentIds(selectedConfig.agents.map((agent) => agent.id));
-  }, [selectedConfig?.id]);
+    if (!selectedConfig) {
+      setSelectedAgentIds([]);
+      setSelectedScenarioIds([]);
+      return;
+    }
+    setSelectedAgentIds(availableAgents.map((agent) => agent.id));
+    setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
+    setApplySnapshotEval(true);
+    setPresetWarning("");
+  }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
   const runDemo = () => {
     setRunning(true);
@@ -96,22 +214,38 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`]);
       return;
     }
-    const selectedAgents = selectedConfig.agents.filter((agent) => selectedAgentIds.includes(agent.id));
+    const selectedAgents = availableAgents.filter((agent) => selectedAgentIds.includes(agent.id));
     if (selectedAgents.length === 0) {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one agent.`]);
+      return;
+    }
+    const selectedScenarios = availableScenarios.filter((scenario) => selectedScenarioIds.includes(scenario.id));
+    if (selectedScenarios.length === 0) {
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one test.`]);
       return;
     }
     setRunning(true);
     setDone(false);
     setRunId("");
-    setLogs([`[${new Date().toLocaleTimeString()}] Starting evaluation run...`]);
+    const compositionMode =
+      (selectedConfig.serverRefs?.length || 0) +
+        (selectedConfig.agentRefs?.length || 0) +
+        (selectedConfig.scenarioRefs?.length || 0) >
+      0
+        ? "refs-composed"
+        : "single-file/inline";
+    setLogs([
+      `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
+      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${applySnapshotEval ? "on" : "off"}`
+    ]);
     setProgress(10);
     try {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.name || agent.id),
-        applySnapshotEval: true,
+        scenarioIds: selectedScenarios.map((scenario) => scenario.id),
+        applySnapshotEval,
       });
       setActiveJobId(jobId);
       unsubscribeRef.current?.();
@@ -144,7 +278,11 @@ const RunEvaluation = () => {
           unsubscribeRef.current = null;
         }
         if (event.type === "error") {
-          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Error: ${String(event.payload.message ?? "Unknown error")}`]);
+          const message = String(event.payload.message ?? "Unknown error");
+          const extraHint = message.includes("Anthropic model not found")
+            ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
+            : "";
+          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Error: ${message}${extraHint}`]);
           setRunning(false);
           setDone(false);
           setProgress(0);
@@ -154,7 +292,11 @@ const RunEvaluation = () => {
         }
       });
     } catch (error: any) {
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${error?.message ?? String(error)}`]);
+      const message = String(error?.message ?? error);
+      const extraHint = message.includes("Anthropic model not found")
+        ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
+        : "";
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${message}${extraHint}`]);
       setRunning(false);
       setProgress(0);
       setActiveJobId(null);
@@ -204,6 +346,79 @@ const RunEvaluation = () => {
     }
   };
 
+  const applyPreset = (preset: RunPresetRecord) => {
+    pendingPresetRef.current = preset;
+    setPresetId(preset.id);
+    setPresetNameDraft(preset.name);
+    const matchingConfig = configs.find((config) => config.sourcePath === preset.config_path);
+    if (matchingConfig) {
+      setConfigId(matchingConfig.id);
+    } else {
+      setPresetWarning(`Preset config not found in current config list: ${preset.config_path}`);
+    }
+  };
+
+  const savePreset = async (mode: "save" | "saveAs") => {
+    if (!formPresetPayload) {
+      toast({ title: "Cannot save preset", description: "Select a config first.", variant: "destructive" });
+      return;
+    }
+    if (formPresetPayload.agents.length === 0 || formPresetPayload.scenario_ids.length === 0) {
+      toast({
+        title: "Cannot save preset",
+        description: "Select at least one model and one test.",
+        variant: "destructive",
+      });
+      return;
+    }
+    let name = formPresetPayload.name;
+    if (mode === "saveAs" || !presetId) {
+      const prompted = window.prompt("Preset name", name);
+      if (!prompted?.trim()) return;
+      name = prompted.trim();
+      setPresetNameDraft(name);
+    }
+    const payload = { ...formPresetPayload, name };
+    try {
+      const next =
+        mode === "save" && presetId
+          ? await source.updateRunPreset(presetId, payload)
+          : await source.createRunPreset(payload);
+      await loadPresets();
+      setPresetId(next.id);
+      setPresetNameDraft(next.name);
+      setPresetWarning("");
+      toast({ title: "Preset saved", description: next.name });
+    } catch (error: any) {
+      toast({
+        title: "Failed to save preset",
+        description: String(error?.message ?? error),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deletePreset = async () => {
+    if (!presetId) return;
+    const target = runPresets.find((preset) => preset.id === presetId);
+    if (!target) return;
+    if (!window.confirm(`Delete preset "${target.name}"?`)) return;
+    try {
+      await source.deleteRunPreset(target.id);
+      await loadPresets();
+      setPresetId("");
+      setPresetNameDraft("");
+      setPresetWarning("");
+      toast({ title: "Preset deleted", description: target.name });
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete preset",
+        description: String(error?.message ?? error),
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
@@ -215,14 +430,16 @@ const RunEvaluation = () => {
 
   useEffect(() => {
     void reload();
+    void loadPresets();
     const handleFocus = () => {
       void reload();
+      void loadPresets();
     };
     window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
-  }, [reload]);
+  }, [reload, source]);
 
   return (
     <div className="space-y-6">
@@ -261,6 +478,46 @@ const RunEvaluation = () => {
               <Input type="number" min="1" max="10" value={varianceRuns} onChange={(e) => setVarianceRuns(e.target.value)} />
             </div>
           </div>
+          <div className="grid gap-4 sm:grid-cols-[1.5fr_auto_auto_auto] items-end">
+            <div className="space-y-2">
+              <Label>Run Preset</Label>
+              <Select
+                value={presetId || "__none__"}
+                onValueChange={(value) => {
+                  if (value === "__none__") {
+                    setPresetId("");
+                    setPresetNameDraft("");
+                    setPresetWarning("");
+                    return;
+                  }
+                  const preset = runPresets.find((item) => item.id === value);
+                  if (preset) applyPreset(preset);
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a preset" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No preset</SelectItem>
+                  {runPresets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void savePreset(presetId ? "save" : "saveAs")} disabled={!formPresetPayload}>
+              {presetId ? "Save" : "Save As"}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void savePreset("saveAs")} disabled={!formPresetPayload}>
+              Save As
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void deletePreset()} disabled={!presetId}>
+              Delete
+            </Button>
+          </div>
+          {(presetWarning || (presetId && presetDirty)) && (
+            <p className="text-xs text-muted-foreground">
+              {presetWarning || "Unsaved changes to selected preset."}
+            </p>
+          )}
           {selectedConfig && (
             <div className="space-y-2">
               {selectedConfig.snapshotEval?.enabled && (
@@ -274,13 +531,13 @@ const RunEvaluation = () => {
                 <button
                   type="button"
                   className="text-xs text-primary hover:underline"
-                  onClick={() => setSelectedAgentIds(selectedConfig.agents.map((agent) => agent.id))}
+                  onClick={() => setSelectedAgentIds(availableAgents.map((agent) => agent.id))}
                 >
                   Select all
                 </button>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {selectedConfig.agents.map((agent) => {
+                {availableAgents.map((agent) => {
                   const checked = selectedAgentIds.includes(agent.id);
                   return (
                     <label key={agent.id} className="flex items-center gap-2 text-sm rounded-md border p-2">
@@ -298,10 +555,75 @@ const RunEvaluation = () => {
                   );
                 })}
               </div>
+              {availableAgents.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No agents available in this config. Add inline agents or agent references.
+                </p>
+              )}
             </div>
           )}
+          {selectedConfig && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Tests</Label>
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id))}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setSelectedScenarioIds([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {selectedScenarioIds.length} of {availableScenarios.length} selected
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {availableScenarios.map((scenario) => {
+                  const checked = selectedScenarioIds.includes(scenario.id);
+                  return (
+                    <label key={scenario.id} className="flex items-start gap-2 text-sm rounded-md border p-2">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          const isChecked = value === true;
+                          setSelectedScenarioIds((prev) =>
+                            isChecked ? [...prev, scenario.id] : prev.filter((id) => id !== scenario.id),
+                          );
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-medium">{scenario.name || scenario.id}</span>
+                        <span className="block font-mono text-xs text-muted-foreground truncate">{scenario.id}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-sm rounded-md border p-2">
+            <Checkbox checked={applySnapshotEval} onCheckedChange={(v) => setApplySnapshotEval(v === true)} />
+            <span>Apply snapshot evaluation policy (if configured)</span>
+          </label>
           <div className="flex gap-2">
-            <Button onClick={startRun} disabled={running || !configId || (selectedConfig?.agents.length ?? 0) > 0 && selectedAgentIds.length === 0}>
+            <Button
+              onClick={startRun}
+              disabled={
+                running ||
+                !configId ||
+                (availableAgents.length > 0 && selectedAgentIds.length === 0) ||
+                (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
+              }
+            >
               <Play className="mr-2 h-4 w-4" />Run
             </Button>
             {running && (

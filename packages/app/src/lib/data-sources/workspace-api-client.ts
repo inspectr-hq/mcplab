@@ -5,6 +5,8 @@ import type {
   SnapshotComparison,
   SnapshotRecord,
   TraceUiEvent,
+  RunPresetRecord,
+  ProviderModelsResponse,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
 } from './types';
@@ -37,7 +39,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const workspaceApiClient = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
   getSettings: () =>
-    request<{ workspaceRoot: string; configsDir: string; runsDir: string; snapshotsDir: string; librariesDir: string }>('/api/settings'),
+    request<{
+      workspaceRoot: string;
+      configsDir: string;
+      runsDir: string;
+      snapshotsDir: string;
+      librariesDir: string;
+      runPresetsDir: string;
+    }>('/api/settings'),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
     request<WorkspaceConfigRecord>('/api/configs', {
@@ -69,10 +78,13 @@ export const workspaceApiClient = {
       body: JSON.stringify({ runId })
     }),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
-    request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>('/api/snapshots/generate-eval', {
-      method: 'POST',
-      body: JSON.stringify({ runId, configId, name })
-    }),
+    request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
+      '/api/snapshots/generate-eval',
+      {
+        method: 'POST',
+        body: JSON.stringify({ runId, configId, name })
+      }
+    ),
   updateSnapshotPolicy: (
     configId: string,
     policy: {
@@ -105,6 +117,7 @@ export const workspaceApiClient = {
     configPath: string;
     runsPerScenario: number;
     scenarioId?: string;
+    scenarioIds?: string[];
     agents?: string[];
     applySnapshotEval?: boolean;
   }) =>
@@ -112,6 +125,24 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(params)
     }),
+  listRunPresets: () => request<RunPresetRecord[]>('/api/run-presets'),
+  createRunPreset: (preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>) =>
+    request<RunPresetRecord>('/api/run-presets', {
+      method: 'POST',
+      body: JSON.stringify({ preset })
+    }),
+  updateRunPreset: (
+    id: string,
+    preset: Omit<RunPresetRecord, 'id' | 'created_at' | 'updated_at'>
+  ) =>
+    request<RunPresetRecord>(`/api/run-presets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ preset })
+    }),
+  deleteRunPreset: (id: string) =>
+    request<{ ok: boolean }>(`/api/run-presets/${id}`, { method: 'DELETE' }),
+  listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
+    request<ProviderModelsResponse>(`/api/providers/models?provider=${encodeURIComponent(provider)}`),
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

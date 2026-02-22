@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
+import { stringify as stringifyYaml } from 'yaml';
 import type { EvalConfig, ScenarioRunResult, ResultsJson } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -24,10 +25,13 @@ export async function runAll(
   throwIfAborted(options.signal);
   const runId = createRunId();
   const runRoot = options.runsDir?.trim() || 'runs';
-  const runDir = join(process.cwd(), runRoot, runId);
+  const runsBaseDir = isAbsolute(runRoot) ? runRoot : resolve(process.cwd(), runRoot);
+  const runDir = join(runsBaseDir, runId);
   mkdirSync(runDir, { recursive: true });
 
   const tracePath = join(runDir, 'trace.jsonl');
+  const resolvedConfigPath = join(runDir, 'resolved-config.yaml');
+  writeFileSync(resolvedConfigPath, `${stringifyYaml(config)}\n`, 'utf8');
   const trace = new TraceWriter(tracePath);
   trace.write({
     type: 'run_started',
@@ -49,7 +53,9 @@ export async function runAll(
   for (const scenario of config.scenarios) {
     throwIfAborted(options.signal);
     if (!scenario.agent) {
-      throw new Error(`Scenario '${scenario.id}' has no agent. Provide --agents or set scenario.agent.`);
+      throw new Error(
+        `Scenario '${scenario.id}' has no agent. Provide --agents or set scenario.agent.`
+      );
     }
     const agent = config.agents[scenario.agent];
     if (!agent) {
@@ -66,7 +72,13 @@ export async function runAll(
         ts: new Date().toISOString()
       });
 
-      const runResult = await runAgentScenario({ scenario, agent, mcp, trace, signal: options.signal });
+      const runResult = await runAgentScenario({
+        scenario,
+        agent,
+        mcp,
+        trace,
+        signal: options.signal
+      });
       const evalResult = evaluateScenario(
         runResult.finalText,
         runResult.toolSequence,

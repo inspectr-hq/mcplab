@@ -3,7 +3,6 @@
   "title": "MCP Evaluation Config",
   "description": "Configuration schema for MCP evaluation scenarios",
   "type": "object",
-  "required": ["servers", "agents", "scenarios"],
   "properties": {
     "servers": {
       "type": "object",
@@ -83,6 +82,11 @@
         }
       }
     },
+    "server_refs": {
+      "type": "array",
+      "description": "References to reusable servers defined in mcplab/servers.yaml",
+      "items": { "type": "string" }
+    },
     "agents": {
       "type": "object",
       "description": "LLM agent configurations",
@@ -127,10 +131,14 @@
         }
       }
     },
+    "agent_refs": {
+      "type": "array",
+      "description": "References to reusable agents defined in mcplab/agents.yaml",
+      "items": { "type": "string" }
+    },
     "scenarios": {
       "type": "array",
       "description": "Evaluation scenarios",
-      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["id", "servers", "prompt"],
@@ -271,8 +279,12 @@
           }
         }
       }
-    }
-    ,
+    },
+    "scenario_refs": {
+      "type": "array",
+      "description": "References to reusable scenarios from mcplab/scenarios/*.yaml",
+      "items": { "type": "string" }
+    },
     "snapshot_eval": {
       "type": "object",
       "description": "Config-level snapshot evaluation policy",

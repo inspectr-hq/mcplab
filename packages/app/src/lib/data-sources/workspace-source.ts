@@ -1,5 +1,11 @@
 import type { EvalConfig } from '@/types/eval';
-import { fromCoreConfigYaml, fromCoreLibraries, fromCoreResultsJson, toCoreConfigYaml, toCoreLibraries } from './adapters';
+import {
+  fromCoreConfigYaml,
+  fromCoreLibraries,
+  fromCoreResultsJson,
+  toCoreConfigYaml,
+  toCoreLibraries
+} from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
 import type { EvalDataSource } from './types';
 
@@ -102,5 +108,20 @@ export const workspaceSource: EvalDataSource = {
   },
   async saveLibraries(libraries) {
     await workspaceApiClient.saveLibraries(toCoreLibraries(libraries));
+  },
+  async listRunPresets() {
+    return workspaceApiClient.listRunPresets();
+  },
+  async createRunPreset(preset) {
+    return workspaceApiClient.createRunPreset(preset);
+  },
+  async updateRunPreset(id, preset) {
+    return workspaceApiClient.updateRunPreset(id, preset);
+  },
+  async deleteRunPreset(id) {
+    await workspaceApiClient.deleteRunPreset(id);
+  },
+  async listProviderModels(provider) {
+    return workspaceApiClient.listProviderModels(provider);
   }
 };

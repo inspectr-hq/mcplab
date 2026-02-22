@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useConfigs } from "@/contexts/ConfigContext";
@@ -120,7 +121,18 @@ const Configurations = () => {
                   <TableCell>
                     <div>
                       <Link to={`/configs/${cfg.id}`} className="font-medium text-sm hover:text-primary">{cfg.name}</Link>
+                      {cfg.loadError && (
+                        <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
+                          <AlertTriangle className="mr-1 h-3 w-3" />
+                          Broken
+                        </Badge>
+                      )}
                       {cfg.description && <p className="text-xs text-muted-foreground mt-0.5">{cfg.description}</p>}
+                      {cfg.loadError && (
+                        <p className="text-xs text-destructive mt-0.5 break-all">
+                          {cfg.loadError}
+                        </p>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">{cfg.scenarios.length}</TableCell>

@@ -1,4 +1,4 @@
-import { Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +41,14 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
 
   const remove = (index: number) => onChange(scenarios.filter((_, i) => i !== index));
   const add = () => onChange([...scenarios, emptyScenario()]);
+  const move = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= scenarios.length) return;
+    const next = [...scenarios];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    onChange(next);
+  };
 
   return (
     <div className="space-y-4">
@@ -53,7 +61,20 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
         )}
       </div>
       {scenarios.map((sc, i) => (
-        <ScenarioCard key={sc.id} scenario={sc} index={i} agents={agents} servers={servers} snapshotEval={snapshotEval} onUpdate={(patch) => update(i, patch)} onRemove={() => remove(i)} readOnly={readOnly} />
+        <ScenarioCard
+          key={sc.id}
+          scenario={sc}
+          index={i}
+          total={scenarios.length}
+          agents={agents}
+          servers={servers}
+          snapshotEval={snapshotEval}
+          onUpdate={(patch) => update(i, patch)}
+          onMoveUp={() => move(i, -1)}
+          onMoveDown={() => move(i, 1)}
+          onRemove={() => remove(i)}
+          readOnly={readOnly}
+        />
       ))}
       {scenarios.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-6">No scenarios configured. Add one to get started.</p>
@@ -62,10 +83,10 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
   );
 }
 
-function ScenarioCard({ scenario, index, agents, servers, snapshotEval, onUpdate, onRemove, readOnly }: {
-  scenario: Scenario; index: number; agents: AgentConfig[]; servers: ServerConfig[];
+function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
+  scenario: Scenario; index: number; total: number; agents: AgentConfig[]; servers: ServerConfig[];
   snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
-  onUpdate: (patch: Partial<Scenario>) => void; onRemove: () => void; readOnly?: boolean;
+  onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean;
 }) {
   const [newRuleType, setNewRuleType] = useState<EvalRule["type"]>("required_tool");
   const [newRuleValue, setNewRuleValue] = useState("");
@@ -117,11 +138,37 @@ function ScenarioCard({ scenario, index, agents, servers, snapshotEval, onUpdate
   return (
     <Card className="border-dashed">
       <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-medium">{scenario.name || `Scenario ${index + 1}`}</CardTitle>
+        <CardTitle className="text-sm font-medium">
+          {index + 1}. {scenario.name || `Scenario ${index + 1}`}
+        </CardTitle>
         {!readOnly && (
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onMoveUp}
+              disabled={index === 0}
+              aria-label="Move scenario up"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onMoveDown}
+              disabled={index === total - 1}
+              aria-label="Move scenario down"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          </div>
         )}
       </CardHeader>
       <CardContent className="space-y-3">

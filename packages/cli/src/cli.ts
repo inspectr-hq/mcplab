@@ -4,7 +4,13 @@ import { Command } from 'commander';
 import kleur from 'kleur';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { loadConfig, selectScenarios, runAll, type EvalConfig, type ResultsJson } from '@inspectr/mcplab-core';
+import {
+  loadConfig,
+  selectScenarios,
+  runAll,
+  type EvalConfig,
+  type ResultsJson
+} from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../package.json' with { type: 'json' };
 import { execSync } from 'node:child_process';
@@ -46,7 +52,10 @@ program
       let { config, hash } = loadConfig(resolve(options.config));
 
       const requestedAgents = options.agents
-        ? options.agents.split(',').map((a: string) => a.trim()).filter(Boolean)
+        ? options.agents
+            .split(',')
+            .map((a: string) => a.trim())
+            .filter(Boolean)
         : undefined;
       const beforeExpandCount = config.scenarios.length;
       config = expandConfigForAgents(config, requestedAgents);
@@ -73,14 +82,20 @@ program
         runsDir: String(options.runsDir)
       });
       let shouldFailOnDrift = false;
-      const useSnapshotEval = Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
+      const useSnapshotEval =
+        Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
 
       if (useSnapshotEval) {
         const policy = config.snapshot_eval;
         if (!policy?.baseline_snapshot_id) {
-          console.log(kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.'));
+          console.log(
+            kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.')
+          );
         } else {
-          const snapshot = loadSnapshot(String(policy.baseline_snapshot_id), resolve(options.snapshotsDir));
+          const snapshot = loadSnapshot(
+            String(policy.baseline_snapshot_id),
+            resolve(options.snapshotsDir)
+          );
           const comparison = compareRunToSnapshot(results, snapshot);
           const enabledScenarioIds = new Set(
             selected.scenarios
@@ -99,10 +114,13 @@ program
             `${applied.mode} · baseline=${applied.baseline_snapshot_id} · overall=${applied.overall_score} · status=${applied.status}`
           );
           if (applied.impacted_scenarios.length > 0) {
-            console.log(kleur.yellow(`Impacted scenarios: ${applied.impacted_scenarios.join(', ')}`));
+            console.log(
+              kleur.yellow(`Impacted scenarios: ${applied.impacted_scenarios.join(', ')}`)
+            );
           }
           console.log(formatSnapshotComparisonTable(comparison));
-          shouldFailOnDrift = policy.mode === 'fail_on_drift' && applied.impacted_scenarios.length > 0;
+          shouldFailOnDrift =
+            policy.mode === 'fail_on_drift' && applied.impacted_scenarios.length > 0;
         }
       }
 
@@ -113,7 +131,10 @@ program
       console.log(kleur.green(`Run completed: ${runDir}`));
 
       if (options.compareSnapshot) {
-        const snapshot = loadSnapshot(String(options.compareSnapshot), resolve(options.snapshotsDir));
+        const snapshot = loadSnapshot(
+          String(options.compareSnapshot),
+          resolve(options.snapshotsDir)
+        );
         const comparison = compareRunToSnapshot(results, snapshot);
         console.log('');
         console.log(kleur.cyan('📸 Snapshot Comparison'));
@@ -181,12 +202,12 @@ program
           saveSnapshot(snapshot, resolve(options.snapshotsDir));
 
           const configPath = resolve(String(options.config));
-          const { config } = loadConfig(configPath);
+          const { sourceConfig } = loadConfig(configPath);
           const nextConfig: EvalConfig = {
-            ...config,
+            ...sourceConfig,
             snapshot_eval: {
               enabled: true,
-              mode: config.snapshot_eval?.mode ?? 'warn',
+              mode: sourceConfig.snapshot_eval?.mode ?? 'warn',
               baseline_snapshot_id: snapshot.id,
               baseline_source_run_id: results.metadata.run_id,
               last_updated_at: new Date().toISOString()
@@ -218,16 +239,16 @@ program
             throw new Error('mode must be warn or fail_on_drift');
           }
           const configPath = resolve(String(options.config));
-          const { config } = loadConfig(configPath);
+          const { sourceConfig } = loadConfig(configPath);
           const nextConfig: EvalConfig = {
-            ...config,
+            ...sourceConfig,
             snapshot_eval: {
               enabled,
               mode,
               baseline_snapshot_id:
-                options.baselineSnapshot ?? config.snapshot_eval?.baseline_snapshot_id,
+                options.baselineSnapshot ?? sourceConfig.snapshot_eval?.baseline_snapshot_id,
               baseline_source_run_id:
-                options.baselineSourceRun ?? config.snapshot_eval?.baseline_source_run_id,
+                options.baselineSourceRun ?? sourceConfig.snapshot_eval?.baseline_source_run_id,
               last_updated_at: new Date().toISOString()
             }
           };
@@ -329,6 +350,7 @@ program
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
   .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
+  .option('--run-presets-dir <path>', 'Directory for saved run presets', 'mcplab/run-presets')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
@@ -346,6 +368,7 @@ program
         runsDir: resolve(options.runsDir),
         snapshotsDir: resolve(options.snapshotsDir),
         librariesDir: resolve(options.librariesDir),
+        runPresetsDir: resolve(options.runPresetsDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)
       });

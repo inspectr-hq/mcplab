@@ -135,7 +135,10 @@ function buildSnapshotItem(scenario: ScenarioAggregate): SnapshotItem {
   };
 }
 
-export function compareRunToSnapshot(results: ResultsJson, snapshot: SnapshotRecord): SnapshotComparison {
+export function compareRunToSnapshot(
+  results: ResultsJson,
+  snapshot: SnapshotRecord
+): SnapshotComparison {
   const scenario_results = snapshot.items.map((item) => {
     const scenario = results.scenarios.find(
       (candidate) => candidate.scenario_id === item.scenario_id && candidate.agent === item.agent
@@ -158,7 +161,8 @@ export function compareRunToSnapshot(results: ResultsJson, snapshot: SnapshotRec
     const semantics = scoreSemantics(item, scenario, reasons);
 
     const score = tools * 0.45 + extracts * 0.35 + semantics * 0.2;
-    const status: ScenarioComparison['status'] = score >= 0.8 ? 'Match' : score >= 0.6 ? 'Warn' : 'Drift';
+    const status: ScenarioComparison['status'] =
+      score >= 0.8 ? 'Match' : score >= 0.6 ? 'Warn' : 'Drift';
 
     return {
       scenario_id: item.scenario_id,
@@ -178,7 +182,8 @@ export function compareRunToSnapshot(results: ResultsJson, snapshot: SnapshotRec
     scenario_results.length === 0
       ? 0
       : round2(
-          scenario_results.reduce((sum, scenario) => sum + scenario.score, 0) / scenario_results.length
+          scenario_results.reduce((sum, scenario) => sum + scenario.score, 0) /
+            scenario_results.length
         );
 
   return {
@@ -264,7 +269,9 @@ function scoreTools(item: SnapshotItem, scenario: ScenarioAggregate, reasons: st
 
   if (item.allowed_sequences.length > 0) {
     const allValid = scenario.runs.every((run) =>
-      item.allowed_sequences.some((allowed) => JSON.stringify(allowed) === JSON.stringify(run.tool_sequence))
+      item.allowed_sequences.some(
+        (allowed) => JSON.stringify(allowed) === JSON.stringify(run.tool_sequence)
+      )
     );
     if (!allValid) {
       penalties += 0.2;
@@ -313,14 +320,20 @@ function scoreExtracts(item: SnapshotItem, scenario: ScenarioAggregate, reasons:
     const fieldScore = compareValue(expected, actual);
     sum += fieldScore;
     if (fieldScore < 0.8) {
-      reasons.push(`Extract drift (${key}): expected '${String(expected)}', observed '${String(actual)}'`);
+      reasons.push(
+        `Extract drift (${key}): expected '${String(expected)}', observed '${String(actual)}'`
+      );
     }
   }
 
   return clamp01(sum / keys.size);
 }
 
-function scoreSemantics(item: SnapshotItem, scenario: ScenarioAggregate, reasons: string[]): number {
+function scoreSemantics(
+  item: SnapshotItem,
+  scenario: ScenarioAggregate,
+  reasons: string[]
+): number {
   const normalized = normalizeText(scenario.last_final_answer || '');
   const runTokens = tokenize(normalized);
   const baseTokens = new Set(item.final_answer_features.token_set);
@@ -406,7 +419,12 @@ function normalizeText(value: string): string {
 }
 
 function tokenize(value: string): Set<string> {
-  return new Set(value.split(' ').map((token) => token.trim()).filter((token) => token.length > 2));
+  return new Set(
+    value
+      .split(' ')
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2)
+  );
 }
 
 function round2(value: number): number {

@@ -35,6 +35,7 @@ const App = () => (
                   <Route path="/" element={<Index />} />
                   <Route path="/configs" element={<Configurations />} />
                   <Route path="/configs/:id" element={<ConfigEditor />} />
+                  <Route path="/configs/:id/:tab" element={<ConfigEditor />} />
                   <Route path="/libraries/servers" element={<ManageServers />} />
                   <Route path="/libraries/agents" element={<ManageAgents />} />
                   <Route path="/libraries/scenarios" element={<ManageScenarios />} />

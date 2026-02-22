@@ -55,9 +55,13 @@ export interface EvalConfig {
   name: string;
   description?: string;
   sourcePath?: string;
+  loadError?: string;
   servers: ServerConfig[];
+  serverRefs?: string[];
   agents: AgentConfig[];
+  agentRefs?: string[];
   scenarios: Scenario[];
+  scenarioRefs?: string[];
   snapshotEval?: SnapshotEvalPolicy;
   createdAt: string;
   updatedAt: string;

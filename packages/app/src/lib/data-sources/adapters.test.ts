@@ -56,19 +56,83 @@ describe('fromCoreResultsJson conversation mapping', () => {
   it('maps mixed trace events and partitions conversations by run', () => {
     const traceEvents: TraceUiEvent[] = [
       { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
-      { type: 'llm_request', messages_summary: 'user: first question', ts: '2026-02-08T10:00:01.000Z' },
-      { type: 'llm_response', raw_or_summary: 'tool_calls:search_tags', ts: '2026-02-08T10:00:02.000Z' },
-      { type: 'tool_call', scenario_id: 'scn-1', tool: 'search_tags', args: { q: 'TM5-BP2' }, ts_start: '2026-02-08T10:00:03.000Z' },
-      { type: 'tool_result', scenario_id: 'scn-1', tool: 'search_tags', ok: true, result_summary: '{"count":9}', duration_ms: 120, ts_end: '2026-02-08T10:00:03.120Z' },
-      { type: 'final_answer', scenario_id: 'scn-1', text: 'Final answer one', ts: '2026-02-08T10:00:04.000Z' },
-      { type: 'scenario_finished', scenario_id: 'scn-1', pass: true, ts: '2026-02-08T10:00:05.000Z' },
+      {
+        type: 'llm_request',
+        messages_summary: 'user: first question',
+        ts: '2026-02-08T10:00:01.000Z'
+      },
+      {
+        type: 'llm_response',
+        raw_or_summary: 'tool_calls:search_tags',
+        ts: '2026-02-08T10:00:02.000Z'
+      },
+      {
+        type: 'tool_call',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        args: { q: 'TM5-BP2' },
+        ts_start: '2026-02-08T10:00:03.000Z'
+      },
+      {
+        type: 'tool_result',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        ok: true,
+        result_summary: '{"count":9}',
+        duration_ms: 120,
+        ts_end: '2026-02-08T10:00:03.120Z'
+      },
+      {
+        type: 'final_answer',
+        scenario_id: 'scn-1',
+        text: 'Final answer one',
+        ts: '2026-02-08T10:00:04.000Z'
+      },
+      {
+        type: 'scenario_finished',
+        scenario_id: 'scn-1',
+        pass: true,
+        ts: '2026-02-08T10:00:05.000Z'
+      },
       { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:01:00.000Z' },
-      { type: 'llm_request', messages_summary: 'user: second question', ts: '2026-02-08T10:01:01.000Z' },
-      { type: 'llm_response', raw_or_summary: 'tool_calls:search_tags', ts: '2026-02-08T10:01:02.000Z' },
-      { type: 'tool_call', scenario_id: 'scn-1', tool: 'search_tags', args: { q: 'TM5-BP3' }, ts_start: '2026-02-08T10:01:03.000Z' },
-      { type: 'tool_result', scenario_id: 'scn-1', tool: 'search_tags', ok: false, result_summary: '{"error":"timeout"}', duration_ms: 80, ts_end: '2026-02-08T10:01:03.080Z' },
-      { type: 'final_answer', scenario_id: 'scn-1', text: 'Final answer two', ts: '2026-02-08T10:01:04.000Z' },
-      { type: 'scenario_finished', scenario_id: 'scn-1', pass: false, ts: '2026-02-08T10:01:05.000Z' }
+      {
+        type: 'llm_request',
+        messages_summary: 'user: second question',
+        ts: '2026-02-08T10:01:01.000Z'
+      },
+      {
+        type: 'llm_response',
+        raw_or_summary: 'tool_calls:search_tags',
+        ts: '2026-02-08T10:01:02.000Z'
+      },
+      {
+        type: 'tool_call',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        args: { q: 'TM5-BP3' },
+        ts_start: '2026-02-08T10:01:03.000Z'
+      },
+      {
+        type: 'tool_result',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        ok: false,
+        result_summary: '{"error":"timeout"}',
+        duration_ms: 80,
+        ts_end: '2026-02-08T10:01:03.080Z'
+      },
+      {
+        type: 'final_answer',
+        scenario_id: 'scn-1',
+        text: 'Final answer two',
+        ts: '2026-02-08T10:01:04.000Z'
+      },
+      {
+        type: 'scenario_finished',
+        scenario_id: 'scn-1',
+        pass: false,
+        ts: '2026-02-08T10:01:05.000Z'
+      }
     ];
 
     const mapped = fromCoreResultsJson(baseResults(), traceEvents);
@@ -89,26 +153,72 @@ describe('fromCoreResultsJson conversation mapping', () => {
   it('handles missing llm_response/final_answer without crashing', () => {
     const traceEvents: TraceUiEvent[] = [
       { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
-      { type: 'llm_request', messages_summary: 'user: only prompt', ts: '2026-02-08T10:00:01.000Z' },
-      { type: 'tool_call', scenario_id: 'scn-1', tool: 'search_tags', args: {}, ts_start: '2026-02-08T10:00:02.000Z' },
-      { type: 'tool_result', scenario_id: 'scn-1', tool: 'search_tags', ok: true, result_summary: '{}', duration_ms: 10, ts_end: '2026-02-08T10:00:02.010Z' },
-      { type: 'scenario_finished', scenario_id: 'scn-1', pass: true, ts: '2026-02-08T10:00:03.000Z' }
+      {
+        type: 'llm_request',
+        messages_summary: 'user: only prompt',
+        ts: '2026-02-08T10:00:01.000Z'
+      },
+      {
+        type: 'tool_call',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        args: {},
+        ts_start: '2026-02-08T10:00:02.000Z'
+      },
+      {
+        type: 'tool_result',
+        scenario_id: 'scn-1',
+        tool: 'search_tags',
+        ok: true,
+        result_summary: '{}',
+        duration_ms: 10,
+        ts_end: '2026-02-08T10:00:02.010Z'
+      },
+      {
+        type: 'scenario_finished',
+        scenario_id: 'scn-1',
+        pass: true,
+        ts: '2026-02-08T10:00:03.000Z'
+      }
     ];
 
     const mapped = fromCoreResultsJson(baseResults(), traceEvents);
     const firstRun = mapped.scenarios[0].runs[0];
 
-    expect(firstRun.conversation.map((item) => item.kind)).toEqual(['user_prompt', 'tool_call', 'tool_result']);
+    expect(firstRun.conversation.map((item) => item.kind)).toEqual([
+      'user_prompt',
+      'tool_call',
+      'tool_result'
+    ]);
     expect(mapped.scenarios[0].runs[1].conversation).toEqual([]);
   });
 
   it('drops assistant response when it is a prefix of final answer', () => {
     const traceEvents: TraceUiEvent[] = [
       { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
-      { type: 'llm_request', messages_summary: 'user: investigate', ts: '2026-02-08T10:00:01.000Z' },
-      { type: 'llm_response', raw_or_summary: "It seems there are no ALPHA or BETA product batches in the given time range...", ts: '2026-02-08T10:00:02.000Z' },
-      { type: 'final_answer', scenario_id: 'scn-1', text: "It seems there are no ALPHA or BETA product batches in the given time range. The data availability looks good, but the value_based_search did not find any matching events.", ts: '2026-02-08T10:00:03.000Z' },
-      { type: 'scenario_finished', scenario_id: 'scn-1', pass: true, ts: '2026-02-08T10:00:04.000Z' }
+      {
+        type: 'llm_request',
+        messages_summary: 'user: investigate',
+        ts: '2026-02-08T10:00:01.000Z'
+      },
+      {
+        type: 'llm_response',
+        raw_or_summary:
+          'It seems there are no ALPHA or BETA product batches in the given time range...',
+        ts: '2026-02-08T10:00:02.000Z'
+      },
+      {
+        type: 'final_answer',
+        scenario_id: 'scn-1',
+        text: 'It seems there are no ALPHA or BETA product batches in the given time range. The data availability looks good, but the value_based_search did not find any matching events.',
+        ts: '2026-02-08T10:00:03.000Z'
+      },
+      {
+        type: 'scenario_finished',
+        scenario_id: 'scn-1',
+        pass: true,
+        ts: '2026-02-08T10:00:04.000Z'
+      }
     ];
 
     const mapped = fromCoreResultsJson(baseResults(), traceEvents);
