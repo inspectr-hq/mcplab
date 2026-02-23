@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { PassRateBadge } from "@/components/PassRateBadge";
@@ -270,8 +269,12 @@ const ResultDetail = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
+    <div
+      className={`${
+        assistantOpen ? "xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden" : ""
+      }`}
+    >
+      <div className={`flex items-center gap-3 ${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
         <Button variant="ghost" size="icon" asChild><Link to="/results"><ArrowLeft className="h-4 w-4" /></Link></Button>
         <div>
           <div className="flex items-center gap-2">
@@ -328,6 +331,17 @@ const ResultDetail = () => {
           MCP Labs Assistant
         </Button>
       </div>
+
+      <div
+        className={`grid gap-6 items-start ${
+          assistantOpen
+            ? assistantExpanded
+              ? "xl:grid-cols-[minmax(0,1fr)_52rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
+              : "xl:grid-cols-[minmax(0,1fr)_28rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
+            : "grid-cols-1"
+        }`}
+      >
+      <div className={`min-w-0 space-y-6 ${assistantOpen ? "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2" : ""}`}>
 
       {result.snapshotEval?.applied && (
         <Card className="border-amber-500/30">
@@ -739,41 +753,50 @@ const ResultDetail = () => {
         </CardContent>
       </Card>
 
-      <Sheet open={assistantOpen} onOpenChange={setAssistantOpen}>
-        <SheetContent
-          side="right"
-          className={`flex h-full flex-col p-0 ${assistantExpanded ? "w-[92vw] sm:max-w-4xl" : "w-[92vw] sm:max-w-xl"}`}
-        >
-          <SheetHeader className="border-b px-4 py-3">
-            <div className="flex items-start justify-between gap-2 pr-8">
-              <div>
-                <SheetTitle className="flex items-center gap-2 text-base">
+      </div>
+
+      {assistantOpen && (
+        <Card className="min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <CardHeader className="border-b px-4 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-amber-500" />
                   MCP Labs Assistant
-                </SheetTitle>
-                <SheetDescription className="mt-1 text-xs">
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Ask questions about this run result, failures, tool usage, and snapshot drift.
-                  {assistantMeta && (
-                    <span className="mt-1 block text-[11px]">
-                      Using {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
-                    </span>
-                  )}
-                </SheetDescription>
+                </p>
+                {assistantMeta && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Using {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
+                  </p>
+                )}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => setAssistantExpanded((prev) => !prev)}
-              >
-                {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                {assistantExpanded ? "Compact" : "Expand"}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => setAssistantExpanded((prev) => !prev)}
+                >
+                  {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                  {assistantExpanded ? "Compact" : "Expand"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setAssistantOpen(false)}
+                >
+                  Hide
+                </Button>
+              </div>
             </div>
-          </SheetHeader>
-
-          <div className="flex min-h-0 flex-1 flex-col">
+          </CardHeader>
+          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
             <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
               <div className="space-y-3 pr-2">
                 {assistantMessages.map((message, index) => {
@@ -785,11 +808,7 @@ const ResultDetail = () => {
                           <Bot className="h-3 w-3" />
                         </div>
                       )}
-                      <div
-                        className={`max-w-[92%] rounded-md border p-3 text-sm ${
-                          isUser ? "border-primary/20 bg-primary/10" : "bg-background"
-                        }`}
-                      >
+                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${isUser ? "border-primary/20 bg-primary/10" : "bg-background"}`}>
                         <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
                           {isUser ? "You" : "Assistant"}
                         </p>
@@ -817,7 +836,6 @@ const ResultDetail = () => {
                 <div ref={assistantChatEndRef} />
               </div>
             </ScrollArea>
-
             <div className="border-t bg-background px-4 py-3">
               <div className="flex gap-2">
                 <Input
@@ -836,9 +854,10 @@ const ResultDetail = () => {
                 </Button>
               </div>
             </div>
-          </div>
-        </SheetContent>
-      </Sheet>
+          </CardContent>
+        </Card>
+      )}
+      </div>
     </div>
   );
 };
