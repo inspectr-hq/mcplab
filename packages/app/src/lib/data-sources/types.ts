@@ -333,6 +333,122 @@ export interface ScenarioAssistantTurnResponse {
   pendingToolCall?: ScenarioAssistantPendingToolCall;
 }
 
+export interface ToolAnalysisFinding {
+  id: string;
+  scope:
+    | 'tool_name'
+    | 'description'
+    | 'schema'
+    | 'ergonomics'
+    | 'safety'
+    | 'eval_readiness'
+    | 'execution';
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  title: string;
+  detail: string;
+  suggestion?: string;
+}
+
+export interface ToolAnalysisToolReport {
+  serverName: string;
+  toolName: string;
+  publicToolName: string;
+  description?: string;
+  inputSchema?: unknown;
+  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  classificationReason: string;
+  metadataReview?: {
+    strengths: string[];
+    issues: ToolAnalysisFinding[];
+    suggestedDescription?: string;
+    suggestedSchemaChanges: Array<{
+      type:
+        | 'description'
+        | 'parameter'
+        | 'required'
+        | 'enum'
+        | 'constraints'
+        | 'examples'
+        | 'naming';
+      summary: string;
+      before?: string;
+      after?: string;
+    }>;
+    evalReadinessNotes: string[];
+  };
+  deeperAnalysis?: {
+    attempted: boolean;
+    skippedReason?: string;
+    sampleCalls: Array<{
+      callIndex: number;
+      arguments: unknown;
+      ok: boolean;
+      durationMs?: number;
+      resultPreview?: string;
+      error?: string;
+      observations: string[];
+      issues: ToolAnalysisFinding[];
+    }>;
+    overallObservations: string[];
+  };
+  overallRecommendations: string[];
+}
+
+export interface ToolAnalysisServerReport {
+  serverName: string;
+  toolCountDiscovered: number;
+  toolCountAnalyzed: number;
+  toolCountSkipped: number;
+  warnings: string[];
+  tools: ToolAnalysisToolReport[];
+}
+
+export interface ToolAnalysisReport {
+  schemaVersion: 1;
+  createdAt: string;
+  assistantAgentName: string;
+  assistantAgentModel: string;
+  modes: {
+    metadataReview: boolean;
+    deeperAnalysis: boolean;
+  };
+  settings: {
+    autoRunPolicy?: 'read_only_allowlist';
+    sampleCallsPerTool?: number;
+    toolCallTimeoutMs?: number;
+  };
+  summary: {
+    serversAnalyzed: number;
+    toolsAnalyzed: number;
+    toolsSkipped: number;
+    issueCounts: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      info: number;
+    };
+  };
+  servers: ToolAnalysisServerReport[];
+  findings: ToolAnalysisFinding[];
+}
+
+export interface ToolAnalysisDiscoveredTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  classificationReason: string;
+}
+
+export interface ToolAnalysisDiscoverResponse {
+  servers: Array<{
+    serverName: string;
+    warnings: string[];
+    tools: ToolAnalysisDiscoveredTool[];
+  }>;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -429,4 +545,24 @@ export interface EvalDataSource {
     callId: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
+  discoverToolsForAnalysis: (params: {
+    serverNames: string[];
+  }) => Promise<ToolAnalysisDiscoverResponse>;
+  startToolAnalysis: (params: {
+    assistantAgentName?: string;
+    serverNames: string[];
+    selectedToolsByServer?: Record<string, string[]>;
+    modes: {
+      metadataReview: boolean;
+      deeperAnalysis: boolean;
+    };
+    deeperAnalysisOptions?: {
+      autoRunPolicy: 'read_only_allowlist';
+      sampleCallsPerTool?: number;
+      toolCallTimeoutMs?: number;
+    };
+  }) => Promise<{ jobId: string }>;
+  subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
+  getToolAnalysisResult: (jobId: string) => Promise<{ jobId: string; report: ToolAnalysisReport }>;
+  stopToolAnalysis: (jobId: string) => Promise<void>;
 }

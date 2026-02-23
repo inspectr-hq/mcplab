@@ -151,5 +151,27 @@ export const demoSource: EvalDataSource = {
   },
   async closeScenarioAssistantSession() {
     // no-op
+  },
+  async discoverToolsForAnalysis() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
+  async startToolAnalysis() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
+  subscribeToolAnalysisJob(_jobId: string, onEvent: (event: RunJobEvent) => void) {
+    const timeout = window.setTimeout(() => {
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'Analyze MCP Tools is only available in workspace mode.' }
+      });
+    }, 100);
+    return () => window.clearTimeout(timeout);
+  },
+  async getToolAnalysisResult() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
+  async stopToolAnalysis() {
+    // no-op
   }
 };

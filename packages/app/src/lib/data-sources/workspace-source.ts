@@ -138,5 +138,20 @@ export const workspaceSource: EvalDataSource = {
   },
   async closeScenarioAssistantSession(sessionId) {
     await workspaceApiClient.closeScenarioAssistantSession(sessionId);
+  },
+  async discoverToolsForAnalysis(params) {
+    return workspaceApiClient.discoverToolsForAnalysis(params);
+  },
+  async startToolAnalysis(params) {
+    return workspaceApiClient.startToolAnalysis(params);
+  },
+  subscribeToolAnalysisJob(jobId, onEvent) {
+    return workspaceApiClient.subscribeToolAnalysisJob(jobId, onEvent);
+  },
+  async getToolAnalysisResult(jobId) {
+    return workspaceApiClient.getToolAnalysisResult(jobId);
+  },
+  async stopToolAnalysis(jobId) {
+    await workspaceApiClient.stopToolAnalysis(jobId);
   }
 };

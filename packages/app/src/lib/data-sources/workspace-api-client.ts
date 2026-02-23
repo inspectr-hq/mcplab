@@ -8,6 +8,8 @@ import type {
   SnapshotRecord,
   TraceUiEvent,
   ProviderModelsResponse,
+  ToolAnalysisDiscoverResponse,
+  ToolAnalysisReport,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
 } from './types';
@@ -190,6 +192,68 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }),
+  discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
+    request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }),
+  startToolAnalysis: (params: {
+    assistantAgentName?: string;
+    serverNames: string[];
+    selectedToolsByServer?: Record<string, string[]>;
+    modes: { metadataReview: boolean; deeperAnalysis: boolean };
+    deeperAnalysisOptions?: {
+      autoRunPolicy: 'read_only_allowlist';
+      sampleCallsPerTool?: number;
+      toolCallTimeoutMs?: number;
+    };
+  }) =>
+    request<{ jobId: string }>('/api/tool-analysis/jobs', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }),
+  getToolAnalysisResult: (jobId: string) =>
+    request<{ jobId: string; report: ToolAnalysisReport }>(
+      `/api/tool-analysis/jobs/${jobId}/result`
+    ),
+  stopToolAnalysis: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/tool-analysis/jobs/${jobId}/stop`, {
+      method: 'POST'
+    }),
+  subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {
+    const source = new EventSource(`${BASE}/api/tool-analysis/jobs/${jobId}/events`);
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      source.close();
+    };
+    const messageHandler = (event: MessageEvent) => {
+      if (closed) return;
+      if (typeof event.data !== 'string' || !event.data) return;
+      try {
+        const parsed = JSON.parse(event.data) as RunJobEvent;
+        onEvent(parsed);
+        if (parsed.type === 'completed' || parsed.type === 'error') close();
+      } catch {
+        // ignore malformed payload
+      }
+    };
+    source.addEventListener('started', messageHandler);
+    source.addEventListener('log', messageHandler);
+    source.addEventListener('completed', messageHandler);
+    source.addEventListener('error', messageHandler);
+    source.onerror = () => {
+      if (closed) return;
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'SSE connection error' }
+      });
+      close();
+    };
+    return () => close();
+  },
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

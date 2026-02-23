@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
@@ -18,18 +18,25 @@ import {
 
 const navSections = [
   {
-    title: "Workspace",
+    title: "Home",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "MCP Evaluations", url: "/configs", icon: Settings }
+
+    ]
+  },
+  {
+    title: "Lab",
+    items: [
+      { title: "MCP Evaluations", url: "/mcp-evaluations", icon: FlaskConical },
+      { title: "Analyze MCP", url: "/tool-analysis", icon: Microscope }
     ]
   },
   {
     title: "Libraries",
     items: [
+      { title: "Scenarios", url: "/libraries/scenarios", icon: FileCode },
       { title: "Servers", url: "/libraries/servers", icon: Database },
       { title: "Agents", url: "/libraries/agents", icon: Bot },
-      { title: "Scenarios", url: "/libraries/scenarios", icon: FileCode }
     ]
   },
   {
@@ -41,7 +48,7 @@ const navSections = [
     ]
   },
   {
-    title: "Application",
+    title: "Workspace",
     items: [{ title: "Settings", url: "/settings", icon: Settings }]
   }
 ] as const;
@@ -61,7 +68,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-sidebar-foreground">MCPLab</span>
-              <span className="text-xs text-muted-foreground">Evaluation Manager</span>
+              <span className="text-xs text-muted-foreground">MCP Evaluation Lab</span>
             </div>
           )}
         </div>

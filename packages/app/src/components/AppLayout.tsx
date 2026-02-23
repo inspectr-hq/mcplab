@@ -37,6 +37,10 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Settings" });
     return crumbs;
   }
+  if (matchPath("/tool-analysis", pathname)) {
+    crumbs.push({ label: "Analyze MCP Tools" });
+    return crumbs;
+  }
   if (matchPath("/results/:id", pathname)) {
     crumbs.push({ label: "Results", to: "/results" }, { label: "Result" });
     return crumbs;

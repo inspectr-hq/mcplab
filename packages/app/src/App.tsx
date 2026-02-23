@@ -14,6 +14,7 @@ import ManageServers from "./pages/ManageServers";
 import ManageAgents from "./pages/ManageAgents";
 import ManageScenarios from "./pages/ManageScenarios";
 import SettingsPage from "./pages/Settings";
+import ToolAnalysis from "./pages/ToolAnalysis";
 import RunEvaluation from "./pages/RunEvaluation";
 import Results from "./pages/Results";
 import ResultDetail from "./pages/ResultDetail";
@@ -34,9 +35,10 @@ const App = () => (
               <Routes>
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
-                  <Route path="/configs" element={<Configurations />} />
-                  <Route path="/configs/:id" element={<ConfigEditor />} />
-                  <Route path="/configs/:id/:tab" element={<ConfigEditor />} />
+                  <Route path="/mcp-evaluations" element={<Configurations />} />
+                  <Route path="/mcp-evaluations/:id" element={<ConfigEditor />} />
+                  <Route path="/mcp-evaluations/:id/:tab" element={<ConfigEditor />} />
+                  <Route path="/tool-analysis" element={<ToolAnalysis />} />
                   <Route path="/libraries/servers" element={<ManageServers />} />
                   <Route path="/libraries/agents" element={<ManageAgents />} />
                   <Route path="/libraries/scenarios" element={<ManageScenarios />} />
