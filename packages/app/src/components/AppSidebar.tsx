@@ -7,6 +7,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarSeparator,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -14,16 +15,31 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Configurations", url: "/configs", icon: Settings },
-  { title: "Manage Servers", url: "/libraries/servers", icon: Database },
-  { title: "Manage Agents", url: "/libraries/agents", icon: Bot },
-  { title: "Manage Scenarios", url: "/libraries/scenarios", icon: FileCode },
-  { title: "Run Evaluation", url: "/run", icon: Play },
-  { title: "Results", url: "/results", icon: BarChart3 },
-  { title: "Compare", url: "/compare", icon: GitCompare },
-];
+const navSections = [
+  {
+    title: "Workspace",
+    items: [
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Configurations", url: "/configs", icon: Settings }
+    ]
+  },
+  {
+    title: "Libraries",
+    items: [
+      { title: "Servers", url: "/libraries/servers", icon: Database },
+      { title: "Agents", url: "/libraries/agents", icon: Bot },
+      { title: "Scenarios", url: "/libraries/scenarios", icon: FileCode }
+    ]
+  },
+  {
+    title: "Execution",
+    items: [
+      { title: "Run Evaluation", url: "/run", icon: Play },
+      { title: "Results", url: "/results", icon: BarChart3 },
+      { title: "Compare", url: "/compare", icon: GitCompare }
+    ]
+  }
+] as const;
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -46,35 +62,44 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={
-                      item.url === "/"
-                        ? location.pathname === "/"
-                        : location.pathname.startsWith(item.url)
-                    }
-                    tooltip={item.title}
-                  >
-                    <NavLink
-                      to={item.url}
-                      end={item.url === "/"}
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {navSections.map((section, sectionIndex) => (
+          <div key={section.title}>
+            {sectionIndex > 0 && !collapsed && <SidebarSeparator className="my-1.5" />}
+            <SidebarGroup className={collapsed ? "px-2" : "px-3 py-2"}>
+              {!collapsed && (
+                <SidebarGroupLabel className="px-1 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/90">
+                  {section.title}
+                </SidebarGroupLabel>
+              )}
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {section.items.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={
+                          item.url === "/"
+                            ? location.pathname === "/"
+                            : location.pathname.startsWith(item.url)
+                        }
+                        tooltip={item.title}
+                      >
+                        <NavLink
+                          to={item.url}
+                          end={item.url === "/"}
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </div>
+        ))}
       </SidebarContent>
     </Sidebar>
   );
