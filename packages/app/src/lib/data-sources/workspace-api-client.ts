@@ -67,11 +67,9 @@ export const workspaceApiClient = {
       snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
-      oauthDebuggerEnabled?: boolean;
     }>('/api/settings'),
   updateSettings: (patch: {
     scenarioAssistantAgentName?: string;
-    oauthDebuggerEnabled?: boolean;
   }) =>
     request<{
       workspaceRoot: string;
@@ -80,7 +78,6 @@ export const workspaceApiClient = {
       snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
-      oauthDebuggerEnabled?: boolean;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)

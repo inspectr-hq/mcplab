@@ -365,7 +365,7 @@ const ConfigEditor = () => {
             <Button size="sm" variant="outline" asChild>
               <Link to={`/run?configId=${encodeURIComponent(existing.id)}`}>
                 <Play className="mr-1.5 h-3.5 w-3.5" />
-                Test Config
+                Run MCP Evaluation
               </Link>
             </Button>
           )}
@@ -730,39 +730,39 @@ const ConfigEditor = () => {
         </TabsList>
 
         <TabsContent value="servers">
-          <Card className="mb-4">
-            <CardContent className="pt-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <Select value={selectedLibraryServerId} onValueChange={setSelectedLibraryServerId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select server from library" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libServers.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryServerId} onClick={addServerReference}>
-                    Add Ref
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryServerId} onClick={importServerFromLibrary}>
-                    Import Inline
-                  </Button>
+          {!readOnly && (
+            <Card className="mb-4">
+              <CardContent className="pt-4">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select value={selectedLibraryServerId} onValueChange={setSelectedLibraryServerId}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select server from library" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {libServers.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={addServerReference}>
+                      Add Ref
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={importServerFromLibrary}>
+                      Import Inline
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              {(config.serverRefs ?? []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(config.serverRefs ?? []).map((ref) => (
-                    <Badge
-                      key={ref}
-                      variant={missingServerRefSet.has(ref) ? "destructive" : "secondary"}
-                      className="gap-1"
-                    >
-                      {missingServerRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                      {ref}
-                      {!readOnly && (
+                {(config.serverRefs ?? []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {(config.serverRefs ?? []).map((ref) => (
+                      <Badge
+                        key={ref}
+                        variant={missingServerRefSet.has(ref) ? "destructive" : "secondary"}
+                        className="gap-1"
+                      >
+                        {missingServerRefSet.has(ref) ? "Missing ref: " : "Ref: "}
+                        {ref}
                         <button
                           type="button"
                           onClick={() => removeRef("serverRefs", ref)}
@@ -773,18 +773,18 @@ const ConfigEditor = () => {
                           <X className="h-2.5 w-2.5" />
                           Remove
                         </button>
-                      )}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {missingServerRefs.length > 0 && (
-                <p className="mt-2 text-xs text-destructive">
-                  Missing server refs: {missingServerRefs.join(", ")}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {missingServerRefs.length > 0 && (
+                  <p className="mt-2 text-xs text-destructive">
+                    Missing server refs: {missingServerRefs.join(", ")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
           {referencedServers.length > 0 && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
@@ -811,7 +811,7 @@ const ConfigEditor = () => {
         </TabsContent>
 
         <TabsContent value="agents">
-          <Card className="mb-4">
+          {!readOnly && <Card className="mb-4">
             <CardContent className="pt-4">
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Select value={selectedLibraryAgentId} onValueChange={setSelectedLibraryAgentId}>
@@ -825,10 +825,10 @@ const ConfigEditor = () => {
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryAgentId} onClick={addAgentReference}>
+                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
                     Add Ref
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryAgentId} onClick={importAgentFromLibrary}>
+                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibrary}>
                     Import Inline
                   </Button>
                 </div>
@@ -843,18 +843,16 @@ const ConfigEditor = () => {
                     >
                       {missingAgentRefSet.has(ref) ? "Missing ref: " : "Ref: "}
                       {ref}
-                      {!readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => removeRef("agentRefs", ref)}
-                          className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                          aria-label={`Remove agent reference ${ref}`}
-                          title={`Remove agent reference ${ref}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                          Remove
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeRef("agentRefs", ref)}
+                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
+                        aria-label={`Remove agent reference ${ref}`}
+                        title={`Remove agent reference ${ref}`}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                        Remove
+                      </button>
                     </Badge>
                   ))}
                 </div>
@@ -865,7 +863,7 @@ const ConfigEditor = () => {
                 </p>
               )}
             </CardContent>
-          </Card>
+          </Card>}
           {referencedAgents.length > 0 && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
@@ -892,13 +890,8 @@ const ConfigEditor = () => {
         </TabsContent>
 
         <TabsContent value="scenarios">
-          <Card className="mb-4">
+          {!readOnly && <Card className="mb-4">
             <CardContent className="pt-4">
-              {readOnly && (
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Scenario ordering is available in Edit mode. Click <span className="font-medium">Edit</span> to reorder with the up/down controls.
-                </p>
-              )}
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
                   <SelectTrigger className="h-8">
@@ -911,10 +904,10 @@ const ConfigEditor = () => {
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryScenarioId} onClick={addScenarioReference}>
+                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
                     Add Ref
                   </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={readOnly || !selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
+                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
                     Import Inline
                   </Button>
                 </div>
@@ -929,18 +922,16 @@ const ConfigEditor = () => {
                     >
                       {missingScenarioRefSet.has(ref) ? "Missing ref: " : "Ref: "}
                       {ref}
-                      {!readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => removeRef("scenarioRefs", ref)}
-                          className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                          aria-label={`Remove scenario reference ${ref}`}
-                          title={`Remove scenario reference ${ref}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                          Remove
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeRef("scenarioRefs", ref)}
+                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
+                        aria-label={`Remove scenario reference ${ref}`}
+                        title={`Remove scenario reference ${ref}`}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                        Remove
+                      </button>
                     </Badge>
                   ))}
                 </div>
@@ -951,7 +942,7 @@ const ConfigEditor = () => {
                 </p>
               )}
             </CardContent>
-          </Card>
+          </Card>}
           {referencedScenarios.length > 0 && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">

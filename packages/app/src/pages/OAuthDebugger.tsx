@@ -75,9 +75,6 @@ function toMarkdownClient(session: OAuthDebuggerSessionView, events: OAuthDebugg
 export default function OAuthDebuggerPage() {
   const { source, mode } = useDataSource();
   const { servers, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
-  const [oauthDebuggerEnabled, setOauthDebuggerEnabled] = useState(false);
-  const [loadingFlag, setLoadingFlag] = useState(false);
-  const oauthFlagKey = 'mcplab.feature.oauthDebugger';
 
   const [viewStep, setViewStep] = useState<ViewStep>('configure');
   const [selectedServerId, setSelectedServerId] = useState('');
@@ -108,7 +105,7 @@ export default function OAuthDebuggerPage() {
   const [stopping, setStopping] = useState(false);
   const [inspectorStepFilter, setInspectorStepFilter] = useState<string>('all');
   const [inspectorStatusFilter, setInspectorStatusFilter] = useState<string>('all');
-  const [networkTab, setNetworkTab] = useState<'inspector' | 'sequence'>('inspector');
+  const [networkTab, setNetworkTab] = useState<'events' | 'inspector'>('inspector');
   const unsubscribeRef = useRef<null | (() => void)>(null);
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -120,27 +117,21 @@ export default function OAuthDebuggerPage() {
   }, []);
 
   useEffect(() => {
-    const readFlag = () => {
-      if (typeof window === 'undefined') return false;
-      const raw = window.localStorage.getItem(oauthFlagKey);
-      return raw === '1' || raw === 'true';
-    };
-    setLoadingFlag(true);
-    const sync = () => setOauthDebuggerEnabled(readFlag());
-    sync();
-    const onStorage = () => sync();
-    window.addEventListener('storage', onStorage);
-    setLoadingFlag(false);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
-
-  useEffect(() => {
     eventsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [events.length]);
 
-  const selectedServer = servers.find((s) => s.id === selectedServerId);
+  const oauthServers = useMemo(
+    () => servers.filter((s) => s.authType === 'oauth2'),
+    [servers]
+  );
+  const selectedServer = oauthServers.find((s) => s.id === selectedServerId);
+
+  useEffect(() => {
+    if (!selectedServerId) return;
+    if (!oauthServers.some((s) => s.id === selectedServerId)) {
+      setSelectedServerId('');
+    }
+  }, [oauthServers, selectedServerId]);
 
   const progressModel = useMemo(() => {
     const total = session?.stepStates.length ?? 0;
@@ -182,7 +173,7 @@ export default function OAuthDebuggerPage() {
     return {
       profile: 'latest',
       target: {
-        serverName: selectedServer.id,
+        serverName: selectedServer.name || selectedServer.id,
         overrides: {
           authorizationServerMetadataUrl: authorizationServerMetadataUrl || undefined,
           authorizationEndpoint: authorizationEndpoint || undefined,
@@ -243,7 +234,7 @@ export default function OAuthDebuggerPage() {
       }
       void source.getOAuthDebuggerSession(id).then((response) => {
         setSession(response.session);
-        if (response.session.status === 'completed' || response.session.status === 'error' || response.session.status === 'stopped') {
+        if (response.session.status === 'completed') {
           setViewStep('report');
         }
       }).catch(() => {
@@ -320,7 +311,11 @@ export default function OAuthDebuggerPage() {
       if (response.status !== 'running') {
         const next = await source.getOAuthDebuggerSession(sessionId);
         setSession(next.session);
-        setViewStep('report');
+        if (next.session.status === 'completed') {
+          setViewStep('report');
+        } else {
+          setViewStep('run');
+        }
       }
     } catch (error: any) {
       toast({
@@ -331,6 +326,23 @@ export default function OAuthDebuggerPage() {
     } finally {
       setStopping(false);
     }
+  };
+
+  const restartSession = async () => {
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    setSession(null);
+    setSessionId(null);
+    setEvents([]);
+    setRunning(false);
+    setStopping(false);
+    setSubmitting(false);
+    setManualCallbackUrl('');
+    setInspectorStepFilter('all');
+    setInspectorStatusFilter('all');
+    setNetworkTab('inspector');
+    setViewStep('run');
+    await createAndStart();
   };
 
   const exportReport = async (format: 'json' | 'markdown' | 'raw') => {
@@ -372,11 +384,9 @@ export default function OAuthDebuggerPage() {
     }
   };
 
-  const openAuthorizeUrl = () => {
-    if (!sessionId) return;
-    const launchUrl = `${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${sessionId}/authorize`;
-    window.open(launchUrl, '_blank', 'noopener,noreferrer');
-  };
+  const authorizeLaunchHref = sessionId
+    ? `${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${sessionId}/authorize`
+    : undefined;
 
   const severityBadge = (severity: 'error' | 'warning' | 'info') => {
     if (severity === 'error') return 'destructive' as const;
@@ -415,18 +425,7 @@ export default function OAuthDebuggerPage() {
         </div>
       </div>
 
-      {!loadingFlag && mode === 'workspace' && !oauthDebuggerEnabled && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>OAuth Debugger is disabled</AlertTitle>
-          <AlertDescription>
-            Enable it in localStorage with key <code className="mx-1 rounded border px-1 py-0.5 text-xs">mcplab.feature.oauthDebugger</code>
-            set to <code className="mx-1 rounded border px-1 py-0.5 text-xs">true</code>, then refresh the page.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {(loadingFlag || mode !== 'workspace' || oauthDebuggerEnabled) && viewStep === 'configure' && (
+      {viewStep === 'configure' && (
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-3">
@@ -442,18 +441,27 @@ export default function OAuthDebuggerPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="space-y-2">
+              <div className="max-w-xl space-y-2">
                 <Label>MCP Server</Label>
                 <Select value={selectedServerId} onValueChange={setSelectedServerId}>
                   <SelectTrigger><SelectValue placeholder="Select an MCP server" /></SelectTrigger>
                   <SelectContent>
-                    {servers.map((server) => (
+                    {oauthServers.map((server) => (
                       <SelectItem key={server.id} value={server.id}>
                         {server.name || server.id}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {oauthServers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No MCP servers with OAuth configured found. Add OAuth 2.0 auth in{' '}
+                    <a href="/libraries/servers" className="underline text-primary">
+                      Manage Servers
+                    </a>
+                    .
+                  </p>
+                )}
                 {selectedServer && (
                   <p className="text-xs text-muted-foreground">
                     {selectedServer.transport} · {selectedServer.url || selectedServer.command || 'No URL/command'}
@@ -461,47 +469,6 @@ export default function OAuthDebuggerPage() {
                 )}
               </div>
 
-              <details className="rounded-md border p-3">
-                <summary className="cursor-pointer text-sm font-medium">Advanced endpoint overrides</summary>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Authorization server metadata URL</Label>
-                    <Input value={authorizationServerMetadataUrl} onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)} placeholder="https://.../.well-known/oauth-authorization-server" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Resource server base URL</Label>
-                    <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Authorization endpoint</Label>
-                    <Input value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} placeholder="https://.../authorize" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Token endpoint</Label>
-                    <Input value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} placeholder="https://.../token" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Registration endpoint (DCR)</Label>
-                    <Input value={registrationEndpoint} onChange={(e) => setRegistrationEndpoint(e.target.value)} placeholder="https://.../register" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">CIMD URL</Label>
-                    <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
-                  </div>
-                </div>
-              </details>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Protocol Profile</CardTitle>
-              <CardDescription>
-                Latest MCP OAuth draft profile is implemented in v1. Version presets are planned for older drafts.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Badge>MCP OAuth (latest draft)</Badge>
             </CardContent>
           </Card>
 
@@ -530,8 +497,8 @@ export default function OAuthDebuggerPage() {
                 ))}
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1">
+              <div className="grid gap-3 md:grid-cols-1">
+                <div className="max-w-md space-y-1">
                   <Label className="text-xs">Redirect mode</Label>
                   <Select value={redirectMode} onValueChange={(v) => setRedirectMode(v as 'local_callback' | 'manual')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -540,10 +507,6 @@ export default function OAuthDebuggerPage() {
                       <SelectItem value="manual">Manual paste redirect URL</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Token endpoint auth method</Label>
-                  <Input value={tokenEndpointAuthMethod} onChange={(e) => setTokenEndpointAuthMethod(e.target.value)} placeholder="client_secret_basic / none / client_secret_post" />
                 </div>
               </div>
 
@@ -560,23 +523,10 @@ export default function OAuthDebuggerPage() {
                 </div>
               )}
 
-              {registrationMethod === 'dcr' && (
-                <div className="space-y-1">
-                  <Label className="text-xs">DCR metadata JSON (optional overrides)</Label>
-                  <Textarea value={dcrMetadataJson} onChange={(e) => setDcrMetadataJson(e.target.value)} className="min-h-32 font-mono text-xs" />
-                </div>
-              )}
-
               {registrationMethod === 'cimd' && (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">CIMD URL</Label>
-                    <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Expected client_id (optional)</Label>
-                    <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} />
-                  </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">CIMD URL</Label>
+                  <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
                 </div>
               )}
             </CardContent>
@@ -591,10 +541,6 @@ export default function OAuthDebuggerPage() {
                 <Label className="text-xs">Scopes (space or comma separated)</Label>
                 <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile mcp" />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Resource / audience (optional)</Label>
-                <Input value={resource} onChange={(e) => setResource(e.target.value)} placeholder="https://resource.example.com" />
-              </div>
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={usePkce} onCheckedChange={(v) => setUsePkce(Boolean(v))} />
                 <Label>Use PKCE (S256)</Label>
@@ -602,19 +548,91 @@ export default function OAuthDebuggerPage() {
             </CardContent>
           </Card>
 
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Secrets display</AlertTitle>
-            <AlertDescription className="space-y-2">
-              <p>
-                This debugger is configured to show full tokens/secrets in network logs and exports.
-              </p>
-              <div className="flex items-center gap-2">
-                <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(!Boolean(v))} />
-                <Label>Hide sensitive values in inspector</Label>
+          <details className="rounded-md border bg-card p-3 shadow-sm">
+            <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
+            <div className="mt-3 space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Token endpoint auth method</Label>
+                  <Input
+                    value={tokenEndpointAuthMethod}
+                    onChange={(e) => setTokenEndpointAuthMethod(e.target.value)}
+                    placeholder="client_secret_basic / none / client_secret_post"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Resource / audience (optional)</Label>
+                  <Input
+                    value={resource}
+                    onChange={(e) => setResource(e.target.value)}
+                    placeholder="https://resource.example.com"
+                  />
+                </div>
               </div>
-            </AlertDescription>
-          </Alert>
+
+              {registrationMethod === 'dcr' && (
+                <div className="space-y-1">
+                  <Label className="text-xs">DCR metadata JSON (optional overrides)</Label>
+                  <Textarea
+                    value={dcrMetadataJson}
+                    onChange={(e) => setDcrMetadataJson(e.target.value)}
+                    className="min-h-32 font-mono text-xs"
+                  />
+                </div>
+              )}
+
+              {registrationMethod === 'cimd' && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Expected client_id (optional)</Label>
+                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} />
+                </div>
+              )}
+
+              <div className="rounded-md border bg-background p-3">
+                <div className="mb-3 text-sm font-medium">Endpoint overrides</div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Authorization server metadata URL</Label>
+                    <Input value={authorizationServerMetadataUrl} onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)} placeholder="https://.../.well-known/oauth-authorization-server" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Resource server base URL</Label>
+                    <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Authorization endpoint</Label>
+                    <Input value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} placeholder="https://.../authorize" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Token endpoint</Label>
+                    <Input value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} placeholder="https://.../token" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Registration endpoint (DCR)</Label>
+                    <Input value={registrationEndpoint} onChange={(e) => setRegistrationEndpoint(e.target.value)} placeholder="https://.../register" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">CIMD URL override</Label>
+                    <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
+                  </div>
+                </div>
+              </div>
+
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Secrets display</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  <p>
+                    This debugger is configured to show full tokens/secrets in network logs and exports.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(!Boolean(v))} />
+                    <Label>Hide sensitive values in inspector</Label>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          </details>
 
           <div className="flex justify-end">
             <Button type="button" onClick={() => void createAndStart()} disabled={submitting || mode !== 'workspace'}>
@@ -626,7 +644,8 @@ export default function OAuthDebuggerPage() {
       )}
 
       {viewStep === 'run' && (
-        <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <div className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
           <Card className="xl:col-span-1">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
@@ -637,12 +656,24 @@ export default function OAuthDebuggerPage() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {session?.uiHints.authorizationUrl && (
-                    <Button type="button" size="sm" variant="outline" onClick={openAuthorizeUrl}>
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Open Authorization URL
+                  {session?.uiHints.authorizationUrl && authorizeLaunchHref && (
+                    <Button asChild type="button" size="sm" variant="outline">
+                      <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Open Authorization URL
+                      </a>
                     </Button>
                   )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void restartSession()}
+                    disabled={submitting}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Restart
+                  </Button>
                   {sessionId && (
                     <Button type="button" size="sm" variant="outline" onClick={() => void stopSession()} disabled={stopping || !sessionId}>
                       {(stopping || running) && stopping && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -680,9 +711,11 @@ export default function OAuthDebuggerPage() {
                         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Continue
                       </Button>
-                      {session.uiHints.authorizationUrl && (
-                        <Button type="button" size="sm" variant="outline" onClick={openAuthorizeUrl}>
-                          Open Authorization URL
+                      {session.uiHints.authorizationUrl && authorizeLaunchHref && (
+                        <Button asChild type="button" size="sm" variant="outline">
+                          <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                            Open Authorization URL
+                          </a>
                         </Button>
                       )}
                     </div>
@@ -699,6 +732,16 @@ export default function OAuthDebuggerPage() {
                       Complete the authorization flow in your browser. MCP Lab is listening for the callback at:
                     </p>
                     <p className="text-xs font-mono break-all">{session.uiHints.callbackUrl}</p>
+                    {session.uiHints.authorizationUrl && authorizeLaunchHref && (
+                      <div className="pt-2">
+                        <Button asChild type="button" size="sm" variant="outline">
+                          <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Open Authorization URL
+                          </a>
+                        </Button>
+                      </div>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}
@@ -716,10 +759,15 @@ export default function OAuthDebuggerPage() {
                           s.status === 'failed'
                             ? 'destructive'
                             : s.status === 'completed'
-                              ? 'default'
+                              ? 'outline'
                               : s.status === 'active'
                                 ? 'secondary'
                                 : 'outline'
+                        }
+                        className={
+                          s.status === 'completed'
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                            : undefined
                         }
                       >
                         {s.status}
@@ -734,27 +782,6 @@ export default function OAuthDebuggerPage() {
                 )}
               </div>
 
-              <div className="rounded-md border bg-muted/10 p-3">
-                <div className="mb-2 text-xs font-medium text-muted-foreground">Live events</div>
-                <div className="max-h-48 space-y-1 overflow-auto text-xs">
-                  {events.length === 0 ? (
-                    <p className="text-muted-foreground">No events yet.</p>
-                  ) : (
-                    events.map((event, index) => (
-                      <div key={`${event.ts}-${index}`} className="break-all">
-                        <span className="mr-2 font-mono text-muted-foreground">
-                          {new Date(event.ts).toLocaleTimeString()}
-                        </span>
-                        <Badge variant="outline" className="mr-2 text-[10px]">{event.type}</Badge>
-                        {typeof event.payload.message === 'string'
-                          ? event.payload.message
-                          : JSON.stringify(event.payload)}
-                      </div>
-                    ))
-                  )}
-                  <div ref={eventsEndRef} />
-                </div>
-              </div>
             </CardContent>
           </Card>
 
@@ -762,14 +789,36 @@ export default function OAuthDebuggerPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Inspect</CardTitle>
-                <CardDescription>Network requests/responses and synchronized sequence view.</CardDescription>
+                <CardDescription>Live events and network requests/responses for the OAuth flow.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'inspector' | 'sequence')}>
+                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')}>
                   <TabsList className="grid grid-cols-2">
                     <TabsTrigger value="inspector">Network Inspector</TabsTrigger>
-                    <TabsTrigger value="sequence">Sequence Diagram</TabsTrigger>
+                    <TabsTrigger value="events">Live Debug</TabsTrigger>
                   </TabsList>
+                  <TabsContent value="events" className="mt-3">
+                    <div className="max-h-64 space-y-1 overflow-auto rounded-md border bg-muted/10 p-3 text-xs">
+                      {events.length === 0 ? (
+                        <p className="text-muted-foreground">No events yet.</p>
+                      ) : (
+                        events.map((event, index) => (
+                          <div key={`${event.ts}-${index}`} className="break-all">
+                            <span className="mr-2 font-mono text-muted-foreground">
+                              {new Date(event.ts).toLocaleTimeString()}
+                            </span>
+                            <Badge variant="outline" className="mr-2 text-[10px]">
+                              {event.type}
+                            </Badge>
+                            {typeof event.payload.message === 'string'
+                              ? event.payload.message
+                              : JSON.stringify(event.payload)}
+                          </div>
+                        ))
+                      )}
+                      <div ref={eventsEndRef} />
+                    </div>
+                  </TabsContent>
                   <TabsContent value="inspector" className="space-y-3 mt-3">
                     <div className="grid gap-2 md:grid-cols-2">
                       <div className="space-y-1">
@@ -824,12 +873,12 @@ export default function OAuthDebuggerPage() {
                             <div className="mt-3 space-y-3">
                               <div>
                                 <div className="mb-1 text-xs font-medium">Headers</div>
-                                <pre className="max-h-40 overflow-auto rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.headers, null, 2)}</pre>
+                                <pre className="max-h-40 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.headers, null, 2)}</pre>
                               </div>
                               {exchange.bodyText && (
                                 <div>
                                   <div className="mb-1 text-xs font-medium">Body</div>
-                                  <pre className="max-h-64 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap break-all">{exchange.bodyText}</pre>
+                                  <pre className="max-h-64 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{exchange.bodyText}</pre>
                                 </div>
                               )}
                               <div className="flex gap-2">
@@ -844,28 +893,12 @@ export default function OAuthDebuggerPage() {
                       )}
                     </div>
                   </TabsContent>
-                  <TabsContent value="sequence" className="mt-3">
-                    <div className="max-h-[34rem] space-y-2 overflow-auto rounded-md border p-3">
-                      {(session?.sequence ?? []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No sequence events yet.</p>
-                      ) : (
-                        (session?.sequence ?? []).map((row) => (
-                          <div key={row.id} className="grid grid-cols-[6rem_1fr_6rem] items-center gap-2 rounded border p-2 text-xs">
-                            <div className="text-right font-medium">{row.from}</div>
-                            <div className="rounded bg-muted px-2 py-1">
-                              <div className="font-medium">{row.label}</div>
-                              {row.stepId && <div className="text-muted-foreground">{row.stepId}</div>}
-                            </div>
-                            <div className="font-medium">{row.to}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </TabsContent>
                 </Tabs>
               </CardContent>
             </Card>
           </div>
+          </div>
+
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
@@ -59,37 +59,10 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const [oauthDebuggerEnabled, setOauthDebuggerEnabled] = useState(false);
-
-  const readOauthDebuggerFlag = () => {
-    if (typeof window === "undefined") return false;
-    const raw = window.localStorage.getItem("mcplab.feature.oauthDebugger");
-    return raw === "1" || raw === "true";
-  };
-
-  useEffect(() => {
-    const sync = () => setOauthDebuggerEnabled(readOauthDebuggerFlag());
-    sync();
-    const onStorage = () => sync();
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
 
   const sections = useMemo(
-    () =>
-      navSections.map((section) =>
-        section.title === "Lab"
-          ? {
-              ...section,
-              items: section.items.filter((item) =>
-                item.url === "/oauth-debugger" ? oauthDebuggerEnabled : true
-              )
-            }
-          : section
-      ),
-    [oauthDebuggerEnabled]
+    () => navSections,
+    []
   );
 
   return (

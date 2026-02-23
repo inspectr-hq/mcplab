@@ -277,7 +277,6 @@ export interface WorkspaceSettings {
   snapshotsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
-  oauthDebuggerEnabled?: boolean;
 }
 
 export interface ScenarioAssistantSuggestionBundle {
@@ -662,7 +661,6 @@ export interface EvalDataSource {
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
   updateWorkspaceSettings: (patch: {
     scenarioAssistantAgentName?: string;
-    oauthDebuggerEnabled?: boolean;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (params: {
     configId?: string;
