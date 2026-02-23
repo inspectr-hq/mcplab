@@ -1,4 +1,5 @@
-import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
@@ -28,7 +29,8 @@ const navSections = [
     title: "Lab",
     items: [
       { title: "MCP Evaluations", url: "/mcp-evaluations", icon: FlaskConical },
-      { title: "Analyze MCP", url: "/tool-analysis", icon: Microscope }
+      { title: "Analyze MCP", url: "/tool-analysis", icon: Microscope },
+      { title: "OAuth Debugger", url: "/oauth-debugger", icon: ShieldCheck }
     ]
   },
   {
@@ -57,6 +59,38 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const [oauthDebuggerEnabled, setOauthDebuggerEnabled] = useState(false);
+
+  const readOauthDebuggerFlag = () => {
+    if (typeof window === "undefined") return false;
+    const raw = window.localStorage.getItem("mcplab.feature.oauthDebugger");
+    return raw === "1" || raw === "true";
+  };
+
+  useEffect(() => {
+    const sync = () => setOauthDebuggerEnabled(readOauthDebuggerFlag());
+    sync();
+    const onStorage = () => sync();
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  const sections = useMemo(
+    () =>
+      navSections.map((section) =>
+        section.title === "Lab"
+          ? {
+              ...section,
+              items: section.items.filter((item) =>
+                item.url === "/oauth-debugger" ? oauthDebuggerEnabled : true
+              )
+            }
+          : section
+      ),
+    [oauthDebuggerEnabled]
+  );
 
   return (
     <Sidebar collapsible="icon">
@@ -74,7 +108,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {navSections.map((section, sectionIndex) => (
+        {sections.map((section, sectionIndex) => (
           <div key={section.title}>
             {sectionIndex > 0 && !collapsed && <SidebarSeparator className="my-1.5" />}
             <SidebarGroup className={collapsed ? "px-2" : "px-3 py-2"}>

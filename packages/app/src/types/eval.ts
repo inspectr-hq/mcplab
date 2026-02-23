@@ -7,8 +7,12 @@ export interface ServerConfig {
   url?: string;
   command?: string;
   args?: string[];
-  authType?: 'none' | 'bearer' | 'api-key';
+  authType?: 'none' | 'bearer' | 'api-key' | 'oauth2';
   authValue?: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthRedirectUrl?: string;
+  oauthScope?: string;
 }
 
 export interface AgentConfig {

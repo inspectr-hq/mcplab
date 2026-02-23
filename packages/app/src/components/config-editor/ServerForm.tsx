@@ -17,12 +17,31 @@ const emptyServer = (): ServerConfig => ({
   name: "",
   transport: "stdio",
   authType: "none",
+  oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
 export function ServerForm({ servers, onChange, readOnly }: ServerFormProps) {
   const update = (index: number, patch: Partial<ServerConfig>) => {
     const next = servers.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
+  };
+
+  const setAuthType = (index: number, nextType: ServerConfig["authType"]) => {
+    const current = servers[index];
+    if (!current) return;
+    update(index, {
+      authType: nextType,
+      ...(nextType !== "oauth2"
+        ? {
+            oauthClientId: undefined,
+            oauthClientSecret: undefined,
+            oauthRedirectUrl: undefined,
+            oauthScope: undefined
+          }
+        : {
+            oauthRedirectUrl: current.oauthRedirectUrl || "http://localhost:6274/oauth/"
+          })
+    });
   };
 
   const remove = (index: number) => onChange(servers.filter((_, i) => i !== index));
@@ -86,22 +105,73 @@ export function ServerForm({ servers, onChange, readOnly }: ServerFormProps) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Auth Type</Label>
-                <Select value={srv.authType || "none"} onValueChange={(v) => update(i, { authType: v as ServerConfig["authType"] })} disabled={readOnly}>
+                <Select value={srv.authType || "none"} onValueChange={(v) => setAuthType(i, v as ServerConfig["authType"])} disabled={readOnly}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
                     <SelectItem value="bearer">Bearer Token</SelectItem>
                     <SelectItem value="api-key">API Key</SelectItem>
+                    <SelectItem value="oauth2">OAuth 2.0</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {srv.authType && srv.authType !== "none" && (
+              {srv.authType && srv.authType !== "none" && srv.authType !== "oauth2" && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">{srv.authType === "bearer" ? "Token" : "API Key"}</Label>
                   <Input type="password" value={srv.authValue || ""} onChange={(e) => update(i, { authValue: e.target.value })} disabled={readOnly} placeholder="••••••••" className="font-mono text-xs" />
                 </div>
               )}
             </div>
+            {srv.authType === "oauth2" && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client ID</Label>
+                    <Input
+                      value={srv.oauthClientId || ""}
+                      onChange={(e) => update(i, { oauthClientId: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="your-client-id"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client Secret (optional)</Label>
+                    <Input
+                      type="password"
+                      value={srv.oauthClientSecret || ""}
+                      onChange={(e) => update(i, { oauthClientSecret: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="••••••••"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Redirect URL</Label>
+                    <Input
+                      value={srv.oauthRedirectUrl || "http://localhost:6274/oauth/"}
+                      onChange={(e) => update(i, { oauthRedirectUrl: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="http://localhost:6274/oauth/"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Scope (space-separated)</Label>
+                    <Input
+                      value={srv.oauthScope || ""}
+                      onChange={(e) => update(i, { oauthScope: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="openid profile mcp"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}

@@ -15,7 +15,18 @@ export interface ServerAuthOauthClientCredentials {
   token_params?: Record<string, string>;
 }
 
-export type ServerAuth = ServerAuthBearer | ServerAuthOauthClientCredentials;
+export interface ServerAuthOauthAuthorizationCode {
+  type: 'oauth_authorization_code';
+  client_id: string;
+  client_secret?: string;
+  redirect_url: string;
+  scope?: string;
+}
+
+export type ServerAuth =
+  | ServerAuthBearer
+  | ServerAuthOauthClientCredentials
+  | ServerAuthOauthAuthorizationCode;
 
 export interface ServerConfig {
   transport: TransportType;

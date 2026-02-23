@@ -125,6 +125,12 @@ export class McpClientManager {
       return headers;
     }
 
+    if (server.auth.type === 'oauth_authorization_code') {
+      throw new Error(
+        `Server '${serverName}' uses OAuth authorization_code metadata. This auth type is intended for OAuth Debugger setup, not automated MCP runtime connections. Use bearer or oauth_client_credentials for runs.`
+      );
+    }
+
     return headers;
   }
 

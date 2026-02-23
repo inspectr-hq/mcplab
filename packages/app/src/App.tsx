@@ -15,6 +15,7 @@ import ManageAgents from "./pages/ManageAgents";
 import ManageScenarios from "./pages/ManageScenarios";
 import SettingsPage from "./pages/Settings";
 import ToolAnalysis from "./pages/ToolAnalysis";
+import OAuthDebugger from "./pages/OAuthDebugger";
 import RunEvaluation from "./pages/RunEvaluation";
 import Results from "./pages/Results";
 import ResultDetail from "./pages/ResultDetail";
@@ -39,6 +40,7 @@ const App = () => (
                   <Route path="/mcp-evaluations/:id" element={<ConfigEditor />} />
                   <Route path="/mcp-evaluations/:id/:tab" element={<ConfigEditor />} />
                   <Route path="/tool-analysis" element={<ToolAnalysis />} />
+                  <Route path="/oauth-debugger" element={<OAuthDebugger />} />
                   <Route path="/libraries/servers" element={<ManageServers />} />
                   <Route path="/libraries/agents" element={<ManageAgents />} />
                   <Route path="/libraries/scenarios" element={<ManageScenarios />} />

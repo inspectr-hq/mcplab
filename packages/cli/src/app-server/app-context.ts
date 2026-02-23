@@ -1,9 +1,25 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppSettings } from './types.js';
-import type { parseBody, asJson } from './http.js';
+import type { parseBody, asJson, asText } from './http.js';
 import type { addJobEvent, sendSseEvent } from './jobs.js';
 import type { readLibraries } from './libraries-store.js';
-import type { discoverMcpToolsForServers, runToolAnalysisJob, ToolAnalysisJob } from './tool-analysis-domain.js';
+import type {
+  discoverMcpToolsForServers,
+  runToolAnalysisJob,
+  ToolAnalysisJob
+} from './tool-analysis-domain.js';
+import type {
+  cleanupOAuthDebuggerSessions,
+  oauthDebuggerSessionView,
+  createOAuthDebuggerSession,
+  startOrResumeOAuthDebuggerSession,
+  submitManualCallbackToSession,
+  submitBrowserCallbackToSession,
+  stopOAuthDebuggerSession,
+  oauthDebuggerExportMarkdown,
+  oauthDebuggerExportRawTrace,
+  OAuthDebuggerSession
+} from './oauth-debugger-domain.js';
 import type {
   cleanupAssistantSessions,
   touchAssistantSession,
@@ -25,12 +41,23 @@ import type {
   compareRunToSnapshot,
   applySnapshotPolicyToRunResult
 } from '../snapshot.js';
-import type { getRunResults, listRuns, getTraceEvents, toTraceUiEvents, selectScenarioIds } from './runs-store.js';
+import type {
+  getRunResults,
+  listRuns,
+  getTraceEvents,
+  toTraceUiEvents,
+  selectScenarioIds
+} from './runs-store.js';
 import type { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import type { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
 import type { RunSummary, TraceUiEvent } from './runs-store.js';
 import type { ConfigRecord } from './config-store.js';
-import type { ResultsJson, EvalConfig, ExecutableEvalConfig, TraceEvent } from '@inspectr/mcplab-core';
+import type {
+  ResultsJson,
+  EvalConfig,
+  ExecutableEvalConfig,
+  TraceEvent
+} from '@inspectr/mcplab-core';
 
 export interface AppRouteRequestContext {
   req: IncomingMessage;
@@ -48,6 +75,7 @@ export interface ActiveJobState {
 export interface HttpDeps {
   parseBody: typeof parseBody;
   asJson: typeof asJson;
+  asText: typeof asText;
 }
 
 export interface JobStreamDeps {
@@ -78,6 +106,18 @@ export interface AssistantDeps extends LibraryDeps {
   summarizeToolResultForAssistant: typeof summarizeToolResultForAssistant;
 }
 
+export interface OAuthDebuggerDeps extends LibraryDeps {
+  cleanupOAuthDebuggerSessions: typeof cleanupOAuthDebuggerSessions;
+  oauthDebuggerSessionView: typeof oauthDebuggerSessionView;
+  createOAuthDebuggerSession: typeof createOAuthDebuggerSession;
+  startOrResumeOAuthDebuggerSession: typeof startOrResumeOAuthDebuggerSession;
+  submitManualCallbackToSession: typeof submitManualCallbackToSession;
+  submitBrowserCallbackToSession: typeof submitBrowserCallbackToSession;
+  stopOAuthDebuggerSession: typeof stopOAuthDebuggerSession;
+  oauthDebuggerExportMarkdown: typeof oauthDebuggerExportMarkdown;
+  oauthDebuggerExportRawTrace: typeof oauthDebuggerExportRawTrace;
+}
+
 export interface SnapshotDeps {
   listSnapshots: typeof listSnapshots;
   buildSnapshotFromRun: typeof buildSnapshotFromRun;
@@ -106,7 +146,10 @@ export interface RunDeps {
   toTraceUiEvents: typeof toTraceUiEvents;
   selectScenarioIds: typeof selectScenarioIds;
   expandConfigForAgents: (config: EvalConfig, requestedAgents?: string[]) => ExecutableEvalConfig;
-  resolveRunSelectedAgents: (config: EvalConfig, requestedAgents?: string[]) => string[] | undefined;
+  resolveRunSelectedAgents: (
+    config: EvalConfig,
+    requestedAgents?: string[]
+  ) => string[] | undefined;
   loadSnapshot: typeof loadSnapshot;
   compareRunToSnapshot: typeof compareRunToSnapshot;
   applySnapshotPolicyToRunResult: typeof applySnapshotPolicyToRunResult;
@@ -114,15 +157,18 @@ export interface RunDeps {
 }
 
 export interface AppRouteDeps
-  extends HttpDeps,
+  extends
+    HttpDeps,
     JobStreamDeps,
     ToolAnalysisDeps,
+    OAuthDebuggerDeps,
     AssistantDeps,
     SnapshotDeps,
     ConfigDeps,
     RunDeps {}
 
 export type ToolAnalysisJobsMap = Map<string, ToolAnalysisJob>;
+export type OAuthDebuggerSessionsMap = Map<string, OAuthDebuggerSession>;
 export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
 export type RunsResults = ResultsJson;
 export type RunsList = RunSummary[];

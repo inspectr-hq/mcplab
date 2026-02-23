@@ -4,7 +4,11 @@ import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
-import { pickDefaultAssistantAgentName, resolveAssistantAgentFromLibraries, truncateJson } from './scenario-assistant-domain.js';
+import {
+  pickDefaultAssistantAgentName,
+  resolveAssistantAgentFromLibraries,
+  truncateJson
+} from './scenario-assistant-domain.js';
 
 type JobEvent = {
   type: 'started' | 'log' | 'completed' | 'error';
@@ -532,26 +536,28 @@ export async function runToolAnalysisJob(params: {
                   : undefined,
               suggestedSchemaChanges: Array.isArray(metaJson.suggestedSchemaChanges)
                 ? metaJson.suggestedSchemaChanges.map((c: unknown) => {
-                    const change = (c && typeof c === 'object' ? c : {}) as SuggestedSchemaChangeJson;
-                    return ({
-                    type: (
-                      [
-                        'description',
-                        'parameter',
-                        'required',
-                        'enum',
-                        'constraints',
-                        'examples',
-                        'naming'
-                      ] as const
-                    ).includes(change.type as ToolAnalysisSuggestedSchemaChange['type'])
-                      ? (change.type as ToolAnalysisSuggestedSchemaChange['type'])
-                      : 'parameter',
-                    summary: String(change.summary ?? 'Suggested change'),
-                    before: change.before ? String(change.before) : undefined,
-                    after: change.after ? String(change.after) : undefined
-                  });
-                })
+                    const change = (
+                      c && typeof c === 'object' ? c : {}
+                    ) as SuggestedSchemaChangeJson;
+                    return {
+                      type: (
+                        [
+                          'description',
+                          'parameter',
+                          'required',
+                          'enum',
+                          'constraints',
+                          'examples',
+                          'naming'
+                        ] as const
+                      ).includes(change.type as ToolAnalysisSuggestedSchemaChange['type'])
+                        ? (change.type as ToolAnalysisSuggestedSchemaChange['type'])
+                        : 'parameter',
+                      summary: String(change.summary ?? 'Suggested change'),
+                      before: change.before ? String(change.before) : undefined,
+                      after: change.after ? String(change.after) : undefined
+                    };
+                  })
                 : [],
               evalReadinessNotes: clampStringArray(metaJson.evalReadinessNotes)
             };

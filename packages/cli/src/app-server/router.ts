@@ -43,6 +43,7 @@ import {
 } from './runs-store.js';
 import { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
+import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleSnapshotsRoutes } from './snapshots-routes.js';
 import { handleConfigsRoutes } from './configs-routes.js';
@@ -66,6 +67,18 @@ import {
   runToolAnalysisJob,
   type ToolAnalysisJob
 } from './tool-analysis-domain.js';
+import {
+  cleanupOAuthDebuggerSessions,
+  oauthDebuggerSessionView,
+  createOAuthDebuggerSession,
+  startOrResumeOAuthDebuggerSession,
+  submitManualCallbackToSession,
+  submitBrowserCallbackToSession,
+  stopOAuthDebuggerSession,
+  oauthDebuggerExportMarkdown,
+  oauthDebuggerExportRawTrace,
+  type OAuthDebuggerSession
+} from './oauth-debugger-domain.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -159,16 +172,27 @@ export async function startAppServer(options: AppServerOptions) {
   const devMcp = await maybeStartDevMcpServer(workspaceRoot, options.dev);
   const jobs = new Map<string, RunJob>();
   const toolAnalysisJobs = new Map<string, ToolAnalysisJob>();
+  const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   let activeJobId: string | null = null;
   const routeDeps: AppRouteDeps = {
     parseBody,
     asJson,
+    asText,
     addJobEvent,
     sendSseEvent,
     readLibraries,
     discoverMcpToolsForServers,
     runToolAnalysisJob,
+    cleanupOAuthDebuggerSessions,
+    oauthDebuggerSessionView,
+    createOAuthDebuggerSession,
+    startOrResumeOAuthDebuggerSession,
+    submitManualCallbackToSession,
+    submitBrowserCallbackToSession,
+    stopOAuthDebuggerSession,
+    oauthDebuggerExportMarkdown,
+    oauthDebuggerExportRawTrace,
     cleanupAssistantSessions,
     touchAssistantSession,
     assistantSessionView,
@@ -290,6 +314,10 @@ export async function startAppServer(options: AppServerOptions) {
           settings.scenarioAssistantAgentName = next || undefined;
           persistSettingsOverrides(settings);
         }
+        if (Object.prototype.hasOwnProperty.call(body, 'oauthDebuggerEnabled')) {
+          settings.oauthDebuggerEnabled = body.oauthDebuggerEnabled === true;
+          persistSettingsOverrides(settings);
+        }
         asJson(res, 200, settings);
         return;
       }
@@ -307,6 +335,20 @@ export async function startAppServer(options: AppServerOptions) {
           scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
         });
         asJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (
+        await handleOAuthDebuggerRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          settings,
+          oauthDebuggerSessions,
+          deps: routeDeps
+        })
+      ) {
         return;
       }
 

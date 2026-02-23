@@ -1,12 +1,13 @@
 import { existsSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, join } from 'node:path';
-import { McpClientManager, loadConfig, type AgentConfig, type EvalConfig } from '@inspectr/mcplab-core';
-import type {
-  AppRouteDeps,
-  AppRouteRequestContext,
-  AssistantSessionsMap
-} from './app-context.js';
+import {
+  McpClientManager,
+  loadConfig,
+  type AgentConfig,
+  type EvalConfig
+} from '@inspectr/mcplab-core';
+import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
@@ -54,8 +55,7 @@ export async function handleScenarioAssistantRoutes(params: {
     summarizeToolResultForAssistant
   } = deps;
 
-  const errorMessage = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   type SessionPendingCall = ScenarioAssistantSession['pendingToolCalls'][number];
   type SessionContext = ScenarioAssistantSession['context'];
 

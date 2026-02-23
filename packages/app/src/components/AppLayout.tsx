@@ -40,6 +40,10 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Analyze MCP Tools" });
     return crumbs;
   }
+  if (matchPath("/oauth-debugger", pathname)) {
+    crumbs.push({ label: "OAuth Debugger" });
+    return crumbs;
+  }
   if (matchPath("/results/:id", pathname)) {
     crumbs.push({ label: "Results", to: "/results" }, { label: "Result" });
     return crumbs;

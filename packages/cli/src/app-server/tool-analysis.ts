@@ -1,9 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type {
-  AppRouteDeps,
-  AppRouteRequestContext,
-  ToolAnalysisJobsMap
-} from './app-context.js';
+import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
 
 export type ToolAnalysisRouteDeps = Pick<
@@ -37,8 +33,7 @@ export async function handleToolAnalysisRoutes(params: {
     runToolAnalysisJob
   } = deps;
 
-  const errorMessage = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
+  const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
   if (pathname === '/api/tool-analysis/discover-tools' && method === 'POST') {
     const body = await parseBody(req);

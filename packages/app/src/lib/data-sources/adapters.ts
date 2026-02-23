@@ -27,11 +27,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const servers = serverEntries.map(([name, server], index) => {
     const id = toId('srv', index);
     serverIdByName.set(name, id);
-    const authType: 'none' | 'bearer' | 'api-key' =
+    const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
       server.auth?.type === 'bearer'
         ? 'bearer'
         : server.auth?.type === 'oauth_client_credentials'
           ? 'api-key'
+          : server.auth?.type === 'oauth_authorization_code'
+            ? 'oauth2'
           : 'none';
     return {
       id,
@@ -39,7 +41,14 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       transport: 'streamable-http' as const,
       url: server.url,
       authType,
-      authValue: server.auth?.type === 'bearer' ? server.auth.env : undefined
+      authValue: server.auth?.type === 'bearer' ? server.auth.env : undefined,
+      oauthClientId:
+        server.auth?.type === 'oauth_authorization_code' ? server.auth.client_id : undefined,
+      oauthClientSecret:
+        server.auth?.type === 'oauth_authorization_code' ? server.auth.client_secret : undefined,
+      oauthRedirectUrl:
+        server.auth?.type === 'oauth_authorization_code' ? server.auth.redirect_url : undefined,
+      oauthScope: server.auth?.type === 'oauth_authorization_code' ? server.auth.scope : undefined
     };
   });
 
@@ -174,7 +183,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
       auth:
         server.authType === 'bearer'
           ? { type: 'bearer', env: server.authValue || 'MCP_TOKEN' }
-          : undefined
+          : server.authType === 'oauth2'
+            ? {
+                type: 'oauth_authorization_code',
+                client_id: server.oauthClientId || '',
+                client_secret: server.oauthClientSecret || undefined,
+                redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+                scope: server.oauthScope || undefined
+              }
+            : undefined
     };
   }
 

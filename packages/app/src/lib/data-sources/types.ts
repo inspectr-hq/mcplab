@@ -17,10 +17,18 @@ export interface CoreServerAuthOauth {
   token_params?: Record<string, string>;
 }
 
+export interface CoreServerAuthOauthAuthorizationCode {
+  type: 'oauth_authorization_code';
+  client_id: string;
+  client_secret?: string;
+  redirect_url: string;
+  scope?: string;
+}
+
 export interface CoreServerConfig {
   transport: 'http';
   url: string;
-  auth?: CoreServerAuthBearer | CoreServerAuthOauth;
+  auth?: CoreServerAuthBearer | CoreServerAuthOauth | CoreServerAuthOauthAuthorizationCode;
 }
 
 export interface CoreAgentConfig {
@@ -269,6 +277,7 @@ export interface WorkspaceSettings {
   snapshotsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
+  oauthDebuggerEnabled?: boolean;
 }
 
 export interface ScenarioAssistantSuggestionBundle {
@@ -449,6 +458,158 @@ export interface ToolAnalysisDiscoverResponse {
   }>;
 }
 
+export type OAuthDebuggerSessionStatus =
+  | 'configuring'
+  | 'running'
+  | 'waiting_for_user'
+  | 'waiting_for_browser_callback'
+  | 'completed'
+  | 'error'
+  | 'stopped';
+
+export interface OAuthValidationFinding {
+  id: string;
+  stepId: string;
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  title: string;
+  detail: string;
+  specReference?: string;
+  recommendation?: string;
+}
+
+export interface OAuthNetworkExchange {
+  id: string;
+  stepId: string;
+  kind: 'http';
+  phase: 'request' | 'response';
+  label: string;
+  method?: string;
+  url: string;
+  headers: Record<string, string>;
+  bodyText?: string;
+  status?: number;
+  durationMs?: number;
+  timestamp: string;
+}
+
+export interface OAuthDebuggerStepState {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'active' | 'completed' | 'failed' | 'skipped';
+  startedAt?: string;
+  finishedAt?: string;
+  outcomeSummary?: string;
+  teachableMoment?: string;
+  networkExchangeIds: string[];
+  validationIds: string[];
+}
+
+export interface OAuthSequenceEvent {
+  id: string;
+  ts: string;
+  from: string;
+  to: string;
+  label: string;
+  stepId?: string;
+  networkExchangeId?: string;
+}
+
+export interface OAuthDebuggerSessionView {
+  id: string;
+  status: OAuthDebuggerSessionStatus;
+  createdAt: string;
+  updatedAt: string;
+  profile: 'latest';
+  registrationMethod: 'pre_registered' | 'dcr' | 'cimd';
+  stepStates: OAuthDebuggerStepState[];
+  validations: OAuthValidationFinding[];
+  network: OAuthNetworkExchange[];
+  networkSummary: {
+    requestCount: number;
+    errorCount: number;
+  };
+  sequence: OAuthSequenceEvent[];
+  uiHints: {
+    nextAction?: 'start' | 'open_authorize_url' | 'paste_callback_url' | 'none';
+    authorizationUrl?: string;
+    callbackMode?: 'local_callback' | 'manual';
+    callbackUrl?: string;
+  };
+  summary?: {
+    issuer?: string;
+    clientId?: string;
+    redirectUri?: string;
+    tokenEndpointStatus?: number;
+    tokenType?: string;
+    grantedScopes?: string[];
+  };
+}
+
+export interface OAuthDebuggerSessionConfig {
+  profile: 'latest';
+  target: {
+    serverName: string;
+    overrides?: {
+      authorizationServerMetadataUrl?: string;
+      authorizationEndpoint?: string;
+      tokenEndpoint?: string;
+      registrationEndpoint?: string;
+      cimdUrl?: string;
+      resourceBaseUrl?: string;
+    };
+  };
+  registrationMethod: 'pre_registered' | 'dcr' | 'cimd';
+  clientConfig: {
+    preRegistered?: {
+      clientId: string;
+      clientSecret?: string;
+      tokenEndpointAuthMethod?: string;
+    };
+    dcr?: {
+      metadata?: Record<string, unknown>;
+      tokenEndpointAuthMethod?: string;
+    };
+    cimd?: {
+      cimdUrl?: string;
+      expectedClientId?: string;
+    };
+  };
+  runtime: {
+    redirectMode: 'local_callback' | 'manual';
+    scopes?: string[];
+    resource?: string;
+    usePkce: boolean;
+    codeChallengeMethod?: 'S256';
+    state?: string;
+    nonce?: string;
+    extraAuthParams?: Record<string, string>;
+  };
+  display: {
+    showSensitiveValues: boolean;
+  };
+}
+
+export interface OAuthDebuggerSessionEvent {
+  type:
+    | 'started'
+    | 'step_started'
+    | 'step_completed'
+    | 'step_failed'
+    | 'http_request'
+    | 'http_response'
+    | 'validation'
+    | 'log'
+    | 'waiting_for_user'
+    | 'waiting_for_browser_callback'
+    | 'completed'
+    | 'error'
+    | 'stopped';
+  ts: string;
+  payload: Record<string, unknown>;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -501,6 +662,7 @@ export interface EvalDataSource {
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
   updateWorkspaceSettings: (patch: {
     scenarioAssistantAgentName?: string;
+    oauthDebuggerEnabled?: boolean;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (params: {
     configId?: string;
@@ -567,4 +729,28 @@ export interface EvalDataSource {
   stopToolAnalysis: (
     jobId: string
   ) => Promise<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>;
+  createOAuthDebuggerSession: (
+    config: OAuthDebuggerSessionConfig
+  ) => Promise<{ sessionId: string; session: OAuthDebuggerSessionView }>;
+  getOAuthDebuggerSession: (
+    sessionId: string
+  ) => Promise<{ session: OAuthDebuggerSessionView }>;
+  startOAuthDebuggerSession: (
+    sessionId: string
+  ) => Promise<{ session: OAuthDebuggerSessionView }>;
+  subscribeOAuthDebuggerSession: (
+    sessionId: string,
+    onEvent: (event: OAuthDebuggerSessionEvent) => void
+  ) => () => void;
+  submitOAuthDebuggerManualCallback: (
+    sessionId: string,
+    payload: { redirectUrl?: string; code?: string; state?: string }
+  ) => Promise<{ session: OAuthDebuggerSessionView }>;
+  stopOAuthDebuggerSession: (
+    sessionId: string
+  ) => Promise<{ ok: boolean; status: OAuthDebuggerSessionStatus }>;
+  exportOAuthDebuggerSession: (
+    sessionId: string,
+    format: 'json' | 'markdown' | 'raw'
+  ) => Promise<string | { session: OAuthDebuggerSessionView; raw: unknown }>;
 }

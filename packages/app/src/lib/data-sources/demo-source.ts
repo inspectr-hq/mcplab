@@ -173,5 +173,33 @@ export const demoSource: EvalDataSource = {
   },
   async stopToolAnalysis() {
     return { ok: true, status: 'stopped' as const };
+  },
+  async createOAuthDebuggerSession() {
+    throw new Error('OAuth Debugger is only available in workspace mode.');
+  },
+  async getOAuthDebuggerSession() {
+    throw new Error('OAuth Debugger is only available in workspace mode.');
+  },
+  async startOAuthDebuggerSession() {
+    throw new Error('OAuth Debugger is only available in workspace mode.');
+  },
+  subscribeOAuthDebuggerSession(_sessionId, onEvent) {
+    const timeout = window.setTimeout(() => {
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'OAuth Debugger is only available in workspace mode.' }
+      } as any);
+    }, 100);
+    return () => window.clearTimeout(timeout);
+  },
+  async submitOAuthDebuggerManualCallback() {
+    throw new Error('OAuth Debugger is only available in workspace mode.');
+  },
+  async stopOAuthDebuggerSession() {
+    return { ok: true, status: 'stopped' as const };
+  },
+  async exportOAuthDebuggerSession() {
+    throw new Error('OAuth Debugger is only available in workspace mode.');
   }
 };

@@ -8,6 +8,9 @@ import type {
   SnapshotRecord,
   TraceUiEvent,
   ProviderModelsResponse,
+  OAuthDebuggerSessionConfig,
+  OAuthDebuggerSessionEvent,
+  OAuthDebuggerSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   WorkspaceConfigRecord,
@@ -39,6 +42,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestText(path: string, init?: RequestInit): Promise<string> {
+  const response = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...(init?.headers || {})
+    }
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Request failed (${response.status}): ${body}`);
+  }
+  return response.text();
+}
+
 export const workspaceApiClient = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
   getSettings: () =>
@@ -49,8 +67,9 @@ export const workspaceApiClient = {
       snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
+      oauthDebuggerEnabled?: boolean;
     }>('/api/settings'),
-  updateSettings: (patch: { scenarioAssistantAgentName?: string }) =>
+  updateSettings: (patch: { scenarioAssistantAgentName?: string; oauthDebuggerEnabled?: boolean }) =>
     request<{
       workspaceRoot: string;
       configsDir: string;
@@ -58,6 +77,7 @@ export const workspaceApiClient = {
       snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
+      oauthDebuggerEnabled?: boolean;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)
@@ -257,6 +277,90 @@ export const workspaceApiClient = {
     };
     return () => close();
   },
+  createOAuthDebuggerSession: (config: OAuthDebuggerSessionConfig) =>
+    request<{ sessionId: string; session: OAuthDebuggerSessionView }>('/api/oauth-debugger/sessions', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    }),
+  getOAuthDebuggerSession: (sessionId: string) =>
+    request<{ session: OAuthDebuggerSessionView }>(`/api/oauth-debugger/sessions/${sessionId}`),
+  startOAuthDebuggerSession: (sessionId: string) =>
+    request<{ session: OAuthDebuggerSessionView }>(`/api/oauth-debugger/sessions/${sessionId}/start`, {
+      method: 'POST',
+      body: JSON.stringify({})
+    }),
+  subscribeOAuthDebuggerSession: (
+    sessionId: string,
+    onEvent: (event: OAuthDebuggerSessionEvent) => void
+  ) => {
+    const source = new EventSource(`${BASE}/api/oauth-debugger/sessions/${sessionId}/events`);
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      source.close();
+    };
+    const messageHandler = (event: MessageEvent) => {
+      if (closed) return;
+      if (typeof event.data !== 'string' || !event.data) return;
+      try {
+        const parsed = JSON.parse(event.data) as OAuthDebuggerSessionEvent;
+        onEvent(parsed);
+        if (parsed.type === 'completed' || parsed.type === 'error' || parsed.type === 'stopped') {
+          close();
+        }
+      } catch {
+        // ignore malformed payload
+      }
+    };
+    [
+      'started',
+      'step_started',
+      'step_completed',
+      'step_failed',
+      'http_request',
+      'http_response',
+      'validation',
+      'log',
+      'waiting_for_user',
+      'waiting_for_browser_callback',
+      'completed',
+      'error',
+      'stopped'
+    ].forEach((type) => source.addEventListener(type, messageHandler));
+    source.onerror = () => {
+      if (closed) return;
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'SSE connection error' }
+      });
+      close();
+    };
+    return () => close();
+  },
+  submitOAuthDebuggerManualCallback: (
+    sessionId: string,
+    payload: { redirectUrl?: string; code?: string; state?: string }
+  ) =>
+    request<{ session: OAuthDebuggerSessionView }>(
+      `/api/oauth-debugger/sessions/${sessionId}/manual-callback`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }
+    ),
+  stopOAuthDebuggerSession: (sessionId: string) =>
+    request<{ ok: boolean; status: OAuthDebuggerSessionView['status'] }>(
+      `/api/oauth-debugger/sessions/${sessionId}/stop`,
+      { method: 'POST', body: JSON.stringify({}) }
+    ),
+  exportOAuthDebuggerSession: (sessionId: string, format: 'json' | 'markdown' | 'raw') =>
+    format === 'json'
+      ? request<{ session: OAuthDebuggerSessionView; raw: unknown }>(
+          `/api/oauth-debugger/sessions/${sessionId}/export?format=json`
+        )
+      : requestText(`/api/oauth-debugger/sessions/${sessionId}/export?format=${format}`),
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

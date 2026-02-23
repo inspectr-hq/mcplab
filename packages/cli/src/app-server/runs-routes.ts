@@ -297,12 +297,11 @@ export async function handleRunsRoutes(params: {
           type: 'error',
           ts: new Date().toISOString(),
           payload: {
-            message:
-              aborted
-                ? 'Run aborted by user'
-                : error instanceof Error
-                  ? error.message
-                  : String(error)
+            message: aborted
+              ? 'Run aborted by user'
+              : error instanceof Error
+                ? error.message
+                : String(error)
           }
         });
         job.status = aborted ? 'stopped' : 'error';

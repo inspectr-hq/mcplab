@@ -153,5 +153,26 @@ export const workspaceSource: EvalDataSource = {
   },
   async stopToolAnalysis(jobId) {
     return workspaceApiClient.stopToolAnalysis(jobId);
+  },
+  async createOAuthDebuggerSession(config) {
+    return workspaceApiClient.createOAuthDebuggerSession(config);
+  },
+  async getOAuthDebuggerSession(sessionId) {
+    return workspaceApiClient.getOAuthDebuggerSession(sessionId);
+  },
+  async startOAuthDebuggerSession(sessionId) {
+    return workspaceApiClient.startOAuthDebuggerSession(sessionId);
+  },
+  subscribeOAuthDebuggerSession(sessionId, onEvent) {
+    return workspaceApiClient.subscribeOAuthDebuggerSession(sessionId, onEvent);
+  },
+  async submitOAuthDebuggerManualCallback(sessionId, payload) {
+    return workspaceApiClient.submitOAuthDebuggerManualCallback(sessionId, payload);
+  },
+  async stopOAuthDebuggerSession(sessionId) {
+    return workspaceApiClient.stopOAuthDebuggerSession(sessionId);
+  },
+  async exportOAuthDebuggerSession(sessionId, format) {
+    return workspaceApiClient.exportOAuthDebuggerSession(sessionId, format);
   }
 };
