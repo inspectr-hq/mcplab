@@ -58,7 +58,8 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
   for (const assertion of assertions) {
     if (assertion.type === 'regex') {
       try {
-        const re = new RegExp(assertion.pattern);
+        // Default text pattern checks to case-insensitive to reduce brittle LLM-output casing failures.
+        const re = new RegExp(assertion.pattern, 'i');
         if (!re.test(text)) {
           failures.push(`Regex assertion failed: ${assertion.pattern}`);
         }
