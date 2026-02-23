@@ -172,6 +172,6 @@ export const demoSource: EvalDataSource = {
     throw new Error('Analyze MCP Tools is only available in workspace mode.');
   },
   async stopToolAnalysis() {
-    return { ok: true, status: "stopped" as const };
+    return { ok: true, status: 'stopped' as const };
   }
 };

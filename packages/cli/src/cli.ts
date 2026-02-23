@@ -17,7 +17,7 @@ import pkg from '../package.json' with { type: 'json' };
 import { execSync } from 'node:child_process';
 import chokidar from 'chokidar';
 import { stringify as stringifyYaml } from 'yaml';
-import { startAppServer } from './app-server.js';
+import { startAppServer } from './app-server/index.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,

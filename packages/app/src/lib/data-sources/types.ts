@@ -566,5 +566,5 @@ export interface EvalDataSource {
   getToolAnalysisResult: (jobId: string) => Promise<{ jobId: string; report: ToolAnalysisReport }>;
   stopToolAnalysis: (
     jobId: string
-  ) => Promise<{ ok: boolean; status: "running" | "completed" | "error" | "stopped" }>;
+  ) => Promise<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>;
 }

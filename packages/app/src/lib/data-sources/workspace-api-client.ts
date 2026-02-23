@@ -220,7 +220,7 @@ export const workspaceApiClient = {
     request<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>(
       `/api/tool-analysis/jobs/${jobId}/stop`,
       {
-      method: 'POST'
+        method: 'POST'
       }
     ),
   subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {

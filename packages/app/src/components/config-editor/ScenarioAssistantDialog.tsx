@@ -390,16 +390,25 @@ export function ScenarioAssistantDialog({
                               onApply={() => applySuggestions(message.id, message.suggestions, "snapshotEval")}
                             />
                           )}
-                          {(message.suggestions.notes ?? []).length > 0 && (
+                          {(() => {
+                            const rawNotes = message.suggestions?.notes;
+                            const notes = Array.isArray(rawNotes)
+                              ? rawNotes
+                              : typeof rawNotes === "string"
+                                ? [rawNotes]
+                                : [];
+                            if (notes.length === 0) return null;
+                            return (
                             <div className="space-y-2 rounded-md border p-3">
                               <h5 className="text-sm font-medium">Notes</h5>
                               <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                                {message.suggestions.notes?.map((note, index) => (
+                                {notes.map((note, index) => (
                                   <li key={`${message.id}-note-${index}`}>{note}</li>
                                 ))}
                               </ul>
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       )}
                     </Fragment>

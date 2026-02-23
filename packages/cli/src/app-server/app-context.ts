@@ -1,0 +1,131 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AppSettings } from './types.js';
+import type { parseBody, asJson } from './http.js';
+import type { addJobEvent, sendSseEvent } from './jobs.js';
+import type { readLibraries } from './libraries-store.js';
+import type { discoverMcpToolsForServers, runToolAnalysisJob, ToolAnalysisJob } from './tool-analysis-domain.js';
+import type {
+  cleanupAssistantSessions,
+  touchAssistantSession,
+  assistantSessionView,
+  pickDefaultAssistantAgentName,
+  resolveAssistantAgentFromConfig,
+  resolveAssistantAgentFromLibraries,
+  preloadAssistantTools,
+  continueAssistantTurn,
+  executeAssistantToolCall,
+  summarizeToolResultForAssistant,
+  ScenarioAssistantSession
+} from './scenario-assistant-domain.js';
+import type {
+  listSnapshots,
+  buildSnapshotFromRun,
+  saveSnapshot,
+  loadSnapshot,
+  compareRunToSnapshot,
+  applySnapshotPolicyToRunResult
+} from '../snapshot.js';
+import type { getRunResults, listRuns, getTraceEvents, toTraceUiEvents, selectScenarioIds } from './runs-store.js';
+import type { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
+import type { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
+import type { RunSummary, TraceUiEvent } from './runs-store.js';
+import type { ConfigRecord } from './config-store.js';
+import type { ResultsJson, EvalConfig, ExecutableEvalConfig, TraceEvent } from '@inspectr/mcplab-core';
+
+export interface AppRouteRequestContext {
+  req: IncomingMessage;
+  res: ServerResponse;
+  pathname: string;
+  method: string;
+  settings: AppSettings;
+}
+
+export interface ActiveJobState {
+  get(): string | null;
+  set(value: string | null): void;
+}
+
+export interface HttpDeps {
+  parseBody: typeof parseBody;
+  asJson: typeof asJson;
+}
+
+export interface JobStreamDeps {
+  addJobEvent: typeof addJobEvent;
+  sendSseEvent: typeof sendSseEvent;
+}
+
+export interface LibraryDeps {
+  readLibraries: typeof readLibraries;
+}
+
+export interface ToolAnalysisDeps extends LibraryDeps {
+  discoverMcpToolsForServers: typeof discoverMcpToolsForServers;
+  runToolAnalysisJob: typeof runToolAnalysisJob;
+}
+
+export interface AssistantDeps extends LibraryDeps {
+  cleanupAssistantSessions: typeof cleanupAssistantSessions;
+  touchAssistantSession: typeof touchAssistantSession;
+  assistantSessionView: typeof assistantSessionView;
+  ensureInsideRoot: typeof ensureInsideRoot;
+  pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
+  resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
+  resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
+  preloadAssistantTools: typeof preloadAssistantTools;
+  continueAssistantTurn: typeof continueAssistantTurn;
+  executeAssistantToolCall: typeof executeAssistantToolCall;
+  summarizeToolResultForAssistant: typeof summarizeToolResultForAssistant;
+}
+
+export interface SnapshotDeps {
+  listSnapshots: typeof listSnapshots;
+  buildSnapshotFromRun: typeof buildSnapshotFromRun;
+  saveSnapshot: typeof saveSnapshot;
+  loadSnapshot: typeof loadSnapshot;
+  compareRunToSnapshot: typeof compareRunToSnapshot;
+  getRunResults: typeof getRunResults;
+  decodeConfigId: typeof decodeConfigId;
+  readConfigRecord: typeof readConfigRecord;
+}
+
+export interface ConfigDeps {
+  listConfigs: typeof listConfigs;
+  safeFileName: typeof safeFileName;
+  ensureInsideRoot: typeof ensureInsideRoot;
+  decodeConfigId: typeof decodeConfigId;
+  readConfigRecord: typeof readConfigRecord;
+  readConfigRecordOrInvalid: typeof readConfigRecordOrInvalid;
+}
+
+export interface RunDeps {
+  ensureInsideRoot: typeof ensureInsideRoot;
+  listRuns: typeof listRuns;
+  getRunResults: typeof getRunResults;
+  getTraceEvents: typeof getTraceEvents;
+  toTraceUiEvents: typeof toTraceUiEvents;
+  selectScenarioIds: typeof selectScenarioIds;
+  expandConfigForAgents: (config: EvalConfig, requestedAgents?: string[]) => ExecutableEvalConfig;
+  resolveRunSelectedAgents: (config: EvalConfig, requestedAgents?: string[]) => string[] | undefined;
+  loadSnapshot: typeof loadSnapshot;
+  compareRunToSnapshot: typeof compareRunToSnapshot;
+  applySnapshotPolicyToRunResult: typeof applySnapshotPolicyToRunResult;
+  pkgVersion: string;
+}
+
+export interface AppRouteDeps
+  extends HttpDeps,
+    JobStreamDeps,
+    ToolAnalysisDeps,
+    AssistantDeps,
+    SnapshotDeps,
+    ConfigDeps,
+    RunDeps {}
+
+export type ToolAnalysisJobsMap = Map<string, ToolAnalysisJob>;
+export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
+export type RunsResults = ResultsJson;
+export type RunsList = RunSummary[];
+export type RunsTraceEvents = TraceEvent[];
+export type RunsTraceUiEvents = TraceUiEvent[];
+export type ConfigRecords = ConfigRecord[];

@@ -1,0 +1,120 @@
+import { basename, extname, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
+import type { EvalConfig } from '@inspectr/mcplab-core';
+import { loadConfig } from '@inspectr/mcplab-core';
+import { encodeConfigId, ensureInsideRoot } from './store-utils.js';
+
+export interface ConfigRecord {
+  id: string;
+  name: string;
+  path: string;
+  mtime: string;
+  hash: string;
+  config: EvalConfig;
+  error?: string;
+  warnings?: string[];
+}
+
+export function readConfigRecord(
+  absPath: string,
+  configsDir: string,
+  bundleRoot?: string
+): ConfigRecord {
+  const {
+    config: _resolvedConfig,
+    sourceConfig,
+    hash,
+    warnings
+  } = loadConfig(absPath, { bundleRoot });
+  const stat = statSync(absPath);
+  const name = basename(absPath, extname(absPath));
+  return {
+    id: encodeConfigId(absPath, configsDir),
+    name,
+    path: absPath,
+    mtime: stat.mtime.toISOString(),
+    hash,
+    config: sourceConfig,
+    warnings: warnings.length > 0 ? warnings : undefined
+  };
+}
+
+function emptySourceConfig(): EvalConfig {
+  return {
+    servers: {},
+    server_refs: [],
+    agents: {},
+    agent_refs: [],
+    scenarios: [],
+    scenario_refs: []
+  };
+}
+
+function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
+  try {
+    const raw = readFileSync(absPath, 'utf8');
+    const parsed = parseYaml(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptySourceConfig();
+    const obj = parsed as Record<string, unknown>;
+    return {
+      servers:
+        obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)
+          ? (obj.servers as EvalConfig['servers'])
+          : {},
+      server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
+      agents:
+        obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)
+          ? (obj.agents as EvalConfig['agents'])
+          : {},
+      agent_refs: Array.isArray(obj.agent_refs) ? obj.agent_refs.map((v) => String(v)) : [],
+      scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as EvalConfig['scenarios']) : [],
+      scenario_refs: Array.isArray(obj.scenario_refs)
+        ? obj.scenario_refs.map((v) => String(v))
+        : [],
+      run_defaults:
+        obj.run_defaults && typeof obj.run_defaults === 'object' && !Array.isArray(obj.run_defaults)
+          ? (obj.run_defaults as EvalConfig['run_defaults'])
+          : undefined,
+      snapshot_eval:
+        obj.snapshot_eval &&
+        typeof obj.snapshot_eval === 'object' &&
+        !Array.isArray(obj.snapshot_eval)
+          ? (obj.snapshot_eval as EvalConfig['snapshot_eval'])
+          : undefined
+    };
+  } catch {
+    return emptySourceConfig();
+  }
+}
+
+export function readConfigRecordOrInvalid(
+  absPath: string,
+  configsDir: string,
+  bundleRoot?: string
+): ConfigRecord {
+  try {
+    return readConfigRecord(absPath, configsDir, bundleRoot);
+  } catch (error) {
+    const stat = statSync(absPath);
+    const name = basename(absPath, extname(absPath));
+    return {
+      id: encodeConfigId(absPath, configsDir),
+      name,
+      path: absPath,
+      mtime: stat.mtime.toISOString(),
+      hash: '',
+      config: parseSourceConfigForInvalidRecord(absPath),
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+export function listConfigs(configsDir: string, bundleRoot?: string): ConfigRecord[] {
+  if (!existsSync(configsDir)) return [];
+  const files = readdirSync(configsDir)
+    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
+    .map((name) => ensureInsideRoot(configsDir, join(configsDir, name)));
+  const records = files.map((path) => readConfigRecordOrInvalid(path, configsDir, bundleRoot));
+  return records.sort((a, b) => a.name.localeCompare(b.name));
+}
