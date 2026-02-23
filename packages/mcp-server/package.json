@@ -18,7 +18,7 @@
     "mcplab-mcp-server": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "rm -rf dist && tsc -b --force"
   },
   "dependencies": {
     "@inspectr/mcplab-core": "0.1.0",
