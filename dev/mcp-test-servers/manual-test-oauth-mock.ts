@@ -42,6 +42,18 @@ function rand(prefix: string) {
   return `${prefix}_${randomBytes(8).toString('hex')}`;
 }
 
+function isDebuggerLoopbackCallback(redirectUri: string): boolean {
+  try {
+    const url = new URL(redirectUri);
+    const isLoopbackHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    const isAppPort = url.port === '8787';
+    const matchesPath = /^\/api\/oauth-debugger\/sessions\/[^/]+\/callback$/.test(url.pathname);
+    return url.protocol === 'http:' && isLoopbackHost && isAppPort && matchesPath;
+  } catch {
+    return false;
+  }
+}
+
 async function main() {
   const opts = envServerOptions(3113, 'mcplab-mcp-oauth-mock');
   const issuer = `http://${opts.host}:${opts.port}`;
@@ -130,7 +142,9 @@ async function main() {
           sendText(res, 400, 'invalid authorize request');
           return true;
         }
-        if (!client.redirectUris.includes(redirectUri)) {
+        const allowRedirect =
+          client.redirectUris.includes(redirectUri) || isDebuggerLoopbackCallback(redirectUri);
+        if (!allowRedirect) {
           sendText(res, 400, `redirect_uri not allowed: ${redirectUri}`);
           return true;
         }
