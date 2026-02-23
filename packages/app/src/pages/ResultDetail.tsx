@@ -15,6 +15,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveCo
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
+import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type { ResultAssistantChatMessage, SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
@@ -24,6 +25,7 @@ const ResultDetail = () => {
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
   const { configs } = useConfigs();
+  const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
@@ -83,6 +85,33 @@ const ResultDetail = () => {
     if (byRequested) return byRequested;
     return result ? configs.find((c) => c.id === result.configId) : undefined;
   }, [configs, requestedConfigId, result]);
+  const scenarioDefinitionByResultId = useMemo(() => {
+    const map = new Map<string, UiEvalConfig["scenarios"][number]>();
+    if (activeConfig) {
+      for (const scenario of activeConfig.scenarios) {
+        map.set(scenario.id, scenario);
+        if (scenario.name && !map.has(scenario.name)) map.set(scenario.name, scenario);
+      }
+      if ((activeConfig.scenarioRefs?.length ?? 0) > 0) {
+        for (const ref of activeConfig.scenarioRefs ?? []) {
+          const libScenario =
+            libraryScenarios.find((s) => s.name === ref) ??
+            libraryScenarios.find((s) => s.id === ref);
+          if (libScenario) {
+            map.set(libScenario.id, libScenario);
+            if (libScenario.name) map.set(libScenario.name, libScenario);
+            if (!map.has(ref)) map.set(ref, libScenario);
+          }
+        }
+      }
+    }
+    // Broader fallback for refs-only configs where we only know result scenario ids.
+    for (const libScenario of libraryScenarios) {
+      if (!map.has(libScenario.id)) map.set(libScenario.id, libScenario);
+      if (libScenario.name && !map.has(libScenario.name)) map.set(libScenario.name, libScenario);
+    }
+    return map;
+  }, [activeConfig, libraryScenarios]);
   const inferredConfigId = useMemo(() => {
     if (!result?.snapshotEval?.baselineSnapshotId) return "";
     const matches = configs.filter(
@@ -595,7 +624,7 @@ const ResultDetail = () => {
                                 </div>
                                 <div className="flex-1 space-y-1">
                                   {(() => {
-                                    const scenarioDef = activeConfig?.scenarios.find((s) => s.id === sc.scenarioId);
+                                    const scenarioDef = scenarioDefinitionByResultId.get(sc.scenarioId);
                                     const checks = scenarioDef ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons) : [];
                                     const failedChecks = checks.filter((c) => c.status === "failed");
                                     const passedChecks = checks.filter((c) => c.status === "passed");
@@ -611,13 +640,29 @@ const ResultDetail = () => {
                                       </Badge>
                                     )}
                                   </div>
+                                  {run.failureReasons.length > 0 && (
+                                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                                      <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                                        <XCircle className="h-3.5 w-3.5" />
+                                        Failure reasons
+                                      </p>
+                                      <ul className="space-y-1 text-xs text-destructive">
+                                        {run.failureReasons.map((reason, index) => (
+                                          <li key={index}>• {reason}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
                                   {checks.length > 0 && (
                                     <div className="rounded-md border bg-muted/20 p-2">
                                       <div className="mb-2 flex flex-wrap items-center gap-2">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                                           Checks
                                         </p>
-                                        <Badge variant="outline" className="h-5 text-[10px]">
+                                        <Badge
+                                          variant="outline"
+                                          className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
+                                        >
                                           {passedChecks.length} passed
                                         </Badge>
                                         <Badge
@@ -667,77 +712,87 @@ const ResultDetail = () => {
                                       </div>
                                     </div>
                                   )}
-                                  {run.failureReasons.length > 0 && (
-                                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
-                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
-                                        Failure reasons
-                                      </p>
-                                      <ul className="space-y-1 text-xs text-destructive">
-                                        {run.failureReasons.map((reason, index) => (
-                                          <li key={index}>• {reason}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
                                       </>
                                     );
                                   })()}
-                                  <div className="flex flex-wrap gap-1">
-                                    {run.toolCalls.map((tc, i) => (
-                                      <Badge key={i} variant="outline" className="font-mono text-xs">
-                                        <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                        {tc.name}
-                                        <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                  <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                      <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        <Wrench className="h-3.5 w-3.5 text-sky-600" />
+                                        Tool calls
+                                      </p>
+                                      <Badge variant="outline" className="h-5 text-[10px]">
+                                        {run.toolCalls.length} total
                                       </Badge>
-                                    ))}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {run.toolCalls.map((tc, i) => (
+                                        <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
+                                          <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                          {tc.name}
+                                          <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                        </Badge>
+                                      ))}
+                                    </div>
                                   </div>
-                                  <div className="rounded-md border bg-muted/20 p-2">
-                                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
+                                    <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                      <Bot className="h-3.5 w-3.5" />
                                       Final answer
                                     </p>
-                                    <MarkdownText
+                                    <ExpandableText
                                       text={run.finalAnswer || "No final answer captured."}
+                                      maxLength={1200}
                                       className="text-xs text-foreground"
                                     />
                                   </div>
-                                  <div>
-                                    <div className="flex flex-wrap gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs"
-                                        onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
-                                      >
-                                        {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 gap-1 px-2 text-xs"
-                                        onClick={() =>
-                                          openAssistantWithPrompt(
-                                            `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
-                                          )
-                                        }
-                                      >
-                                        <Sparkles className="h-3 w-3" />
-                                        Ask Assistant
-                                      </Button>
+                                  <div className="rounded-md border bg-muted/10 p-2">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        Conversation trace
+                                      </p>
+                                      <div className="flex flex-wrap gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 px-2 text-xs"
+                                          onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
+                                        >
+                                          {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 gap-1 px-2 text-xs"
+                                          onClick={() =>
+                                            openAssistantWithPrompt(
+                                              `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                            )
+                                          }
+                                        >
+                                          <Sparkles className="h-3 w-3" />
+                                          Ask Assistant
+                                        </Button>
+                                      </div>
                                     </div>
+                                    {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? (
+                                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                        {run.conversation.length === 0 ? (
+                                          <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
+                                        ) : (
+                                          run.conversation.map((item) => (
+                                            <ConversationRow key={item.id} item={item} />
+                                          ))
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">
+                                        Expand to inspect user/assistant/tool messages for this run.
+                                      </p>
+                                    )}
                                   </div>
-                                  {openConversations.has(runKey(sc.scenarioId, run.runIndex)) && (
-                                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                                      {run.conversation.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
-                                      ) : (
-                                        run.conversation.map((item) => (
-                                          <ConversationRow key={item.id} item={item} />
-                                        ))
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                             ))}
