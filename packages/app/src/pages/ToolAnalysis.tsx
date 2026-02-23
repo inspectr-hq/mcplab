@@ -9,14 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { ChevronDown, CircleHelp, Download, Lightbulb, Loader2, RefreshCw, Search } from "lucide-react";
+import { CircleHelp, Download, Loader2, RefreshCw, Search } from "lucide-react";
 
-const ALL_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
-type FindingSeverity = (typeof ALL_SEVERITIES)[number];
+const TOOL_ANALYSIS_ACTIVE_JOB_KEY = "mcplab.toolAnalysis.activeJobId";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -28,71 +28,6 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-function toMarkdownReport(report: ToolAnalysisReport): string {
-  const lines: string[] = [];
-  lines.push(`# MCP Tool Analysis Report`);
-  lines.push("");
-  lines.push(`- Created: ${report.createdAt}`);
-  lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
-  lines.push(`- Assistant Model: ${report.assistantAgentModel}`);
-  lines.push(
-    `- Modes: ${[
-      report.modes.metadataReview ? "metadata review" : null,
-      report.modes.deeperAnalysis ? "deeper analysis" : null
-    ]
-      .filter(Boolean)
-      .join(" + ")}`
-  );
-  lines.push("");
-  lines.push(`## Summary`);
-  lines.push(`- Servers analyzed: ${report.summary.serversAnalyzed}`);
-  lines.push(`- Tools analyzed: ${report.summary.toolsAnalyzed}`);
-  lines.push(`- Tools skipped: ${report.summary.toolsSkipped}`);
-  lines.push("");
-  for (const server of report.servers) {
-    lines.push(`## Server: ${server.serverName}`);
-    if (server.warnings.length > 0) {
-      lines.push(...server.warnings.map((warning) => `- Warning: ${warning}`));
-      lines.push("");
-    }
-    for (const tool of server.tools) {
-      lines.push(`### ${tool.publicToolName}`);
-      lines.push(`- Safety: ${tool.safetyClassification} (${tool.classificationReason})`);
-      if (tool.metadataReview) {
-        if (tool.metadataReview.issues.length > 0) {
-          lines.push(`#### Metadata issues`);
-          for (const issue of tool.metadataReview.issues) {
-            lines.push(`  - [${issue.severity}] ${issue.title}: ${issue.detail}`);
-          }
-        }
-      }
-      if (tool.deeperAnalysis) {
-        if (!tool.deeperAnalysis.attempted) {
-          lines.push(`- Deeper analysis: skipped (${tool.deeperAnalysis.skippedReason ?? "unknown"})`);
-        } else {
-          lines.push(`- Deeper analysis sample calls: ${tool.deeperAnalysis.sampleCalls.length}`);
-          for (const sample of tool.deeperAnalysis.sampleCalls) {
-            lines.push(
-              `  - Call ${sample.callIndex}: ${sample.ok ? "ok" : "error"}${sample.durationMs ? ` (${sample.durationMs}ms)` : ""}`
-            );
-            if (sample.error) lines.push(`    - Error: ${sample.error}`);
-            for (const obs of sample.observations) lines.push(`    - ${obs}`);
-          }
-        }
-      }
-      if (tool.overallRecommendations.length > 0) {
-        lines.push(`#### Recommendations`);
-        for (const rec of tool.overallRecommendations) lines.push(`  - ${rec}`);
-      }
-      if (tool.metadataReview && tool.metadataReview.evalReadinessNotes.length > 0) {
-        lines.push(`#### Agent/Eval readiness notes`);
-        for (const note of tool.metadataReview.evalReadinessNotes) lines.push(`  - ${note}`);
-      }
-      lines.push("");
-    }
-  }
-  return `${lines.join("\n")}\n`;
-}
 
 function ModeInfo({
   text
@@ -126,49 +61,6 @@ function formatToolDiscoveryWarning(serverName: string, warning: string): string
   return warning;
 }
 
-function SuggestionCallout({ text }: { text: string }) {
-  return (
-    <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/70 px-2.5 py-2 text-[11px] text-slate-800">
-      <div className="mb-1 inline-flex items-center gap-1 text-sky-800 font-medium">
-        <Lightbulb className="h-3.5 w-3.5" />
-        Suggested improvement
-      </div>
-      <p>{text}</p>
-    </div>
-  );
-}
-
-function severityBadgeClass(severity: "critical" | "high" | "medium" | "low" | "info"): string {
-  switch (severity) {
-    case "critical":
-      return "border-red-300 bg-red-100 text-red-900";
-    case "high":
-      return "border-orange-300 bg-orange-100 text-orange-900";
-    case "medium":
-      return "border-amber-300 bg-amber-100 text-amber-900";
-    case "low":
-      return "border-sky-300 bg-sky-100 text-sky-900";
-    case "info":
-    default:
-      return "border-slate-300 bg-slate-100 text-slate-800";
-  }
-}
-
-function severityBadgeInactiveClass(severity: "critical" | "high" | "medium" | "low" | "info"): string {
-  switch (severity) {
-    case "critical":
-      return "border-red-300 bg-background text-red-900";
-    case "high":
-      return "border-orange-300 bg-background text-orange-900";
-    case "medium":
-      return "border-amber-300 bg-background text-amber-900";
-    case "low":
-      return "border-sky-300 bg-background text-sky-900";
-    case "info":
-    default:
-      return "border-slate-300 bg-background text-slate-800";
-  }
-}
 
 const ToolAnalysisPage = () => {
   const { mode, source } = useDataSource();
@@ -189,12 +81,10 @@ const ToolAnalysisPage = () => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [events, setEvents] = useState<RunJobEvent[]>([]);
   const [report, setReport] = useState<ToolAnalysisReport | null>(null);
+  const [savedReportId, setSavedReportId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [viewStep, setViewStep] = useState<"configure" | "run" | "report">("configure");
   const [runState, setRunState] = useState<"idle" | "running" | "stopped" | "error">("idle");
-  const [activeSeverityFilters, setActiveSeverityFilters] = useState<FindingSeverity[]>([
-    ...ALL_SEVERITIES
-  ]);
   const cleanupRef = useRef<null | (() => void)>(null);
 
   const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || "";
@@ -247,6 +137,109 @@ const ToolAnalysisPage = () => {
       cleanupRef.current?.();
     };
   }, []);
+
+  const clearActiveToolAnalysisJob = () => {
+    try {
+      sessionStorage.removeItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY);
+    } catch {
+      // ignore sessionStorage access issues
+    }
+  };
+
+  const setActiveToolAnalysisJob = (jobId: string) => {
+    try {
+      sessionStorage.setItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY, jobId);
+    } catch {
+      // ignore sessionStorage access issues
+    }
+  };
+
+  const attachToJob = (jobId: string) => {
+    cleanupRef.current?.();
+    cleanupRef.current = source.subscribeToolAnalysisJob(jobId, (event) => {
+      setEvents((prev) => [...prev, event]);
+      if (event.type === "completed") {
+        void source
+          .getToolAnalysisResult(jobId)
+          .then((result) => {
+            setReport(result.report);
+            setSavedReportId(result.savedReportId ?? null);
+          })
+          .catch((error: any) =>
+            toast({
+              title: "Could not load analysis report",
+              description: String(error?.message ?? error),
+              variant: "destructive"
+            })
+          )
+          .finally(() => {
+            clearActiveToolAnalysisJob();
+            setActiveJobId(null);
+            setSubmitting(false);
+            setRunState("idle");
+            setViewStep("report");
+          });
+      } else if (event.type === "error") {
+        const message = String(event.payload?.message ?? "");
+        clearActiveToolAnalysisJob();
+        setRunState(message.toLowerCase().includes("abort") ? "stopped" : "error");
+        setActiveJobId(null);
+        setSubmitting(false);
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (mode !== "workspace" || activeJobId || report) return;
+    let storedJobId = "";
+    try {
+      storedJobId = sessionStorage.getItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY) ?? "";
+    } catch {
+      storedJobId = "";
+    }
+    if (!storedJobId) return;
+
+    let cancelled = false;
+    setViewStep("run");
+    setRunState("running");
+    setSubmitting(true);
+    setActiveJobId(storedJobId);
+    setEvents([]);
+
+    void source
+      .getToolAnalysisResult(storedJobId)
+      .then((result) => {
+        if (cancelled) return;
+        setReport(result.report);
+        setSavedReportId(result.savedReportId ?? null);
+        clearActiveToolAnalysisJob();
+        setActiveJobId(null);
+        setSubmitting(false);
+        setRunState("idle");
+        setViewStep("report");
+      })
+      .catch((error: any) => {
+        if (cancelled) return;
+        const msg = String(error?.message ?? error);
+        if (msg.includes("(404)")) {
+          clearActiveToolAnalysisJob();
+          setActiveJobId(null);
+          setSubmitting(false);
+          setRunState("error");
+          setViewStep("run");
+          toast({
+            title: "Previous tool analysis job not found",
+            description: "It may have expired from memory before you returned to this page."
+          });
+          return;
+        }
+        attachToJob(storedJobId);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, source, activeJobId, report]);
 
   const discoverTools = async () => {
     if (mode !== "workspace") return;
@@ -331,6 +324,7 @@ const ToolAnalysisPage = () => {
     setSubmitting(true);
     setEvents([]);
     setReport(null);
+    setSavedReportId(null);
     setViewStep("run");
     setRunState("running");
     try {
@@ -345,33 +339,8 @@ const ToolAnalysisPage = () => {
         }
       });
       setActiveJobId(jobId);
-      cleanupRef.current?.();
-      cleanupRef.current = source.subscribeToolAnalysisJob(jobId, (event) => {
-        setEvents((prev) => [...prev, event]);
-        if (event.type === "completed") {
-          void source
-            .getToolAnalysisResult(jobId)
-            .then((result) => setReport(result.report))
-            .catch((error: any) =>
-              toast({
-                title: "Could not load analysis report",
-                description: String(error?.message ?? error),
-                variant: "destructive"
-              })
-            )
-            .finally(() => {
-              setActiveJobId(null);
-              setSubmitting(false);
-              setRunState("idle");
-              setViewStep("report");
-            });
-        } else if (event.type === "error") {
-          const message = String(event.payload?.message ?? "");
-          setRunState(message.toLowerCase().includes("abort") ? "stopped" : "error");
-          setActiveJobId(null);
-          setSubmitting(false);
-        }
-      });
+      setActiveToolAnalysisJob(jobId);
+      attachToJob(jobId);
     } catch (error: any) {
       setSubmitting(false);
       setRunState("error");
@@ -394,6 +363,8 @@ const ToolAnalysisPage = () => {
         cleanupRef.current = null;
         const result = await source.getToolAnalysisResult(jobId);
         setReport(result.report);
+        setSavedReportId(result.savedReportId ?? null);
+        clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
         setRunState("idle");
@@ -404,6 +375,7 @@ const ToolAnalysisPage = () => {
       if (response.status === "stopped") {
         cleanupRef.current?.();
         cleanupRef.current = null;
+        clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
         setRunState("stopped");
@@ -413,6 +385,7 @@ const ToolAnalysisPage = () => {
       if (response.status === "error") {
         cleanupRef.current?.();
         cleanupRef.current = null;
+        clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
         setRunState("error");
@@ -455,12 +428,6 @@ const ToolAnalysisPage = () => {
     setSelectedToolsByServer((prev) => ({ ...prev, [serverName]: toolNames }));
   };
 
-  const toggleSeverityFilter = (severity: FindingSeverity) => {
-    setActiveSeverityFilters((prev) =>
-      prev.includes(severity) ? prev.filter((s) => s !== severity) : [...prev, severity]
-    );
-  };
-
   const canOpenConfigureStep = true;
   const canOpenRunStep =
     activeJobId !== null || events.length > 0 || runState === "stopped" || runState === "error";
@@ -479,8 +446,6 @@ const ToolAnalysisPage = () => {
       setViewStep("report");
     }
   };
-
-  const reportSeveritySet = new Set(activeSeverityFilters);
 
   return (
     <div className="space-y-6">
@@ -845,6 +810,16 @@ const ToolAnalysisPage = () => {
               <Button type="button" size="sm" variant="outline" onClick={backToConfigure}>
                 Back to Configure Analysis
               </Button>
+              {savedReportId && (
+                <>
+                  <Button asChild type="button" size="sm" variant="outline">
+                    <Link to={`/tool-analysis-results/${savedReportId}`}>Open saved report</Link>
+                  </Button>
+                  <Button asChild type="button" size="sm" variant="outline">
+                    <Link to="/tool-analysis-results">View all reports</Link>
+                  </Button>
+                </>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -867,7 +842,7 @@ const ToolAnalysisPage = () => {
                 onClick={() =>
                   downloadTextFile(
                     `tool-analysis-${Date.now()}.md`,
-                    toMarkdownReport(report),
+                    toolAnalysisReportToMarkdown(report),
                     "text/markdown"
                   )
                 }
@@ -877,212 +852,7 @@ const ToolAnalysisPage = () => {
               </Button>
             </div>
           </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <Card><CardContent className="pt-6"><div className="text-xs text-muted-foreground">Tools analyzed</div><div className="text-2xl font-semibold">{report.summary.toolsAnalyzed}</div></CardContent></Card>
-            <Card><CardContent className="pt-6"><div className="text-xs text-muted-foreground">Tools skipped</div><div className="text-2xl font-semibold">{report.summary.toolsSkipped}</div></CardContent></Card>
-            <Card><CardContent className="pt-6"><div className="text-xs text-muted-foreground">Findings</div><div className="text-2xl font-semibold">{report.findings.length}</div></CardContent></Card>
-          </div>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Analysis Overview</CardTitle>
-              <CardDescription>
-                Visual breakdown of findings by severity. Click badges to filter the report.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {ALL_SEVERITIES.filter((severity) => report.summary.issueCounts[severity] > 0).map((severity) => {
-                  const active = reportSeveritySet.has(severity);
-                  return (
-                    <button
-                      key={`sev-${severity}`}
-                      type="button"
-                      onClick={() => toggleSeverityFilter(severity)}
-                      className="rounded-full"
-                      aria-pressed={active}
-                    >
-                      <Badge
-                        variant="outline"
-                        className={`capitalize font-normal ${active ? severityBadgeClass(severity) : severityBadgeInactiveClass(severity)} ${
-                          active ? "ring-1 ring-current" : "opacity-70"
-                        }`}
-                      >
-                        {severity}: {report.summary.issueCounts[severity]}
-                      </Badge>
-                    </button>
-                  );
-                })}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setActiveSeverityFilters([...ALL_SEVERITIES])}
-                  className="h-7 px-2 text-xs"
-                >
-                  Reset
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            {report.servers.map((server) => {
-              const filteredTools = server.tools.filter((tool) => {
-                const findings = [
-                  ...(tool.metadataReview?.issues ?? []),
-                  ...(tool.deeperAnalysis?.sampleCalls.flatMap((call) => call.issues) ?? [])
-                ];
-                if (findings.length === 0) return activeSeverityFilters.length === ALL_SEVERITIES.length;
-                return findings.some((finding) => reportSeveritySet.has(finding.severity as FindingSeverity));
-              });
-              if (filteredTools.length === 0) return null;
-              return (
-              <Card key={server.serverName}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{server.serverName}</CardTitle>
-                  <CardDescription>
-                    Discovered {server.toolCountDiscovered} · Showing {filteredTools.length} of {server.toolCountAnalyzed} analyzed · Skipped {server.toolCountSkipped}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {server.warnings.length > 0 && (
-                    <Alert>
-                      <AlertTitle>Warnings</AlertTitle>
-                      <AlertDescription>
-                        <ul className="ml-4 list-disc space-y-1">
-                          {server.warnings.map((warning) => <li key={`${server.serverName}-${warning}`}>{warning}</li>)}
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {filteredTools.map((tool) => (
-                    <details key={tool.publicToolName} className="group rounded-md border p-3">
-                      <summary className="cursor-pointer list-none">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-mono text-sm">{tool.publicToolName}</div>
-                            {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={tool.safetyClassification === "read_like" ? "secondary" : "outline"}>
-                              {tool.safetyClassification}
-                            </Badge>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </div>
-                        </div>
-                      </summary>
-                      <div className="mt-3 space-y-2">
-                      {tool.metadataReview && (
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium">Metadata review</div>
-                          {tool.metadataReview.issues.filter((issue) =>
-                            reportSeveritySet.has(issue.severity as FindingSeverity)
-                          ).length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No metadata issues reported.</p>
-                          ) : (
-                            <div className="space-y-1">
-                              {tool.metadataReview.issues
-                                .filter((issue) =>
-                                  reportSeveritySet.has(issue.severity as FindingSeverity)
-                                )
-                                .map((issue, index) => (
-                                <div key={issue.id} className="rounded border p-2 text-xs">
-                                  <div className="mb-1 flex items-center justify-between gap-2">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
-                                        {index + 1}
-                                      </span>
-                                      <span className="min-w-0 font-bold leading-tight">{issue.title}</span>
-                                    </div>
-                                    <Badge
-                                      variant="outline"
-                                      className={`shrink-0 text-[10px] ${severityBadgeClass(issue.severity)}`}
-                                    >
-                                      {issue.severity}
-                                    </Badge>
-                                  </div>
-                                  <p><span className="font-bold">Finding:</span> {issue.detail}</p>
-                                  {issue.suggestion && <SuggestionCallout text={issue.suggestion} />}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {tool.deeperAnalysis && (
-                        <div className="space-y-1">
-                          <div className="text-xs font-medium">Deeper analysis</div>
-                          {!tool.deeperAnalysis.attempted ? (
-                            <p className="text-xs text-muted-foreground">{tool.deeperAnalysis.skippedReason ?? "Skipped"}</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {tool.deeperAnalysis.sampleCalls.map((sample) => (
-                                <div key={`${tool.publicToolName}-call-${sample.callIndex}`} className="rounded border p-2 text-xs">
-                                  <div className="mb-1 flex items-center gap-2">
-                                    <Badge variant={sample.ok ? "secondary" : "destructive"} className="text-[10px]">
-                                      {sample.ok ? "ok" : "error"}
-                                    </Badge>
-                                    <span>Call {sample.callIndex}</span>
-                                    {sample.durationMs !== undefined && (
-                                      <span className="text-muted-foreground">{sample.durationMs}ms</span>
-                                    )}
-                                  </div>
-                                  {sample.error && <p className="text-destructive">{sample.error}</p>}
-                                  {sample.observations.length > 0 && (
-                                    <div className="mt-2">
-                                      <div className="mb-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                        Observations
-                                      </div>
-                                      <ul className="ml-4 list-disc space-y-1">
-                                      {sample.observations.map((obs, idx) => <li key={`${tool.publicToolName}-obs-${sample.callIndex}-${idx}`}>{obs}</li>)}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {sample.issues.length > 0 && (
-                                    <div className="mt-2 space-y-1">
-                                      {sample.issues
-                                        .filter((issue) =>
-                                          reportSeveritySet.has(issue.severity as FindingSeverity)
-                                        )
-                                        .map((issue, index) => (
-                                        <div key={`${sample.callIndex}-${issue.id}`} className="rounded border p-2">
-                                          <div className="mb-1 flex items-center justify-between gap-2">
-                                            <div className="flex min-w-0 items-center gap-2">
-                                              <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
-                                                {index + 1}
-                                              </span>
-                                              <span className="min-w-0 font-bold leading-tight">{issue.title}</span>
-                                            </div>
-                                            <Badge
-                                              variant="outline"
-                                              className={`shrink-0 text-[10px] ${severityBadgeClass(issue.severity)}`}
-                                            >
-                                              {issue.severity}
-                                            </Badge>
-                                          </div>
-                                          <p><span className="font-bold">Finding:</span> {issue.detail}</p>
-                                          {issue.suggestion && <SuggestionCallout text={issue.suggestion} />}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      </div>
-                    </details>
-                  ))}
-                </CardContent>
-              </Card>
-              );
-            })}
-          </div>
+          <ToolAnalysisReportView report={report} />
         </div>
       )}
     </div>
