@@ -69,7 +69,10 @@ export const workspaceApiClient = {
       scenarioAssistantAgentName?: string;
       oauthDebuggerEnabled?: boolean;
     }>('/api/settings'),
-  updateSettings: (patch: { scenarioAssistantAgentName?: string; oauthDebuggerEnabled?: boolean }) =>
+  updateSettings: (patch: {
+    scenarioAssistantAgentName?: string;
+    oauthDebuggerEnabled?: boolean;
+  }) =>
     request<{
       workspaceRoot: string;
       configsDir: string;
@@ -278,17 +281,23 @@ export const workspaceApiClient = {
     return () => close();
   },
   createOAuthDebuggerSession: (config: OAuthDebuggerSessionConfig) =>
-    request<{ sessionId: string; session: OAuthDebuggerSessionView }>('/api/oauth-debugger/sessions', {
-      method: 'POST',
-      body: JSON.stringify(config)
-    }),
+    request<{ sessionId: string; session: OAuthDebuggerSessionView }>(
+      '/api/oauth-debugger/sessions',
+      {
+        method: 'POST',
+        body: JSON.stringify(config)
+      }
+    ),
   getOAuthDebuggerSession: (sessionId: string) =>
     request<{ session: OAuthDebuggerSessionView }>(`/api/oauth-debugger/sessions/${sessionId}`),
   startOAuthDebuggerSession: (sessionId: string) =>
-    request<{ session: OAuthDebuggerSessionView }>(`/api/oauth-debugger/sessions/${sessionId}/start`, {
-      method: 'POST',
-      body: JSON.stringify({})
-    }),
+    request<{ session: OAuthDebuggerSessionView }>(
+      `/api/oauth-debugger/sessions/${sessionId}/start`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
   subscribeOAuthDebuggerSession: (
     sessionId: string,
     onEvent: (event: OAuthDebuggerSessionEvent) => void

@@ -34,7 +34,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
           ? 'api-key'
           : server.auth?.type === 'oauth_authorization_code'
             ? 'oauth2'
-          : 'none';
+            : 'none';
     return {
       id,
       name,

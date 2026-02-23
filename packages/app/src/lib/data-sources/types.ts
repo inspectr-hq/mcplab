@@ -732,12 +732,8 @@ export interface EvalDataSource {
   createOAuthDebuggerSession: (
     config: OAuthDebuggerSessionConfig
   ) => Promise<{ sessionId: string; session: OAuthDebuggerSessionView }>;
-  getOAuthDebuggerSession: (
-    sessionId: string
-  ) => Promise<{ session: OAuthDebuggerSessionView }>;
-  startOAuthDebuggerSession: (
-    sessionId: string
-  ) => Promise<{ session: OAuthDebuggerSessionView }>;
+  getOAuthDebuggerSession: (sessionId: string) => Promise<{ session: OAuthDebuggerSessionView }>;
+  startOAuthDebuggerSession: (sessionId: string) => Promise<{ session: OAuthDebuggerSessionView }>;
   subscribeOAuthDebuggerSession: (
     sessionId: string,
     onEvent: (event: OAuthDebuggerSessionEvent) => void

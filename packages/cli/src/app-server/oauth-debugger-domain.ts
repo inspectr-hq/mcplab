@@ -1095,7 +1095,9 @@ export function createOAuthDebuggerSession(params: {
 }): OAuthDebuggerSession {
   const runtime = normalizeRuntime(params.config.runtime);
   const serverOauth =
-    params.serverConfig?.auth?.type === 'oauth_authorization_code' ? params.serverConfig.auth : undefined;
+    params.serverConfig?.auth?.type === 'oauth_authorization_code'
+      ? params.serverConfig.auth
+      : undefined;
   const clientConfig: OAuthDebuggerSessionConfigInput['clientConfig'] =
     params.config.registrationMethod === 'pre_registered'
       ? {
@@ -1127,7 +1129,7 @@ export function createOAuthDebuggerSession(params: {
             ? runtime.scopes
             : serverOauth?.scope
               ? serverOauth.scope.split(/\s+/).filter(Boolean)
-              : [],
+              : []
       },
       display: {
         showSensitiveValues: params.config.display?.showSensitiveValues !== false
