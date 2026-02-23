@@ -13,6 +13,7 @@ import ConfigEditor from "./pages/ConfigEditor";
 import ManageServers from "./pages/ManageServers";
 import ManageAgents from "./pages/ManageAgents";
 import ManageScenarios from "./pages/ManageScenarios";
+import SettingsPage from "./pages/Settings";
 import RunEvaluation from "./pages/RunEvaluation";
 import Results from "./pages/Results";
 import ResultDetail from "./pages/ResultDetail";
@@ -40,6 +41,7 @@ const App = () => (
                   <Route path="/libraries/agents" element={<ManageAgents />} />
                   <Route path="/libraries/scenarios" element={<ManageScenarios />} />
                   <Route path="/libraries/scenarios/:scenarioId" element={<ManageScenarios />} />
+                  <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/run" element={<RunEvaluation />} />
                   <Route path="/results" element={<Results />} />
                   <Route path="/results/:id" element={<ResultDetail />} />

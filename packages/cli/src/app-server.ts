@@ -52,6 +52,7 @@ interface AppSettings {
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;
+  scenarioAssistantAgentName?: string;
 }
 
 interface ConfigRecord {
@@ -351,6 +352,39 @@ function parseBody(req: IncomingMessage): Promise<any> {
     });
     req.on('error', rejectBody);
   });
+}
+
+interface AppSettingsOverrides {
+  scenario_assistant_agent_name?: string;
+}
+
+function settingsOverridesFilePath(settings: AppSettings): string {
+  return join(settings.librariesDir, '.mcplab-app-settings.yaml');
+}
+
+function loadSettingsOverrides(settings: AppSettings): AppSettingsOverrides {
+  const filePath = settingsOverridesFilePath(settings);
+  if (!existsSync(filePath)) return {};
+  try {
+    const parsed = parseYaml(readFileSync(filePath, 'utf8')) as AppSettingsOverrides | undefined;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function applySettingsOverrides(settings: AppSettings): void {
+  const overrides = loadSettingsOverrides(settings);
+  settings.scenarioAssistantAgentName = overrides.scenario_assistant_agent_name?.trim() || undefined;
+}
+
+function persistSettingsOverrides(settings: AppSettings): void {
+  const payload: AppSettingsOverrides = {
+    ...(settings.scenarioAssistantAgentName
+      ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
+      : {})
+  };
+  writeFileSync(settingsOverridesFilePath(settings), `${stringifyYaml(payload)}\n`, 'utf8');
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -701,6 +735,31 @@ function resolveAssistantAgentFromConfig(
     );
   }
   return agent;
+}
+
+function resolveAssistantAgentFromLibraries(
+  libraries: ReturnType<typeof readLibraries>,
+  selectedAssistantAgentName: string
+): AgentConfig {
+  const agent = libraries.agents[selectedAssistantAgentName];
+  if (!agent) {
+    throw new Error(
+      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
+    );
+  }
+  return agent;
+}
+
+function pickDefaultAssistantAgentName(params: {
+  requested?: string;
+  settingsDefault?: string;
+  agentNames: string[];
+}): string {
+  const requested = params.requested?.trim();
+  if (requested) return requested;
+  const settingsDefault = params.settingsDefault?.trim();
+  if (settingsDefault) return settingsDefault;
+  return params.agentNames[0] ?? '';
 }
 
 function ensureInsideRoot(rootDir: string, candidatePath: string): string {
@@ -1203,6 +1262,7 @@ export async function startAppServer(options: AppServerOptions) {
   mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+  applySettingsOverrides(settings);
 
   const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
   const viteDevTarget = 'http://127.0.0.1:8685';
@@ -1291,6 +1351,12 @@ export async function startAppServer(options: AppServerOptions) {
           settings.librariesDir = resolve(String(body.librariesDir));
           mkdirSync(settings.librariesDir, { recursive: true });
           mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+          applySettingsOverrides(settings);
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
+          const next = String(body.scenarioAssistantAgentName ?? '').trim();
+          settings.scenarioAssistantAgentName = next || undefined;
+          persistSettingsOverrides(settings);
         }
         asJson(res, 200, settings);
         return;
@@ -1317,38 +1383,55 @@ export async function startAppServer(options: AppServerOptions) {
         const body = await parseBody(req);
         const configPathRaw = body.configPath ? String(body.configPath).trim() : '';
         const scenarioId = String(body.scenarioId ?? '').trim();
-        const selectedAssistantAgentName = String(body.selectedAssistantAgentName ?? '').trim();
+        const requestedAssistantAgentName = String(body.selectedAssistantAgentName ?? '').trim();
         const context = (body.context ?? {}) as ScenarioAssistantContextInput;
-        if (!configPathRaw) {
-          asJson(res, 400, {
-            error: 'configPath is required for Scenario Assistant in workspace mode'
-          });
-          return;
-        }
         if (!scenarioId) {
           asJson(res, 400, { error: 'scenarioId is required' });
-          return;
-        }
-        if (!selectedAssistantAgentName) {
-          asJson(res, 400, { error: 'selectedAssistantAgentName is required' });
           return;
         }
         if (!context?.scenario || typeof context.scenario !== 'object') {
           asJson(res, 400, { error: 'context.scenario is required' });
           return;
         }
-        const configPath = isAbsolute(configPathRaw)
-          ? ensureInsideRoot(settings.configsDir, configPathRaw)
-          : ensureInsideRoot(settings.configsDir, join(settings.configsDir, configPathRaw));
-        if (!existsSync(configPath)) {
-          asJson(res, 404, { error: `Config not found: ${configPath}` });
-          return;
+        let configPath: string | undefined;
+        let agentConfig: AgentConfig;
+        let serversByName: EvalConfig['servers'];
+        let warnings: string[] = [];
+        let selectedAssistantAgentName = '';
+        if (configPathRaw) {
+          configPath = isAbsolute(configPathRaw)
+            ? ensureInsideRoot(settings.configsDir, configPathRaw)
+            : ensureInsideRoot(settings.configsDir, join(settings.configsDir, configPathRaw));
+          if (!existsSync(configPath)) {
+            asJson(res, 404, { error: `Config not found: ${configPath}` });
+            return;
+          }
+          const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+          warnings = [...(loaded.warnings ?? [])];
+          selectedAssistantAgentName = pickDefaultAssistantAgentName({
+            requested: requestedAssistantAgentName,
+            agentNames: Object.keys(loaded.config.agents)
+          });
+          if (!selectedAssistantAgentName) {
+            asJson(res, 400, { error: 'No agents available for Scenario Assistant in this MCP Evaluation.' });
+            return;
+          }
+          agentConfig = resolveAssistantAgentFromConfig(loaded.config, selectedAssistantAgentName);
+          serversByName = loaded.config.servers;
+        } else {
+          const libraries = readLibraries(settings.librariesDir);
+          selectedAssistantAgentName = pickDefaultAssistantAgentName({
+            requested: requestedAssistantAgentName,
+            settingsDefault: settings.scenarioAssistantAgentName,
+            agentNames: Object.keys(libraries.agents)
+          });
+          if (!selectedAssistantAgentName) {
+            asJson(res, 400, { error: 'No library agents available for Scenario Assistant. Add an agent first.' });
+            return;
+          }
+          agentConfig = resolveAssistantAgentFromLibraries(libraries, selectedAssistantAgentName);
+          serversByName = libraries.servers;
         }
-        const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
-        const agentConfig = resolveAssistantAgentFromConfig(
-          loaded.config,
-          selectedAssistantAgentName
-        );
         const session: ScenarioAssistantSession = {
           id: `sas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           createdAt: Date.now(),
@@ -1363,7 +1446,7 @@ export async function startAppServer(options: AppServerOptions) {
           pendingToolCalls: [],
           chatMessages: [],
           llmMessages: [],
-          warnings: [...(loaded.warnings ?? [])]
+          warnings
         };
         session.chatMessages.push({
           id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1372,7 +1455,7 @@ export async function startAppServer(options: AppServerOptions) {
           createdAt: new Date().toISOString()
         });
         const selectedServerNames = Array.from(new Set(context.scenario.serverNames ?? []));
-        await preloadAssistantTools(session, loaded.config.servers, selectedServerNames);
+        await preloadAssistantTools(session, serversByName, selectedServerNames);
         assistantSessions.set(session.id, session);
         asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
         return;

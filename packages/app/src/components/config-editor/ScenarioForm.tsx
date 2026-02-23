@@ -173,9 +173,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
               className="h-7 px-2 text-xs"
               onClick={() => setAssistantOpen(true)}
               title={
-                !configPath
-                  ? "Save the config first to use Scenario Assistant"
-                  : agents.length === 0
+                agents.length === 0
                     ? "Add at least one agent in the config"
                     : scenario.serverIds.length === 0
                       ? "Select at least one server for this scenario"

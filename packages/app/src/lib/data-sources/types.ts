@@ -262,6 +262,15 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
+export interface WorkspaceSettings {
+  workspaceRoot: string;
+  configsDir: string;
+  runsDir: string;
+  snapshotsDir: string;
+  librariesDir: string;
+  scenarioAssistantAgentName?: string;
+}
+
 export interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
@@ -373,6 +382,10 @@ export interface EvalDataSource {
   listProviderModels: (
     provider: 'anthropic' | 'openai' | 'azure'
   ) => Promise<ProviderModelsResponse>;
+  getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
+  updateWorkspaceSettings: (patch: {
+    scenarioAssistantAgentName?: string;
+  }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (params: {
     configId?: string;
     configPath?: string;

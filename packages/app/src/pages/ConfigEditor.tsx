@@ -959,7 +959,7 @@ const ConfigEditor = () => {
                   <div className="text-sm font-medium">Referenced scenario order</div>
                   <Button size="sm" variant="outline" asChild>
                     <Link to="/libraries/scenarios">
-                      Edit in Manage Scenarios
+                      Scenarios Overview
                       <ExternalLink className="ml-1.5 h-3 w-3" />
                     </Link>
                   </Button>
@@ -969,6 +969,22 @@ const ConfigEditor = () => {
                     <div key={`scenario-order-${ref}-${index}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
                       <span>{index + 1}. {ref}</span>
                       <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          asChild
+                        >
+                          <Link
+                            to={
+                              findLibraryScenarioByRef(ref)
+                                ? `/libraries/scenarios/${encodeURIComponent(findLibraryScenarioByRef(ref)!.id)}`
+                                : "/libraries/scenarios"
+                            }
+                          >
+                            Edit
+                          </Link>
+                        </Button>
                         {!readOnly && (
                           <>
                             <Button

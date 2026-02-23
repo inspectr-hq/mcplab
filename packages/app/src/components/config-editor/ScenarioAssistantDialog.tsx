@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bot, Loader2, Sparkles, Wrench } from "lucide-react";
+import { Fragment, useEffect, useState, useRef } from "react";
+import { Bot, CheckCircle2, Loader2, Sparkles, User, Wrench } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
 import type {
   ScenarioAssistantSessionView,
@@ -55,9 +56,11 @@ export function ScenarioAssistantDialog({
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
   const [selectedAssistantAgentName, setSelectedAssistantAgentName] = useState(
     defaultAssistantAgentName || agents[0]?.name || ""
   );
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (open && !selectedAssistantAgentName && agents[0]?.name) {
@@ -68,7 +71,7 @@ export function ScenarioAssistantDialog({
   useEffect(() => {
     if (!open) return;
     if (mode !== "workspace") return;
-    if (!configPath || !selectedAssistantAgentName || sessionId) return;
+    if (!selectedAssistantAgentName || sessionId) return;
     let cancelled = false;
     setLoading(true);
     source
@@ -149,17 +152,26 @@ export function ScenarioAssistantDialog({
     setSessionId(null);
     setSession(null);
     setInput("");
+    setAppliedSuggestionKeys(new Set());
     void source.closeScenarioAssistantSession(id).catch(() => {});
   }, [open, sessionId, source]);
 
-  const latestSuggestions = useMemo(() => {
-    if (!session) return undefined;
-    const messages = [...session.messages].reverse();
-    return messages.find((message) => message.suggestions)?.suggestions;
-  }, [session]);
+  useEffect(() => {
+    if (!open) return;
+    const timeout = window.setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [
+    open,
+    loading,
+    session?.messages.length,
+    session?.pendingToolCalls.length,
+    session?.warnings.length
+  ]);
 
   const canUseAssistant =
-    mode === "workspace" && Boolean(configPath) && agents.length > 0 && scenario.serverIds.length > 0;
+    mode === "workspace" && agents.length > 0 && scenario.serverIds.length > 0 && Boolean(selectedAssistantAgentName);
 
   const sendMessage = async (message: string) => {
     if (!sessionId) return;
@@ -215,7 +227,11 @@ export function ScenarioAssistantDialog({
     }
   };
 
-  const applySuggestions = (suggestions: ScenarioAssistantSuggestionBundle | undefined, key: "prompt" | "evalRules" | "extractRules" | "snapshotEval") => {
+  const applySuggestions = (
+    messageId: string | undefined,
+    suggestions: ScenarioAssistantSuggestionBundle | undefined,
+    key: "prompt" | "evalRules" | "extractRules" | "snapshotEval"
+  ) => {
     if (!suggestions) return;
     if (key === "prompt" && suggestions.prompt) {
       onApplyPatch({ prompt: suggestions.prompt.replacement });
@@ -233,6 +249,10 @@ export function ScenarioAssistantDialog({
           baselineSnapshotId: suggestions.snapshotEval.patch.baselineSnapshotId
         }
       });
+    }
+    if (messageId) {
+      const composite = `${messageId}:${key}`;
+      setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
     }
     toast({ title: "Applied suggestion", description: `Updated ${key}` });
   };
@@ -252,11 +272,10 @@ export function ScenarioAssistantDialog({
 
         {!canUseAssistant ? (
           <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            Scenario Assistant is available in workspace mode for saved configs with at least one agent and one selected server.
+            Scenario Assistant is available in workspace mode with a configured assistant agent and at least one selected server on the scenario.
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1.35fr_1fr]">
-            <div className="min-h-0 flex flex-col gap-3">
+          <div className="min-h-0 flex flex-1 flex-col gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Assistant Agent</Label>
@@ -320,21 +339,70 @@ export function ScenarioAssistantDialog({
                     </div>
                   ))}
                   {session?.messages.map((message) => (
-                    <div key={message.id} className="space-y-2">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : null}
-                        <Badge variant="outline" className="text-[10px] uppercase">{message.role}</Badge>
-                        <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+                    <Fragment key={message.id}>
+                      <div className="space-y-2">
+                        <AssistantChatMessageRow message={message} />
+                        {message.pendingToolCallId && (
+                          <div className="text-xs text-muted-foreground">
+                            Tool call approval required below.
+                          </div>
+                        )}
                       </div>
-                      <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm whitespace-pre-wrap">
-                        {message.text}
-                      </div>
-                      {message.pendingToolCallId && (
-                        <div className="text-xs text-muted-foreground">
-                          Tool call approval required below.
+                      {message.suggestions && (
+                        <div className="ml-0 space-y-3 rounded-md border border-dashed bg-muted/10 p-3">
+                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Structured Suggestions
+                          </div>
+                          {message.suggestions.prompt && (
+                            <SuggestionCard
+                              title="Prompt"
+                              rationale={message.suggestions.prompt.rationale}
+                              preview={message.suggestions.prompt.replacement}
+                              applied={appliedSuggestionKeys.has(`${message.id}:prompt`)}
+                              onApply={() => applySuggestions(message.id, message.suggestions, "prompt")}
+                            />
+                          )}
+                          {message.suggestions.evalRules && (
+                            <SuggestionCard
+                              title="Eval Rules"
+                              rationale={message.suggestions.evalRules.rationale}
+                              preview={JSON.stringify(message.suggestions.evalRules.replacement, null, 2)}
+                              applied={appliedSuggestionKeys.has(`${message.id}:evalRules`)}
+                              onApply={() => applySuggestions(message.id, message.suggestions, "evalRules")}
+                            />
+                          )}
+                          {message.suggestions.extractRules && (
+                            <SuggestionCard
+                              title="Extract Rules"
+                              rationale={message.suggestions.extractRules.rationale}
+                              preview={JSON.stringify(message.suggestions.extractRules.replacement, null, 2)}
+                              applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
+                              onApply={() => applySuggestions(message.id, message.suggestions, "extractRules")}
+                            />
+                          )}
+                          {message.suggestions.snapshotEval && (
+                            <SuggestionCard
+                              title="Snapshot Settings"
+                              rationale={message.suggestions.snapshotEval.rationale}
+                              preview={JSON.stringify(message.suggestions.snapshotEval.patch, null, 2)}
+                              applied={appliedSuggestionKeys.has(`${message.id}:snapshotEval`)}
+                              onApply={() => applySuggestions(message.id, message.suggestions, "snapshotEval")}
+                            />
+                          )}
+                          {(message.suggestions.notes ?? []).length > 0 && (
+                            <div className="space-y-2 rounded-md border p-3">
+                              <h5 className="text-sm font-medium">Notes</h5>
+                              <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                                {message.suggestions.notes?.map((note, index) => (
+                                  <li key={`${message.id}-note-${index}`}>{note}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
+                    </Fragment>
                   ))}
                   {(session?.pendingToolCalls ?? []).map((call) => (
                     <div key={call.id} className="rounded-md border border-dashed p-3 space-y-2">
@@ -359,6 +427,7 @@ export function ScenarioAssistantDialog({
                       Starting assistant session...
                     </div>
                   )}
+                  <div ref={chatEndRef} />
                 </div>
               </ScrollArea>
 
@@ -379,68 +448,6 @@ export function ScenarioAssistantDialog({
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
                 </Button>
               </div>
-            </div>
-
-            <div className="min-h-0 flex flex-col rounded-md border">
-              <div className="px-4 py-3">
-                <h4 className="text-sm font-semibold">Structured Suggestions</h4>
-                <p className="text-xs text-muted-foreground">
-                  Apply sections individually. Changes affect only this scenario draft.
-                </p>
-              </div>
-              <Separator />
-              <ScrollArea className="min-h-0 flex-1 p-4">
-                <div className="space-y-4">
-                  {!latestSuggestions && (
-                    <p className="text-xs text-muted-foreground">
-                      Ask the assistant for rules, extracts, or prompt improvements to see structured suggestions here.
-                    </p>
-                  )}
-                  {latestSuggestions?.prompt && (
-                    <SuggestionCard
-                      title="Prompt"
-                      rationale={latestSuggestions.prompt.rationale}
-                      preview={latestSuggestions.prompt.replacement}
-                      onApply={() => applySuggestions(latestSuggestions, "prompt")}
-                    />
-                  )}
-                  {latestSuggestions?.evalRules && (
-                    <SuggestionCard
-                      title="Eval Rules"
-                      rationale={latestSuggestions.evalRules.rationale}
-                      preview={JSON.stringify(latestSuggestions.evalRules.replacement, null, 2)}
-                      onApply={() => applySuggestions(latestSuggestions, "evalRules")}
-                    />
-                  )}
-                  {latestSuggestions?.extractRules && (
-                    <SuggestionCard
-                      title="Extract Rules"
-                      rationale={latestSuggestions.extractRules.rationale}
-                      preview={JSON.stringify(latestSuggestions.extractRules.replacement, null, 2)}
-                      onApply={() => applySuggestions(latestSuggestions, "extractRules")}
-                    />
-                  )}
-                  {latestSuggestions?.snapshotEval && (
-                    <SuggestionCard
-                      title="Snapshot Settings"
-                      rationale={latestSuggestions.snapshotEval.rationale}
-                      preview={JSON.stringify(latestSuggestions.snapshotEval.patch, null, 2)}
-                      onApply={() => applySuggestions(latestSuggestions, "snapshotEval")}
-                    />
-                  )}
-                  {(latestSuggestions?.notes ?? []).length > 0 && (
-                    <div className="space-y-2 rounded-md border p-3">
-                      <h5 className="text-sm font-medium">Notes</h5>
-                      <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                        {latestSuggestions?.notes?.map((note, index) => (
-                          <li key={`${note}-${index}`}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-            </div>
           </div>
         )}
       </DialogContent>
@@ -452,19 +459,28 @@ function SuggestionCard({
   title,
   rationale,
   preview,
+  applied = false,
   onApply
 }: {
   title: string;
   rationale?: string;
   preview: string;
+  applied?: boolean;
   onApply: () => void;
 }) {
   return (
-    <div className="space-y-2 rounded-md border p-3">
+    <div className={`space-y-2 rounded-md border p-3 ${applied ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <h5 className="text-sm font-medium">{title}</h5>
-        <Button type="button" size="sm" variant="outline" onClick={onApply}>
-          Apply
+        <Button type="button" size="sm" variant={applied ? "secondary" : "outline"} onClick={onApply} disabled={applied}>
+          {applied ? (
+            <>
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              Applied
+            </>
+          ) : (
+            "Apply"
+          )}
         </Button>
       </div>
       {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
@@ -473,3 +489,316 @@ function SuggestionCard({
   );
 }
 
+function AssistantChatMessageRow({
+  message
+}: {
+  message: ScenarioAssistantSessionView["messages"][number];
+}) {
+  const role = message.role;
+  if (role === "tool") {
+    return (
+      <div className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm">
+        <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+          <Wrench className="h-3.5 w-3.5" />
+          Tool
+          <span className="font-normal normal-case text-sky-700/80">
+            {new Date(message.createdAt).toLocaleTimeString()}
+          </span>
+        </div>
+        <p className="whitespace-pre-wrap text-sky-900">{message.text}</p>
+      </div>
+    );
+  }
+
+  if (role === "system") {
+    return (
+      <div className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="mb-1 font-semibold uppercase tracking-wide">System</div>
+        <MarkdownContent text={message.text} variant="system" />
+      </div>
+    );
+  }
+
+  const isUser = role === "user";
+  const Icon = isUser ? User : Bot;
+  return (
+    <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
+      {!isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+      <div
+        className={`max-w-[92%] rounded-md border px-3 py-2 text-sm ${
+          isUser
+            ? "border-primary/30 bg-primary/10"
+            : "border-muted bg-muted/40"
+        }`}
+      >
+        <div className={`mb-1 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "justify-end" : ""}`}>
+          <span>{isUser ? "You" : "Assistant"}</span>
+          <span className="font-normal">{new Date(message.createdAt).toLocaleTimeString()}</span>
+        </div>
+        {isUser ? (
+          <p className="whitespace-pre-wrap">{message.text}</p>
+        ) : (
+          <MarkdownContent text={message.text} variant="assistant" />
+        )}
+      </div>
+      {isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarkdownContent({
+  text,
+  variant = "assistant"
+}: {
+  text: string;
+  variant?: "assistant" | "system";
+}) {
+  const blocks = parseMarkdownBlocks(text);
+  return (
+    <div className={cn("space-y-2", variant === "system" && "text-xs")}>
+      {blocks.map((block, index) => (
+        <Fragment key={`md-${index}`}>
+          {renderMarkdownBlock(block, index, variant)}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+type MarkdownBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
+  | { type: "hr" }
+  | { type: "code"; lang?: string; code: string }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function parseMarkdownBlocks(input: string): MarkdownBlock[] {
+  const lines = input.replace(/\r\n/g, "\n").split("\n");
+  const blocks: MarkdownBlock[] = [];
+  let i = 0;
+
+  const isBlank = (line: string) => line.trim() === "";
+  const isFence = (line: string) => line.trimStart().startsWith("```");
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (isBlank(line)) {
+      i += 1;
+      continue;
+    }
+
+    if (isFence(line)) {
+      const lang = trimmed.replace(/^```/, "").trim() || undefined;
+      i += 1;
+      const codeLines: string[] = [];
+      while (i < lines.length && !isFence(lines[i])) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length && isFence(lines[i])) i += 1;
+      blocks.push({ type: "code", lang, code: codeLines.join("\n") });
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
+      blocks.push({ type: "hr" });
+      i += 1;
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      blocks.push({
+        type: "heading",
+        level: headingMatch[1].length as 1 | 2 | 3 | 4,
+        text: headingMatch[2].trim()
+      });
+      i += 1;
+      continue;
+    }
+
+    if (looksLikeMarkdownTable(lines, i)) {
+      const header = splitTableRow(lines[i]);
+      i += 2; // skip separator
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].includes("|") && !isBlank(lines[i])) {
+        rows.push(splitTableRow(lines[i]));
+        i += 1;
+      }
+      blocks.push({ type: "table", headers: header, rows });
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+/);
+    const bulletMatch = trimmed.match(/^[-*+]\s+/);
+    if (orderedMatch || bulletMatch) {
+      const ordered = Boolean(orderedMatch);
+      const items: string[] = [];
+      while (i < lines.length) {
+        const current = lines[i].trim();
+        if (ordered ? /^\d+\.\s+/.test(current) : /^[-*+]\s+/.test(current)) {
+          items.push(current.replace(ordered ? /^\d+\.\s+/ : /^[-*+]\s+/, ""));
+          i += 1;
+          continue;
+        }
+        if (isBlank(lines[i])) {
+          i += 1;
+        }
+        break;
+      }
+      blocks.push({ type: "list", ordered, items });
+      continue;
+    }
+
+    const paragraphLines = [line];
+    i += 1;
+    while (i < lines.length) {
+      const next = lines[i];
+      const nextTrimmed = next.trim();
+      if (
+        isBlank(next) ||
+        isFence(next) ||
+        /^---+$/.test(nextTrimmed) ||
+        /^#{1,4}\s+/.test(nextTrimmed) ||
+        looksLikeMarkdownTable(lines, i) ||
+        /^\d+\.\s+/.test(nextTrimmed) ||
+        /^[-*+]\s+/.test(nextTrimmed)
+      ) {
+        break;
+      }
+      paragraphLines.push(next);
+      i += 1;
+    }
+    blocks.push({ type: "paragraph", text: paragraphLines.join("\n") });
+  }
+
+  return blocks;
+}
+
+function looksLikeMarkdownTable(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) return false;
+  const header = lines[index].trim();
+  const separator = lines[index + 1].trim();
+  if (!header.includes("|")) return false;
+  return /^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(separator);
+}
+
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownBlock(
+  block: MarkdownBlock,
+  index: number,
+  variant: "assistant" | "system"
+) {
+  if (block.type === "hr") {
+    return <hr className="border-border/60" />;
+  }
+  if (block.type === "heading") {
+    const className =
+      block.level === 1
+        ? "text-base font-semibold"
+        : block.level === 2
+          ? "text-sm font-semibold"
+          : "text-sm font-medium";
+    return <h4 className={className}>{renderInlineMarkdown(block.text, `${index}-h`)}</h4>;
+  }
+  if (block.type === "paragraph") {
+    return (
+      <p className={cn("whitespace-pre-wrap leading-relaxed", variant === "system" && "leading-normal")}>
+        {renderInlineMarkdown(block.text, `${index}-p`)}
+      </p>
+    );
+  }
+  if (block.type === "code") {
+    return (
+      <div className="rounded-md border bg-muted/70">
+        {block.lang && (
+          <div className="border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            {block.lang}
+          </div>
+        )}
+        <pre className="max-h-72 overflow-auto p-2 text-xs">
+          <code>{block.code}</code>
+        </pre>
+      </div>
+    );
+  }
+  if (block.type === "list") {
+    const Tag = block.ordered ? "ol" : "ul";
+    return (
+      <Tag className={cn("space-y-1 pl-5", block.ordered ? "list-decimal" : "list-disc")}>
+        {block.items.map((item, itemIndex) => (
+          <li key={`${index}-li-${itemIndex}`} className="leading-relaxed">
+            {renderInlineMarkdown(item, `${index}-li-${itemIndex}`)}
+          </li>
+        ))}
+      </Tag>
+    );
+  }
+  if (block.type === "table") {
+    return (
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[480px] border-collapse text-xs">
+          <thead className="bg-muted/40">
+            <tr>
+              {block.headers.map((header, headerIndex) => (
+                <th
+                  key={`${index}-th-${headerIndex}`}
+                  className="border-b px-2 py-1.5 text-left font-semibold align-top"
+                >
+                  {renderInlineMarkdown(header, `${index}-thc-${headerIndex}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={`${index}-row-${rowIndex}`} className="border-t">
+                {row.map((cell, cellIndex) => (
+                  <td key={`${index}-td-${rowIndex}-${cellIndex}`} className="px-2 py-1.5 align-top">
+                    {renderInlineMarkdown(cell, `${index}-tdc-${rowIndex}-${cellIndex}`)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return null;
+}
+
+function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={`${keyBase}-${index}`} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
+  });
+}

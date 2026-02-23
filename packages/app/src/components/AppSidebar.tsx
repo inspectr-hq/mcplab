@@ -1,5 +1,6 @@
 import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -38,6 +39,10 @@ const navSections = [
       { title: "Results", url: "/results", icon: BarChart3 },
       { title: "Compare", url: "/compare", icon: GitCompare }
     ]
+  },
+  {
+    title: "Application",
+    items: [{ title: "Settings", url: "/settings", icon: Settings }]
   }
 ] as const;
 
@@ -50,8 +55,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            E
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent/50 ring-1 ring-sidebar-border">
+            <IconInspectr width={22} height={22} from="#f59e0b" to="#facc15" />
           </div>
           {!collapsed && (
             <div className="flex flex-col">

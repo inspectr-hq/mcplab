@@ -128,6 +128,12 @@ export const demoSource: EvalDataSource = {
       source: 'demo defaults'
     };
   },
+  async getWorkspaceSettings() {
+    return null;
+  },
+  async updateWorkspaceSettings() {
+    return null;
+  },
   async createScenarioAssistantSession() {
     throw new Error('Scenario Assistant is only available in workspace mode.');
   },

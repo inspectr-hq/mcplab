@@ -46,7 +46,20 @@ export const workspaceApiClient = {
       runsDir: string;
       snapshotsDir: string;
       librariesDir: string;
+      scenarioAssistantAgentName?: string;
     }>('/api/settings'),
+  updateSettings: (patch: { scenarioAssistantAgentName?: string }) =>
+    request<{
+      workspaceRoot: string;
+      configsDir: string;
+      runsDir: string;
+      snapshotsDir: string;
+      librariesDir: string;
+      scenarioAssistantAgentName?: string;
+    }>('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch)
+    }),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
     request<WorkspaceConfigRecord>('/api/configs', {

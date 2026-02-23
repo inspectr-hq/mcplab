@@ -303,7 +303,7 @@ const RunEvaluation = () => {
         <CardContent className="pt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Configuration</Label>
+              <Label>MCP Evaluation</Label>
               <div className="flex items-center gap-2">
                 <Select value={configId} onValueChange={setConfigId}>
                   <SelectTrigger><SelectValue placeholder="Select a config" /></SelectTrigger>

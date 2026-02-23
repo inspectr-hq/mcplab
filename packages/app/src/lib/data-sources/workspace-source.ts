@@ -115,6 +115,12 @@ export const workspaceSource: EvalDataSource = {
   async listProviderModels(provider) {
     return workspaceApiClient.listProviderModels(provider);
   },
+  async getWorkspaceSettings() {
+    return workspaceApiClient.getSettings();
+  },
+  async updateWorkspaceSettings(patch) {
+    return workspaceApiClient.updateSettings(patch);
+  },
   async createScenarioAssistantSession(params) {
     return workspaceApiClient.createScenarioAssistantSession(params);
   },

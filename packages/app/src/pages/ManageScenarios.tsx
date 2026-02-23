@@ -2,6 +2,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { useLibraries } from "@/contexts/LibraryContext";
+import { useDataSource } from "@/contexts/DataSourceContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -9,16 +10,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RefreshCw, ExternalLink, Pencil, ArrowLeft, Search, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const ManageScenarios = () => {
   const { scenarioId } = useParams<{ scenarioId?: string }>();
   const navigate = useNavigate();
+  const { mode, source } = useDataSource();
   const { scenarios, setScenarios, agents, servers, reload, loading } = useLibraries();
   const [query, setQuery] = useState("");
   const [serverFilter, setServerFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<"name" | "id" | "servers" | "evalRules" | "extractRules">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>("");
 
   const selectedScenarioId = scenarioId ? decodeURIComponent(scenarioId) : undefined;
   const selectedIndex = selectedScenarioId
@@ -115,6 +118,27 @@ const ManageScenarios = () => {
     return next;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarios, query, serverFilter, sortBy, sortDir, servers]);
+
+  useEffect(() => {
+    if (mode !== "workspace") return;
+    let active = true;
+    source
+      .getWorkspaceSettings()
+      .then((settings) => {
+        if (!active || !settings) return;
+        setScenarioAssistantAgentName(settings.scenarioAssistantAgentName ?? "");
+      })
+      .catch(() => {
+        if (!active) return;
+        setScenarioAssistantAgentName("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [mode, source]);
+
+  const effectiveAssistantAgentName =
+    scenarioAssistantAgentName || agents[0]?.name || "";
 
   return (
     <div className="space-y-6">
@@ -309,6 +333,7 @@ const ManageScenarios = () => {
               scenarios={[selectedScenario]}
               agents={agents}
               servers={servers}
+              defaultAssistantAgentName={effectiveAssistantAgentName}
               onChange={(next) => {
                 void handleSaveSingle(next);
               }}
