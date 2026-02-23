@@ -12,7 +12,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { CircleHelp, Download, Lightbulb, Loader2, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, CircleHelp, Download, Lightbulb, Loader2, RefreshCw, Search } from "lucide-react";
 
 const ALL_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -127,8 +127,8 @@ function formatToolDiscoveryWarning(serverName: string, warning: string): string
 
 function SuggestionCallout({ text }: { text: string }) {
   return (
-    <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] text-emerald-900">
-      <div className="mb-1 inline-flex items-center gap-1 font-medium">
+    <div className="mt-2 rounded-md border border-sky-200 bg-sky-50/70 px-2.5 py-2 text-[11px] text-slate-800">
+      <div className="mb-1 inline-flex items-center gap-1 text-sky-800 font-medium">
         <Lightbulb className="h-3.5 w-3.5" />
         Suggested improvement
       </div>
@@ -838,7 +838,7 @@ const ToolAnalysisPage = () => {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {ALL_SEVERITIES.map((severity) => {
+                {ALL_SEVERITIES.filter((severity) => report.summary.issueCounts[severity] > 0).map((severity) => {
                   const active = reportSeveritySet.has(severity);
                   return (
                     <button
@@ -903,17 +903,22 @@ const ToolAnalysisPage = () => {
                     </Alert>
                   )}
                   {filteredTools.map((tool) => (
-                    <div key={tool.publicToolName} className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="font-mono text-sm">{tool.publicToolName}</div>
-                          {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
+                    <details key={tool.publicToolName} className="group rounded-md border p-3">
+                      <summary className="cursor-pointer list-none">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-mono text-sm">{tool.publicToolName}</div>
+                            {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={tool.safetyClassification === "read_like" ? "secondary" : "outline"}>
+                              {tool.safetyClassification}
+                            </Badge>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </div>
                         </div>
-                        <Badge variant={tool.safetyClassification === "read_like" ? "secondary" : "outline"}>
-                          {tool.safetyClassification}
-                        </Badge>
-                      </div>
-
+                      </summary>
+                      <div className="mt-3 space-y-2">
                       {tool.metadataReview && (
                         <div className="space-y-1">
                           <div className="text-xs font-medium">Metadata review</div>
@@ -927,18 +932,23 @@ const ToolAnalysisPage = () => {
                                 .filter((issue) =>
                                   reportSeveritySet.has(issue.severity as FindingSeverity)
                                 )
-                                .map((issue) => (
+                                .map((issue, index) => (
                                 <div key={issue.id} className="rounded border p-2 text-xs">
-                                  <div className="mb-1 flex items-center gap-2">
+                                  <div className="mb-1 flex items-center justify-between gap-2">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
+                                        {index + 1}
+                                      </span>
+                                      <span className="min-w-0 font-bold leading-tight">{issue.title}</span>
+                                    </div>
                                     <Badge
                                       variant="outline"
-                                      className={`text-[10px] ${severityBadgeClass(issue.severity)}`}
+                                      className={`shrink-0 text-[10px] ${severityBadgeClass(issue.severity)}`}
                                     >
                                       {issue.severity}
                                     </Badge>
-                                    <span className="font-medium">{issue.title}</span>
                                   </div>
-                                  <p>{issue.detail}</p>
+                                  <p><span className="font-bold">Finding:</span> {issue.detail}</p>
                                   {issue.suggestion && <SuggestionCallout text={issue.suggestion} />}
                                 </div>
                               ))}
@@ -967,9 +977,14 @@ const ToolAnalysisPage = () => {
                                   </div>
                                   {sample.error && <p className="text-destructive">{sample.error}</p>}
                                   {sample.observations.length > 0 && (
-                                    <ul className="ml-4 list-disc space-y-1">
+                                    <div className="mt-2">
+                                      <div className="mb-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                        Observations
+                                      </div>
+                                      <ul className="ml-4 list-disc space-y-1">
                                       {sample.observations.map((obs, idx) => <li key={`${tool.publicToolName}-obs-${sample.callIndex}-${idx}`}>{obs}</li>)}
-                                    </ul>
+                                      </ul>
+                                    </div>
                                   )}
                                   {sample.issues.length > 0 && (
                                     <div className="mt-2 space-y-1">
@@ -977,18 +992,23 @@ const ToolAnalysisPage = () => {
                                         .filter((issue) =>
                                           reportSeveritySet.has(issue.severity as FindingSeverity)
                                         )
-                                        .map((issue) => (
+                                        .map((issue, index) => (
                                         <div key={`${sample.callIndex}-${issue.id}`} className="rounded border p-2">
-                                          <div className="mb-1 flex items-center gap-2">
+                                          <div className="mb-1 flex items-center justify-between gap-2">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                              <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
+                                                {index + 1}
+                                              </span>
+                                              <span className="min-w-0 font-bold leading-tight">{issue.title}</span>
+                                            </div>
                                             <Badge
                                               variant="outline"
-                                              className={`text-[10px] ${severityBadgeClass(issue.severity)}`}
+                                              className={`shrink-0 text-[10px] ${severityBadgeClass(issue.severity)}`}
                                             >
                                               {issue.severity}
                                             </Badge>
-                                            <span className="font-medium">{issue.title}</span>
                                           </div>
-                                          <p>{issue.detail}</p>
+                                          <p><span className="font-bold">Finding:</span> {issue.detail}</p>
                                           {issue.suggestion && <SuggestionCallout text={issue.suggestion} />}
                                         </div>
                                       ))}
@@ -1000,7 +1020,8 @@ const ToolAnalysisPage = () => {
                           )}
                         </div>
                       )}
-                    </div>
+                      </div>
+                    </details>
                   ))}
                 </CardContent>
               </Card>
