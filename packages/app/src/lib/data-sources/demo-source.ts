@@ -127,5 +127,23 @@ export const demoSource: EvalDataSource = {
       kind: provider === 'azure' ? ('deployments' as const) : ('models' as const),
       source: 'demo defaults'
     };
+  },
+  async createScenarioAssistantSession() {
+    throw new Error('Scenario Assistant is only available in workspace mode.');
+  },
+  async getScenarioAssistantSession() {
+    throw new Error('Scenario Assistant is only available in workspace mode.');
+  },
+  async sendScenarioAssistantMessage() {
+    throw new Error('Scenario Assistant is only available in workspace mode.');
+  },
+  async approveScenarioAssistantToolCall() {
+    throw new Error('Scenario Assistant is only available in workspace mode.');
+  },
+  async denyScenarioAssistantToolCall() {
+    throw new Error('Scenario Assistant is only available in workspace mode.');
+  },
+  async closeScenarioAssistantSession() {
+    // no-op
   }
 };

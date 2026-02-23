@@ -114,7 +114,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     scenarios,
     scenarioRefs: record.config.scenario_refs ?? [],
     runDefaults:
-      record.config.run_defaults?.selected_agents && record.config.run_defaults.selected_agents.length > 0
+      record.config.run_defaults?.selected_agents &&
+      record.config.run_defaults.selected_agents.length > 0
         ? {
             selectedAgentNames: [...record.config.run_defaults.selected_agents]
           }

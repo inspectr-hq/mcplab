@@ -1,4 +1,4 @@
-import type { EvalConfig, EvalResult } from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
 
 export type DataMode = 'demo' | 'workspace';
 
@@ -262,6 +262,68 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
+export interface ScenarioAssistantSuggestionBundle {
+  prompt?: { replacement: string; rationale?: string };
+  evalRules?: {
+    replacement: Array<{ type: EvalRule['type']; value: string }>;
+    rationale?: string;
+  };
+  extractRules?: {
+    replacement: Array<{ name: string; pattern: string }>;
+    rationale?: string;
+  };
+  snapshotEval?: {
+    patch: {
+      enabled?: boolean;
+      baselineSnapshotId?: string;
+    };
+    rationale?: string;
+  };
+  notes?: string[];
+}
+
+export interface ScenarioAssistantMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCallId?: string;
+}
+
+export interface ScenarioAssistantPendingToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+}
+
+export interface ScenarioAssistantSessionView {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  warnings: string[];
+  toolsLoaded: number;
+  toolServers: string[];
+  messages: ScenarioAssistantMessage[];
+  pendingToolCalls: ScenarioAssistantPendingToolCall[];
+}
+
+export interface ScenarioAssistantTurnResponse {
+  type: 'assistant_message' | 'tool_call_request';
+  text: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCall?: ScenarioAssistantPendingToolCall;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -311,4 +373,47 @@ export interface EvalDataSource {
   listProviderModels: (
     provider: 'anthropic' | 'openai' | 'azure'
   ) => Promise<ProviderModelsResponse>;
+  createScenarioAssistantSession: (params: {
+    configId?: string;
+    configPath?: string;
+    scenarioId: string;
+    selectedAssistantAgentName: string;
+    context: {
+      configSnapshotPolicy?: {
+        enabled: boolean;
+        mode: 'warn' | 'fail_on_drift';
+        baselineSnapshotId?: string;
+      };
+      scenario: {
+        id: string;
+        name: string;
+        prompt: string;
+        serverNames: string[];
+        evalRules: Array<{ type: EvalRule['type']; value: string }>;
+        extractRules: Array<{ name: string; pattern: string }>;
+        snapshotEval?: {
+          enabled?: boolean;
+          baselineSnapshotId?: string;
+        };
+      };
+      availableServers: Array<{ name: string; url?: string }>;
+      availableAgents: Array<{ name: string; provider: string; model: string }>;
+    };
+  }) => Promise<{ sessionId: string; session: ScenarioAssistantSessionView }>;
+  getScenarioAssistantSession: (
+    sessionId: string
+  ) => Promise<{ session: ScenarioAssistantSessionView }>;
+  sendScenarioAssistantMessage: (
+    sessionId: string,
+    message: string
+  ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  approveScenarioAssistantToolCall: (
+    sessionId: string,
+    callId: string
+  ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  denyScenarioAssistantToolCall: (
+    sessionId: string,
+    callId: string
+  ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
 }

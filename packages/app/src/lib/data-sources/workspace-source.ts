@@ -114,5 +114,23 @@ export const workspaceSource: EvalDataSource = {
   },
   async listProviderModels(provider) {
     return workspaceApiClient.listProviderModels(provider);
+  },
+  async createScenarioAssistantSession(params) {
+    return workspaceApiClient.createScenarioAssistantSession(params);
+  },
+  async getScenarioAssistantSession(sessionId) {
+    return workspaceApiClient.getScenarioAssistantSession(sessionId);
+  },
+  async sendScenarioAssistantMessage(sessionId, message) {
+    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message);
+  },
+  async approveScenarioAssistantToolCall(sessionId, callId) {
+    return workspaceApiClient.approveScenarioAssistantToolCall(sessionId, callId);
+  },
+  async denyScenarioAssistantToolCall(sessionId, callId) {
+    return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId);
+  },
+  async closeScenarioAssistantSession(sessionId) {
+    await workspaceApiClient.closeScenarioAssistantSession(sessionId);
   }
 };

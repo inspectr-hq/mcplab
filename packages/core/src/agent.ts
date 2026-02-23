@@ -143,6 +143,23 @@ export async function runAgentScenario(params: {
   return { finalText, toolSequence, toolDurationsMs };
 }
 
+export async function chatWithAgent(params: {
+  agent: AgentConfig;
+  messages: LlmMessage[];
+  tools?: ToolDef[];
+  system?: string;
+}): Promise<LlmResponse> {
+  const { agent, messages } = params;
+  const tools = params.tools ?? [];
+  const adapter = createAdapter(agent);
+  return adapter.chat(messages, tools, {
+    model: agent.model,
+    temperature: agent.temperature,
+    max_tokens: agent.max_tokens,
+    system: params.system ?? agent.system
+  });
+}
+
 function createAdapter(agent: AgentConfig): LlmAdapter {
   if (agent.provider === 'openai') {
     return new OpenAiAdapter(process.env.OPENAI_API_KEY);

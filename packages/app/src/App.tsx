@@ -39,6 +39,7 @@ const App = () => (
                   <Route path="/libraries/servers" element={<ManageServers />} />
                   <Route path="/libraries/agents" element={<ManageAgents />} />
                   <Route path="/libraries/scenarios" element={<ManageScenarios />} />
+                  <Route path="/libraries/scenarios/:scenarioId" element={<ManageScenarios />} />
                   <Route path="/run" element={<RunEvaluation />} />
                   <Route path="/results" element={<Results />} />
                   <Route path="/results/:id" element={<ResultDetail />} />

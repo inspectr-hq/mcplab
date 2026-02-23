@@ -14,8 +14,16 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { EvalConfig, ExecutableEvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core';
-import { loadConfig, runAll } from '@inspectr/mcplab-core';
+import type {
+  AgentConfig,
+  EvalConfig,
+  ExecutableEvalConfig,
+  LlmMessage,
+  ResultsJson,
+  ToolDef,
+  TraceEvent
+} from '@inspectr/mcplab-core';
+import { chatWithAgent, loadConfig, McpClientManager, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../package.json' with { type: 'json' };
 import {
@@ -113,6 +121,86 @@ interface DevMcpServerRuntime {
   path: string;
   targetBaseUrl: string;
   stop: () => void;
+}
+
+interface ScenarioAssistantContextInput {
+  configSnapshotPolicy?: {
+    enabled?: boolean;
+    mode?: 'warn' | 'fail_on_drift';
+    baselineSnapshotId?: string;
+  };
+  scenario: {
+    id: string;
+    name?: string;
+    prompt: string;
+    serverNames: string[];
+    evalRules: Array<{ type: string; value: string }>;
+    extractRules: Array<{ name: string; pattern: string }>;
+    snapshotEval?: {
+      enabled?: boolean;
+      baselineSnapshotId?: string;
+    };
+  };
+  availableServers?: Array<{ name: string; url?: string }>;
+  availableAgents?: Array<{ name: string; provider: string; model: string }>;
+}
+
+interface ScenarioAssistantSuggestionBundle {
+  prompt?: { replacement: string; rationale?: string };
+  evalRules?: {
+    replacement: Array<{ type: string; value: string }>;
+    rationale?: string;
+  };
+  extractRules?: {
+    replacement: Array<{ name: string; pattern: string }>;
+    rationale?: string;
+  };
+  snapshotEval?: {
+    patch: {
+      enabled?: boolean;
+      baselineSnapshotId?: string;
+    };
+    rationale?: string;
+  };
+  notes?: string[];
+}
+
+interface AssistantPendingToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+}
+
+interface AssistantChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  pendingToolCallId?: string;
+}
+
+interface ScenarioAssistantSession {
+  id: string;
+  createdAt: number;
+  lastTouchedAt: number;
+  configPath?: string;
+  selectedAssistantAgentName: string;
+  context: ScenarioAssistantContextInput;
+  agentConfig: AgentConfig;
+  mcp: McpClientManager;
+  tools: ToolDef[];
+  toolPublicMap: Map<string, { server: string; tool: string }>;
+  pendingToolCalls: AssistantPendingToolCall[];
+  chatMessages: AssistantChatMessage[];
+  llmMessages: LlmMessage[];
+  warnings: string[];
 }
 
 function asJson(res: ServerResponse, code: number, body: unknown) {
@@ -265,6 +353,356 @@ function parseBody(req: IncomingMessage): Promise<any> {
   });
 }
 
+const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
+const SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN = 3;
+const SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
+
+function cleanupAssistantSessions(
+  sessions: Map<string, ScenarioAssistantSession>,
+  now = Date.now()
+): void {
+  for (const [id, session] of sessions) {
+    if (now - session.lastTouchedAt > SCENARIO_ASSISTANT_SESSION_TTL_MS) {
+      sessions.delete(id);
+    }
+  }
+}
+
+function touchAssistantSession(session: ScenarioAssistantSession): void {
+  session.lastTouchedAt = Date.now();
+}
+
+function assistantSessionView(session: ScenarioAssistantSession) {
+  return {
+    id: session.id,
+    createdAt: new Date(session.createdAt).toISOString(),
+    updatedAt: new Date(session.lastTouchedAt).toISOString(),
+    selectedAssistantAgentName: session.selectedAssistantAgentName,
+    model: session.agentConfig.model,
+    provider: session.agentConfig.provider,
+    warnings: session.warnings,
+    toolsLoaded: session.tools.length,
+    toolServers: Array.from(new Set(session.tools.map((tool) => tool.name.split('__')[0]))),
+    messages: session.chatMessages,
+    pendingToolCalls: session.pendingToolCalls.filter((call) => call.status === 'pending')
+  };
+}
+
+function assistantSystemPrompt(session: ScenarioAssistantSession): string {
+  const { scenario, configSnapshotPolicy } = session.context;
+  const toolLines = session.tools.map((tool) => {
+    const mapping = session.toolPublicMap.get(tool.name);
+    const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
+    return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${mapping?.tool ?? tool.name}) schema=${schemaText}`;
+  });
+  return [
+    'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
+    'Goal: help the user author deterministic scenario prompt, eval rules, extract rules, and snapshot settings.',
+    'Use the available MCP tools and schemas to ground suggestions.',
+    'If you need live MCP information, call a tool and wait for approval.',
+    'Respond ONLY as JSON with one of these envelopes:',
+    `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
+    `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
+    'For suggestions, use keys: prompt, evalRules, extractRules, snapshotEval, notes.',
+    'prompt: { replacement: string, rationale?: string }',
+    'evalRules: { replacement: [{ type, value }...], rationale?: string }',
+    'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
+    'snapshotEval: { patch: { enabled?: boolean, baselineSnapshotId?: string }, rationale?: string }',
+    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains.',
+    'Ask clarifying questions if the scenario intent is unclear.',
+    `Scenario context: ${JSON.stringify({
+      id: scenario.id,
+      name: scenario.name ?? '',
+      prompt: scenario.prompt,
+      serverNames: scenario.serverNames,
+      evalRules: scenario.evalRules,
+      extractRules: scenario.extractRules,
+      snapshotEval: scenario.snapshotEval ?? null,
+      configSnapshotPolicy: configSnapshotPolicy ?? null
+    })}`,
+    toolLines.length > 0
+      ? `Available MCP tools:\n${toolLines.join('\n')}`
+      : 'No MCP tools available.'
+  ].join('\n');
+}
+
+function truncateJson(value: unknown, maxChars: number): string {
+  try {
+    const text = JSON.stringify(value);
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars)}…`;
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeAssistantToolName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
+}
+
+function makeAssistantToolPublicName(
+  serverName: string,
+  toolName: string,
+  used: Set<string>
+): string {
+  const base = `${normalizeAssistantToolName(serverName)}__${normalizeAssistantToolName(toolName)}`;
+  let candidate = base;
+  let suffix = 2;
+  while (used.has(candidate)) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+async function preloadAssistantTools(
+  session: ScenarioAssistantSession,
+  serversByName: Record<string, EvalConfig['servers'][string]>,
+  selectedServerNames: string[]
+): Promise<void> {
+  const usedNames = new Set<string>();
+  for (const serverName of selectedServerNames) {
+    const server = serversByName[serverName];
+    if (!server) {
+      session.warnings.push(`Scenario Assistant: server '${serverName}' not found in config.`);
+      continue;
+    }
+    try {
+      await session.mcp.connectAll({ [serverName]: server });
+      const tools = await session.mcp.listTools(serverName);
+      for (const tool of tools) {
+        const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
+        session.toolPublicMap.set(publicName, { server: serverName, tool: tool.name });
+        session.tools.push({
+          ...tool,
+          name: publicName,
+          description: `${tool.description ?? ''}\n[server=${serverName} tool=${tool.name}]`.trim()
+        });
+      }
+    } catch (error: any) {
+      session.warnings.push(
+        `Scenario Assistant MCP preload failed for server '${serverName}': ${error?.message ?? String(error)}`
+      );
+    }
+  }
+}
+
+function parseAssistantModelOutput(text: string): {
+  type: 'assistant_message' | 'tool_call_request';
+  text: string;
+  suggestions?: ScenarioAssistantSuggestionBundle;
+  toolCall?: { name: string; arguments: unknown };
+} {
+  const cleaned = text.trim();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const fenced =
+      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
+    if (fenced) {
+      parsed = JSON.parse(fenced[1]);
+    } else {
+      throw new Error('Assistant returned invalid JSON');
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Assistant response must be a JSON object');
+  }
+  if (parsed.type !== 'assistant_message' && parsed.type !== 'tool_call_request') {
+    throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
+  }
+  if (typeof parsed.text !== 'string') {
+    throw new Error('Assistant response missing text');
+  }
+  if (parsed.type === 'tool_call_request') {
+    if (!parsed.toolCall || typeof parsed.toolCall !== 'object') {
+      throw new Error('Assistant tool_call_request missing toolCall');
+    }
+    if (typeof parsed.toolCall.name !== 'string' || !parsed.toolCall.name.trim()) {
+      throw new Error('Assistant toolCall.name must be a non-empty string');
+    }
+  }
+  return parsed;
+}
+
+function safeAssistantTextFromResponse(rawText: string): string {
+  try {
+    return parseAssistantModelOutput(rawText).text;
+  } catch {
+    return rawText.trim();
+  }
+}
+
+async function assistantChatModel(
+  session: ScenarioAssistantSession
+): Promise<ReturnType<typeof parseAssistantModelOutput>> {
+  let response = await chatWithAgent({
+    agent: session.agentConfig,
+    messages: session.llmMessages,
+    tools: session.tools,
+    system: assistantSystemPrompt(session)
+  });
+  if (response.tool_calls && response.tool_calls.length > 0) {
+    const first = response.tool_calls[0];
+    return {
+      type: 'tool_call_request',
+      text: response.content?.trim() || `I need to call '${first.name}' to help answer.`,
+      toolCall: {
+        name: first.name,
+        arguments: first.arguments ?? {}
+      }
+    };
+  }
+  const rawText = response.content?.trim() ?? '';
+  try {
+    return parseAssistantModelOutput(rawText);
+  } catch (error) {
+    session.llmMessages.push({
+      role: 'assistant',
+      content: rawText
+    });
+    session.llmMessages.push({
+      role: 'user',
+      content:
+        'Your previous response was not valid JSON. Reply ONLY with a valid JSON envelope matching the specified schema.'
+    });
+    response = await chatWithAgent({
+      agent: session.agentConfig,
+      messages: session.llmMessages,
+      tools: session.tools,
+      system: assistantSystemPrompt(session)
+    });
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      const first = response.tool_calls[0];
+      return {
+        type: 'tool_call_request',
+        text: response.content?.trim() || `I need to call '${first.name}' to help answer.`,
+        toolCall: { name: first.name, arguments: first.arguments ?? {} }
+      };
+    }
+    return parseAssistantModelOutput(response.content?.trim() ?? '');
+  }
+}
+
+async function continueAssistantTurn(session: ScenarioAssistantSession): Promise<{
+  session: ReturnType<typeof assistantSessionView>;
+  response: {
+    type: 'assistant_message' | 'tool_call_request';
+    text: string;
+    suggestions?: ScenarioAssistantSuggestionBundle;
+    pendingToolCall?: AssistantPendingToolCall;
+  };
+}> {
+  const pendingCountForTurn = session.pendingToolCalls.filter((c) => c.status === 'pending').length;
+  if (pendingCountForTurn > SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
+    throw new Error('Scenario Assistant exceeded maximum pending tool calls for this turn');
+  }
+  const modelOutput = await assistantChatModel(session);
+  if (modelOutput.type === 'tool_call_request') {
+    const requested = modelOutput.toolCall!;
+    const mapping = session.toolPublicMap.get(requested.name);
+    if (!mapping) {
+      throw new Error(
+        `Scenario Assistant requested unknown tool '${requested.name}'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
+      );
+    }
+    const pending: AssistantPendingToolCall = {
+      id: `satc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      server: mapping.server,
+      tool: mapping.tool,
+      publicToolName: requested.name,
+      arguments: requested.arguments ?? {},
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    session.pendingToolCalls.push(pending);
+    session.chatMessages.push({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      role: 'assistant',
+      text: modelOutput.text,
+      createdAt: new Date().toISOString(),
+      suggestions: modelOutput.suggestions,
+      pendingToolCallId: pending.id
+    });
+    session.llmMessages.push({
+      role: 'assistant',
+      content: modelOutput.text,
+      tool_calls: [
+        {
+          id: pending.id,
+          name: pending.publicToolName,
+          arguments: pending.arguments as any
+        }
+      ]
+    });
+    touchAssistantSession(session);
+    return {
+      session: assistantSessionView(session),
+      response: {
+        type: 'tool_call_request',
+        text: modelOutput.text,
+        suggestions: modelOutput.suggestions,
+        pendingToolCall: pending
+      }
+    };
+  }
+
+  session.chatMessages.push({
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    role: 'assistant',
+    text: modelOutput.text,
+    createdAt: new Date().toISOString(),
+    suggestions: modelOutput.suggestions
+  });
+  session.llmMessages.push({
+    role: 'assistant',
+    content: JSON.stringify(modelOutput)
+  });
+  touchAssistantSession(session);
+  return {
+    session: assistantSessionView(session),
+    response: {
+      type: 'assistant_message',
+      text: modelOutput.text,
+      suggestions: modelOutput.suggestions
+    }
+  };
+}
+
+async function executeAssistantToolCall(
+  session: ScenarioAssistantSession,
+  pending: AssistantPendingToolCall
+): Promise<unknown> {
+  const timeoutMs = 10_000;
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([
+    session.mcp.callTool(pending.server, pending.tool, pending.arguments),
+    timeout
+  ]);
+}
+
+function summarizeToolResultForAssistant(result: unknown): string {
+  const text = truncateJson(result, SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
+  return text;
+}
+
+function resolveAssistantAgentFromConfig(
+  config: EvalConfig,
+  selectedAssistantAgentName: string
+): AgentConfig {
+  const agent = config.agents[selectedAssistantAgentName];
+  if (!agent) {
+    throw new Error(
+      `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
+    );
+  }
+  return agent;
+}
+
 function ensureInsideRoot(rootDir: string, candidatePath: string): string {
   const root = resolve(rootDir);
   const candidate = resolve(candidatePath);
@@ -296,7 +734,12 @@ function safeFileName(name: string): string {
 }
 
 function readConfigRecord(absPath: string, configsDir: string, bundleRoot?: string): ConfigRecord {
-  const { config: _resolvedConfig, sourceConfig, hash, warnings } = loadConfig(absPath, { bundleRoot });
+  const {
+    config: _resolvedConfig,
+    sourceConfig,
+    hash,
+    warnings
+  } = loadConfig(absPath, { bundleRoot });
   const stat = statSync(absPath);
   const name = basename(absPath, extname(absPath));
   return {
@@ -661,7 +1104,10 @@ function expandConfigForAgents(
   };
 }
 
-function resolveRunSelectedAgents(config: EvalConfig, requestedAgents?: string[]): string[] | undefined {
+function resolveRunSelectedAgents(
+  config: EvalConfig,
+  requestedAgents?: string[]
+): string[] | undefined {
   if (requestedAgents && requestedAgents.length > 0) return requestedAgents;
   return config.run_defaults?.selected_agents;
 }
@@ -762,6 +1208,7 @@ export async function startAppServer(options: AppServerOptions) {
   const viteDevTarget = 'http://127.0.0.1:8685';
   const devMcp = maybeStartDevMcpServer(workspaceRoot, options.dev);
   const jobs = new Map<string, RunJob>();
+  const assistantSessions = new Map<string, ScenarioAssistantSession>();
   let activeJobId: string | null = null;
 
   const server = createServer(async (req, res) => {
@@ -862,6 +1309,237 @@ export async function startAppServer(options: AppServerOptions) {
           scenarios: (body.scenarios as EvalConfig['scenarios']) ?? []
         });
         asJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
+        cleanupAssistantSessions(assistantSessions);
+        const body = await parseBody(req);
+        const configPathRaw = body.configPath ? String(body.configPath).trim() : '';
+        const scenarioId = String(body.scenarioId ?? '').trim();
+        const selectedAssistantAgentName = String(body.selectedAssistantAgentName ?? '').trim();
+        const context = (body.context ?? {}) as ScenarioAssistantContextInput;
+        if (!configPathRaw) {
+          asJson(res, 400, {
+            error: 'configPath is required for Scenario Assistant in workspace mode'
+          });
+          return;
+        }
+        if (!scenarioId) {
+          asJson(res, 400, { error: 'scenarioId is required' });
+          return;
+        }
+        if (!selectedAssistantAgentName) {
+          asJson(res, 400, { error: 'selectedAssistantAgentName is required' });
+          return;
+        }
+        if (!context?.scenario || typeof context.scenario !== 'object') {
+          asJson(res, 400, { error: 'context.scenario is required' });
+          return;
+        }
+        const configPath = isAbsolute(configPathRaw)
+          ? ensureInsideRoot(settings.configsDir, configPathRaw)
+          : ensureInsideRoot(settings.configsDir, join(settings.configsDir, configPathRaw));
+        if (!existsSync(configPath)) {
+          asJson(res, 404, { error: `Config not found: ${configPath}` });
+          return;
+        }
+        const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+        const agentConfig = resolveAssistantAgentFromConfig(
+          loaded.config,
+          selectedAssistantAgentName
+        );
+        const session: ScenarioAssistantSession = {
+          id: `sas-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          createdAt: Date.now(),
+          lastTouchedAt: Date.now(),
+          configPath,
+          selectedAssistantAgentName,
+          context,
+          agentConfig,
+          mcp: new McpClientManager(),
+          tools: [],
+          toolPublicMap: new Map(),
+          pendingToolCalls: [],
+          chatMessages: [],
+          llmMessages: [],
+          warnings: [...(loaded.warnings ?? [])]
+        };
+        session.chatMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'system',
+          text: 'Scenario Assistant session created.',
+          createdAt: new Date().toISOString()
+        });
+        const selectedServerNames = Array.from(new Set(context.scenario.serverNames ?? []));
+        await preloadAssistantTools(session, loaded.config.servers, selectedServerNames);
+        assistantSessions.set(session.id, session);
+        asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
+        return;
+      }
+
+      if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'GET') {
+        cleanupAssistantSessions(assistantSessions);
+        const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
+        const session = assistantSessions.get(sessionId);
+        if (!session) {
+          asJson(res, 404, { error: 'Scenario Assistant session not found' });
+          return;
+        }
+        touchAssistantSession(session);
+        asJson(res, 200, { session: assistantSessionView(session) });
+        return;
+      }
+
+      if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'DELETE') {
+        cleanupAssistantSessions(assistantSessions);
+        const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
+        assistantSessions.delete(sessionId);
+        asJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (
+        pathname.startsWith('/api/scenario-assistant/sessions/') &&
+        pathname.endsWith('/messages') &&
+        method === 'POST'
+      ) {
+        cleanupAssistantSessions(assistantSessions);
+        const parts = pathname.split('/');
+        const sessionId = parts[4];
+        const session = assistantSessions.get(sessionId);
+        if (!session) {
+          asJson(res, 404, { error: 'Scenario Assistant session not found' });
+          return;
+        }
+        const body = await parseBody(req);
+        const message = String(body.message ?? '').trim();
+        if (!message) {
+          asJson(res, 400, { error: 'message is required' });
+          return;
+        }
+        session.chatMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'user',
+          text: message,
+          createdAt: new Date().toISOString()
+        });
+        session.llmMessages.push({ role: 'user', content: message });
+        const output = await continueAssistantTurn(session);
+        asJson(res, 200, output);
+        return;
+      }
+
+      if (
+        pathname.startsWith('/api/scenario-assistant/sessions/') &&
+        pathname.includes('/tool-calls/') &&
+        pathname.endsWith('/approve') &&
+        method === 'POST'
+      ) {
+        cleanupAssistantSessions(assistantSessions);
+        const parts = pathname.split('/');
+        const sessionId = parts[4];
+        const callId = parts[6];
+        const session = assistantSessions.get(sessionId);
+        if (!session) {
+          asJson(res, 404, { error: 'Scenario Assistant session not found' });
+          return;
+        }
+        const pending = session.pendingToolCalls.find((call) => call.id === callId);
+        if (!pending) {
+          asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
+          return;
+        }
+        if (pending.status !== 'pending') {
+          asJson(res, 409, { error: `Tool call is already ${pending.status}` });
+          return;
+        }
+        const body = await parseBody(req);
+        if (Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')) {
+          pending.arguments = body.argumentsOverride;
+        }
+        pending.status = 'approved';
+        session.chatMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'tool',
+          text: `Approved tool call ${pending.server}::${pending.tool}`,
+          createdAt: new Date().toISOString()
+        });
+        let toolResult: unknown;
+        try {
+          toolResult = await executeAssistantToolCall(session, pending);
+          pending.resultPreview = summarizeToolResultForAssistant(toolResult);
+          session.llmMessages.push({
+            role: 'tool',
+            content: pending.resultPreview,
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+        } catch (error: any) {
+          pending.status = 'error';
+          pending.error = error?.message ?? String(error);
+          session.llmMessages.push({
+            role: 'tool',
+            content: JSON.stringify({ error: pending.error }),
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+          session.chatMessages.push({
+            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            role: 'tool',
+            text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
+            createdAt: new Date().toISOString()
+          });
+        }
+        const output = await continueAssistantTurn(session);
+        asJson(res, 200, output);
+        return;
+      }
+
+      if (
+        pathname.startsWith('/api/scenario-assistant/sessions/') &&
+        pathname.includes('/tool-calls/') &&
+        pathname.endsWith('/deny') &&
+        method === 'POST'
+      ) {
+        cleanupAssistantSessions(assistantSessions);
+        const parts = pathname.split('/');
+        const sessionId = parts[4];
+        const callId = parts[6];
+        const session = assistantSessions.get(sessionId);
+        if (!session) {
+          asJson(res, 404, { error: 'Scenario Assistant session not found' });
+          return;
+        }
+        const pending = session.pendingToolCalls.find((call) => call.id === callId);
+        if (!pending) {
+          asJson(res, 404, { error: 'Scenario Assistant tool call not found' });
+          return;
+        }
+        if (pending.status !== 'pending') {
+          asJson(res, 409, { error: `Tool call is already ${pending.status}` });
+          return;
+        }
+        pending.status = 'denied';
+        session.chatMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'tool',
+          text: `Denied tool call ${pending.server}::${pending.tool}`,
+          createdAt: new Date().toISOString()
+        });
+        session.llmMessages.push({
+          role: 'tool',
+          content: JSON.stringify({
+            denied: true,
+            reason: 'User denied tool call',
+            server: pending.server,
+            tool: pending.tool
+          }),
+          tool_call_id: pending.id,
+          name: pending.publicToolName
+        });
+        const output = await continueAssistantTurn(session);
+        asJson(res, 200, output);
         return;
       }
 

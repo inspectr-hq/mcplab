@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,11 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
 import { useState } from "react";
+import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
   agents: AgentConfig[];
   servers: ServerConfig[];
+  configId?: string;
+  configPath?: string;
+  defaultAssistantAgentName?: string;
   snapshotEval?: {
     enabled: boolean;
     mode: "warn" | "fail_on_drift";
@@ -21,6 +25,7 @@ interface ScenarioFormProps {
   };
   onChange: (scenarios: Scenario[]) => void;
   readOnly?: boolean;
+  allowAdd?: boolean;
 }
 
 const emptyScenario = (): Scenario => ({
@@ -32,7 +37,18 @@ const emptyScenario = (): Scenario => ({
   extractRules: [],
 });
 
-export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChange, readOnly }: ScenarioFormProps) {
+export function ScenarioForm({
+  scenarios,
+  agents,
+  servers,
+  configId,
+  configPath,
+  defaultAssistantAgentName,
+  snapshotEval,
+  onChange,
+  readOnly,
+  allowAdd = !readOnly
+}: ScenarioFormProps) {
   const update = (index: number, patch: Partial<Scenario>) => {
     const next = scenarios.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
@@ -53,7 +69,7 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Scenarios</h3>
-        {!readOnly && (
+        {!readOnly && allowAdd && (
           <Button type="button" variant="outline" size="sm" onClick={add}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />Add Scenario
           </Button>
@@ -67,6 +83,9 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
           total={scenarios.length}
           agents={agents}
           servers={servers}
+          configId={configId}
+          configPath={configPath}
+          defaultAssistantAgentName={defaultAssistantAgentName}
           snapshotEval={snapshotEval}
           onUpdate={(patch) => update(i, patch)}
           onMoveUp={() => move(i, -1)}
@@ -82,8 +101,11 @@ export function ScenarioForm({ scenarios, agents, servers, snapshotEval, onChang
   );
 }
 
-function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
+function ScenarioCard({ scenario, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
   scenario: Scenario; index: number; total: number; agents: AgentConfig[]; servers: ServerConfig[];
+  configId?: string;
+  configPath?: string;
+  defaultAssistantAgentName?: string;
   snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
   onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean;
 }) {
@@ -91,6 +113,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
   const [newRuleValue, setNewRuleValue] = useState("");
   const [newExtractName, setNewExtractName] = useState("");
   const [newExtractPattern, setNewExtractPattern] = useState("");
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   const addRule = () => {
     if (!newRuleValue.trim()) return;
@@ -146,6 +169,25 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
             <Button
               type="button"
               variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setAssistantOpen(true)}
+              title={
+                !configPath
+                  ? "Save the config first to use Scenario Assistant"
+                  : agents.length === 0
+                    ? "Add at least one agent in the config"
+                    : scenario.serverIds.length === 0
+                      ? "Select at least one server for this scenario"
+                      : "Open Scenario Assistant"
+              }
+            >
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              Assist
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               size="icon"
               className="h-7 w-7"
               onClick={onMoveUp}
@@ -172,6 +214,32 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
         )}
       </CardHeader>
       <CardContent className="space-y-3">
+        <ScenarioAssistantDialog
+          open={assistantOpen}
+          onOpenChange={setAssistantOpen}
+          configId={configId}
+          configPath={configPath}
+          scenario={scenario}
+          agents={agents}
+          servers={servers}
+          snapshotEval={snapshotEval}
+          defaultAssistantAgentName={defaultAssistantAgentName}
+          onApplyPatch={(patch) =>
+            onUpdate({
+              ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+              ...(patch.evalRules !== undefined ? { evalRules: patch.evalRules } : {}),
+              ...(patch.extractRules !== undefined ? { extractRules: patch.extractRules } : {}),
+              ...(patch.snapshotEval !== undefined
+                ? {
+                    snapshotEval: {
+                      ...(scenario.snapshotEval ?? {}),
+                      ...patch.snapshotEval
+                    }
+                  }
+                : {})
+            })
+          }
+        />
         <div className="space-y-1.5">
           <Label className="text-xs">Name</Label>
           <Input value={scenario.name} onChange={(e) => onUpdate({ name: e.target.value })} disabled={readOnly} placeholder="e.g. List directory" />

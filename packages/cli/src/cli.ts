@@ -279,7 +279,9 @@ program
           const scenarioId = String(options.scenario).trim();
           if (!scenarioId) throw new Error('scenario is required');
           const { sourceConfig } = loadConfig(configPath);
-          const scenarioIndex = (sourceConfig.scenarios ?? []).findIndex((s) => s.id === scenarioId);
+          const scenarioIndex = (sourceConfig.scenarios ?? []).findIndex(
+            (s) => s.id === scenarioId
+          );
           if (scenarioIndex < 0) {
             throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
           }

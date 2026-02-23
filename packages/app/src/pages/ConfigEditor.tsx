@@ -1011,6 +1011,9 @@ const ConfigEditor = () => {
                   scenarios={referencedScenarios}
                   agents={libAgents}
                   servers={libServers}
+                  configId={config.id}
+                  configPath={config.sourcePath}
+                  defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
                   snapshotEval={config.snapshotEval}
                   onChange={() => {}}
                   readOnly
@@ -1025,8 +1028,11 @@ const ConfigEditor = () => {
           ) : (
             <ScenarioForm
               scenarios={config.scenarios}
-              agents={config.agents}
-              servers={config.servers}
+              agents={[...config.agents, ...referencedAgents]}
+              servers={[...config.servers, ...referencedServers]}
+              configId={config.id}
+              configPath={config.sourcePath}
+              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
               snapshotEval={config.snapshotEval}
               onChange={(scenarios) => patch({ scenarios })}
               readOnly={readOnly}

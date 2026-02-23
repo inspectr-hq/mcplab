@@ -1,6 +1,8 @@
 import type {
   CoreEvalConfig,
   CoreResultsJson,
+  ScenarioAssistantSessionView,
+  ScenarioAssistantTurnResponse,
   RunJobEvent,
   SnapshotComparison,
   SnapshotRecord,
@@ -129,6 +131,52 @@ export const workspaceApiClient = {
     request<ProviderModelsResponse>(
       `/api/providers/models?provider=${encodeURIComponent(provider)}`
     ),
+  createScenarioAssistantSession: (params: {
+    configId?: string;
+    configPath?: string;
+    scenarioId: string;
+    selectedAssistantAgentName: string;
+    context: unknown;
+  }) =>
+    request<{ sessionId: string; session: ScenarioAssistantSessionView }>(
+      '/api/scenario-assistant/sessions',
+      {
+        method: 'POST',
+        body: JSON.stringify(params)
+      }
+    ),
+  getScenarioAssistantSession: (sessionId: string) =>
+    request<{ session: ScenarioAssistantSessionView }>(
+      `/api/scenario-assistant/sessions/${sessionId}`
+    ),
+  sendScenarioAssistantMessage: (sessionId: string, message: string) =>
+    request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
+      `/api/scenario-assistant/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ message })
+      }
+    ),
+  approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+    request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
+  denyScenarioAssistantToolCall: (sessionId: string, callId: string) =>
+    request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
+  closeScenarioAssistantSession: (sessionId: string) =>
+    request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
+      method: 'DELETE'
+    }),
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

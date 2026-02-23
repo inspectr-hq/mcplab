@@ -860,7 +860,10 @@ function listRuns(
   });
 }
 
-function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): ExecutableEvalConfig {
+function expandConfigForAgents(
+  config: EvalConfig,
+  requestedAgents?: string[]
+): ExecutableEvalConfig {
   const selectedAgents =
     requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
   const missing = selectedAgents.filter((agent) => !config.agents[agent]);

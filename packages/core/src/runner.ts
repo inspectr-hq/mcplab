@@ -1,7 +1,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import type { ExecutableEvalConfig, ScenarioRunResult, ResultsJson, ExecutableScenario } from './types.js';
+import type {
+  ExecutableEvalConfig,
+  ScenarioRunResult,
+  ResultsJson,
+  ExecutableScenario
+} from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
 import { runAgentScenario } from './agent.js';
