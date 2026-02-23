@@ -56,6 +56,7 @@ import type {
   ResultsJson,
   EvalConfig,
   ExecutableEvalConfig,
+  chatWithAgent,
   TraceEvent
 } from '@inspectr/mcplab-core';
 
@@ -153,6 +154,10 @@ export interface RunDeps {
   loadSnapshot: typeof loadSnapshot;
   compareRunToSnapshot: typeof compareRunToSnapshot;
   applySnapshotPolicyToRunResult: typeof applySnapshotPolicyToRunResult;
+  readLibraries: typeof readLibraries;
+  pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
+  resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
+  chatWithAgent: typeof chatWithAgent;
   pkgVersion: string;
 }
 

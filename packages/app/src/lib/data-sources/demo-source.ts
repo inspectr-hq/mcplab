@@ -102,6 +102,9 @@ export const demoSource: EvalDataSource = {
   async compareSnapshot() {
     throw new Error('Snapshots are only available in workspace mode.');
   },
+  async askResultAssistant() {
+    throw new Error('Result Assistant is only available in workspace mode.');
+  },
   async generateSnapshotEvalBaseline() {
     throw new Error('Snapshot eval is only available in workspace mode.');
   },

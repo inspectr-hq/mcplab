@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { PassRateBadge } from "@/components/PassRateBadge";
@@ -14,8 +17,8 @@ import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { toast } from "@/hooks/use-toast";
-import type { ConversationItem, EvalResult } from "@/types/eval";
-import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
+import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
+import type { ResultAssistantChatMessage, SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +36,17 @@ const ResultDetail = () => {
   const [targetConfigId, setTargetConfigId] = useState("");
   const [acceptSnapshotName, setAcceptSnapshotName] = useState("");
   const [acceptingBaseline, setAcceptingBaseline] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState<ResultAssistantChatMessage[]>([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [assistantMeta, setAssistantMeta] = useState<{
+    assistantAgentName: string;
+    provider: string;
+    model: string;
+  } | null>(null);
+  const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -65,6 +79,11 @@ const ResultDetail = () => {
   }, [source]);
 
   const requestedConfigId = searchParams.get("configId") ?? "";
+  const activeConfig = useMemo(() => {
+    const byRequested = requestedConfigId ? configs.find((c) => c.id === requestedConfigId) : undefined;
+    if (byRequested) return byRequested;
+    return result ? configs.find((c) => c.id === result.configId) : undefined;
+  }, [configs, requestedConfigId, result]);
   const inferredConfigId = useMemo(() => {
     if (!result?.snapshotEval?.baselineSnapshotId) return "";
     const matches = configs.filter(
@@ -87,6 +106,14 @@ const ResultDetail = () => {
       setTargetConfigId((prev) => prev || inferredConfigId);
     }
   }, [requestedConfigId, configs, inferredConfigId]);
+
+  useEffect(() => {
+    if (!assistantOpen) return;
+    const t = window.setTimeout(() => {
+      assistantChatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [assistantOpen, assistantMessages.length, assistantLoading]);
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
@@ -195,6 +222,53 @@ const ResultDetail = () => {
     }
   };
 
+  const askResultAssistant = async () => {
+    const question = assistantInput.trim();
+    if (!question || !result) return;
+    const nextMessages: ResultAssistantChatMessage[] = [
+      ...assistantMessages,
+      { role: "user", text: question }
+    ];
+    setAssistantMessages(nextMessages);
+    setAssistantInput("");
+    setAssistantLoading(true);
+    try {
+      const response = await source.askResultAssistant(result.id, nextMessages);
+      setAssistantMeta({
+        assistantAgentName: response.assistantAgentName,
+        provider: response.provider,
+        model: response.model
+      });
+      setAssistantMessages([
+        ...nextMessages,
+        { role: "assistant", text: response.reply || "(No response)" }
+      ]);
+    } catch (error: any) {
+      toast({
+        title: "MCP Labs Assistant error",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const openAssistantWithPrompt = (prompt?: string) => {
+    setAssistantOpen(true);
+    if (assistantMessages.length === 0) {
+      setAssistantMessages([
+        {
+          role: "assistant",
+          text: "Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result."
+        }
+      ]);
+    }
+    if (prompt) {
+      setAssistantInput(prompt);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -242,6 +316,16 @@ const ResultDetail = () => {
           URL.revokeObjectURL(url);
         }}>
           <Download className="h-3.5 w-3.5" />Download Report
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 gap-1.5"
+          onClick={() => openAssistantWithPrompt()}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          MCP Labs Assistant
         </Button>
       </div>
 
@@ -451,6 +535,28 @@ const ResultDetail = () => {
                       <tr>
                         <td colSpan={7} className="p-0">
                           <div className="bg-muted/30 p-4 space-y-2">
+                            <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold">Scenario details</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {sc.scenarioId} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs shrink-0"
+                                onClick={() =>
+                                  openAssistantWithPrompt(
+                                    `Explain why scenario '${sc.scenarioId}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
+                                  )
+                                }
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Ask Assistant
+                              </Button>
+                            </div>
                             {(() => {
                               const row = comparisonByScenario.get(sc.scenarioId);
                               if (!row || row.reasons.length === 0) return null;
@@ -474,11 +580,94 @@ const ResultDetail = () => {
                                   {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
                                 </div>
                                 <div className="flex-1 space-y-1">
-                                  <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const scenarioDef = activeConfig?.scenarios.find((s) => s.id === sc.scenarioId);
+                                    const checks = scenarioDef ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons) : [];
+                                    const failedChecks = checks.filter((c) => c.status === "failed");
+                                    const passedChecks = checks.filter((c) => c.status === "passed");
+                                    return (
+                                      <>
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-mono text-xs text-muted-foreground">Run #{run.runIndex + 1}</span>
                                     <span className="text-xs text-muted-foreground">·</span>
                                     <span className="text-xs text-muted-foreground">{run.duration}ms</span>
+                                    {!run.passed && (
+                                      <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
+                                        Failed
+                                      </Badge>
+                                    )}
                                   </div>
+                                  {checks.length > 0 && (
+                                    <div className="rounded-md border bg-muted/20 p-2">
+                                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                          Checks
+                                        </p>
+                                        <Badge variant="outline" className="h-5 text-[10px]">
+                                          {passedChecks.length} passed
+                                        </Badge>
+                                        <Badge
+                                          variant="outline"
+                                          className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
+                                        >
+                                          {failedChecks.length} failed
+                                        </Badge>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {checks.map((check, idx) => (
+                                          <div
+                                            key={`${check.rule.type}-${check.rule.value}-${idx}`}
+                                            className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                              check.status === "failed"
+                                                ? "border-destructive/20 bg-destructive/5"
+                                                : "border-success/20 bg-success/5"
+                                            }`}
+                                          >
+                                            <div className="min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                {check.status === "failed" ? (
+                                                  <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                ) : (
+                                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                                                )}
+                                                <span className="font-medium">{formatEvalRuleLabel(check.rule)}</span>
+                                              </div>
+                                              {check.failureReason && (
+                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                  {check.failureReason}
+                                                </p>
+                                              )}
+                                            </div>
+                                            <Badge
+                                              variant="outline"
+                                              className={`shrink-0 text-[10px] ${
+                                                check.status === "failed"
+                                                  ? "border-destructive/30 text-destructive"
+                                                  : "border-success/30 text-success"
+                                              }`}
+                                            >
+                                              {check.status}
+                                            </Badge>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {run.failureReasons.length > 0 && (
+                                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                                        Failure reasons
+                                      </p>
+                                      <ul className="space-y-1 text-xs text-destructive">
+                                        {run.failureReasons.map((reason, index) => (
+                                          <li key={index}>• {reason}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                      </>
+                                    );
+                                  })()}
                                   <div className="flex flex-wrap gap-1">
                                     {run.toolCalls.map((tc, i) => (
                                       <Badge key={i} variant="outline" className="font-mono text-xs">
@@ -492,20 +681,37 @@ const ResultDetail = () => {
                                     <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                                       Final answer
                                     </p>
-                                    <p className="text-xs text-foreground whitespace-pre-wrap">
-                                      {run.finalAnswer || "No final answer captured."}
-                                    </p>
+                                    <MarkdownText
+                                      text={run.finalAnswer || "No final answer captured."}
+                                      className="text-xs text-foreground"
+                                    />
                                   </div>
                                   <div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2 text-xs"
-                                      onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
-                                    >
-                                      {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
-                                    </Button>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
+                                      >
+                                        {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 gap-1 px-2 text-xs"
+                                        onClick={() =>
+                                          openAssistantWithPrompt(
+                                            `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                          )
+                                        }
+                                      >
+                                        <Sparkles className="h-3 w-3" />
+                                        Ask Assistant
+                                      </Button>
+                                    </div>
                                   </div>
                                   {openConversations.has(runKey(sc.scenarioId, run.runIndex)) && (
                                     <div className="space-y-2 rounded-md border bg-muted/20 p-2">
@@ -517,9 +723,6 @@ const ResultDetail = () => {
                                         ))
                                       )}
                                     </div>
-                                  )}
-                                  {run.failureReasons.length > 0 && (
-                                    <p className="text-xs text-destructive">{run.failureReasons.join(", ")}</p>
                                   )}
                                 </div>
                               </div>
@@ -535,6 +738,107 @@ const ResultDetail = () => {
           </Table>
         </CardContent>
       </Card>
+
+      <Sheet open={assistantOpen} onOpenChange={setAssistantOpen}>
+        <SheetContent
+          side="right"
+          className={`flex h-full flex-col p-0 ${assistantExpanded ? "w-[92vw] sm:max-w-4xl" : "w-[92vw] sm:max-w-xl"}`}
+        >
+          <SheetHeader className="border-b px-4 py-3">
+            <div className="flex items-start justify-between gap-2 pr-8">
+              <div>
+                <SheetTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  MCP Labs Assistant
+                </SheetTitle>
+                <SheetDescription className="mt-1 text-xs">
+                  Ask questions about this run result, failures, tool usage, and snapshot drift.
+                  {assistantMeta && (
+                    <span className="mt-1 block text-[11px]">
+                      Using {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
+                    </span>
+                  )}
+                </SheetDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => setAssistantExpanded((prev) => !prev)}
+              >
+                {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                {assistantExpanded ? "Compact" : "Expand"}
+              </Button>
+            </div>
+          </SheetHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+              <div className="space-y-3 pr-2">
+                {assistantMessages.map((message, index) => {
+                  const isUser = message.role === "user";
+                  return (
+                    <div key={`${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+                      {!isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          <Bot className="h-3 w-3" />
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[92%] rounded-md border p-3 text-sm ${
+                          isUser ? "border-primary/20 bg-primary/10" : "bg-background"
+                        }`}
+                      >
+                        <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
+                          {isUser ? "You" : "Assistant"}
+                        </p>
+                        <MarkdownText text={message.text} className="text-sm" />
+                      </div>
+                      {isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+                          <User className="h-3 w-3" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {assistantLoading && (
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                      <Bot className="h-3 w-3" />
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Thinking...
+                    </div>
+                  </div>
+                )}
+                <div ref={assistantChatEndRef} />
+              </div>
+            </ScrollArea>
+
+            <div className="border-t bg-background px-4 py-3">
+              <div className="flex gap-2">
+                <Input
+                  value={assistantInput}
+                  onChange={(e) => setAssistantInput(e.target.value)}
+                  placeholder="Ask about this result..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!assistantLoading) void askResultAssistant();
+                    }
+                  }}
+                />
+                <Button type="button" onClick={() => void askResultAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
+                  Ask
+                </Button>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
@@ -566,6 +870,7 @@ function ConversationRow({ item }: { item: ConversationItem }) {
   }
 
   const isUser = item.kind === "user_prompt";
+  const displayText = normalizeConversationText(item.text, item.kind);
   const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Assistant final" : "Assistant";
   const Icon = isUser ? User : Bot;
   return (
@@ -578,9 +883,9 @@ function ConversationRow({ item }: { item: ConversationItem }) {
       <div className={`max-w-[90%] rounded-md p-2 ${isUser ? "bg-primary/10" : "bg-muted/50"}`}>
         <p className={`mb-1 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>{label}</p>
         {isUser ? (
-          <p className="whitespace-pre-wrap">{item.text}</p>
+          <ExpandableText text={displayText} maxLength={280} className="text-xs" />
         ) : (
-          <ExpandableText text={item.text} maxLength={500} className="whitespace-pre-wrap" />
+          <ExpandableText text={displayText} maxLength={500} className="text-xs" />
         )}
       </div>
       {isUser && (
@@ -590,6 +895,17 @@ function ConversationRow({ item }: { item: ConversationItem }) {
       )}
     </div>
   );
+}
+
+function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {
+  const trimmed = String(text ?? "");
+  if (kind === "user_prompt") {
+    return trimmed.replace(/^user:\s*/i, "");
+  }
+  if (kind === "assistant_final" || kind === "assistant_thought") {
+    return trimmed.replace(/^assistant:\s*/i, "");
+  }
+  return trimmed;
 }
 
 function ToolEventRow({
@@ -637,7 +953,7 @@ function ExpandableText({ text, maxLength, className }: { text: string; maxLengt
 
   return (
     <div>
-      <p className={className}>{display}</p>
+      <MarkdownText text={display} className={className} />
       {isLong && (
         <button
           type="button"
@@ -649,6 +965,290 @@ function ExpandableText({ text, maxLength, className }: { text: string; maxLengt
       )}
     </div>
   );
+}
+
+type MarkdownBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "heading"; level: number; text: string }
+  | { type: "hr" }
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "code"; lang?: string; code: string }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function MarkdownText({ text, className }: { text: string; className?: string }) {
+  const blocks = parseMarkdownBlocks(text);
+  return (
+    <div className={`space-y-2 ${className ?? ""}`}>
+      {blocks.map((block, index) => renderMarkdownBlock(block, index))}
+    </div>
+  );
+}
+
+function parseMarkdownBlocks(text: string): MarkdownBlock[] {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const blocks: MarkdownBlock[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (/^---+$/.test(trimmed)) {
+      blocks.push({ type: "hr" });
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)$/);
+    if (headingMatch) {
+      blocks.push({
+        type: "heading",
+        level: headingMatch[1].length,
+        text: headingMatch[2],
+      });
+      continue;
+    }
+
+    const codeMatch = trimmed.match(/^```(\w+)?\s*$/);
+    if (codeMatch) {
+      const codeLines: string[] = [];
+      let j = i + 1;
+      for (; j < lines.length; j += 1) {
+        if (lines[j].trim().startsWith("```")) break;
+        codeLines.push(lines[j]);
+      }
+      blocks.push({ type: "code", lang: codeMatch[1], code: codeLines.join("\n") });
+      i = j;
+      continue;
+    }
+
+    if (looksLikeMarkdownTable(lines, i)) {
+      const headers = splitTableRow(lines[i]);
+      const rows: string[][] = [];
+      let j = i + 2;
+      while (j < lines.length && lines[j].includes("|") && lines[j].trim()) {
+        rows.push(splitTableRow(lines[j]));
+        j += 1;
+      }
+      blocks.push({ type: "table", headers, rows });
+      i = j - 1;
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (orderedMatch) {
+      const items = [orderedMatch[2]];
+      let j = i + 1;
+      while (j < lines.length) {
+        const m = lines[j].trim().match(/^\d+\.\s+(.*)$/);
+        if (!m) break;
+        items.push(m[1]);
+        j += 1;
+      }
+      blocks.push({ type: "list", ordered: true, items });
+      i = j - 1;
+      continue;
+    }
+
+    const bulletMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (bulletMatch) {
+      const items = [bulletMatch[1]];
+      let j = i + 1;
+      while (j < lines.length) {
+        const m = lines[j].trim().match(/^[-*+]\s+(.*)$/);
+        if (!m) break;
+        items.push(m[1]);
+        j += 1;
+      }
+      blocks.push({ type: "list", ordered: false, items });
+      i = j - 1;
+      continue;
+    }
+
+    const paragraphLines = [line];
+    let j = i + 1;
+    while (j < lines.length) {
+      const nextTrimmed = lines[j].trim();
+      if (
+        !nextTrimmed ||
+        /^---+$/.test(nextTrimmed) ||
+        /^#{1,4}\s+/.test(nextTrimmed) ||
+        looksLikeMarkdownTable(lines, j) ||
+        /^\d+\.\s+/.test(nextTrimmed) ||
+        /^[-*+]\s+/.test(nextTrimmed) ||
+        /^```/.test(nextTrimmed)
+      ) {
+        break;
+      }
+      paragraphLines.push(lines[j]);
+      j += 1;
+    }
+    blocks.push({ type: "paragraph", text: paragraphLines.join("\n") });
+    i = j - 1;
+  }
+
+  return blocks.length > 0 ? blocks : [{ type: "paragraph", text }];
+}
+
+function looksLikeMarkdownTable(lines: string[], index: number): boolean {
+  if (index + 1 >= lines.length) return false;
+  const header = lines[index].trim();
+  const separator = lines[index + 1].trim();
+  if (!header.includes("|")) return false;
+  return /^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(separator);
+}
+
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownBlock(block: MarkdownBlock, index: number) {
+  if (block.type === "hr") {
+    return <hr key={`hr-${index}`} className="border-border/60" />;
+  }
+  if (block.type === "heading") {
+    const className =
+      block.level === 1
+        ? "text-sm font-semibold"
+        : block.level === 2
+          ? "text-xs font-semibold"
+          : "text-xs font-medium";
+    return (
+      <h4 key={`h-${index}`} className={className}>
+        {renderInlineMarkdown(block.text, `${index}-h`)}
+      </h4>
+    );
+  }
+  if (block.type === "paragraph") {
+    return (
+      <p key={`p-${index}`} className="whitespace-pre-wrap leading-relaxed">
+        {renderInlineMarkdown(block.text, `${index}-p`)}
+      </p>
+    );
+  }
+  if (block.type === "code") {
+    return (
+      <div key={`code-${index}`} className="rounded-md border bg-muted/70">
+        {block.lang && (
+          <div className="border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            {block.lang}
+          </div>
+        )}
+        <pre className="max-h-64 overflow-auto p-2 text-[11px]">
+          <code>{block.code}</code>
+        </pre>
+      </div>
+    );
+  }
+  if (block.type === "list") {
+    const Tag = block.ordered ? "ol" : "ul";
+    return (
+      <Tag
+        key={`list-${index}`}
+        className={`space-y-1 pl-5 ${block.ordered ? "list-decimal" : "list-disc"}`}
+      >
+        {block.items.map((item, itemIndex) => (
+          <li key={`${index}-li-${itemIndex}`} className="leading-relaxed">
+            {renderInlineMarkdown(item, `${index}-li-${itemIndex}`)}
+          </li>
+        ))}
+      </Tag>
+    );
+  }
+  if (block.type === "table") {
+    return (
+      <div key={`table-${index}`} className="overflow-x-auto rounded-md border">
+        <table className="w-full min-w-[420px] border-collapse text-[11px]">
+          <thead className="bg-muted/40">
+            <tr>
+              {block.headers.map((header, headerIndex) => (
+                <th
+                  key={`${index}-th-${headerIndex}`}
+                  className="border-b px-2 py-1 text-left font-semibold align-top"
+                >
+                  {renderInlineMarkdown(header, `${index}-thc-${headerIndex}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={`${index}-row-${rowIndex}`} className="border-t">
+                {row.map((cell, cellIndex) => (
+                  <td key={`${index}-td-${rowIndex}-${cellIndex}`} className="px-2 py-1 align-top">
+                    {renderInlineMarkdown(cell, `${index}-tdc-${rowIndex}-${cellIndex}`)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return null;
+}
+
+function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  return parts.map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={`${keyBase}-${index}`} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
+  });
+}
+
+function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+  return evalRules.map((rule) => {
+    const failureReason = matchFailureReasonForRule(rule, failureReasons);
+    return {
+      rule,
+      status: failureReason ? ("failed" as const) : ("passed" as const),
+      failureReason
+    };
+  });
+}
+
+function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
+  const expectedPrefix =
+    rule.type === "required_tool"
+      ? `Required tool not used: ${rule.value}`
+      : rule.type === "forbidden_tool"
+        ? `Forbidden tool used: ${rule.value}`
+        : `Regex assertion failed: ${rule.value}`;
+
+  const exact = failureReasons.find((reason) => reason === expectedPrefix);
+  if (exact) return exact;
+
+  if (rule.type === "response_contains" || rule.type === "response_not_contains") {
+    return failureReasons.find(
+      (reason) =>
+        reason.startsWith("Regex assertion failed:") &&
+        reason.includes(rule.value)
+    );
+  }
+
+  return undefined;
+}
+
+function formatEvalRuleLabel(rule: EvalRule): string {
+  if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
+  if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
+  if (rule.type === "response_contains") return `Response contains (regex) · ${rule.value}`;
+  if (rule.type === "response_not_contains") return `Response not contains (regex) · ${rule.value}`;
+  return `${rule.type} · ${rule.value}`;
 }
 
 export default ResultDetail;

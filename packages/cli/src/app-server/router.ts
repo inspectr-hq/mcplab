@@ -222,6 +222,7 @@ export async function startAppServer(options: AppServerOptions) {
     expandConfigForAgents,
     resolveRunSelectedAgents,
     applySnapshotPolicyToRunResult,
+    chatWithAgent,
     pkgVersion: pkg.version
   };
 

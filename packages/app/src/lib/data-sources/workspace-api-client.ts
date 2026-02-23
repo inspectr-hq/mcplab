@@ -114,6 +114,14 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify({ runId })
     }),
+  askResultAssistant: (runId: string, messages: Array<{ role: 'user' | 'assistant'; text: string }>) =>
+    request<{ reply: string; assistantAgentName: string; provider: string; model: string }>(
+      `/api/runs/${encodeURIComponent(runId)}/assistant`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ messages })
+      }
+    ),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
     request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
       '/api/snapshots/generate-eval',
