@@ -254,7 +254,13 @@ export function ScenarioAssistantDialog({
       const composite = `${messageId}:${key}`;
       setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
     }
-    toast({ title: "Applied suggestion", description: `Updated ${key}` });
+    const labelByKey: Record<typeof key, string> = {
+      prompt: "Prompt",
+      evalRules: "Checks",
+      extractRules: "Value Capture Rules",
+      snapshotEval: "Snapshot Settings",
+    };
+    toast({ title: "Applied suggestion", description: `Updated ${labelByKey[key]}` });
   };
 
   return (
@@ -311,8 +317,8 @@ export function ScenarioAssistantDialog({
 
               <div className="flex flex-wrap gap-2">
                 {[
-                  "Suggest eval rules",
-                  "Suggest extract rules",
+                  "Suggest checks",
+                  "Suggest value capture rules",
                   "Improve prompt determinism",
                   "Explain snapshot drift risk",
                   "Generate scenario draft"
@@ -365,7 +371,7 @@ export function ScenarioAssistantDialog({
                           )}
                           {message.suggestions.evalRules && (
                             <SuggestionCard
-                              title="Eval Rules"
+                              title="Checks"
                               rationale={message.suggestions.evalRules.rationale}
                               preview={JSON.stringify(message.suggestions.evalRules.replacement, null, 2)}
                               applied={appliedSuggestionKeys.has(`${message.id}:evalRules`)}
@@ -374,7 +380,7 @@ export function ScenarioAssistantDialog({
                           )}
                           {message.suggestions.extractRules && (
                             <SuggestionCard
-                              title="Extract Rules"
+                              title="Value Capture Rules"
                               rationale={message.suggestions.extractRules.rationale}
                               preview={JSON.stringify(message.suggestions.extractRules.replacement, null, 2)}
                               applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
@@ -444,7 +450,7 @@ export function ScenarioAssistantDialog({
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask for help creating/refining this scenario..."
+                  placeholder="Get assistance with creating or refining this scenario ..."
                   disabled={!sessionId || loading}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -541,7 +547,7 @@ function AssistantChatMessageRow({
         className={`max-w-[92%] rounded-md border px-3 py-2 text-sm ${
           isUser
             ? "border-primary/30 bg-primary/10"
-            : "border-muted bg-muted/40"
+            : "border-border/80 bg-muted/30 shadow-sm"
         }`}
       >
         <div className={`mb-1 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "justify-end" : ""}`}>

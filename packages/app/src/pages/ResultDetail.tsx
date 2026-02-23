@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
@@ -48,6 +49,7 @@ const ResultDetail = () => {
     model: string;
   } | null>(null);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
+  const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -142,6 +144,14 @@ const ResultDetail = () => {
     }, 0);
     return () => window.clearTimeout(t);
   }, [assistantOpen, assistantMessages.length, assistantLoading]);
+
+  useEffect(() => {
+    const el = assistantInputRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${Math.max(40, next)}px`;
+  }, [assistantInput, assistantOpen]);
 
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
@@ -715,6 +725,33 @@ const ResultDetail = () => {
                                       </>
                                     );
                                   })()}
+                                  <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                      <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        <Layers className="h-3.5 w-3.5 text-violet-600" />
+                                        Extracted values
+                                      </p>
+                                      <Badge variant="outline" className="h-5 text-[10px]">
+                                        {Object.keys(run.extractedValues ?? {}).length} total
+                                      </Badge>
+                                    </div>
+                                    {Object.keys(run.extractedValues ?? {}).length === 0 ? (
+                                      <p className="text-xs text-muted-foreground">No extracted values captured for this run.</p>
+                                    ) : (
+                                      <div className="grid gap-1.5 sm:grid-cols-2">
+                                        {Object.entries(run.extractedValues ?? {}).map(([key, value]) => (
+                                          <div key={key} className="rounded-md border bg-background px-2 py-1.5 text-xs">
+                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              {key}
+                                            </div>
+                                            <div className="font-mono break-all text-foreground">
+                                              {value === null ? "null" : String(value)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                   <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
                                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                       <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -765,14 +802,14 @@ const ResultDetail = () => {
                                           type="button"
                                           variant="outline"
                                           size="sm"
-                                          className="h-7 gap-1 px-2 text-xs"
+                                          className="h-7 gap-1.5 px-2 text-xs"
                                           onClick={() =>
                                             openAssistantWithPrompt(
                                               `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
                                             )
                                           }
                                         >
-                                          <Sparkles className="h-3 w-3" />
+                                          <Sparkles className="h-3.5 w-3.5" />
                                           Ask Assistant
                                         </Button>
                                       </div>
@@ -867,7 +904,7 @@ const ResultDetail = () => {
                           <Bot className="h-3 w-3" />
                         </div>
                       )}
-                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${isUser ? "border-primary/20 bg-primary/10" : "bg-background"}`}>
+                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${isUser ? "border-primary/20 bg-primary/10" : "border-border/80 bg-background shadow-sm"}`}>
                         <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
                           {isUser ? "You" : "Assistant"}
                         </p>
@@ -896,11 +933,14 @@ const ResultDetail = () => {
               </div>
             </ScrollArea>
             <div className="border-t bg-background px-4 py-3">
-              <div className="flex gap-2">
-                <Input
+              <div className="flex items-end gap-2">
+                <Textarea
+                  ref={assistantInputRef}
                   value={assistantInput}
                   onChange={(e) => setAssistantInput(e.target.value)}
                   placeholder="Ask about this result..."
+                  rows={1}
+                  className="min-h-10 max-h-40 resize-none text-sm"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -908,7 +948,7 @@ const ResultDetail = () => {
                     }
                   }}
                 />
-                <Button type="button" onClick={() => void askResultAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
+                <Button type="button" className="shrink-0" onClick={() => void askResultAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
                   Ask
                 </Button>
               </div>

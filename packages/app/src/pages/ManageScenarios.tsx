@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, ExternalLink, Pencil, ArrowLeft, Search, Plus } from "lucide-react";
+import { RefreshCw, ExternalLink, Pencil, ArrowLeft, Search, Plus, Copy, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Scenario } from "@/types/eval";
 
 const ManageScenarios = () => {
   const { scenarioId } = useParams<{ scenarioId?: string }>();
@@ -22,6 +23,14 @@ const ManageScenarios = () => {
   const [sortBy, setSortBy] = useState<"name" | "id" | "servers" | "evalRules" | "extractRules">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>("");
+  const [draftScenario, setDraftScenario] = useState<Scenario | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string>("");
+  const saveTimerRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+  const latestDraftRef = useRef<Scenario | null>(null);
+  const saveSeqRef = useRef(0);
 
   const selectedScenarioId = scenarioId ? decodeURIComponent(scenarioId) : undefined;
   const selectedIndex = selectedScenarioId
@@ -29,12 +38,61 @@ const ManageScenarios = () => {
     : -1;
   const selectedScenario = selectedIndex >= 0 ? scenarios[selectedIndex] : undefined;
 
-  const handleSaveSingle = async (nextSingle: typeof scenarios) => {
-    const nextScenario = nextSingle[0];
+  const persistSingleScenario = async (nextScenario: Scenario) => {
     if (!selectedScenario || selectedIndex < 0 || !nextScenario) return;
     const next = [...scenarios];
     next[selectedIndex] = nextScenario;
     await setScenarios(next);
+  };
+
+  const flushScenarioSave = async () => {
+    const nextScenario = latestDraftRef.current;
+    if (!nextScenario || !selectedScenario) return;
+    if (saveInFlightRef.current) {
+      saveQueuedRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    saveQueuedRef.current = false;
+    const seq = ++saveSeqRef.current;
+    setSaveStatus("saving");
+    setSaveError("");
+    try {
+      await persistSingleScenario(nextScenario);
+      if (seq === saveSeqRef.current) {
+        setSaveStatus("saved");
+      }
+    } catch (error: any) {
+      const message = String(error?.message ?? error);
+      if (seq === saveSeqRef.current) {
+        setSaveStatus("error");
+        setSaveError(message);
+      }
+      toast({
+        title: "Could not save scenario",
+        description: message,
+        variant: "destructive"
+      });
+    } finally {
+      saveInFlightRef.current = false;
+      if (saveQueuedRef.current) {
+        saveQueuedRef.current = false;
+        void flushScenarioSave();
+      }
+    }
+  };
+
+  const scheduleScenarioSave = (nextScenario: Scenario) => {
+    latestDraftRef.current = nextScenario;
+    setSaveStatus("dirty");
+    setSaveError("");
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void flushScenarioSave();
+    }, 700);
   };
 
   const handleAddScenario = async () => {
@@ -56,6 +114,57 @@ const ManageScenarios = () => {
     await setScenarios([...scenarios, nextScenario]);
     navigate(`/libraries/scenarios/${encodeURIComponent(nextId)}`);
     toast({ title: "Scenario created", description: `Opened ${nextId} for editing.` });
+  };
+
+  const buildUniqueScenarioId = (base: string) => {
+    const normalized = (base || `scn-${Date.now()}`)
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || `scn-${Date.now()}`;
+    let nextId = normalized;
+    let suffix = 1;
+    while (scenarios.some((scenario) => scenario.id === nextId)) {
+      nextId = `${normalized}-${suffix}`;
+      suffix += 1;
+    }
+    return nextId;
+  };
+
+  const handleDuplicateScenario = async (scenarioToDuplicate: Scenario, navigateToCopy = false) => {
+    const duplicateId = buildUniqueScenarioId(`${scenarioToDuplicate.id}-copy`);
+    const duplicate: Scenario = {
+      ...structuredClone(scenarioToDuplicate),
+      id: duplicateId,
+      name: scenarioToDuplicate.name ? `${scenarioToDuplicate.name} (Copy)` : "",
+    };
+    await setScenarios([...scenarios, duplicate]);
+    toast({ title: "Scenario duplicated", description: `Created ${duplicate.id}.` });
+    if (navigateToCopy) {
+      navigate(`/libraries/scenarios/${encodeURIComponent(duplicate.id)}`);
+    }
+  };
+
+  const handleDeleteScenario = async (scenarioToDelete: Scenario) => {
+    const confirmed = window.confirm(
+      `Delete scenario '${scenarioToDelete.name || scenarioToDelete.id}'? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const next = scenarios.filter((scenario) => scenario.id !== scenarioToDelete.id);
+    await setScenarios(next);
+    toast({ title: "Scenario deleted", description: `${scenarioToDelete.id} was removed.` });
+    if (selectedScenario?.id === scenarioToDelete.id) {
+      setDraftScenario(null);
+      latestDraftRef.current = null;
+      setSaveStatus("idle");
+      setSaveError("");
+      navigate("/libraries/scenarios");
+    }
   };
 
   const scenarioServerNames = (serverIds: string[]) =>
@@ -136,6 +245,34 @@ const ManageScenarios = () => {
       active = false;
     };
   }, [mode, source]);
+
+  useEffect(() => {
+    if (selectedScenario) {
+      setDraftScenario(structuredClone(selectedScenario));
+      latestDraftRef.current = structuredClone(selectedScenario);
+      setSaveStatus("idle");
+      setSaveError("");
+    } else {
+      setDraftScenario(null);
+      latestDraftRef.current = null;
+      setSaveStatus("idle");
+      setSaveError("");
+    }
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveInFlightRef.current = false;
+    saveQueuedRef.current = false;
+  }, [selectedScenario?.id, selectedScenario?.updatedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   const effectiveAssistantAgentName =
     scenarioAssistantAgentName || agents[0]?.name || "";
@@ -292,6 +429,25 @@ const ManageScenarios = () => {
                           <Button
                             type="button"
                             size="sm"
+                            variant="outline"
+                            onClick={() => void handleDuplicateScenario(scenario)}
+                          >
+                            <Copy className="mr-1.5 h-3.5 w-3.5" />
+                            Duplicate
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => void handleDeleteScenario(scenario)}
+                          >
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
                             variant="ghost"
                             onClick={async () => {
                               const absoluteUrl = `${window.location.origin}${href}`;
@@ -320,22 +476,81 @@ const ManageScenarios = () => {
         </Card>
       )}
 
-      {selectedScenario ? (
+      {selectedScenario && draftScenario ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Edit Scenario</CardTitle>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Edit Scenario</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleDuplicateScenario(draftScenario, true)}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Duplicate
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void handleDeleteScenario(draftScenario)}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+            </div>
             <CardDescription>
-              Focused editor for <code className="font-mono">{selectedScenario.id}</code>.
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Focused editor for <code className="font-mono">{selectedScenario.id}</code>.
+                </span>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] ${
+                    saveStatus === "saving"
+                      ? "border-amber-300 text-amber-700"
+                      : saveStatus === "saved"
+                        ? "border-emerald-300 text-emerald-700"
+                        : saveStatus === "error"
+                          ? "border-destructive/40 text-destructive"
+                          : saveStatus === "dirty"
+                            ? "border-sky-300 text-sky-700"
+                            : ""
+                  }`}
+                >
+                  {saveStatus === "saving"
+                    ? "Saving..."
+                    : saveStatus === "saved"
+                      ? "Saved"
+                      : saveStatus === "error"
+                        ? "Save failed"
+                        : saveStatus === "dirty"
+                          ? "Unsaved changes"
+                          : "Ready"}
+                </Badge>
+                {saveStatus === "error" && saveError && (
+                  <span className="text-[11px] text-destructive">{saveError}</span>
+                )}
+              </div>
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-3">
             <ScenarioForm
-              scenarios={[selectedScenario]}
+              scenarios={[draftScenario]}
               agents={agents}
               servers={servers}
               defaultAssistantAgentName={effectiveAssistantAgentName}
               onChange={(next) => {
-                void handleSaveSingle(next);
+                const nextScenario = next[0];
+                if (!nextScenario) return;
+                setDraftScenario(nextScenario);
+                scheduleScenarioSave(nextScenario);
               }}
               allowAdd={false}
             />
