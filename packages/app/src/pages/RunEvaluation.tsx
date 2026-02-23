@@ -176,13 +176,35 @@ const RunEvaluation = () => {
       setActiveJobId(jobId);
       unsubscribeRef.current?.();
       unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
+        const ts = new Date(event.ts).toLocaleTimeString();
         if (event.type === "started") {
-          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Run started.`]);
+          setLogs((prev) => [...prev, `[${ts}] Run started.`]);
           setProgress(30);
+        }
+        if (event.type === "log") {
+          const message = String(event.payload.message ?? "").trim();
+          if (message) {
+            setLogs((prev) => [...prev, `[${ts}] ${message}`]);
+            setProgress((prev) => {
+              const lower = message.toLowerCase();
+              if (lower.startsWith("loading mcp evaluation config")) return Math.max(prev, 15);
+              if (lower.startsWith("loaded config")) return Math.max(prev, 20);
+              if (lower.startsWith("selected ")) return Math.max(prev, 30);
+              if (lower.startsWith("using requested agents") || lower.startsWith("using resolved default agents")) return Math.max(prev, 35);
+              if (lower.startsWith("expanded to ")) return Math.max(prev, 45);
+              if (lower.startsWith("running evaluation")) return Math.max(prev, 55);
+              if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 75);
+              if (lower.startsWith("applying snapshot evaluation policy")) return Math.max(prev, 82);
+              if (lower.includes("snapshot evaluation applied") || lower.includes("snapshot evaluation enabled")) return Math.max(prev, 88);
+              if (lower.startsWith("writing results to ")) return Math.max(prev, 94);
+              if (lower.startsWith("run finished:")) return Math.max(prev, 98);
+              return prev;
+            });
+          }
         }
         if (event.type === "completed") {
           const nextRunId = String(event.payload.runId ?? "");
-          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Run completed.`]);
+          setLogs((prev) => [...prev, `[${ts}] Run completed.`]);
           if (event.payload.snapshotEval && typeof event.payload.snapshotEval === "object") {
             const snapshotEval = event.payload.snapshotEval as {
               mode?: string;
@@ -192,7 +214,7 @@ const RunEvaluation = () => {
             };
             setLogs((prev) => [
               ...prev,
-              `[${new Date(event.ts).toLocaleTimeString()}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`
+              `[${ts}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`
             ]);
           }
           setProgress(100);
@@ -208,7 +230,7 @@ const RunEvaluation = () => {
           const extraHint = message.includes("Anthropic model not found")
             ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
             : "";
-          setLogs((prev) => [...prev, `[${new Date(event.ts).toLocaleTimeString()}] Error: ${message}${extraHint}`]);
+          setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
           setRunning(false);
           setDone(false);
           setProgress(0);

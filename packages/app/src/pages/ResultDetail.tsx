@@ -648,7 +648,7 @@ const ResultDetail = () => {
                                       </p>
                                       <ul className="space-y-1 text-xs text-destructive">
                                         {run.failureReasons.map((reason, index) => (
-                                          <li key={index}>• {reason}</li>
+                                          <li key={index}>• {formatFailureReason(reason)}</li>
                                         ))}
                                       </ul>
                                     </div>
@@ -693,7 +693,7 @@ const ResultDetail = () => {
                                               </div>
                                               {check.failureReason && (
                                                 <p className="mt-1 pl-5 text-[11px] text-destructive">
-                                                  {check.failureReason}
+                                                  {formatFailureReason(check.failureReason)}
                                                 </p>
                                               )}
                                             </div>
@@ -719,7 +719,7 @@ const ResultDetail = () => {
                                     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                       <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                                         <Wrench className="h-3.5 w-3.5 text-sky-600" />
-                                        Tool calls
+                                        Tool call sequence
                                       </p>
                                       <Badge variant="outline" className="h-5 text-[10px]">
                                         {run.toolCalls.length} total
@@ -783,7 +783,11 @@ const ResultDetail = () => {
                                           <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
                                         ) : (
                                           run.conversation.map((item) => (
-                                            <ConversationRow key={item.id} item={item} />
+                                            <ConversationRow
+                                              key={item.id}
+                                              item={item}
+                                              fallbackUserPrompt={scenarioDefinitionByResultId.get(sc.scenarioId)?.prompt}
+                                            />
                                           ))
                                         )}
                                       </div>
@@ -917,7 +921,7 @@ const ResultDetail = () => {
   );
 };
 
-function ConversationRow({ item }: { item: ConversationItem }) {
+function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem; fallbackUserPrompt?: string }) {
   if (item.kind === "tool_call") {
     return (
       <ToolEventRow
@@ -944,8 +948,15 @@ function ConversationRow({ item }: { item: ConversationItem }) {
   }
 
   const isUser = item.kind === "user_prompt";
-  const displayText = normalizeConversationText(item.text, item.kind);
-  const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Assistant final" : "Assistant";
+  const normalizedItemText = normalizeConversationText(item.text, item.kind);
+  const normalizedFallbackUserPrompt = fallbackUserPrompt
+    ? normalizeConversationText(fallbackUserPrompt, "user_prompt")
+    : "";
+  const displayText =
+    isUser && normalizedFallbackUserPrompt.length > normalizedItemText.length
+      ? normalizedFallbackUserPrompt
+      : normalizedItemText;
+  const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Agent final" : "Agent";
   const Icon = isUser ? User : Bot;
   return (
     <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
@@ -972,14 +983,15 @@ function ConversationRow({ item }: { item: ConversationItem }) {
 }
 
 function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {
-  const trimmed = String(text ?? "");
+  const raw = String(text ?? "");
+  const trimmedStart = raw.replace(/^\s+/, "");
   if (kind === "user_prompt") {
-    return trimmed.replace(/^user:\s*/i, "");
+    return trimmedStart.replace(/^user:\s*/i, "");
   }
   if (kind === "assistant_final" || kind === "assistant_thought") {
-    return trimmed.replace(/^assistant:\s*/i, "");
+    return trimmedStart.replace(/^assistant:\s*/i, "");
   }
-  return trimmed;
+  return trimmedStart;
 }
 
 function ToolEventRow({
@@ -1268,7 +1280,9 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number) {
 }
 
 function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  const parts = text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g)
+    .filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
@@ -1279,6 +1293,20 @@ function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] 
     }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    const linkMatch = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a
+          key={`${keyBase}-${index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-primary underline underline-offset-2 hover:opacity-80"
+        >
+          {linkMatch[1]}
+        </a>
+      );
     }
     return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
   });
@@ -1320,9 +1348,18 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
 function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
   if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
-  if (rule.type === "response_contains") return `Response contains (regex) · ${rule.value}`;
-  if (rule.type === "response_not_contains") return `Response not contains (regex) · ${rule.value}`;
+  if (rule.type === "response_contains") return `Text must match pattern · ${rule.value}`;
+  if (rule.type === "response_not_contains") return `Text must not match pattern · ${rule.value}`;
   return `${rule.type} · ${rule.value}`;
+}
+
+function formatFailureReason(reason: string): string {
+  const trimmed = String(reason ?? "").trim();
+  const regexMatch = trimmed.match(/^Regex assertion failed:\s*(.+)$/i);
+  if (regexMatch) {
+    return `Text match failed: ${regexMatch[1]}`;
+  }
+  return trimmed;
 }
 
 export default ResultDetail;
