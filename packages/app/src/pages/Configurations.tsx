@@ -43,7 +43,7 @@ const Configurations = () => {
   const handleClone = async (id: string) => {
     const cloned = await cloneConfig(id);
     toast({ title: "Cloned", description: `Created "${cloned.name}".` });
-    navigate(`/configs/${cloned.id}`);
+    navigate(`/mcp-evaluations/${cloned.id}`);
   };
 
   const sortedConfigs = useMemo(() => {
@@ -78,7 +78,7 @@ const Configurations = () => {
             <Upload className="mr-2 h-4 w-4" />Import YAML
           </Button>
           <Button size="sm" asChild>
-            <Link to="/configs/new"><Plus className="mr-2 h-4 w-4" />Create New</Link>
+            <Link to="/mcp-evaluations/new"><Plus className="mr-2 h-4 w-4" />Create New</Link>
           </Button>
         </div>
       </div>
@@ -120,7 +120,7 @@ const Configurations = () => {
                 <TableRow key={cfg.id}>
                   <TableCell>
                     <div>
-                      <Link to={`/configs/${cfg.id}`} className="font-medium text-sm hover:text-primary">{cfg.name}</Link>
+                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{cfg.name}</Link>
                       {cfg.loadError && (
                         <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
                           <AlertTriangle className="mr-1 h-3 w-3" />
@@ -148,7 +148,7 @@ const Configurations = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => navigate(`/configs/${cfg.id}`)}>
+                        <DropdownMenuItem onClick={() => navigate(`/mcp-evaluations/${cfg.id}`)}>
                           <Pencil className="mr-2 h-3.5 w-3.5" />Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>

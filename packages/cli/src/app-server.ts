@@ -1192,6 +1192,17 @@ async function runToolAnalysisJob(params: {
       const toolReports: ToolAnalysisToolReport[] = [];
       for (const toolCtx of selectedTools) {
         if (job.abortController.signal.aborted) throw new Error('Tool analysis aborted by user');
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            kind: 'tool_progress',
+            phase: 'started',
+            serverName: discovered.serverName,
+            toolName: toolCtx.tool.name,
+            message: `Started ${discovered.serverName}::${toolCtx.tool.name}`
+          }
+        });
         const baseReport: ToolAnalysisToolReport = {
           serverName: discovered.serverName,
           toolName: toolCtx.tool.name,
@@ -1445,6 +1456,19 @@ async function runToolAnalysisJob(params: {
           issueCounts[finding.severity] += 1;
         }
         toolReports.push(baseReport);
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            kind: 'tool_progress',
+            phase: 'finished',
+            serverName: discovered.serverName,
+            toolName: toolCtx.tool.name,
+            findings: toolFindings.length,
+            skipped: baseReport.deeperAnalysis?.attempted === false,
+            message: `Finished ${discovered.serverName}::${toolCtx.tool.name}`
+          }
+        });
       }
 
       serverReports.push({
@@ -2109,8 +2133,8 @@ export async function startAppServer(options: AppServerOptions) {
         const serverNames = Array.isArray(body.serverNames)
           ? body.serverNames.map((v: unknown) => String(v).trim()).filter(Boolean)
           : [];
-        if (serverNames.length === 0) {
-          asJson(res, 400, { error: 'serverNames is required' });
+        if (serverNames.length !== 1) {
+          asJson(res, 400, { error: 'Select exactly one MCP server for tool analysis' });
           return;
         }
         const libraries = readLibraries(settings.librariesDir);
@@ -2140,8 +2164,8 @@ export async function startAppServer(options: AppServerOptions) {
           metadataReview: Boolean(body?.modes?.metadataReview),
           deeperAnalysis: Boolean(body?.modes?.deeperAnalysis)
         };
-        if (serverNames.length === 0) {
-          asJson(res, 400, { error: 'At least one server must be selected' });
+        if (serverNames.length !== 1) {
+          asJson(res, 400, { error: 'Select exactly one MCP server for tool analysis' });
           return;
         }
         if (!modes.metadataReview && !modes.deeperAnalysis) {
@@ -2288,6 +2312,15 @@ export async function startAppServer(options: AppServerOptions) {
           asJson(res, 200, { ok: true, status: job.status });
           return;
         }
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            kind: 'job_control',
+            action: 'stop_requested',
+            message: 'Stop requested by user'
+          }
+        });
         job.status = 'stopped';
         job.abortController.abort();
         asJson(res, 200, { ok: true, status: 'stopped' });

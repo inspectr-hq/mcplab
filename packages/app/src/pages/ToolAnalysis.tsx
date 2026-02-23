@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { Download, Loader2, RefreshCw, Search } from "lucide-react";
+import { CircleHelp, Download, Loader2, RefreshCw, Search } from "lucide-react";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -89,11 +90,43 @@ function toMarkdownReport(report: ToolAnalysisReport): string {
   return `${lines.join("\n")}\n`;
 }
 
+function ModeInfo({
+  text
+}: {
+  text: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+          onClick={(e) => e.preventDefault()}
+          aria-label={text}
+        >
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-xs">
+        <p>{text}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function formatToolDiscoveryWarning(serverName: string, warning: string): string {
+  const lower = warning.toLowerCase();
+  if (lower.includes("failed to load tools") || lower.includes("failed to connect to mcp server")) {
+    return `Could not load tools from '${serverName}'. Check that the MCP server is running and reachable, then try Refresh Servers / Discover Tools again.`;
+  }
+  return warning;
+}
+
 const ToolAnalysisPage = () => {
   const { mode, source } = useDataSource();
   const { servers, agents, loading: librariesLoading, reload: reloadLibraries } = useLibraries();
 
-  const [assistantAgentName, setAssistantAgentName] = useState("");
+  const [settingsAssistantAgentName, setSettingsAssistantAgentName] = useState("");
   const [selectedServerNames, setSelectedServerNames] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<
@@ -109,9 +142,11 @@ const ToolAnalysisPage = () => {
   const [events, setEvents] = useState<RunJobEvent[]>([]);
   const [report, setReport] = useState<ToolAnalysisReport | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [viewStep, setViewStep] = useState<"configure" | "run" | "report">("configure");
+  const [runState, setRunState] = useState<"idle" | "running" | "stopped" | "error">("idle");
   const cleanupRef = useRef<null | (() => void)>(null);
 
-  const effectiveAssistantAgentName = assistantAgentName || agents[0]?.name || "";
+  const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || "";
 
   useEffect(() => {
     let active = true;
@@ -120,10 +155,10 @@ const ToolAnalysisPage = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setAssistantAgentName(settings.scenarioAssistantAgentName ?? "");
+        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? "");
       })
       .catch(() => {
-        if (active) setAssistantAgentName("");
+        if (active) setSettingsAssistantAgentName("");
       });
     return () => {
       active = false;
@@ -192,6 +227,7 @@ const ToolAnalysisPage = () => {
     () => Object.values(selectedToolsByServer).reduce((sum, list) => sum + list.length, 0),
     [selectedToolsByServer]
   );
+  const selectedServerLabel = selectedServerNames[0] ?? "";
 
   const startAnalysis = async () => {
     if (mode !== "workspace") {
@@ -206,8 +242,8 @@ const ToolAnalysisPage = () => {
       toast({ title: "Select at least one mode", variant: "destructive" });
       return;
     }
-    if (selectedServerNames.length === 0) {
-      toast({ title: "Select at least one server", variant: "destructive" });
+    if (selectedServerNames.length !== 1) {
+      toast({ title: "Select exactly one server", variant: "destructive" });
       return;
     }
     if (totalSelectedTools === 0) {
@@ -218,9 +254,10 @@ const ToolAnalysisPage = () => {
     setSubmitting(true);
     setEvents([]);
     setReport(null);
+    setViewStep("run");
+    setRunState("running");
     try {
       const { jobId } = await source.startToolAnalysis({
-        assistantAgentName: effectiveAssistantAgentName || undefined,
         serverNames: selectedServerNames,
         selectedToolsByServer,
         modes: { metadataReview, deeperAnalysis },
@@ -248,14 +285,20 @@ const ToolAnalysisPage = () => {
             .finally(() => {
               setActiveJobId(null);
               setSubmitting(false);
+              setRunState("idle");
+              setViewStep("report");
             });
         } else if (event.type === "error") {
+          const message = String(event.payload?.message ?? "");
+          setRunState(message.toLowerCase().includes("abort") ? "stopped" : "error");
           setActiveJobId(null);
           setSubmitting(false);
         }
       });
     } catch (error: any) {
       setSubmitting(false);
+      setRunState("error");
+      setViewStep("run");
       toast({
         title: "Could not start tool analysis",
         description: String(error?.message ?? error),
@@ -278,10 +321,14 @@ const ToolAnalysisPage = () => {
     }
   };
 
+  const backToConfigure = () => {
+    setViewStep("configure");
+    setRunState("idle");
+    setActiveJobId(null);
+  };
+
   const toggleServer = (serverName: string, checked: boolean) => {
-    setSelectedServerNames((prev) =>
-      checked ? Array.from(new Set([...prev, serverName])) : prev.filter((name) => name !== serverName)
-    );
+    setSelectedServerNames((prev) => (checked ? [serverName] : prev.filter((name) => name !== serverName)));
   };
 
   const toggleTool = (serverName: string, toolName: string, checked: boolean) => {
@@ -297,6 +344,25 @@ const ToolAnalysisPage = () => {
     setSelectedToolsByServer((prev) => ({ ...prev, [serverName]: toolNames }));
   };
 
+  const canOpenConfigureStep = true;
+  const canOpenRunStep =
+    activeJobId !== null || events.length > 0 || runState === "stopped" || runState === "error";
+  const canOpenReportStep = Boolean(report);
+
+  const openStep = (step: "configure" | "run" | "report") => {
+    if (step === "configure" && canOpenConfigureStep) {
+      setViewStep("configure");
+      return;
+    }
+    if (step === "run" && canOpenRunStep) {
+      setViewStep("run");
+      return;
+    }
+    if (step === "report" && canOpenReportStep) {
+      setViewStep("report");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
@@ -306,10 +372,49 @@ const ToolAnalysisPage = () => {
             Review MCP tools for schema quality, ergonomics, and agent/eval readiness.
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void reloadLibraries()} disabled={librariesLoading}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh Libraries
-        </Button>
+        <div className="hidden flex-wrap items-center gap-2 md:flex">
+          <button
+            type="button"
+            onClick={() => openStep("configure")}
+            className="rounded-full"
+            aria-label="Open Configure Analysis"
+          >
+            <Badge
+              variant={viewStep === "configure" ? "default" : "outline"}
+              className="cursor-pointer"
+            >
+              Configure Analysis
+            </Badge>
+          </button>
+          <button
+            type="button"
+            onClick={() => openStep("run")}
+            disabled={!canOpenRunStep}
+            className="rounded-full disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Open Run Analysis"
+          >
+            <Badge
+              variant={viewStep === "run" ? "default" : "outline"}
+              className={canOpenRunStep ? "cursor-pointer" : "cursor-not-allowed"}
+            >
+              Run Analysis
+            </Badge>
+          </button>
+          <button
+            type="button"
+            onClick={() => openStep("report")}
+            disabled={!canOpenReportStep}
+            className="rounded-full disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Open Report"
+          >
+            <Badge
+              variant={viewStep === "report" ? "default" : "outline"}
+              className={canOpenReportStep ? "cursor-pointer" : "cursor-not-allowed"}
+            >
+              Report
+            </Badge>
+          </button>
+        </div>
       </div>
 
       {mode !== "workspace" && (
@@ -321,47 +426,45 @@ const ToolAnalysisPage = () => {
         </Alert>
       )}
 
+      {viewStep === "configure" && (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Run Configuration</CardTitle>
+          <CardTitle className="text-base">Run MCP analysis</CardTitle>
           <CardDescription>
             Select servers and tools, choose metadata review and/or deeper sample-call analysis, then run the report.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label className="text-xs">Assistant Agent</Label>
-              <Select value={effectiveAssistantAgentName || "__none__"} onValueChange={(v) => setAssistantAgentName(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select assistant agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Use first available agent</SelectItem>
-                  {agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.name || agent.id}>
-                      {(agent.name || agent.id)} · {agent.model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Tool Search</Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="h-9 pl-8"
-                  placeholder="Filter tools by name or description..."
-                  value={toolQuery}
-                  onChange={(e) => setToolQuery(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
+          {!effectiveAssistantAgentName && (
+            <Alert>
+              <AlertTitle>No assistant agent available</AlertTitle>
+              <AlertDescription>
+                Add a library agent in{" "}
+                <Link to="/libraries/agents" className="underline">
+                  Agents
+                </Link>{" "}
+                and optionally set the default Scenario Assistant Agent in{" "}
+                <Link to="/settings" className="underline">
+                  Settings
+                </Link>
+                .
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
-            <Label className="text-xs">Servers</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs">Servers</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void reloadLibraries()}
+                disabled={librariesLoading}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh Servers
+              </Button>
+            </div>
             <div className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
               {servers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No library servers configured.</p>
@@ -381,11 +484,30 @@ const ToolAnalysisPage = () => {
                 })
               )}
             </div>
+            <p className="text-xs text-muted-foreground">Select exactly one MCP server for analysis.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">Filter visible tools</Label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-9 pl-8"
+                placeholder="Filter tools by name or description..."
+                value={toolQuery}
+                onChange={(e) => setToolQuery(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Filtering only changes what is shown; selected tools remain selected.
+            </p>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Tools (per selected server)</Label>
+              <Label className="text-xs">
+                {selectedServerLabel ? `Tools for ${selectedServerLabel}` : "Tools"}
+              </Label>
               <Button type="button" size="sm" variant="outline" onClick={() => void discoverTools()} disabled={discovering || selectedServerNames.length === 0}>
                 {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Discover Tools
@@ -393,7 +515,9 @@ const ToolAnalysisPage = () => {
             </div>
             <div className="space-y-3 rounded-md border p-3">
               {selectedServerNames.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Select one or more servers to discover tools.</p>
+                <p className="text-sm text-muted-foreground">Select a server to discover tools.</p>
+              ) : discovering && discovered.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Loading tools...</p>
               ) : filteredDiscovered.length === 0 && !discovering ? (
                 <p className="text-sm text-muted-foreground">No discovered tools match the current filters.</p>
               ) : (
@@ -416,7 +540,7 @@ const ToolAnalysisPage = () => {
                         <div className="mb-2 space-y-1">
                           {server.warnings.map((warning) => (
                             <div key={`${server.serverName}-${warning}`} className="text-xs text-amber-700">
-                              {warning}
+                              {formatToolDiscoveryWarning(server.serverName, warning)}
                             </div>
                           ))}
                         </div>
@@ -459,11 +583,17 @@ const ToolAnalysisPage = () => {
             <div className="text-sm font-medium">Analysis Modes</div>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={metadataReview} onCheckedChange={(v) => setMetadataReview(Boolean(v))} />
-              <span>Metadata / schema review (no tool execution)</span>
+              <span className="inline-flex items-center gap-1.5">
+                Metadata / schema review
+                <ModeInfo text="No tool execution. Reviews tool names, descriptions, and schemas only." />
+              </span>
             </label>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={deeperAnalysis} onCheckedChange={(v) => setDeeperAnalysis(Boolean(v))} />
-              <span>Deeper analysis (sample tool calls)</span>
+              <span className="inline-flex items-center gap-1.5">
+                Deeper analysis
+                <ModeInfo text="Runs sample MCP tool calls automatically for read-like tools only (based on the safety allowlist)." />
+              </span>
             </label>
             {deeperAnalysis && (
               <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
@@ -506,42 +636,63 @@ const ToolAnalysisPage = () => {
               {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Analyze Tools
             </Button>
-            {activeJobId && (
-              <Button type="button" variant="outline" onClick={() => void stopAnalysis()}>
-                Stop
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>
+      )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Progress</CardTitle>
-          <CardDescription>Live tool-analysis job events (SSE).</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {events.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No analysis started yet.</p>
-          ) : (
-            <div className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
-              {events.map((event, index) => (
-                <div key={`${event.ts}-${index}`} className="text-xs">
-                  <span className="mr-2 font-mono text-muted-foreground">{new Date(event.ts).toLocaleTimeString()}</span>
-                  <Badge variant="outline" className="mr-2 text-[10px]">{event.type}</Badge>
-                  <span className="break-all">
-                    {typeof event.payload.message === "string"
-                      ? event.payload.message
-                      : JSON.stringify(event.payload)}
-                  </span>
-                </div>
-              ))}
+      {viewStep === "run" && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Progress</CardTitle>
+                <CardDescription>
+                  {activeJobId
+                    ? "Live tool-analysis job events (SSE)."
+                    : runState === "stopped"
+                      ? "Analysis was stopped. You can return to Configure Analysis."
+                      : runState === "error"
+                        ? "Analysis ended with an error. Review the log and go back to Configure Analysis."
+                        : "Analysis finished."}
+                </CardDescription>
+              </div>
+              {activeJobId ? (
+                <Button type="button" size="sm" variant="outline" onClick={() => void stopAnalysis()}>
+                  Stop Analysis
+                </Button>
+              ) : (
+                <Button type="button" size="sm" variant="outline" onClick={backToConfigure}>
+                  Back to Configure Analysis
+                </Button>
+              )}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {events.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {activeJobId ? "Starting analysis..." : "No progress events captured."}
+              </p>
+            ) : (
+              <div className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
+                {events.map((event, index) => (
+                  <div key={`${event.ts}-${index}`} className="text-xs">
+                    <span className="mr-2 font-mono text-muted-foreground">{new Date(event.ts).toLocaleTimeString()}</span>
+                    <Badge variant="outline" className="mr-2 text-[10px]">{event.type}</Badge>
+                    <span className="break-all">
+                      {typeof event.payload.message === "string"
+                        ? event.payload.message
+                        : JSON.stringify(event.payload)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      {report && (
+      {viewStep === "report" && report && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -551,6 +702,9 @@ const ToolAnalysisPage = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={backToConfigure}>
+                Back to Configure Analysis
+              </Button>
               <Button
                 type="button"
                 size="sm"

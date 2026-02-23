@@ -25,11 +25,11 @@ const buildCrumbs = (pathname: string): Crumb[] => {
 
   const crumbs: Crumb[] = [{ label: "Dashboard", to: "/" }];
 
-  if (matchPath("/configs/:id", pathname)) {
-    crumbs.push({ label: "MCP Evaluations", to: "/configs" }, { label: "MCP Evaluation" });
+  if (matchPath("/mcp-evaluations/:id", pathname)) {
+    crumbs.push({ label: "MCP Evaluations", to: "/mcp-evaluations" }, { label: "MCP Evaluation" });
     return crumbs;
   }
-  if (matchPath("/configs", pathname)) {
+  if (matchPath("/mcp-evaluations", pathname)) {
     crumbs.push({ label: "MCP Evaluations" });
     return crumbs;
   }

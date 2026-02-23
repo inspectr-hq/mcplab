@@ -187,20 +187,20 @@ const ConfigEditor = () => {
       const created = await addConfig(nextConfig);
       setConfig(created);
       toast({ title: "MCP Evaluation Created", description: `"${created.name}" has been saved.` });
-      navigate(`/configs/${created.id}`);
+      navigate(`/mcp-evaluations/${created.id}`);
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
       toast({ title: "MCP Evaluation Updated", description: `"${updated.name}" has been updated.` });
       setEditing(false);
       if (updated.id !== id) {
-        navigate(`/configs/${updated.id}`, { replace: true });
+        navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
       }
     }
   };
 
   const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${config.name}` : config.name;
-  const configBasePath = isNew ? "/configs/new" : `/configs/${encodeURIComponent(config.id || id || "")}`;
+  const configBasePath = isNew ? "/mcp-evaluations/new" : `/mcp-evaluations/${encodeURIComponent(config.id || id || "")}`;
   const isBrokenConfig = Boolean(existing?.loadError);
 
   const importServerFromLibrary = () => {
@@ -344,7 +344,7 @@ const ConfigEditor = () => {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-          <Link to="/configs"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to="/mcp-evaluations"><ArrowLeft className="h-4 w-4" /></Link>
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{title}</h1>
@@ -716,10 +716,10 @@ const ConfigEditor = () => {
           next.delete("tab");
           setSearchParams(next, { replace: true });
           if (id && id !== "new") {
-            navigate(`/configs/${encodeURIComponent(id)}/${tab}`, { replace: true });
+            navigate(`/mcp-evaluations/${encodeURIComponent(id)}/${tab}`, { replace: true });
             return;
           }
-          navigate(`/configs/${id ?? "new"}/${tab}`, { replace: true });
+          navigate(`/mcp-evaluations/${id ?? "new"}/${tab}`, { replace: true });
         }}
         className="space-y-4"
       >

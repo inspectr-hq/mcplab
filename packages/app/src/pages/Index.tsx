@@ -69,7 +69,7 @@ const Dashboard = () => {
         </div>
         <div className="flex gap-3">
           <Button asChild>
-            <Link to="/configs/new"><Settings className="mr-2 h-4 w-4" />New MCP Evaluation</Link>
+            <Link to="/mcp-evaluations/new"><Settings className="mr-2 h-4 w-4" />New MCP Evaluation</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link to="/run"><Play className="mr-2 h-4 w-4" />Run Evaluation</Link>
