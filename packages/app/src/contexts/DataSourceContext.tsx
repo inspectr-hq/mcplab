@@ -1,10 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { demoSource } from "@/lib/data-sources/demo-source";
 import { workspaceSource } from "@/lib/data-sources/workspace-source";
 import { workspaceApiClient } from "@/lib/data-sources/workspace-api-client";
 import type { DataMode, EvalDataSource } from "@/lib/data-sources/types";
-
-const MODE_KEY = "mcplab:data-mode";
 
 interface DataSourceContextValue {
   mode: DataMode;
@@ -16,20 +13,12 @@ interface DataSourceContextValue {
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 
 export function DataSourceProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<DataMode>(() => {
-    const stored = localStorage.getItem(MODE_KEY);
-    return stored === "workspace" ? "workspace" : "demo";
-  });
+  const mode: DataMode = "workspace";
   const [connection, setConnection] = useState<"connected" | "disconnected" | "checking">(
-    mode === "workspace" ? "checking" : "connected",
+    "checking",
   );
 
   useEffect(() => {
-    localStorage.setItem(MODE_KEY, mode);
-    if (mode === "demo") {
-      setConnection("connected");
-      return;
-    }
     setConnection("checking");
     workspaceApiClient
       .health()
@@ -37,9 +26,11 @@ export function DataSourceProvider({ children }: { children: ReactNode }) {
       .catch(() => setConnection("disconnected"));
   }, [mode]);
 
-  const source = useMemo<EvalDataSource>(() => (mode === "workspace" ? workspaceSource : demoSource), [mode]);
+  const source = useMemo<EvalDataSource>(() => workspaceSource, []);
 
-  const setMode = (next: DataMode) => setModeState(next);
+  const setMode = () => {
+    // Workspace-only mode; kept for compatibility with existing consumers.
+  };
 
   return (
     <DataSourceContext.Provider value={{ mode, setMode, connection, source }}>

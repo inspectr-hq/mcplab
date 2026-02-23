@@ -217,9 +217,12 @@ export const workspaceApiClient = {
       `/api/tool-analysis/jobs/${jobId}/result`
     ),
   stopToolAnalysis: (jobId: string) =>
-    request<{ ok: boolean }>(`/api/tool-analysis/jobs/${jobId}/stop`, {
+    request<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>(
+      `/api/tool-analysis/jobs/${jobId}/stop`,
+      {
       method: 'POST'
-    }),
+      }
+    ),
   subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {
     const source = new EventSource(`${BASE}/api/tool-analysis/jobs/${jobId}/events`);
     let closed = false;

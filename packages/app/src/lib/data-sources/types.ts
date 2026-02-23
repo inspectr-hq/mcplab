@@ -564,5 +564,7 @@ export interface EvalDataSource {
   }) => Promise<{ jobId: string }>;
   subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
   getToolAnalysisResult: (jobId: string) => Promise<{ jobId: string; report: ToolAnalysisReport }>;
-  stopToolAnalysis: (jobId: string) => Promise<void>;
+  stopToolAnalysis: (
+    jobId: string
+  ) => Promise<{ ok: boolean; status: "running" | "completed" | "error" | "stopped" }>;
 }

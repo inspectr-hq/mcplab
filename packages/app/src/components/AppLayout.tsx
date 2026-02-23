@@ -8,7 +8,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { Fragment } from "react";
 import { Link, Outlet, matchPath, useLocation } from "react-router-dom";
@@ -86,7 +85,7 @@ const buildCrumbs = (pathname: string): Crumb[] => {
 export function AppLayout() {
   const location = useLocation();
   const crumbs = buildCrumbs(location.pathname);
-  const { mode, setMode, connection } = useDataSource();
+  const { connection } = useDataSource();
 
   return (
     <SidebarProvider>
@@ -117,21 +116,29 @@ export function AppLayout() {
               </BreadcrumbList>
             </Breadcrumb>
             <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Data Source</span>
-              <Select value={mode} onValueChange={(value) => setMode(value as "demo" | "workspace")}>
-                <SelectTrigger className="h-8 w-36">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="demo">Demo</SelectItem>
-                  <SelectItem value="workspace">Workspace</SelectItem>
-                </SelectContent>
-              </Select>
-              {mode === "workspace" && (
-                <span className={`text-xs ${connection === "connected" ? "text-success" : connection === "checking" ? "text-muted-foreground" : "text-destructive"}`}>
+              <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    connection === "connected"
+                      ? "bg-emerald-500"
+                      : connection === "checking"
+                        ? "bg-amber-400"
+                        : "bg-rose-500"
+                  }`}
+                  aria-hidden="true"
+                />
+                <span
+                  className={`text-xs ${
+                    connection === "connected"
+                      ? "text-emerald-700"
+                      : connection === "checking"
+                        ? "text-muted-foreground"
+                        : "text-destructive"
+                  }`}
+                >
                   {connection}
                 </span>
-              )}
+              </div>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">
