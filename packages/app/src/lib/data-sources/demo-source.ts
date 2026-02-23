@@ -71,6 +71,9 @@ export const demoSource: EvalDataSource = {
   async getResult(id) {
     return mockResults.find((item) => item.id === id);
   },
+  async deleteResult() {
+    // demo source is static; no-op
+  },
   async startRun() {
     return { jobId: `demo-${Date.now()}` };
   },

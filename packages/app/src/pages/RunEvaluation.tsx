@@ -100,7 +100,16 @@ const RunEvaluation = () => {
       setSelectedScenarioIds([]);
       return;
     }
-    setSelectedAgentIds(availableAgents.map((agent) => agent.id));
+    const configuredDefaultAgentIds = availableAgents
+      .filter((agent) =>
+        (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.name || agent.id)
+      )
+      .map((agent) => agent.id);
+    setSelectedAgentIds(
+      configuredDefaultAgentIds.length > 0
+        ? configuredDefaultAgentIds
+        : availableAgents.map((agent) => agent.id)
+    );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setApplySnapshotEval(true);
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);

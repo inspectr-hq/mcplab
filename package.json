@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc -b && node scripts/copy-cli.mjs",
     "dev": "tsx packages/cli/src/cli.ts",
+    "mcp:build": "npm run build -w @inspectr/mcplab-mcp-server",
     "mcp:dev": "tsx packages/mcp-server/src/index.ts",
     "app": "node dist/cli.js app",
     "app:dev": "tsx packages/cli/src/cli.ts app --dev",

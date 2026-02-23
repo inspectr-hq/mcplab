@@ -5,13 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
 
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
+  const [deletingRun, setDeletingRun] = useState(false);
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -52,8 +65,54 @@ const Results = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
+  const handleDeleteRun = async (runId: string) => {
+    setDeletingRun(true);
+    try {
+      await source.deleteResult(runId);
+      setResults((prev) => prev.filter((r) => r.id !== runId));
+      toast({ title: "Run deleted", description: runId });
+      setPendingDeleteRunId(null);
+    } catch (error: any) {
+      toast({
+        title: "Could not delete run",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setDeletingRun(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <AlertDialog open={pendingDeleteRunId !== null} onOpenChange={(open) => {
+        if (!open && !deletingRun) setPendingDeleteRunId(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete run?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the run artifacts from disk for{" "}
+              <span className="font-mono">{pendingDeleteRunId ?? ""}</span>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingRun}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingRun || !pendingDeleteRunId}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!pendingDeleteRunId) return;
+                void handleDeleteRun(pendingDeleteRunId);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingRun ? "Deleting..." : "Delete run"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div>
         <h1 className="text-2xl font-bold">Results</h1>
         <p className="text-sm text-muted-foreground">Browse and compare evaluation results</p>
@@ -119,7 +178,15 @@ const Results = () => {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild><Link to={`/results/${r.id}`}><Eye className="mr-2 h-3.5 w-3.5" />View</Link></DropdownMenuItem>
                         <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Export JSON</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive"><Trash2 className="mr-2 h-3.5 w-3.5" />Delete</DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            setPendingDeleteRunId(r.id);
+                          }}
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

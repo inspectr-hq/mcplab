@@ -81,12 +81,18 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     return {
       id: scenario.id || toId('scn', index),
       name: scenario.id || `Scenario ${index + 1}`,
-      agentId: scenario.agent ? (agentIdByName.get(scenario.agent) ?? undefined) : undefined,
       serverIds: scenario.servers
         .map((name) => serverIdByName.get(name))
         .filter(Boolean) as string[],
       prompt: scenario.prompt,
-      snapshotEvalEnabled: scenario.snapshot_eval_enabled,
+      snapshotEval: scenario.snapshot_eval
+        ? {
+            enabled: scenario.snapshot_eval.enabled,
+            baselineSnapshotId: scenario.snapshot_eval.baseline_snapshot_id,
+            baselineSourceRunId: scenario.snapshot_eval.baseline_source_run_id,
+            lastUpdatedAt: scenario.snapshot_eval.last_updated_at
+          }
+        : undefined,
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,
@@ -100,12 +106,19 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     name: record.name,
     description: record.path,
     loadError: record.error,
+    loadWarnings: record.warnings,
     servers,
     serverRefs: record.config.server_refs ?? [],
     agents,
     agentRefs: record.config.agent_refs ?? [],
     scenarios,
     scenarioRefs: record.config.scenario_refs ?? [],
+    runDefaults:
+      record.config.run_defaults?.selected_agents && record.config.run_defaults.selected_agents.length > 0
+        ? {
+            selectedAgentNames: [...record.config.run_defaults.selected_agents]
+          }
+        : undefined,
     snapshotEval: record.config.snapshot_eval
       ? {
           enabled: record.config.snapshot_eval.enabled,
@@ -195,10 +208,16 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
 
     return {
       id: scenario.id,
-      agent: scenario.agentId ? agentNameById.get(scenario.agentId) || undefined : undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
-      snapshot_eval_enabled: scenario.snapshotEvalEnabled,
+      snapshot_eval: scenario.snapshotEval
+        ? {
+            enabled: scenario.snapshotEval.enabled,
+            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+            last_updated_at: scenario.snapshotEval.lastUpdatedAt
+          }
+        : undefined,
       eval: {
         tool_constraints: {
           required_tools,
@@ -221,6 +240,12 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
     agent_refs: config.agentRefs ?? [],
     scenarios,
     scenario_refs: config.scenarioRefs ?? [],
+    run_defaults:
+      config.runDefaults?.selectedAgentNames && config.runDefaults.selectedAgentNames.length > 0
+        ? {
+            selected_agents: [...config.runDefaults.selectedAgentNames]
+          }
+        : undefined,
     snapshot_eval: config.snapshotEval
       ? {
           enabled: config.snapshotEval.enabled,

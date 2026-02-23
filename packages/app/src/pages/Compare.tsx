@@ -285,7 +285,7 @@ const Compare = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Scenario</TableHead>
-                      <TableHead>Agent</TableHead>
+                      <TableHead>Agents</TableHead>
                       <TableHead>Score</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Reasons</TableHead>
@@ -293,9 +293,11 @@ const Compare = () => {
                   </TableHeader>
                   <TableBody>
                     {snapshotComparison.scenario_results.map((row) => (
-                      <TableRow key={`${row.scenario_id}:${row.agent}`}>
+                      <TableRow key={row.scenario_id}>
                         <TableCell>{row.scenario_id}</TableCell>
-                        <TableCell>{row.agent}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          baseline: {row.baseline_agents.join(", ") || "—"} · observed: {row.observed_agents.join(", ") || "—"}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{row.score}</TableCell>
                         <TableCell>{row.status}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">

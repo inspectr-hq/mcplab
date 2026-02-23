@@ -67,10 +67,14 @@ export interface ExtractRule {
 
 export interface Scenario {
   id: string;
-  agent?: string;
   servers: string[];
   prompt: string;
-  snapshot_eval_enabled?: boolean;
+  snapshot_eval?: {
+    enabled?: boolean;
+    baseline_snapshot_id?: string;
+    baseline_source_run_id?: string;
+    last_updated_at?: string;
+  };
   eval?: EvalRules;
   extract?: ExtractRule[];
 }
@@ -90,7 +94,19 @@ export interface EvalConfig {
   agent_refs?: string[];
   scenarios: Scenario[];
   scenario_refs?: string[];
+  run_defaults?: {
+    selected_agents?: string[];
+  };
   snapshot_eval?: SnapshotEvalPolicy;
+}
+
+export interface ExecutableScenario extends Scenario {
+  agent: string;
+  scenario_exec_id?: string;
+}
+
+export interface ExecutableEvalConfig extends Omit<EvalConfig, 'scenarios'> {
+  scenarios: ExecutableScenario[];
 }
 
 export interface ToolDef {

@@ -9,6 +9,7 @@ import {
   selectScenarios,
   runAll,
   type EvalConfig,
+  type ExecutableEvalConfig,
   type ResultsJson
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -49,7 +50,10 @@ program
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .action(async (options) => {
     try {
-      let { config, hash } = loadConfig(resolve(options.config));
+      let { config, hash, warnings } = loadConfig(resolve(options.config));
+      for (const warning of warnings) {
+        console.log(kleur.yellow(`⚠ ${warning}`));
+      }
 
       const requestedAgents = options.agents
         ? options.agents
@@ -58,17 +62,18 @@ program
             .filter(Boolean)
         : undefined;
       const beforeExpandCount = config.scenarios.length;
-      config = expandConfigForAgents(config, requestedAgents);
-      if (config.scenarios.length !== beforeExpandCount || requestedAgents?.length) {
-        const agentCount = requestedAgents?.length ?? Object.keys(config.agents).length;
+      const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
+      const expanded = expandConfigForAgents(config, effectiveAgents);
+      if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
+        const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
         console.log(
           kleur.cyan(
-            `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${config.scenarios.length} total tests`
+            `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${expanded.scenarios.length} total tests`
           )
         );
       }
 
-      const selected = selectScenarios(config, options.scenario);
+      const selected = selectScenarios(expanded, options.scenario);
       const runsPerScenario = Number(options.runs);
       if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
         throw new Error('Runs must be a positive number');
@@ -99,12 +104,12 @@ program
           const comparison = compareRunToSnapshot(results, snapshot);
           const enabledScenarioIds = new Set(
             selected.scenarios
-              .filter((scenario) => scenario.snapshot_eval_enabled !== false)
+              .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
               .map((scenario) => scenario.id)
           );
           const applied = applySnapshotPolicyToRunResult({
             results,
-            comparison,
+            comparisons: [comparison],
             policy,
             enabledScenarioIds
           });
@@ -254,6 +259,77 @@ program
           };
           writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
           console.log(kleur.green(`Snapshot eval policy updated: ${configPath}`));
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    new Command('eval-set-scenario')
+      .description('Set or clear a scenario-level snapshot baseline override in a config')
+      .requiredOption('--config <path>', 'Path to eval.yaml')
+      .requiredOption('--scenario <id>', 'Scenario id')
+      .option('--snapshot <snapshotId>', 'Override baseline snapshot id (omit to clear override)')
+      .option('--source-run <runId>', 'Source run id used to create the scenario baseline')
+      .option('--enabled <true|false>', 'Scenario snapshot eval enabled override')
+      .action((options) => {
+        try {
+          const configPath = resolve(String(options.config));
+          const scenarioId = String(options.scenario).trim();
+          if (!scenarioId) throw new Error('scenario is required');
+          const { sourceConfig } = loadConfig(configPath);
+          const scenarioIndex = (sourceConfig.scenarios ?? []).findIndex((s) => s.id === scenarioId);
+          if (scenarioIndex < 0) {
+            throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
+          }
+          const scenarios = [...(sourceConfig.scenarios ?? [])];
+          const current = scenarios[scenarioIndex];
+          const nextScenarioSnapshotEval = {
+            ...(current.snapshot_eval ?? {}),
+            ...(options.snapshot !== undefined
+              ? { baseline_snapshot_id: String(options.snapshot || '') || undefined }
+              : {}),
+            ...(options.sourceRun !== undefined
+              ? { baseline_source_run_id: String(options.sourceRun || '') || undefined }
+              : {}),
+            ...(options.enabled !== undefined
+              ? { enabled: String(options.enabled).toLowerCase() === 'true' }
+              : {}),
+            last_updated_at: new Date().toISOString()
+          };
+          if (!nextScenarioSnapshotEval.baseline_snapshot_id) {
+            delete (nextScenarioSnapshotEval as any).baseline_snapshot_id;
+          }
+          if (!nextScenarioSnapshotEval.baseline_source_run_id) {
+            delete (nextScenarioSnapshotEval as any).baseline_source_run_id;
+          }
+          if (
+            nextScenarioSnapshotEval.enabled === undefined &&
+            !nextScenarioSnapshotEval.baseline_snapshot_id &&
+            !nextScenarioSnapshotEval.baseline_source_run_id
+          ) {
+            scenarios[scenarioIndex] = {
+              ...current,
+              snapshot_eval: undefined
+            };
+          } else {
+            scenarios[scenarioIndex] = {
+              ...current,
+              snapshot_eval: nextScenarioSnapshotEval
+            };
+          }
+          const nextConfig: EvalConfig = {
+            ...sourceConfig,
+            scenarios
+          };
+          writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+          console.log(
+            kleur.green(
+              `Scenario snapshot baseline ${options.snapshot ? 'set' : 'updated'}: ${scenarioId}`
+            )
+          );
+          console.log(kleur.gray(`Config updated: ${configPath}`));
         } catch (err: any) {
           console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
           process.exit(1);
@@ -413,7 +489,7 @@ program
 
       try {
         const { config, hash } = loadConfig(configPath);
-        const expanded = expandConfigForAgents(config);
+        const expanded = expandConfigForAgents(config, config.run_defaults?.selected_agents);
         const selected = selectScenarios(expanded, options.scenario);
         const { runDir, results } = await runAll(selected, {
           runsPerScenario,
@@ -473,7 +549,10 @@ program
 
 program.parse();
 
-function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): EvalConfig {
+function expandConfigForAgents(
+  config: EvalConfig,
+  requestedAgents?: string[]
+): ExecutableEvalConfig {
   const selectedAgents =
     requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
   const missing = selectedAgents.filter((agent) => !config.agents[agent]);
@@ -483,19 +562,13 @@ function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): 
     );
   }
 
-  const scenarios = config.scenarios.flatMap((scenario) => {
-    const pinnedAgent = scenario.agent?.trim();
-    const targetAgents = pinnedAgent
-      ? selectedAgents.includes(pinnedAgent)
-        ? [pinnedAgent]
-        : []
-      : selectedAgents;
-    return targetAgents.map((agent) => ({
+  const scenarios = config.scenarios.flatMap((scenario) =>
+    selectedAgents.map((agent) => ({
       ...scenario,
-      id: `${scenario.id}-${agent}`,
-      agent
-    }));
-  });
+      agent,
+      scenario_exec_id: `${scenario.id}-${agent}`
+    }))
+  );
 
   return { ...config, scenarios };
 }

@@ -6,7 +6,14 @@ import { dirname, resolve, join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { loadConfig, runAll, selectScenarios, type EvalConfig, type ResultsJson } from '@inspectr/mcplab-core';
+import {
+  loadConfig,
+  runAll,
+  selectScenarios,
+  type EvalConfig,
+  type ExecutableEvalConfig,
+  type ResultsJson
+} from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
@@ -95,7 +102,9 @@ function registerTools(server: McpServer): void {
         bundleRoot: z
           .string()
           .optional()
-          .describe('Optional library bundle root. Defaults to mcplab/ or examples/libraries/ if present.'),
+          .describe(
+            'Optional library bundle root. Defaults to mcplab/ or examples/libraries/ if present.'
+          ),
         kind: z
           .enum(['all', 'servers', 'agents', 'scenarios'])
           .optional()
@@ -119,10 +128,7 @@ function registerTools(server: McpServer): void {
                 [selectedKind]: data[selectedKind]
               };
 
-        return ok(
-          `Loaded MCPLab library from ${root}`,
-          structured as Record<string, unknown>
-        );
+        return ok(`Loaded MCPLab library from ${root}`, structured as Record<string, unknown>);
       });
     }
   );
@@ -142,10 +148,7 @@ function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const root = resolveBundleRoot(bundleRoot);
         const item = getLibraryItem(root, kind, id);
-        return ok(
-          `Loaded ${kind.slice(0, -1)} '${id}' from ${root}`,
-          item
-        );
+        return ok(`Loaded ${kind.slice(0, -1)} '${id}' from ${root}`, item);
       });
     }
   );
@@ -180,14 +183,11 @@ function registerTools(server: McpServer): void {
     async (input) => {
       return withToolHandling(async () => {
         const entry = buildServerEntry(input);
-        return ok(
-          `Generated server entry '${input.id}'`,
-          {
-            id: input.id,
-            entry,
-            yaml: stringifyYaml({ [input.id]: entry }).trimEnd()
-          }
-        );
+        return ok(`Generated server entry '${input.id}'`, {
+          id: input.id,
+          entry,
+          yaml: stringifyYaml({ [input.id]: entry }).trimEnd()
+        });
       });
     }
   );
@@ -211,14 +211,11 @@ function registerTools(server: McpServer): void {
     async ({ id, ...agent }) => {
       return withToolHandling(async () => {
         const entry = removeUndefined(agent);
-        return ok(
-          `Generated agent entry '${id}'`,
-          {
-            id,
-            entry,
-            yaml: stringifyYaml({ [id]: entry }).trimEnd()
-          }
-        );
+        return ok(`Generated agent entry '${id}'`, {
+          id,
+          entry,
+          yaml: stringifyYaml({ [id]: entry }).trimEnd()
+        });
       });
     }
   );
@@ -229,7 +226,10 @@ function registerTools(server: McpServer): void {
       description:
         'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Optimized for scenario authoring workflows.',
       inputSchema: {
-        id: z.string().optional().describe('Scenario id (kebab-case). Auto-derived from name if omitted.'),
+        id: z
+          .string()
+          .optional()
+          .describe('Scenario id (kebab-case). Auto-derived from name if omitted.'),
         name: z
           .string()
           .optional()
@@ -238,7 +238,10 @@ function registerTools(server: McpServer): void {
           .string()
           .optional()
           .describe('Optional pinned agent id. Omit to use mcplab run --agents selection.'),
-        servers: z.array(z.string()).min(1).describe('One or more server ids available to the scenario.'),
+        servers: z
+          .array(z.string())
+          .min(1)
+          .describe('One or more server ids available to the scenario.'),
         prompt: z.string().describe('The task prompt the evaluation agent should execute.'),
         snapshot_eval_enabled: z
           .boolean()
@@ -266,7 +269,9 @@ function registerTools(server: McpServer): void {
         as_library_file: z
           .boolean()
           .optional()
-          .describe('True returns standalone scenario YAML file content; false returns list item snippet.')
+          .describe(
+            'True returns standalone scenario YAML file content; false returns list item snippet.'
+          )
       }
     },
     async (input) => {
@@ -276,17 +281,14 @@ function registerTools(server: McpServer): void {
         const yamlLibraryFile = stringifyYaml(scenario).trimEnd();
         const yamlInlineListItem = indentBlock(stringifyYaml([scenario]).trimEnd(), 2);
         const warnings = validateScenarioHeuristics(scenario);
-        return ok(
-          `Generated scenario '${scenario.id}'`,
-          {
-            scenario,
-            yaml: asLibraryFile ? yamlLibraryFile : yamlInlineListItem,
-            yaml_library_file: yamlLibraryFile,
-            yaml_inline_list_item: yamlInlineListItem,
-            format: asLibraryFile ? 'library-scenario-file' : 'inline-scenarios-list-item',
-            warnings
-          }
-        );
+        return ok(`Generated scenario '${scenario.id}'`, {
+          scenario,
+          yaml: asLibraryFile ? yamlLibraryFile : yamlInlineListItem,
+          yaml_library_file: yamlLibraryFile,
+          yaml_inline_list_item: yamlInlineListItem,
+          format: asLibraryFile ? 'library-scenario-file' : 'inline-scenarios-list-item',
+          warnings
+        });
       });
     }
   );
@@ -298,8 +300,14 @@ function registerTools(server: McpServer): void {
         'Validate and expand a MCPLab config file via mcplab-core loadConfig(), including server/agent/scenario library references.',
       inputSchema: {
         config_path: z.string().describe('Path to MCPLab eval YAML config.'),
-        bundle_root: z.string().optional().describe('Optional bundle root override for refs resolution.'),
-        scenario_id: z.string().optional().describe('Optional single scenario id to validate selection.')
+        bundle_root: z
+          .string()
+          .optional()
+          .describe('Optional bundle root override for refs resolution.'),
+        scenario_id: z
+          .string()
+          .optional()
+          .describe('Optional single scenario id to validate selection.')
       }
     },
     async ({ config_path, bundle_root, scenario_id }) => {
@@ -309,16 +317,15 @@ function registerTools(server: McpServer): void {
         });
         const selected = selectScenarios(loaded.config, scenario_id);
         const summary = summarizeConfig(selected);
-        return ok(
-          `Validated config ${config_path}`,
-          {
-            configPath: resolve(config_path),
-            bundleRoot: bundle_root ? resolve(bundle_root) : detectLikelyBundleRoot(resolve(config_path)),
-            hash: loaded.hash,
-            summary,
-            resolved_config: selected
-          }
-        );
+        return ok(`Validated config ${config_path}`, {
+          configPath: resolve(config_path),
+          bundleRoot: bundle_root
+            ? resolve(bundle_root)
+            : detectLikelyBundleRoot(resolve(config_path)),
+          hash: loaded.hash,
+          summary,
+          resolved_config: selected
+        });
       });
     }
   );
@@ -330,9 +337,17 @@ function registerTools(server: McpServer): void {
         'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics.',
       inputSchema: {
         config_path: z.string().describe('Path to MCPLab eval YAML config.'),
-        bundle_root: z.string().optional().describe('Optional bundle root override for library refs.'),
+        bundle_root: z
+          .string()
+          .optional()
+          .describe('Optional bundle root override for library refs.'),
         scenario_id: z.string().optional().describe('Optional scenario id to run.'),
-        runs_per_scenario: z.number().int().positive().optional().describe('Runs per scenario (default 1).'),
+        runs_per_scenario: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Runs per scenario (default 1).'),
         runs_dir: z
           .string()
           .optional()
@@ -345,7 +360,8 @@ function registerTools(server: McpServer): void {
           bundleRoot: bundle_root ? resolve(bundle_root) : undefined
         });
         const selected = selectScenarios(loaded.config, scenario_id);
-        const { runDir, results } = await runAll(selected, {
+        const executable = expandConfigForAgents(selected, selected.run_defaults?.selected_agents);
+        const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
           configHash: loaded.hash,
@@ -354,21 +370,18 @@ function registerTools(server: McpServer): void {
         });
 
         const reportHtml = renderReport(results);
-        return ok(
-          `MCPLab run completed: ${runDir}`,
-          {
-            runDir,
-            summary: results.summary,
-            metadata: results.metadata,
-            scenarios: results.scenarios.map((scenario) => ({
-              scenario_id: scenario.scenario_id,
-              agent: scenario.agent,
-              pass_rate: scenario.pass_rate,
-              tool_usage_frequency: scenario.tool_usage_frequency
-            })),
-            report_html_preview: truncate(reportHtml, 4000)
-          }
-        );
+        return ok(`MCPLab run completed: ${runDir}`, {
+          runDir,
+          summary: results.summary,
+          metadata: results.metadata,
+          scenarios: results.scenarios.map((scenario) => ({
+            scenario_id: scenario.scenario_id,
+            agent: scenario.agent,
+            pass_rate: scenario.pass_rate,
+            tool_usage_frequency: scenario.tool_usage_frequency
+          })),
+          report_html_preview: truncate(reportHtml, 4000)
+        });
       });
     }
   );
@@ -380,7 +393,13 @@ function registerTools(server: McpServer): void {
         'List MCPLab run artifact directories and optionally summarize each run from results.json when present.',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/runs).'),
-        limit: z.number().int().positive().max(100).optional().describe('Max runs to return (default 10).'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .optional()
+          .describe('Max runs to return (default 10).'),
         include_summary: z
           .boolean()
           .optional()
@@ -408,9 +427,20 @@ function registerTools(server: McpServer): void {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/runs).'),
         run_id: z.string().describe('Run id directory name or LATEST.'),
         artifact: z
-          .enum(['results.json', 'summary.md', 'trace.jsonl', 'resolved-config.yaml', 'report.html'])
+          .enum([
+            'results.json',
+            'summary.md',
+            'trace.jsonl',
+            'resolved-config.yaml',
+            'report.html'
+          ])
           .describe('Artifact filename to read.'),
-        max_chars: z.number().int().positive().optional().describe('Optional content truncation limit.')
+        max_chars: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Optional content truncation limit.')
       }
     },
     async ({ runs_dir, run_id, artifact, max_chars }) => {
@@ -461,7 +491,10 @@ function registerPrompts(server: McpServer): void {
         'Guide an LLM to author or refine MCPLab scenarios, prioritizing reusable scenario library files and deterministic eval rules.',
       argsSchema: {
         task: z.string().describe('What the scenario should test.'),
-        bundle_root: z.string().optional().describe('Optional MCPLab library bundle root to inspect.'),
+        bundle_root: z
+          .string()
+          .optional()
+          .describe('Optional MCPLab library bundle root to inspect.'),
         server_ids: z
           .string()
           .optional()
@@ -576,10 +609,14 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
     bundleRoot,
     servers: includeContent
       ? servers
-      : Object.keys(servers).sort().map((id) => ({ id })),
+      : Object.keys(servers)
+          .sort()
+          .map((id) => ({ id })),
     agents: includeContent
       ? agents
-      : Object.keys(agents).sort().map((id) => ({ id })),
+      : Object.keys(agents)
+          .sort()
+          .map((id) => ({ id })),
     scenarios: scenarioEntries
   };
   return out;
@@ -752,13 +789,17 @@ function buildEvalRules(input: {
 function validateScenarioHeuristics(scenario: EvalConfig['scenarios'][number]): string[] {
   const warnings: string[] = [];
   if (!scenario.eval) {
-    warnings.push('No eval rules defined yet. Add required_tools and/or response assertions for deterministic checks.');
+    warnings.push(
+      'No eval rules defined yet. Add required_tools and/or response assertions for deterministic checks.'
+    );
   }
   if (!scenario.extract || scenario.extract.length === 0) {
     warnings.push('No extract rules defined. Consider adding domain metrics for trend tracking.');
   }
   if (scenario.prompt.trim().length < 40) {
-    warnings.push('Prompt is very short; scenario quality usually improves with explicit success criteria and output format instructions.');
+    warnings.push(
+      'Prompt is very short; scenario quality usually improves with explicit success criteria and output format instructions.'
+    );
   }
   return warnings;
 }
@@ -772,7 +813,6 @@ function summarizeConfig(config: EvalConfig): Record<string, unknown> {
     agents: Object.keys(config.agents).sort(),
     scenarios: config.scenarios.map((scenario) => ({
       id: scenario.id,
-      agent: scenario.agent ?? null,
       servers: scenario.servers,
       has_eval: Boolean(scenario.eval),
       extract_count: scenario.extract?.length ?? 0
@@ -780,7 +820,11 @@ function summarizeConfig(config: EvalConfig): Record<string, unknown> {
   };
 }
 
-function listRuns(runsDir: string, limit: number, includeSummary: boolean): Array<Record<string, unknown>> {
+function listRuns(
+  runsDir: string,
+  limit: number,
+  includeSummary: boolean
+): Array<Record<string, unknown>> {
   if (!existsSync(runsDir)) return [];
   const dirNames = readdirSync(runsDir)
     .filter((name) => {
@@ -816,6 +860,27 @@ function listRuns(runsDir: string, limit: number, includeSummary: boolean): Arra
   });
 }
 
+function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): ExecutableEvalConfig {
+  const selectedAgents =
+    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
+  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
+    );
+  }
+
+  const scenarios = config.scenarios.flatMap((scenario) =>
+    selectedAgents.map((agent) => ({
+      ...scenario,
+      agent,
+      scenario_exec_id: `${scenario.id}-${agent}`
+    }))
+  );
+
+  return { ...config, scenarios };
+}
+
 function latestRunId(runsDir: string): string | undefined {
   if (!existsSync(runsDir)) return undefined;
   return readdirSync(runsDir)
@@ -833,7 +898,10 @@ function latestRunId(runsDir: string): string | undefined {
 function detectLikelyBundleRoot(configPath: string): string | null {
   const configDir = dirname(configPath);
   const candidateFromConfigs = dirname(configDir);
-  if (existsSync(join(candidateFromConfigs, 'servers.yaml')) || existsSync(join(candidateFromConfigs, 'scenarios'))) {
+  if (
+    existsSync(join(candidateFromConfigs, 'servers.yaml')) ||
+    existsSync(join(candidateFromConfigs, 'scenarios'))
+  ) {
     return candidateFromConfigs;
   }
   const fallback = resolveBundleRoot();

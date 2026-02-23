@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import type { EvalConfig, ScenarioRunResult, ResultsJson } from './types.js';
+import type { ExecutableEvalConfig, ScenarioRunResult, ResultsJson, ExecutableScenario } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
 import { runAgentScenario } from './agent.js';
@@ -19,7 +19,7 @@ export interface RunOptions {
 }
 
 export async function runAll(
-  config: EvalConfig,
+  config: ExecutableEvalConfig,
   options: RunOptions
 ): Promise<{ runDir: string; results: ResultsJson }> {
   throwIfAborted(options.signal);
@@ -46,7 +46,7 @@ export async function runAll(
   const scenarioRuns: Array<{
     scenario_id: string;
     agent: string;
-    eval?: EvalConfig['scenarios'][number]['eval'];
+    eval?: ExecutableScenario['eval'];
     runs: ScenarioRunResult[];
   }> = [];
 
@@ -54,7 +54,7 @@ export async function runAll(
     throwIfAborted(options.signal);
     if (!scenario.agent) {
       throw new Error(
-        `Scenario '${scenario.id}' has no agent. Provide --agents or set scenario.agent.`
+        `Scenario '${scenario.id}' has no execution agent. Provide run agent selection or config run_defaults.selected_agents.`
       );
     }
     const agent = config.agents[scenario.agent];

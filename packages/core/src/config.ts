@@ -12,6 +12,7 @@ export function loadConfig(
   sourceConfig: EvalConfig;
   hash: string;
   raw: string;
+  warnings: string[];
 } {
   const raw = readFileSync(path, 'utf8');
   const sourceConfig = parse(raw) as EvalConfig;
@@ -19,19 +20,22 @@ export function loadConfig(
   if (!sourceConfig || typeof sourceConfig !== 'object') {
     throw new Error('Invalid config: expected object');
   }
-  const normalizedSource = normalizeConfig(sourceConfig);
+  const { config: normalizedSource, warnings } = normalizeConfig(sourceConfig);
   const config = resolveReferences(normalizedSource, path, options?.bundleRoot);
   const hash = createHash('sha256').update(stableStringify(config)).digest('hex');
-  return { config, sourceConfig: normalizedSource, hash, raw };
+  return { config, sourceConfig: normalizedSource, hash, raw, warnings };
 }
 
-export function selectScenarios(config: EvalConfig, scenarioId?: string): EvalConfig {
+export function selectScenarios<T extends { scenarios: Array<{ id: string }> }>(
+  config: T,
+  scenarioId?: string
+): T {
   if (!scenarioId) return config;
   const scenarios = config.scenarios.filter((s) => s.id === scenarioId);
   if (scenarios.length === 0) {
     throw new Error(`Scenario not found: ${scenarioId}`);
   }
-  return { ...config, scenarios };
+  return { ...config, scenarios } as T;
 }
 
 function resolveReferences(
@@ -97,6 +101,17 @@ function resolveReferences(
   if (missingScenarioRefs.length > 0) {
     missingMessages.push(`scenario_refs: ${missingScenarioRefs.join(', ')}`);
   }
+  const defaultAgents = sourceConfig.run_defaults?.selected_agents ?? [];
+  const missingDefaultAgents = defaultAgents.filter((agent) => !agents[agent]);
+  if (missingDefaultAgents.length > 0) {
+    missingMessages.push(`run_defaults.selected_agents: ${missingDefaultAgents.join(', ')}`);
+  }
+  if (
+    sourceConfig.run_defaults?.selected_agents &&
+    sourceConfig.run_defaults.selected_agents.length === 0
+  ) {
+    missingMessages.push('run_defaults.selected_agents must include at least one valid agent');
+  }
   if (missingMessages.length > 0) {
     throw new Error(`Unresolved config references (${bundleRoot}): ${missingMessages.join(' | ')}`);
   }
@@ -109,14 +124,44 @@ function resolveReferences(
   };
 }
 
-function normalizeConfig(sourceConfig: EvalConfig): EvalConfig {
+function normalizeConfig(sourceConfig: EvalConfig): { config: EvalConfig; warnings: string[] } {
+  const warnings: string[] = [];
+  const legacyPinnedAgents = new Set<string>();
+  const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
+  const normalizedScenarios = scenariosInput.map((scenario) => {
+    const rawScenario = scenario as EvalConfig['scenarios'][number] & {
+      agent?: unknown;
+      snapshot_eval_enabled?: unknown;
+    };
+    const nextScenario: EvalConfig['scenarios'][number] = {
+      id: rawScenario.id,
+      servers: rawScenario.servers,
+      prompt: rawScenario.prompt,
+      eval: rawScenario.eval,
+      extract: rawScenario.extract
+    };
+    const legacyAgent = typeof rawScenario.agent === 'string' ? rawScenario.agent.trim() : '';
+    if (legacyAgent) legacyPinnedAgents.add(legacyAgent);
+    const legacySnapshotEnabled =
+      typeof rawScenario.snapshot_eval_enabled === 'boolean'
+        ? rawScenario.snapshot_eval_enabled
+        : undefined;
+    if (rawScenario.snapshot_eval || legacySnapshotEnabled !== undefined) {
+      nextScenario.snapshot_eval = {
+        ...(rawScenario.snapshot_eval ?? {}),
+        ...(legacySnapshotEnabled !== undefined ? { enabled: legacySnapshotEnabled } : {})
+      };
+    }
+    return nextScenario;
+  });
+
   const normalized: EvalConfig = {
     ...sourceConfig,
     servers: sourceConfig.servers ?? {},
     server_refs: sourceConfig.server_refs ?? [],
     agents: sourceConfig.agents ?? {},
     agent_refs: sourceConfig.agent_refs ?? [],
-    scenarios: sourceConfig.scenarios ?? [],
+    scenarios: normalizedScenarios,
     scenario_refs: sourceConfig.scenario_refs ?? []
   };
 
@@ -138,8 +183,48 @@ function normalizeConfig(sourceConfig: EvalConfig): EvalConfig {
   if (!Array.isArray(normalized.scenario_refs)) {
     throw new Error('Invalid config: scenario_refs must be an array');
   }
+  if (
+    normalized.run_defaults &&
+    (typeof normalized.run_defaults !== 'object' || Array.isArray(normalized.run_defaults))
+  ) {
+    throw new Error('Invalid config: run_defaults must be an object');
+  }
+  if (
+    normalized.run_defaults?.selected_agents !== undefined &&
+    !Array.isArray(normalized.run_defaults.selected_agents)
+  ) {
+    throw new Error('Invalid config: run_defaults.selected_agents must be an array');
+  }
 
-  return normalized;
+  if (legacyPinnedAgents.size > 0) {
+    const migrated = new Set<string>(normalized.run_defaults?.selected_agents ?? []);
+    for (const agent of legacyPinnedAgents) migrated.add(agent);
+    normalized.run_defaults = {
+      ...(normalized.run_defaults ?? {}),
+      selected_agents: Array.from(migrated)
+    };
+    warnings.push(
+      `Legacy scenario.agent was migrated to run_defaults.selected_agents (union): ${Array.from(
+        legacyPinnedAgents
+      ).join(', ')}`
+    );
+  }
+  if (
+    normalized.scenarios.some((s) => s.snapshot_eval && 'enabled' in (s.snapshot_eval ?? {})) &&
+    scenariosInput.some((s: any) => s?.snapshot_eval_enabled !== undefined)
+  ) {
+    warnings.push(
+      'Legacy scenario.snapshot_eval_enabled was migrated to scenario.snapshot_eval.enabled.'
+    );
+  }
+
+  if (normalized.run_defaults?.selected_agents) {
+    normalized.run_defaults.selected_agents = normalized.run_defaults.selected_agents
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+  }
+
+  return { config: normalized, warnings };
 }
 
 function readYaml<T>(path: string, fallback: T): T {

@@ -5,6 +5,7 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync
@@ -13,7 +14,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { EvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core';
+import type { EvalConfig, ExecutableEvalConfig, ResultsJson, TraceEvent } from '@inspectr/mcplab-core';
 import { loadConfig, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../package.json' with { type: 'json' };
@@ -53,6 +54,7 @@ interface ConfigRecord {
   hash: string;
   config: EvalConfig;
   error?: string;
+  warnings?: string[];
 }
 
 interface RunSummary {
@@ -130,7 +132,10 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function maybeStartDevMcpServer(workspaceRoot: string, enabled: boolean): DevMcpServerRuntime | null {
+function maybeStartDevMcpServer(
+  workspaceRoot: string,
+  enabled: boolean
+): DevMcpServerRuntime | null {
   if (!enabled) return null;
   if (String(process.env.MCPLAB_APP_DEV_START_MCP ?? '1') === '0') return null;
 
@@ -291,7 +296,7 @@ function safeFileName(name: string): string {
 }
 
 function readConfigRecord(absPath: string, configsDir: string, bundleRoot?: string): ConfigRecord {
-  const { config: _resolvedConfig, sourceConfig, hash } = loadConfig(absPath, { bundleRoot });
+  const { config: _resolvedConfig, sourceConfig, hash, warnings } = loadConfig(absPath, { bundleRoot });
   const stat = statSync(absPath);
   const name = basename(absPath, extname(absPath));
   return {
@@ -300,7 +305,8 @@ function readConfigRecord(absPath: string, configsDir: string, bundleRoot?: stri
     path: absPath,
     mtime: stat.mtime.toISOString(),
     hash,
-    config: sourceConfig
+    config: sourceConfig,
+    warnings: warnings.length > 0 ? warnings : undefined
   };
 }
 
@@ -328,24 +334,24 @@ function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
         obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)
           ? (obj.servers as EvalConfig['servers'])
           : {},
-      server_refs: Array.isArray(obj.server_refs)
-        ? obj.server_refs.map((v) => String(v))
-        : [],
+      server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
       agents:
         obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)
           ? (obj.agents as EvalConfig['agents'])
           : {},
-      agent_refs: Array.isArray(obj.agent_refs)
-        ? obj.agent_refs.map((v) => String(v))
-        : [],
-      scenarios: Array.isArray(obj.scenarios)
-        ? (obj.scenarios as EvalConfig['scenarios'])
-        : [],
+      agent_refs: Array.isArray(obj.agent_refs) ? obj.agent_refs.map((v) => String(v)) : [],
+      scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as EvalConfig['scenarios']) : [],
       scenario_refs: Array.isArray(obj.scenario_refs)
         ? obj.scenario_refs.map((v) => String(v))
         : [],
+      run_defaults:
+        obj.run_defaults && typeof obj.run_defaults === 'object' && !Array.isArray(obj.run_defaults)
+          ? (obj.run_defaults as EvalConfig['run_defaults'])
+          : undefined,
       snapshot_eval:
-        obj.snapshot_eval && typeof obj.snapshot_eval === 'object' && !Array.isArray(obj.snapshot_eval)
+        obj.snapshot_eval &&
+        typeof obj.snapshot_eval === 'object' &&
+        !Array.isArray(obj.snapshot_eval)
           ? (obj.snapshot_eval as EvalConfig['snapshot_eval'])
           : undefined
     };
@@ -354,7 +360,11 @@ function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
   }
 }
 
-function readConfigRecordOrInvalid(absPath: string, configsDir: string, bundleRoot?: string): ConfigRecord {
+function readConfigRecordOrInvalid(
+  absPath: string,
+  configsDir: string,
+  bundleRoot?: string
+): ConfigRecord {
   try {
     return readConfigRecord(absPath, configsDir, bundleRoot);
   } catch (error) {
@@ -623,7 +633,10 @@ function addJobEvent(job: RunJob, event: JobEvent) {
   }
 }
 
-function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): EvalConfig {
+function expandConfigForAgents(
+  config: EvalConfig,
+  requestedAgents?: string[]
+): ExecutableEvalConfig {
   const selectedAgents =
     requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
   const missing = selectedAgents.filter((agent) => !config.agents[agent]);
@@ -634,17 +647,11 @@ function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): 
   }
   const expandedScenarios = [];
   for (const scenario of config.scenarios) {
-    const pinnedAgent = scenario.agent?.trim();
-    const targetAgents = pinnedAgent
-      ? selectedAgents.includes(pinnedAgent)
-        ? [pinnedAgent]
-        : []
-      : selectedAgents;
-    for (const agent of targetAgents) {
+    for (const agent of selectedAgents) {
       expandedScenarios.push({
         ...scenario,
-        id: `${scenario.id}-${agent}`,
-        agent
+        agent,
+        scenario_exec_id: `${scenario.id}-${agent}`
       });
     }
   }
@@ -652,6 +659,11 @@ function expandConfigForAgents(config: EvalConfig, requestedAgents?: string[]): 
     ...config,
     scenarios: expandedScenarios
   };
+}
+
+function resolveRunSelectedAgents(config: EvalConfig, requestedAgents?: string[]): string[] | undefined {
+  if (requestedAgents && requestedAgents.length > 0) return requestedAgents;
+  return config.run_defaults?.selected_agents;
 }
 
 function startBrowser(url: string) {
@@ -770,7 +782,11 @@ export async function startAppServer(options: AppServerOptions) {
       const pathname = url.pathname;
       const method = req.method ?? 'GET';
 
-      if (devMcp && pathname === devMcp.path && (method === 'GET' || method === 'POST' || method === 'DELETE')) {
+      if (
+        devMcp &&
+        pathname === devMcp.path &&
+        (method === 'GET' || method === 'POST' || method === 'DELETE')
+      ) {
         await proxyToVite(req, res, devMcp.targetBaseUrl, pathname, url.search);
         return;
       }
@@ -964,7 +980,11 @@ export async function startAppServer(options: AppServerOptions) {
       if (pathname.startsWith('/api/configs/') && method === 'GET') {
         const id = pathname.replace('/api/configs/', '');
         const filePath = decodeConfigId(id, settings.configsDir);
-        asJson(res, 200, readConfigRecordOrInvalid(filePath, settings.configsDir, settings.librariesDir));
+        asJson(
+          res,
+          200,
+          readConfigRecordOrInvalid(filePath, settings.configsDir, settings.librariesDir)
+        );
         return;
       }
 
@@ -1191,6 +1211,13 @@ export async function startAppServer(options: AppServerOptions) {
         void (async () => {
           try {
             const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+            for (const warning of loaded.warnings ?? []) {
+              addJobEvent(job, {
+                type: 'log',
+                ts: new Date().toISOString(),
+                payload: { message: warning }
+              });
+            }
             const selectedBaseScenarios = selectScenarioIds(
               loaded.config,
               scenarioIds && scenarioIds.length > 0
@@ -1199,7 +1226,10 @@ export async function startAppServer(options: AppServerOptions) {
                   ? [scenarioId]
                   : undefined
             );
-            const expandedConfig = expandConfigForAgents(selectedBaseScenarios, requestedAgents);
+            const expandedConfig = expandConfigForAgents(
+              selectedBaseScenarios,
+              resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents)
+            );
             const cwdBefore = process.cwd();
             process.chdir(settings.workspaceRoot);
             try {
@@ -1213,27 +1243,57 @@ export async function startAppServer(options: AppServerOptions) {
               });
               if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
                 const policy = expandedConfig.snapshot_eval;
-                if (policy.baseline_snapshot_id) {
-                  const snapshot = loadSnapshot(policy.baseline_snapshot_id, settings.snapshotsDir);
-                  const comparison = compareRunToSnapshot(results, snapshot);
-                  const enabledScenarioIds = new Set(
-                    expandedConfig.scenarios
-                      .filter((scenario) => scenario.snapshot_eval_enabled !== false)
-                      .map((scenario) => scenario.id)
-                  );
-                  applySnapshotPolicyToRunResult({
-                    results,
-                    comparison,
-                    policy,
-                    enabledScenarioIds
-                  });
-                } else {
+                const enabledScenarioIds = new Set(
+                  selectedBaseScenarios.scenarios
+                    .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
+                    .map((scenario) => scenario.id)
+                );
+                const scenarioBaselineMap = new Map<string, string>();
+                for (const scenario of selectedBaseScenarios.scenarios) {
+                  if (scenario.snapshot_eval?.enabled === false) continue;
+                  const baselineId =
+                    scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id;
+                  if (baselineId) scenarioBaselineMap.set(scenario.id, baselineId);
+                }
+                const scenariosWithoutBaseline = selectedBaseScenarios.scenarios
+                  .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
+                  .filter(
+                    (scenario) =>
+                      !(scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id)
+                  )
+                  .map((scenario) => scenario.id);
+                if (scenariosWithoutBaseline.length > 0) {
                   addJobEvent(job, {
                     type: 'log',
                     ts: new Date().toISOString(),
                     payload: {
-                      message: 'Snapshot eval enabled but baseline_snapshot_id is missing.'
+                      message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(', ')}`
                     }
+                  });
+                }
+                const comparisons = [];
+                const scenarioIdsByBaseline = new Map<string, string[]>();
+                for (const [scenarioId, baselineId] of scenarioBaselineMap) {
+                  const list = scenarioIdsByBaseline.get(baselineId) ?? [];
+                  list.push(scenarioId);
+                  scenarioIdsByBaseline.set(baselineId, list);
+                }
+                for (const [baselineId, scenarioIdsForBaseline] of scenarioIdsByBaseline) {
+                  const snapshot = loadSnapshot(baselineId, settings.snapshotsDir);
+                  const fullComparison = compareRunToSnapshot(results, snapshot);
+                  comparisons.push({
+                    ...fullComparison,
+                    scenario_results: fullComparison.scenario_results.filter((row) =>
+                      scenarioIdsForBaseline.includes(row.scenario_id)
+                    )
+                  });
+                }
+                if (comparisons.length > 0) {
+                  applySnapshotPolicyToRunResult({
+                    results,
+                    comparisons,
+                    policy,
+                    enabledScenarioIds
                   });
                 }
               }
@@ -1286,6 +1346,22 @@ export async function startAppServer(options: AppServerOptions) {
           runId,
           results: getRunResults(runId, settings.runsDir)
         });
+        return;
+      }
+
+      if (pathname.startsWith('/api/runs/') && method === 'DELETE') {
+        const runId = pathname.replace('/api/runs/', '');
+        if (!runId || runId.includes('/')) {
+          asJson(res, 400, { error: 'Invalid run id' });
+          return;
+        }
+        const runDir = ensureInsideRoot(settings.runsDir, join(settings.runsDir, runId));
+        if (!existsSync(runDir)) {
+          asJson(res, 404, { error: 'Run not found' });
+          return;
+        }
+        rmSync(runDir, { recursive: true, force: true });
+        asJson(res, 200, { ok: true });
         return;
       }
 

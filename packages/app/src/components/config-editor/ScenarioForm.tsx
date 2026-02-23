@@ -26,7 +26,6 @@ interface ScenarioFormProps {
 const emptyScenario = (): Scenario => ({
   id: `scn-${Date.now()}`,
   name: "",
-  agentId: undefined,
   serverIds: [],
   prompt: "",
   evalRules: [],
@@ -134,6 +133,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
     response_contains: "bg-primary/10 text-primary border-primary/20",
     response_not_contains: "bg-muted text-muted-foreground border-border",
   };
+  const hasScenarioBaselineOverride = scenario.snapshotEval?.baselineSnapshotId !== undefined;
 
   return (
     <Card className="border-dashed">
@@ -172,23 +172,9 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Name</Label>
-            <Input value={scenario.name} onChange={(e) => onUpdate({ name: e.target.value })} disabled={readOnly} placeholder="e.g. List directory" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Agent Scope</Label>
-            <Select value={scenario.agentId || "__run_selected__"} onValueChange={(v) => onUpdate({ agentId: v === "__run_selected__" ? undefined : v })} disabled={readOnly}>
-              <SelectTrigger><SelectValue placeholder="Select agent" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__run_selected__">Run-selected agents (cross-compare)</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name || a.id}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Name</Label>
+          <Input value={scenario.name} onChange={(e) => onUpdate({ name: e.target.value })} disabled={readOnly} placeholder="e.g. List directory" />
         </div>
 
         <div className="space-y-1.5">
@@ -285,15 +271,64 @@ function ScenarioCard({ scenario, index, total, agents, servers, snapshotEval, o
               <div className="flex items-center justify-between rounded-md border bg-white/60 px-2 py-1.5">
                 <span>Enabled for this scenario</span>
                 <Switch
-                  checked={scenario.snapshotEvalEnabled !== false}
+                  checked={scenario.snapshotEval?.enabled !== false}
                   disabled={readOnly}
-                  onCheckedChange={(checked) => onUpdate({ snapshotEvalEnabled: checked })}
+                  onCheckedChange={(checked) =>
+                    onUpdate({
+                      snapshotEval: {
+                        ...(scenario.snapshotEval ?? {}),
+                        enabled: checked
+                      }
+                    })
+                  }
                 />
               </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between rounded-md border bg-white/60 px-2 py-1.5">
+                  <span>Use config baseline</span>
+                  <Switch
+                    checked={!hasScenarioBaselineOverride}
+                    disabled={readOnly}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        onUpdate({
+                          snapshotEval: {
+                            ...(scenario.snapshotEval ?? {}),
+                            baselineSnapshotId: undefined
+                          }
+                        });
+                        return;
+                      }
+                      onUpdate({
+                        snapshotEval: {
+                          ...(scenario.snapshotEval ?? {}),
+                          baselineSnapshotId: scenario.snapshotEval?.baselineSnapshotId ?? ""
+                        }
+                      });
+                    }}
+                  />
+                </div>
+                {hasScenarioBaselineOverride && (
+                  <Input
+                    value={scenario.snapshotEval?.baselineSnapshotId ?? ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        snapshotEval: {
+                          ...(scenario.snapshotEval ?? {}),
+                          baselineSnapshotId: e.target.value
+                        }
+                      })
+                    }
+                    disabled={readOnly}
+                    placeholder="Override baseline snapshot id"
+                    className="h-8 text-xs font-mono"
+                  />
+                )}
+              </div>
               <p>
-                Baseline snapshot:{" "}
+                Effective baseline snapshot:{" "}
                 <span className="font-mono">
-                  {snapshotEval?.baselineSnapshotId ?? "Not configured"}
+                  {scenario.snapshotEval?.baselineSnapshotId || snapshotEval?.baselineSnapshotId || "Not configured"}
                 </span>
               </p>
               <p>

@@ -10,20 +10,19 @@ export interface SnapshotSourceSummary {
 
 export interface SnapshotItem {
   scenario_id: string;
-  agent: string;
+  baseline_agents: string[];
   required_tools: string[];
   forbidden_tools: string[];
   allowed_sequences: string[][];
   baseline_tools: string[];
   extracted_values: Record<string, string | number | boolean | null>;
   final_answer_features: {
-    normalized: string;
     token_set: string[];
   };
 }
 
 export interface SnapshotRecord {
-  schema_version: 1;
+  schema_version: 2;
   id: string;
   name: string;
   created_at: string;
@@ -35,7 +34,8 @@ export interface SnapshotRecord {
 
 export interface ScenarioComparison {
   scenario_id: string;
-  agent: string;
+  baseline_agents: string[];
+  observed_agents: string[];
   score: number;
   status: 'Match' | 'Warn' | 'Drift';
   components: {
@@ -89,8 +89,9 @@ export function ensureRunFullyPassing(results: ResultsJson): void {
 export function buildSnapshotFromRun(results: ResultsJson, name?: string): SnapshotRecord {
   ensureRunFullyPassing(results);
   const id = `snapshot-${results.metadata.run_id}-${Date.now()}`;
+  const aggregated = aggregateScenariosById(results.scenarios);
   return {
-    schema_version: 1,
+    schema_version: 2,
     id,
     name: name?.trim() || `Snapshot ${results.metadata.run_id}`,
     created_at: new Date().toISOString(),
@@ -101,7 +102,7 @@ export function buildSnapshotFromRun(results: ResultsJson, name?: string): Snaps
       total_runs: results.summary.total_runs,
       pass_rate: results.summary.pass_rate
     },
-    items: results.scenarios.map((scenario) => buildSnapshotItem(scenario))
+    items: aggregated.map((scenario) => buildSnapshotItem(scenario))
   };
 }
 
@@ -122,14 +123,13 @@ function buildSnapshotItem(scenario: ScenarioAggregate): SnapshotItem {
 
   return {
     scenario_id: scenario.scenario_id,
-    agent: scenario.agent,
+    baseline_agents: Array.from(new Set(scenario.runs.map((run) => (run as any).__agent ?? scenario.agent))).sort(),
     required_tools,
     forbidden_tools,
     allowed_sequences,
     baseline_tools,
     extracted_values,
     final_answer_features: {
-      normalized,
       token_set
     }
   };
@@ -139,19 +139,19 @@ export function compareRunToSnapshot(
   results: ResultsJson,
   snapshot: SnapshotRecord
 ): SnapshotComparison {
+  const aggregatedScenarios = aggregateScenariosById(results.scenarios);
   const scenario_results = snapshot.items.map((item) => {
-    const scenario = results.scenarios.find(
-      (candidate) => candidate.scenario_id === item.scenario_id && candidate.agent === item.agent
-    );
+    const scenario = aggregatedScenarios.find((candidate) => candidate.scenario_id === item.scenario_id);
 
     if (!scenario) {
       return {
         scenario_id: item.scenario_id,
-        agent: item.agent,
+        baseline_agents: item.baseline_agents ?? [],
+        observed_agents: [],
         score: 0,
         status: 'Drift' as const,
         components: { tools: 0, extracts: 0, semantics: 0 },
-        reasons: ['Scenario/agent pair missing in run']
+        reasons: ['Scenario missing in run']
       };
     }
 
@@ -160,13 +160,25 @@ export function compareRunToSnapshot(
     const extracts = scoreExtracts(item, scenario, reasons);
     const semantics = scoreSemantics(item, scenario, reasons);
 
-    const score = tools * 0.45 + extracts * 0.35 + semantics * 0.2;
-    const status: ScenarioComparison['status'] =
+    let score = tools * 0.45 + extracts * 0.35 + semantics * 0.2;
+    let status: ScenarioComparison['status'] =
       score >= 0.8 ? 'Match' : score >= 0.6 ? 'Warn' : 'Drift';
+    const observedAgents = Array.from(
+      new Set(scenario.runs.map((run) => (run as any).__agent ?? scenario.agent).filter(Boolean))
+    ).sort();
+    const baselineAgents = [...(item.baseline_agents ?? [])].sort();
+    if (JSON.stringify(observedAgents) !== JSON.stringify(baselineAgents)) {
+      reasons.push(
+        `Agent coverage mismatch: baseline=[${baselineAgents.join(', ')}], observed=[${observedAgents.join(', ')}]`
+      );
+      if (status === 'Match') status = 'Warn';
+      score = Math.min(score, 0.79);
+    }
 
     return {
       scenario_id: item.scenario_id,
-      agent: item.agent,
+      baseline_agents: baselineAgents,
+      observed_agents: observedAgents,
       score: round2(score),
       status,
       components: {
@@ -196,36 +208,38 @@ export function compareRunToSnapshot(
 
 export function applySnapshotPolicyToRunResult(params: {
   results: ResultsJson;
-  comparison: SnapshotComparison;
+  comparisons: SnapshotComparison[];
   policy: SnapshotEvalPolicy;
   enabledScenarioIds?: Set<string>;
 }): AppliedSnapshotEval {
-  const { results, comparison, policy, enabledScenarioIds } = params;
-  const impacted = comparison.scenario_results.filter((row) => {
+  const { results, comparisons, policy, enabledScenarioIds } = params;
+  const mergedRows = comparisons.flatMap((c) => c.scenario_results);
+  const baselineIds = Array.from(new Set(comparisons.map((c) => c.snapshot_id)));
+  const overallScore =
+    mergedRows.length === 0 ? 0 : round2(mergedRows.reduce((sum, row) => sum + row.score, 0) / mergedRows.length);
+  const impacted = mergedRows.filter((row) => {
     if (enabledScenarioIds && !enabledScenarioIds.has(row.scenario_id)) return false;
     return row.status === 'Drift';
   });
 
   const overallStatus: 'Match' | 'Warn' | 'Drift' =
-    comparison.overall_score >= 0.8 ? 'Match' : comparison.overall_score >= 0.6 ? 'Warn' : 'Drift';
+    overallScore >= 0.8 ? 'Match' : overallScore >= 0.6 ? 'Warn' : 'Drift';
 
   if (policy.mode === 'fail_on_drift' && impacted.length > 0) {
     for (const row of impacted) {
-      const scenario = results.scenarios.find(
-        (candidate) => candidate.scenario_id === row.scenario_id && candidate.agent === row.agent
-      );
-      if (!scenario) continue;
-      for (const run of scenario.runs) {
-        run.pass = false;
-        const reason = `Snapshot drift (${row.status}, score=${row.score}): ${row.reasons[0] ?? 'baseline mismatch'}`;
-        if (!run.failures.includes(reason)) {
-          run.failures.push(reason);
+      for (const scenario of results.scenarios.filter((candidate) => candidate.scenario_id === row.scenario_id)) {
+        for (const run of scenario.runs) {
+          run.pass = false;
+          const reason = `Snapshot drift (${row.status}, score=${row.score}): ${row.reasons[0] ?? 'baseline mismatch'}`;
+          if (!run.failures.includes(reason)) {
+            run.failures.push(reason);
+          }
         }
+        scenario.pass_rate =
+          scenario.runs.length === 0
+            ? 0
+            : scenario.runs.filter((run) => run.pass).length / scenario.runs.length;
       }
-      scenario.pass_rate =
-        scenario.runs.length === 0
-          ? 0
-          : scenario.runs.filter((run) => run.pass).length / scenario.runs.length;
     }
 
     const totalRuns = results.scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
@@ -239,11 +253,16 @@ export function applySnapshotPolicyToRunResult(params: {
   const applied: AppliedSnapshotEval = {
     applied: true,
     mode: policy.mode,
-    baseline_snapshot_id: comparison.snapshot_id,
+    baseline_snapshot_id:
+      baselineIds.length === 1
+        ? baselineIds[0]
+        : baselineIds.length > 1
+          ? 'mixed'
+          : policy.baseline_snapshot_id ?? 'mixed',
     baseline_source_run_id: policy.baseline_source_run_id,
-    overall_score: comparison.overall_score,
+    overall_score: overallScore,
     status: overallStatus,
-    impacted_scenarios: impacted.map((row) => `${row.scenario_id}::${row.agent}`)
+    impacted_scenarios: impacted.map((row) => row.scenario_id)
   };
   results.metadata.snapshot_eval = applied;
   return applied;
@@ -391,7 +410,14 @@ export function loadSnapshot(id: string, snapshotsDir: string): SnapshotRecord {
   if (!existsSync(path)) {
     throw new Error(`Snapshot not found: ${id}`);
   }
-  return JSON.parse(readFileSync(path, 'utf8')) as SnapshotRecord;
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as SnapshotRecord & { schema_version?: number };
+  if (parsed.schema_version !== 2) {
+    if (parsed.schema_version === 1) {
+      throw new Error('Snapshot v1 is no longer supported; recreate the baseline from a passing run.');
+    }
+    throw new Error(`Unsupported snapshot schema version: ${String(parsed.schema_version ?? 'unknown')}`);
+  }
+  return parsed;
 }
 
 export function listSnapshots(snapshotsDir: string): SnapshotRecord[] {
@@ -401,7 +427,9 @@ export function listSnapshots(snapshotsDir: string): SnapshotRecord[] {
     .filter((name) => name.endsWith('.json'))
     .map((name) => {
       try {
-        return JSON.parse(readFileSync(join(resolved, name), 'utf8')) as SnapshotRecord;
+        const parsed = JSON.parse(readFileSync(join(resolved, name), 'utf8')) as SnapshotRecord & { schema_version?: number };
+        if (parsed.schema_version !== 2) return null;
+        return parsed;
       } catch {
         return null;
       }
@@ -455,15 +483,57 @@ export function formatSnapshotComparisonTable(comparison: SnapshotComparison): s
   lines.push(`Run: ${comparison.run_id}`);
   lines.push(`Overall score: ${comparison.overall_score}`);
   lines.push('');
-  lines.push('Scenario                     | Agent           | Score | Status | Reasons');
-  lines.push('-----------------------------|-----------------|-------|--------|--------');
+  lines.push('Scenario                     | Score | Status | Reasons');
+  lines.push('-----------------------------|-------|--------|--------');
   for (const row of comparison.scenario_results) {
     const reasons = row.reasons.slice(0, 2).join('; ') || '—';
     lines.push(
-      `${pad(row.scenario_id, 29)}| ${pad(row.agent, 15)}| ${pad(row.score.toFixed(2), 5)} | ${pad(row.status, 6)} | ${reasons}`
+      `${pad(row.scenario_id, 29)}| ${pad(row.score.toFixed(2), 5)} | ${pad(row.status, 6)} | ${reasons}`
     );
   }
   return lines.join('\n');
+}
+
+function aggregateScenariosById(scenarios: ScenarioAggregate[]): ScenarioAggregate[] {
+  const byId = new Map<string, ScenarioAggregate>();
+  for (const scenario of scenarios) {
+    const existing = byId.get(scenario.scenario_id);
+    if (!existing) {
+      const clonedRuns = scenario.runs.map((run) => ({ ...run, __agent: scenario.agent } as any));
+      byId.set(scenario.scenario_id, {
+        ...scenario,
+        runs: clonedRuns,
+        tool_usage_frequency: { ...scenario.tool_usage_frequency },
+        distinct_sequences: { ...scenario.distinct_sequences },
+        extracted_values: Object.fromEntries(
+          Object.entries(scenario.extracted_values).map(([k, v]) => [k, { ...v }])
+        )
+      });
+      continue;
+    }
+    existing.runs.push(...scenario.runs.map((run) => ({ ...run, __agent: scenario.agent } as any)));
+    existing.pass_rate = 0;
+    existing.last_final_answer = scenario.last_final_answer || existing.last_final_answer;
+    for (const [tool, count] of Object.entries(scenario.tool_usage_frequency)) {
+      existing.tool_usage_frequency[tool] = (existing.tool_usage_frequency[tool] ?? 0) + count;
+    }
+    for (const [seq, count] of Object.entries(scenario.distinct_sequences)) {
+      existing.distinct_sequences[seq] = (existing.distinct_sequences[seq] ?? 0) + count;
+    }
+    for (const [key, values] of Object.entries(scenario.extracted_values)) {
+      const bucket = (existing.extracted_values[key] ??= {});
+      for (const [value, count] of Object.entries(values)) {
+        bucket[value] = (bucket[value] ?? 0) + count;
+      }
+    }
+    // Merge eval constraints conservatively: preserve first non-empty eval; scenarios should be identical.
+    existing.eval = existing.eval ?? scenario.eval;
+  }
+  for (const scenario of byId.values()) {
+    scenario.pass_rate =
+      scenario.runs.length === 0 ? 0 : scenario.runs.filter((run) => run.pass).length / scenario.runs.length;
+  }
+  return Array.from(byId.values());
 }
 
 function pad(value: string, n: number): string {

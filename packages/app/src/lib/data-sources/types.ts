@@ -33,10 +33,14 @@ export interface CoreAgentConfig {
 
 export interface CoreScenario {
   id: string;
-  agent?: string;
   servers: string[];
   prompt: string;
-  snapshot_eval_enabled?: boolean;
+  snapshot_eval?: {
+    enabled?: boolean;
+    baseline_snapshot_id?: string;
+    baseline_source_run_id?: string;
+    last_updated_at?: string;
+  };
   eval?: {
     tool_constraints?: {
       required_tools?: string[];
@@ -57,6 +61,9 @@ export interface CoreEvalConfig {
   agent_refs?: string[];
   scenarios: CoreScenario[];
   scenario_refs?: string[];
+  run_defaults?: {
+    selected_agents?: string[];
+  };
   snapshot_eval?: {
     enabled: boolean;
     mode: 'warn' | 'fail_on_drift';
@@ -178,6 +185,7 @@ export interface WorkspaceConfigRecord {
   hash: string;
   config: CoreEvalConfig;
   error?: string;
+  warnings?: string[];
 }
 
 export interface WorkspaceRunSummary {
@@ -194,20 +202,19 @@ export interface WorkspaceRunSummary {
 
 export interface SnapshotItem {
   scenario_id: string;
-  agent: string;
+  baseline_agents: string[];
   required_tools: string[];
   forbidden_tools: string[];
   allowed_sequences: string[][];
   baseline_tools: string[];
   extracted_values: Record<string, string | number | boolean | null>;
   final_answer_features: {
-    normalized: string;
     token_set: string[];
   };
 }
 
 export interface SnapshotRecord {
-  schema_version: 1;
+  schema_version: 2;
   id: string;
   name: string;
   created_at: string;
@@ -223,7 +230,8 @@ export interface SnapshotRecord {
 
 export interface SnapshotScenarioComparison {
   scenario_id: string;
-  agent: string;
+  baseline_agents: string[];
+  observed_agents: string[];
   score: number;
   status: 'Match' | 'Warn' | 'Drift';
   components: {
@@ -261,6 +269,7 @@ export interface EvalDataSource {
   deleteConfig: (id: string) => Promise<void>;
   listResults: () => Promise<EvalResult[]>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
+  deleteResult: (id: string) => Promise<void>;
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;
@@ -299,5 +308,7 @@ export interface EvalDataSource {
     agents: EvalConfig['agents'];
     scenarios: EvalConfig['scenarios'];
   }) => Promise<void>;
-  listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') => Promise<ProviderModelsResponse>;
+  listProviderModels: (
+    provider: 'anthropic' | 'openai' | 'azure'
+  ) => Promise<ProviderModelsResponse>;
 }

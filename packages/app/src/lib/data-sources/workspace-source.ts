@@ -66,6 +66,9 @@ export const workspaceSource: EvalDataSource = {
       return undefined;
     }
   },
+  async deleteResult(id) {
+    await workspaceApiClient.deleteRun(id);
+  },
   async startRun(params) {
     return workspaceApiClient.startRun(params);
   },

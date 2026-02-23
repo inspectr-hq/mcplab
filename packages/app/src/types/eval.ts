@@ -34,10 +34,14 @@ export interface ExtractRule {
 export interface Scenario {
   id: string;
   name: string;
-  agentId?: string;
   serverIds: string[];
   prompt: string;
-  snapshotEvalEnabled?: boolean;
+  snapshotEval?: {
+    enabled?: boolean;
+    baselineSnapshotId?: string;
+    baselineSourceRunId?: string;
+    lastUpdatedAt?: string;
+  };
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
 }
@@ -56,12 +60,16 @@ export interface EvalConfig {
   description?: string;
   sourcePath?: string;
   loadError?: string;
+  loadWarnings?: string[];
   servers: ServerConfig[];
   serverRefs?: string[];
   agents: AgentConfig[];
   agentRefs?: string[];
   scenarios: Scenario[];
   scenarioRefs?: string[];
+  runDefaults?: {
+    selectedAgentNames?: string[];
+  };
   snapshotEval?: SnapshotEvalPolicy;
   createdAt: string;
   updatedAt: string;

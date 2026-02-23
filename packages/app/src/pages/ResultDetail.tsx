@@ -122,9 +122,8 @@ const ResultDetail = () => {
   };
 
   const runKey = (scenarioId: string, runIndex: number) => `${scenarioId}:${runIndex}`;
-  const scenarioKey = (scenarioId: string, agent: string) => `${scenarioId}::${agent}`;
   const comparisonByScenario = new Map(
-    (snapshotComparison?.scenario_results ?? []).map((item) => [scenarioKey(item.scenario_id, item.agent), item])
+    (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
   );
 
   const compareWithSnapshot = async () => {
@@ -138,8 +137,8 @@ const ResultDetail = () => {
     }
   };
 
-  const reviewDrift = async () => {
-    const baselineId = result.snapshotEval?.baselineSnapshotId;
+  const reviewDrift = async (baselineIdOverride?: string) => {
+    const baselineId = baselineIdOverride || result.snapshotEval?.baselineSnapshotId;
     if (!baselineId) return;
     setSelectedSnapshotId(baselineId);
     setComparing(true);
@@ -183,7 +182,7 @@ const ResultDetail = () => {
         setAcceptSnapshotName(response.snapshot.name);
       }
       if (result.snapshotEval?.applied) {
-        void reviewDrift();
+        void reviewDrift(response.snapshot.id);
       }
     } catch (error: any) {
       toast({
@@ -431,7 +430,7 @@ const ResultDetail = () => {
                         <TableCell className="font-mono text-sm">{sc.avgToolCalls.toFixed(1)}</TableCell>
                         <TableCell>
                           {(() => {
-                            const row = comparisonByScenario.get(scenarioKey(sc.scenarioId, sc.agentName));
+                            const row = comparisonByScenario.get(sc.scenarioId);
                             if (!row) return <span className="text-xs text-muted-foreground">—</span>;
                             const className =
                               row.status === "Match"
@@ -453,11 +452,14 @@ const ResultDetail = () => {
                         <td colSpan={7} className="p-0">
                           <div className="bg-muted/30 p-4 space-y-2">
                             {(() => {
-                              const row = comparisonByScenario.get(scenarioKey(sc.scenarioId, sc.agentName));
+                              const row = comparisonByScenario.get(sc.scenarioId);
                               if (!row || row.reasons.length === 0) return null;
                               return (
                                 <div className="rounded-md border bg-card p-2">
                                   <p className="mb-1 text-xs font-semibold text-muted-foreground">Snapshot reasons</p>
+                                  <p className="mb-1 text-[11px] text-muted-foreground">
+                                    Baseline agents: {row.baseline_agents.join(", ") || "—"} · observed agents: {row.observed_agents.join(", ") || "—"}
+                                  </p>
                                   <ul className="space-y-1 text-xs text-muted-foreground">
                                     {row.reasons.map((reason, index) => (
                                       <li key={index}>• {reason}</li>

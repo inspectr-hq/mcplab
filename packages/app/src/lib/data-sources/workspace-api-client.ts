@@ -61,6 +61,8 @@ export const workspaceApiClient = {
   listRuns: () => request<WorkspaceRunSummary[]>('/api/runs'),
   getRun: (runId: string) =>
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
+  deleteRun: (runId: string) =>
+    request<{ ok: boolean }>(`/api/runs/${runId}`, { method: 'DELETE' }),
   getRunTrace: (runId: string) =>
     request<{ runId: string; events: TraceUiEvent[] }>(`/api/runs/${runId}/trace`),
   listSnapshots: () => request<SnapshotRecord[]>('/api/snapshots'),
@@ -124,7 +126,9 @@ export const workspaceApiClient = {
       body: JSON.stringify(params)
     }),
   listProviderModels: (provider: 'anthropic' | 'openai' | 'azure') =>
-    request<ProviderModelsResponse>(`/api/providers/models?provider=${encodeURIComponent(provider)}`),
+    request<ProviderModelsResponse>(
+      `/api/providers/models?provider=${encodeURIComponent(provider)}`
+    ),
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

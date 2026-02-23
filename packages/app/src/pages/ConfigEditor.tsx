@@ -254,22 +254,6 @@ const ConfigEditor = () => {
     if (!template) return;
     const nextAgents = [...config.agents];
     const nextServers = [...config.servers];
-    let mappedAgentId: string | undefined = undefined;
-
-    if (template.agentId) {
-      const templateAgent = libAgents.find((item) => item.id === template.agentId);
-      if (templateAgent) {
-        const templateAgentName = templateAgent.name || templateAgent.id;
-        const existingAgent = nextAgents.find((item) => (item.name || item.id) === templateAgentName);
-        if (existingAgent) {
-          mappedAgentId = existingAgent.id;
-        } else {
-          const imported = { ...structuredClone(templateAgent), id: `agt-${Date.now()}` };
-          nextAgents.push(imported);
-          mappedAgentId = imported.id;
-        }
-      }
-    }
 
     const mappedServerIds: string[] = [];
     for (const templateServerId of template.serverIds) {
@@ -289,7 +273,6 @@ const ConfigEditor = () => {
     const importedScenario = {
       ...structuredClone(template),
       id: `scn-${Date.now()}`,
-      agentId: mappedAgentId,
       serverIds: mappedServerIds.length > 0 ? mappedServerIds : []
     };
 
@@ -455,6 +438,22 @@ const ConfigEditor = () => {
         </Card>
       )}
 
+      {!isBrokenConfig && (config.loadWarnings?.length ?? 0) > 0 && (
+        <Card className="border-amber-500/30">
+          <CardContent className="pt-4 space-y-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4" />
+              Migration warnings
+            </div>
+            {config.loadWarnings?.map((warning, index) => (
+              <p key={`${warning}-${index}`} className="text-xs text-muted-foreground">
+                {warning}
+              </p>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats bar */}
       <div className="flex gap-4">
         <Badge
@@ -495,6 +494,78 @@ const ConfigEditor = () => {
               <Label className="text-xs">Description</Label>
               <Input value={config.description || ""} onChange={(e) => patch({ description: e.target.value })} disabled={readOnly} placeholder="Brief description..." />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <div>
+            <p className="text-sm font-semibold">Run Defaults</p>
+            <p className="text-xs text-muted-foreground">
+              Default agent selection for Run UI/CLI. Users can override at run time.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Default agents</Label>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() =>
+                    patch({
+                      runDefaults: {
+                        ...(config.runDefaults ?? {}),
+                        selectedAgentNames: [
+                          ...new Set(
+                            [
+                              ...config.agents.map((a) => a.name || a.id),
+                              ...referencedAgents.map((a) => a.name || a.id)
+                            ]
+                          )
+                        ]
+                      }
+                    })
+                  }
+                >
+                  Select all
+                </button>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[...config.agents, ...referencedAgents].map((agent) => {
+                const agentName = agent.name || agent.id;
+                const checked = (config.runDefaults?.selectedAgentNames ?? []).includes(agentName);
+                return (
+                  <label key={`run-default-${agent.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={readOnly}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...(config.runDefaults?.selectedAgentNames ?? []), agentName]
+                          : (config.runDefaults?.selectedAgentNames ?? []).filter((name) => name !== agentName);
+                        patch({
+                          runDefaults: {
+                            ...(config.runDefaults ?? {}),
+                            selectedAgentNames: Array.from(new Set(next))
+                          }
+                        });
+                      }}
+                    />
+                    <span>{agent.name || agent.id}</span>
+                    {referencedAgents.some((a) => a.id === agent.id) && (
+                      <span className="text-xs text-muted-foreground">(ref)</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+            {[...config.agents, ...referencedAgents].length === 0 && (
+              <p className="text-xs text-muted-foreground">No agents available yet.</p>
+            )}
           </div>
         </CardContent>
       </Card>
