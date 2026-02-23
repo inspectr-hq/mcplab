@@ -78,6 +78,7 @@ export interface ExtractRule {
 
 export interface Scenario {
   id: string;
+  name?: string;
   servers: string[];
   prompt: string;
   snapshot_eval?: {

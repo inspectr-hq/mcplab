@@ -89,7 +89,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
 
     return {
       id: scenario.id || toId('scn', index),
-      name: scenario.id || `Scenario ${index + 1}`,
+      name: scenario.name || scenario.id || `Scenario ${index + 1}`,
       serverIds: scenario.servers
         .map((name) => serverIdByName.get(name))
         .filter(Boolean) as string[],
@@ -226,6 +226,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
 
     return {
       id: scenario.id,
+      name: scenario.name || undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
       snapshot_eval: scenario.snapshotEval

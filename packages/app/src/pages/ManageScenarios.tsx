@@ -505,7 +505,7 @@ const ManageScenarios = () => {
                 </Button>
               </div>
             </div>
-            <CardDescription>
+            <div className="text-sm text-muted-foreground">
               <div className="flex flex-wrap items-center gap-2">
                 <span>
                   Focused editor for <code className="font-mono">{selectedScenario.id}</code>.
@@ -538,7 +538,7 @@ const ManageScenarios = () => {
                   <span className="text-[11px] text-destructive">{saveError}</span>
                 )}
               </div>
-            </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="pt-3">
             <ScenarioForm
