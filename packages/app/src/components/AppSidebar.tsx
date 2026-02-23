@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { LayoutDashboard, Settings, Play, BarChart3, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3,BarChart2, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
@@ -45,8 +45,9 @@ const navSections = [
     title: "Execution",
     items: [
       { title: "Run Evaluation", url: "/run", icon: Play },
-      { title: "Results", url: "/results", icon: BarChart3 },
-      { title: "Compare", url: "/compare", icon: GitCompare }
+      { title: "Evaluation Results", url: "/results", icon: BarChart3 },
+      { title: "Compare Evaluations", url: "/compare", icon: GitCompare },
+      { title: "MCP Analysis Results", url: "/tool-analysis-results", icon: BarChart3 },
     ]
   },
   {

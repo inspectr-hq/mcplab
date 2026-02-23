@@ -13,6 +13,8 @@ import type {
   OAuthDebuggerSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
+  ToolAnalysisResultSummary,
+  SavedToolAnalysisReportRecord,
   WorkspaceConfigRecord,
   WorkspaceRunSummary
 } from './types';
@@ -241,7 +243,7 @@ export const workspaceApiClient = {
       body: JSON.stringify(params)
     }),
   getToolAnalysisResult: (jobId: string) =>
-    request<{ jobId: string; report: ToolAnalysisReport }>(
+    request<{ jobId: string; report: ToolAnalysisReport; savedReportId?: string }>(
       `/api/tool-analysis/jobs/${jobId}/result`
     ),
   stopToolAnalysis: (jobId: string) =>
@@ -285,6 +287,16 @@ export const workspaceApiClient = {
     };
     return () => close();
   },
+  listToolAnalysisResults: () =>
+    request<{ items: ToolAnalysisResultSummary[] }>('/api/tool-analysis-results').then(
+      (r) => r.items
+    ),
+  getToolAnalysisSavedResult: (id: string) =>
+    request<SavedToolAnalysisReportRecord>(`/api/tool-analysis-results/${id}`),
+  deleteToolAnalysisSavedResult: (id: string) =>
+    request<{ ok: boolean }>(`/api/tool-analysis-results/${id}`, { method: 'DELETE' }).then(
+      () => undefined
+    ),
   createOAuthDebuggerSession: (config: OAuthDebuggerSessionConfig) =>
     request<{ sessionId: string; session: OAuthDebuggerSessionView }>(
       '/api/oauth-debugger/sessions',

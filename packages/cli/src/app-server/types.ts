@@ -4,6 +4,7 @@ export interface AppServerOptions {
   configsDir: string;
   runsDir: string;
   snapshotsDir: string;
+  toolAnalysisResultsDir: string;
   librariesDir: string;
   dev: boolean;
   open: boolean;
@@ -14,6 +15,7 @@ export interface AppSettings {
   configsDir: string;
   runsDir: string;
   snapshotsDir: string;
+  toolAnalysisResultsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
 }

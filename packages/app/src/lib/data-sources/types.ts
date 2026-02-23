@@ -446,6 +446,25 @@ export interface ToolAnalysisReport {
   findings: ToolAnalysisFinding[];
 }
 
+export interface SavedToolAnalysisReportRecord {
+  recordVersion: 1;
+  reportId: string;
+  createdAt: string;
+  sourceJobId: string;
+  serverNames: string[];
+  report: ToolAnalysisReport;
+}
+
+export interface ToolAnalysisResultSummary {
+  reportId: string;
+  createdAt: string;
+  assistantAgentName: string;
+  assistantAgentModel: string;
+  serverNames: string[];
+  modes: ToolAnalysisReport['modes'];
+  summary: ToolAnalysisReport['summary'];
+}
+
 export interface ToolAnalysisDiscoveredTool {
   name: string;
   description?: string;
@@ -732,10 +751,15 @@ export interface EvalDataSource {
     };
   }) => Promise<{ jobId: string }>;
   subscribeToolAnalysisJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
-  getToolAnalysisResult: (jobId: string) => Promise<{ jobId: string; report: ToolAnalysisReport }>;
+  getToolAnalysisResult: (
+    jobId: string
+  ) => Promise<{ jobId: string; report: ToolAnalysisReport; savedReportId?: string }>;
   stopToolAnalysis: (
     jobId: string
   ) => Promise<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>;
+  listToolAnalysisResults: () => Promise<ToolAnalysisResultSummary[]>;
+  getToolAnalysisSavedResult: (id: string) => Promise<SavedToolAnalysisReportRecord>;
+  deleteToolAnalysisSavedResult: (id: string) => Promise<void>;
   createOAuthDebuggerSession: (
     config: OAuthDebuggerSessionConfig
   ) => Promise<{ sessionId: string; session: OAuthDebuggerSessionView }>;

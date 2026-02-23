@@ -177,6 +177,15 @@ export const demoSource: EvalDataSource = {
   async stopToolAnalysis() {
     return { ok: true, status: 'stopped' as const };
   },
+  async listToolAnalysisResults() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
+  async getToolAnalysisSavedResult() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
+  async deleteToolAnalysisSavedResult() {
+    throw new Error('Analyze MCP Tools is only available in workspace mode.');
+  },
   async createOAuthDebuggerSession() {
     throw new Error('OAuth Debugger is only available in workspace mode.');
   },

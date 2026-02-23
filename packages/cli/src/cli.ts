@@ -427,6 +427,11 @@ program
   .option('--configs-dir <path>', 'Directory for YAML configs', 'mcplab/configs')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
+  .option(
+    '--tool-analysis-results-dir <path>',
+    'Directory for saved tool analysis reports',
+    'mcplab/tool-analysis-results'
+  )
   .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
@@ -444,6 +449,7 @@ program
         configsDir: resolve(options.configsDir),
         runsDir: resolve(options.runsDir),
         snapshotsDir: resolve(options.snapshotsDir),
+        toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
         librariesDir: resolve(options.librariesDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import {
   existsSync,
   mkdirSync,
@@ -158,11 +159,13 @@ export async function startAppServer(options: AppServerOptions) {
     configsDir: resolve(options.configsDir),
     runsDir: resolve(options.runsDir),
     snapshotsDir: resolve(options.snapshotsDir),
+    toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
     librariesDir: resolve(options.librariesDir)
   };
   mkdirSync(settings.configsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   mkdirSync(settings.snapshotsDir, { recursive: true });
+  mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
   applySettingsOverrides(settings);

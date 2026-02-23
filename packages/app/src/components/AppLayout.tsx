@@ -40,6 +40,19 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Analyze MCP Tools" });
     return crumbs;
   }
+  if (matchPath("/tool-analysis-results/:id", pathname)) {
+    const match = matchPath("/tool-analysis-results/:id", pathname);
+    crumbs.push(
+      { label: "Analyze MCP Tools", to: "/tool-analysis" },
+      { label: "Results", to: "/tool-analysis-results" },
+      { label: match?.params.id ?? "Report" }
+    );
+    return crumbs;
+  }
+  if (matchPath("/tool-analysis-results", pathname)) {
+    crumbs.push({ label: "Analyze MCP Tools", to: "/tool-analysis" }, { label: "Results" });
+    return crumbs;
+  }
   if (matchPath("/oauth-debugger", pathname)) {
     crumbs.push({ label: "OAuth Debugger" });
     return crumbs;

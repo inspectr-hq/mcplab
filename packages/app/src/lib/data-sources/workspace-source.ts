@@ -157,6 +157,15 @@ export const workspaceSource: EvalDataSource = {
   async stopToolAnalysis(jobId) {
     return workspaceApiClient.stopToolAnalysis(jobId);
   },
+  async listToolAnalysisResults() {
+    return workspaceApiClient.listToolAnalysisResults();
+  },
+  async getToolAnalysisSavedResult(id) {
+    return workspaceApiClient.getToolAnalysisSavedResult(id);
+  },
+  async deleteToolAnalysisSavedResult(id) {
+    await workspaceApiClient.deleteToolAnalysisSavedResult(id);
+  },
   async createOAuthDebuggerSession(config) {
     return workspaceApiClient.createOAuthDebuggerSession(config);
   },

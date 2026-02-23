@@ -241,13 +241,50 @@ class AzureOpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create({
+    const baseRequest = {
       model: this.deployment,
       messages: messages.map(toOpenAiMessage),
-      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-      temperature: options.temperature,
-      max_tokens: options.max_tokens
-    });
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined
+    } as any;
+    if (typeof options.temperature === 'number') {
+      baseRequest.temperature = options.temperature;
+    }
+
+    const createWithTemperatureFallback = async (request: any) => {
+      try {
+        return await this.client.chat.completions.create(request);
+      } catch (err: any) {
+        const message = String(err?.message ?? '');
+        const unsupportedTemperature =
+          message.includes('temperature') &&
+          (message.includes('not supported') || message.includes('Only the default'));
+        if (!unsupportedTemperature || !('temperature' in request)) throw err;
+        const { temperature: _ignored, ...withoutTemperature } = request;
+        return this.client.chat.completions.create(withoutTemperature as any);
+      }
+    };
+
+    let response;
+    if (typeof options.max_tokens === 'number') {
+      try {
+        response = await createWithTemperatureFallback({
+          ...baseRequest,
+          max_completion_tokens: options.max_tokens
+        } as any);
+      } catch (err: any) {
+        const message = String(err?.message ?? '');
+        const unsupportedMaxCompletionTokens =
+          message.includes('max_completion_tokens') && message.includes('not supported');
+        if (!unsupportedMaxCompletionTokens) throw err;
+        response = await createWithTemperatureFallback({
+          ...baseRequest,
+          max_tokens: options.max_tokens
+        } as any);
+      }
+    } else {
+      response = await createWithTemperatureFallback(baseRequest as any);
+    }
+
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call) => ({
       id: call.id,

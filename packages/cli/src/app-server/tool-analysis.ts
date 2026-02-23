@@ -1,6 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
+import {
+  createToolAnalysisReportId,
+  deleteToolAnalysisReportRecord,
+  listToolAnalysisReports,
+  readToolAnalysisReportRecord,
+  writeToolAnalysisReportRecord
+} from './tool-analysis-storage.js';
 
 export type ToolAnalysisRouteDeps = Pick<
   AppRouteDeps,
@@ -125,11 +132,37 @@ export async function handleToolAnalysisRoutes(params: {
             )
           }
         });
+        if (job.result) {
+          try {
+            const reportId = createToolAnalysisReportId(new Date(job.result.createdAt));
+            const savedPath = writeToolAnalysisReportRecord(settings.toolAnalysisResultsDir, {
+              recordVersion: 1,
+              reportId,
+              createdAt: job.result.createdAt,
+              sourceJobId: job.id,
+              serverNames,
+              report: job.result
+            });
+            job.savedReportId = reportId;
+            job.savedReportPath = savedPath;
+          } catch (persistError: unknown) {
+            addJobEvent(job, {
+              type: 'log',
+              ts: new Date().toISOString(),
+              payload: {
+                kind: 'persist',
+                message: `Tool analysis completed but report could not be persisted: ${errorMessage(
+                  persistError
+                )}`
+              }
+            });
+          }
+        }
         job.status = 'completed';
         addJobEvent(job, {
           type: 'completed',
           ts: new Date().toISOString(),
-          payload: { summary: job.result?.summary ?? null }
+          payload: { summary: job.result?.summary ?? null, savedReportId: job.savedReportId ?? null }
         });
       } catch (error: unknown) {
         const aborted = job.abortController.signal.aborted || job.status === 'stopped';
@@ -150,6 +183,41 @@ export async function handleToolAnalysisRoutes(params: {
       }
     })();
     asJson(res, 202, { jobId });
+    return true;
+  }
+
+  if (pathname === '/api/tool-analysis-results' && method === 'GET') {
+    asJson(res, 200, { items: listToolAnalysisReports(settings.toolAnalysisResultsDir) });
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tool-analysis-results/') && method === 'GET') {
+    const reportId = pathname.split('/')[3];
+    if (!reportId) {
+      asJson(res, 400, { error: 'Report id is required' });
+      return true;
+    }
+    const record = readToolAnalysisReportRecord(settings.toolAnalysisResultsDir, reportId);
+    if (!record) {
+      asJson(res, 404, { error: 'Tool analysis report not found' });
+      return true;
+    }
+    asJson(res, 200, record);
+    return true;
+  }
+
+  if (pathname.startsWith('/api/tool-analysis-results/') && method === 'DELETE') {
+    const reportId = pathname.split('/')[3];
+    if (!reportId) {
+      asJson(res, 400, { error: 'Report id is required' });
+      return true;
+    }
+    const deleted = deleteToolAnalysisReportRecord(settings.toolAnalysisResultsDir, reportId);
+    if (!deleted) {
+      asJson(res, 404, { error: 'Tool analysis report not found' });
+      return true;
+    }
+    asJson(res, 200, { ok: true });
     return true;
   }
 
@@ -198,7 +266,7 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 409, { error: `Job not completed (status=${job.status})` });
       return true;
     }
-    asJson(res, 200, { jobId, report: job.result });
+    asJson(res, 200, { jobId, report: job.result, savedReportId: job.savedReportId });
     return true;
   }
 

@@ -85,7 +85,7 @@ interface ToolAnalysisServerReport {
   tools: ToolAnalysisToolReport[];
 }
 
-interface ToolAnalysisReport {
+export interface ToolAnalysisReport {
   schemaVersion: 1;
   createdAt: string;
   assistantAgentName: string;
@@ -130,6 +130,8 @@ export interface ToolAnalysisJob {
   clients: Set<ServerResponse>;
   abortController: AbortController;
   result?: ToolAnalysisReport;
+  savedReportId?: string;
+  savedReportPath?: string;
 }
 
 interface ToolAnalysisToolContext {
