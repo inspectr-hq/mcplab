@@ -67,8 +67,8 @@ const Configurations = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Configurations</h1>
-          <p className="text-sm text-muted-foreground">Manage your evaluation configurations</p>
+          <h1 className="text-2xl font-bold">MCP Evaluations</h1>
+          <p className="text-sm text-muted-foreground">Manage your MCP evaluation suites</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => void reload()}>
@@ -166,14 +166,14 @@ const Configurations = () => {
               {!loading && configs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    No configurations yet. Create your first one to get started.
+                    No MCP evaluations yet. Create your first one to get started.
                   </TableCell>
                 </TableRow>
               )}
               {loading && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    Loading configurations...
+                    Loading MCP evaluations...
                   </TableCell>
                 </TableRow>
               )}

@@ -26,11 +26,11 @@ const buildCrumbs = (pathname: string): Crumb[] => {
   const crumbs: Crumb[] = [{ label: "Dashboard", to: "/" }];
 
   if (matchPath("/configs/:id", pathname)) {
-    crumbs.push({ label: "Configurations", to: "/configs" }, { label: "Config" });
+    crumbs.push({ label: "MCP Evaluations", to: "/configs" }, { label: "MCP Evaluation" });
     return crumbs;
   }
   if (matchPath("/configs", pathname)) {
-    crumbs.push({ label: "Configurations" });
+    crumbs.push({ label: "MCP Evaluations" });
     return crumbs;
   }
   if (matchPath("/results/:id", pathname)) {
@@ -46,15 +46,25 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     return crumbs;
   }
   if (matchPath("/libraries/servers", pathname)) {
-    crumbs.push({ label: "Manage Servers" });
+    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "Servers" });
     return crumbs;
   }
   if (matchPath("/libraries/agents", pathname)) {
-    crumbs.push({ label: "Manage Agents" });
+    crumbs.push({ label: "Libraries", to: "/libraries/agents" }, { label: "Agents" });
+    return crumbs;
+  }
+  if (matchPath("/libraries/scenarios/:scenarioId", pathname)) {
+    const match = matchPath("/libraries/scenarios/:scenarioId", pathname);
+    const scenarioId = match?.params.scenarioId ? decodeURIComponent(match.params.scenarioId) : "Scenario";
+    crumbs.push(
+      { label: "Libraries", to: "/libraries/scenarios" },
+      { label: "Scenarios", to: "/libraries/scenarios" },
+      { label: scenarioId }
+    );
     return crumbs;
   }
   if (matchPath("/libraries/scenarios", pathname)) {
-    crumbs.push({ label: "Manage Scenarios" });
+    crumbs.push({ label: "Libraries", to: "/libraries/scenarios" }, { label: "Scenarios" });
     return crumbs;
   }
   if (matchPath("/compare", pathname)) {

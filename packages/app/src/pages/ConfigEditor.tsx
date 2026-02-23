@@ -179,19 +179,19 @@ const ConfigEditor = () => {
 
   const handleSave = async () => {
     if (!config.name.trim()) {
-      toast({ title: "Validation Error", description: "Configuration name is required.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
       return;
     }
     const nextConfig = { ...config, updatedAt: new Date().toISOString() };
     if (isNew) {
       const created = await addConfig(nextConfig);
       setConfig(created);
-      toast({ title: "Configuration Created", description: `"${created.name}" has been saved.` });
+      toast({ title: "MCP Evaluation Created", description: `"${created.name}" has been saved.` });
       navigate(`/configs/${created.id}`);
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
-      toast({ title: "Configuration Updated", description: `"${updated.name}" has been updated.` });
+      toast({ title: "MCP Evaluation Updated", description: `"${updated.name}" has been updated.` });
       setEditing(false);
       if (updated.id !== id) {
         navigate(`/configs/${updated.id}`, { replace: true });
@@ -199,7 +199,7 @@ const ConfigEditor = () => {
     }
   };
 
-  const title = isNew ? "New Configuration" : editing ? `Editing: ${config.name}` : config.name;
+  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${config.name}` : config.name;
   const configBasePath = isNew ? "/configs/new" : `/configs/${encodeURIComponent(config.id || id || "")}`;
   const isBrokenConfig = Boolean(existing?.loadError);
 
@@ -350,14 +350,14 @@ const ConfigEditor = () => {
           <h1 className="text-2xl font-bold truncate">{title}</h1>
           <p className="text-sm text-muted-foreground">
             {isNew
-              ? "Create a new evaluation configuration"
+              ? "Create a new MCP evaluation"
                 : loading
                   ? "Loading configuration..."
                 : existing
                   ? existing.loadError
-                    ? "Configuration could not be fully loaded"
+                    ? "MCP evaluation could not be fully loaded"
                     : `Last updated ${new Date(config.updatedAt).toLocaleDateString()}`
-                  : "Configuration not found"}
+                  : "MCP evaluation not found"}
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -487,7 +487,7 @@ const ConfigEditor = () => {
         <CardContent className="pt-6 space-y-3">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Configuration Name</Label>
+              <Label className="text-xs">MCP Evaluation Name</Label>
               <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. Basic OpenAI Eval" />
             </div>
             <div className="space-y-1.5">

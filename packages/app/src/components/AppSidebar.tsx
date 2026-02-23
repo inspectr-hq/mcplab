@@ -20,7 +20,7 @@ const navSections = [
     title: "Workspace",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "Configurations", url: "/configs", icon: Settings }
+      { title: "MCP Evaluations", url: "/configs", icon: Settings }
     ]
   },
   {

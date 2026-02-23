@@ -69,7 +69,7 @@ const Dashboard = () => {
         </div>
         <div className="flex gap-3">
           <Button asChild>
-            <Link to="/configs/new"><Settings className="mr-2 h-4 w-4" />New Config</Link>
+            <Link to="/configs/new"><Settings className="mr-2 h-4 w-4" />New MCP Evaluation</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link to="/run"><Play className="mr-2 h-4 w-4" />Run Evaluation</Link>
@@ -82,7 +82,7 @@ const Dashboard = () => {
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Configurations" value={totalConfigs} icon={Layers} subtitle={`${totalConfigs} active`} />
+        <StatCard title="MCP Evaluations" value={totalConfigs} icon={Layers} subtitle={`${totalConfigs} active`} />
         <StatCard title="Total Runs" value={totalRuns} icon={Activity} subtitle="Last 30 days" />
         <StatCard title="Pass Rate" value={`${Math.round(overallPassRate * 100)}%`} icon={BarChart3} subtitle="+5% from last week" trend="up" />
         <StatCard title="Avg Latency" value={`${avgLatency}ms`} icon={Timer} subtitle="-120ms from last week" trend="up" />
