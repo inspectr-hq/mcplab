@@ -31,6 +31,7 @@ interface ScenarioAssistantDialogProps {
     baselineSnapshotId?: string;
   };
   defaultAssistantAgentName?: string;
+  initialUserMessage?: string;
   onApplyPatch: (patch: {
     prompt?: string;
     evalRules?: Scenario["evalRules"];
@@ -49,6 +50,7 @@ export function ScenarioAssistantDialog({
   servers,
   snapshotEval,
   defaultAssistantAgentName,
+  initialUserMessage,
   onApplyPatch
 }: ScenarioAssistantDialogProps) {
   const { mode, source } = useDataSource();
@@ -61,6 +63,7 @@ export function ScenarioAssistantDialog({
     defaultAssistantAgentName || agents[0]?.name || ""
   );
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const initialMessageSentRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (open && !selectedAssistantAgentName && agents[0]?.name) {
@@ -153,6 +156,7 @@ export function ScenarioAssistantDialog({
     setSession(null);
     setInput("");
     setAppliedSuggestionKeys(new Set());
+    initialMessageSentRef.current = null;
     void source.closeScenarioAssistantSession(id).catch(() => {});
   }, [open, sessionId, source]);
 
@@ -192,6 +196,16 @@ export function ScenarioAssistantDialog({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!open || !sessionId || !session) return;
+    if (!canUseAssistant || loading) return;
+    const handoffMessage = String(initialUserMessage ?? "").trim();
+    if (!handoffMessage) return;
+    if (initialMessageSentRef.current === handoffMessage) return;
+    initialMessageSentRef.current = handoffMessage;
+    void sendMessage(handoffMessage);
+  }, [open, sessionId, session, canUseAssistant, loading, initialUserMessage]);
 
   const handleApprove = async (callId: string) => {
     if (!sessionId) return;

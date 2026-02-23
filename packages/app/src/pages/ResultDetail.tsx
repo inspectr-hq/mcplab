@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,11 @@ import { toast } from "@/hooks/use-toast";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type { ResultAssistantChatMessage, SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
+const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
   const { configs } = useConfigs();
@@ -43,6 +46,7 @@ const ResultDetail = () => {
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
   const [assistantMeta, setAssistantMeta] = useState<{
     assistantAgentName: string;
     provider: string;
@@ -292,8 +296,9 @@ const ResultDetail = () => {
     }
   };
 
-  const openAssistantWithPrompt = (prompt?: string) => {
+  const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
     setAssistantOpen(true);
+    setAssistantContextScenarioId(options?.scenarioId ?? null);
     if (assistantMessages.length === 0) {
       setAssistantMessages([
         {
@@ -304,6 +309,56 @@ const ResultDetail = () => {
     }
     if (prompt) {
       setAssistantInput(prompt);
+    }
+  };
+
+  const sendToScenarioAssistant = (assistantReply: string) => {
+    if (!result) return;
+    if (!assistantContextScenarioId) {
+      toast({
+        title: "No scenario context",
+        description: "Ask about a specific scenario or run first, then send the suggestion.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const libScenario =
+      libraryScenarios.find((s) => s.id === assistantContextScenarioId) ??
+      libraryScenarios.find((s) => s.name === assistantContextScenarioId);
+    if (!libScenario) {
+      toast({
+        title: "Scenario not found in library",
+        description: `Could not find library scenario '${assistantContextScenarioId}' to open in Scenario Assistant.`,
+        variant: "destructive"
+      });
+      return;
+    }
+    const prompt = [
+      `I am sending a suggestion from the Result Assistant for scenario '${assistantContextScenarioId}' based on run '${result.id}'.`,
+      "Please review the suggestion, check it against the current scenario configuration, and propose concrete updates to the Checks and/or Value Capture Rules if appropriate.",
+      "",
+      "Result Assistant suggestion:",
+      assistantReply
+    ].join("\n");
+    try {
+      window.sessionStorage.setItem(
+        RESULT_ASSISTANT_HANDOFF_STORAGE_KEY,
+        JSON.stringify({
+          type: "result-assistant-handoff-v1",
+          runId: result.id,
+          configId: requestedConfigId || result.configId || "",
+          scenarioId: libScenario.id,
+          prompt,
+          sourceReply: assistantReply
+        })
+      );
+      navigate(`/libraries/scenarios/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
+    } catch (error: any) {
+      toast({
+        title: "Could not create handoff",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
     }
   };
 
@@ -603,7 +658,7 @@ const ResultDetail = () => {
                                 onClick={() =>
                                   openAssistantWithPrompt(
                                     `Explain why scenario '${sc.scenarioId}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
-                                  )
+                                  , { scenarioId: sc.scenarioId })
                                 }
                               >
                                 <Sparkles className="h-3.5 w-3.5" />
@@ -806,7 +861,7 @@ const ResultDetail = () => {
                                           onClick={() =>
                                             openAssistantWithPrompt(
                                               `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
-                                            )
+                                            , { scenarioId: sc.scenarioId })
                                           }
                                         >
                                           <Sparkles className="h-3.5 w-3.5" />
@@ -897,6 +952,9 @@ const ResultDetail = () => {
               <div className="space-y-3 pr-2">
                 {assistantMessages.map((message, index) => {
                   const isUser = message.role === "user";
+                  const canShowHandoff =
+                    !isUser &&
+                    isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
                   return (
                     <div key={`${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                       {!isUser && (
@@ -909,6 +967,20 @@ const ResultDetail = () => {
                           {isUser ? "You" : "Assistant"}
                         </p>
                         <MarkdownText text={message.text} className="text-sm" />
+                        {canShowHandoff && (
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2 text-xs"
+                              onClick={() => sendToScenarioAssistant(message.text)}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Send to Scenario Assistant
+                            </Button>
+                          </div>
+                        )}
                       </div>
                       {isUser && (
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
@@ -1032,6 +1104,60 @@ function normalizeConversationText(text: string, kind: ConversationItem["kind"])
     return trimmedStart.replace(/^assistant:\s*/i, "");
   }
   return trimmedStart;
+}
+
+function isScenarioAssistantHandoffRelevant(reply: string, hasScenarioContext: boolean): boolean {
+  if (!hasScenarioContext) return false;
+  const text = String(reply ?? "").toLowerCase();
+  if (!text.trim()) return false;
+
+  const editSignals = [
+    "check",
+    "checks",
+    "rule",
+    "rules",
+    "regex",
+    "pattern",
+    "value capture",
+    "extract rule",
+    "update",
+    "change",
+    "replace",
+    "modify",
+    "adjust",
+    "use ",
+    "set ",
+  ];
+  const concreteSuggestionSignals = [
+    "change ",
+    "replace ",
+    "update ",
+    "use ",
+    "set the",
+    "suggested",
+    "you should",
+    "try ",
+    "text match failed",
+    "text must match pattern",
+  ];
+  const explanationOnlySignals = [
+    "i can only read",
+    "i don't have write access",
+    "i cannot directly edit",
+    "what happened",
+    "summary",
+  ];
+
+  if (explanationOnlySignals.some((s) => text.includes(s)) && !concreteSuggestionSignals.some((s) => text.includes(s))) {
+    return false;
+  }
+
+  const hasEditSignal = editSignals.some((s) => text.includes(s));
+  const hasConcreteSuggestion = concreteSuggestionSignals.some((s) => text.includes(s));
+  const hasListStructure = /(^|\n)\s*[-*]\s+/.test(reply) || /(^|\n)\s*\d+\.\s+/.test(reply);
+  const hasQuotedPattern = /["'`][^"'`\n]{2,}["'`]/.test(reply);
+
+  return hasEditSignal && (hasConcreteSuggestion || hasListStructure || hasQuotedPattern);
 }
 
 function ToolEventRow({

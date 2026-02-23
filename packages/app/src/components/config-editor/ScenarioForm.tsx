@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
 
 interface ScenarioFormProps {
@@ -18,6 +18,8 @@ interface ScenarioFormProps {
   configId?: string;
   configPath?: string;
   defaultAssistantAgentName?: string;
+  assistantInitialPromptByScenarioId?: Record<string, string>;
+  assistantAutoOpenNonceByScenarioId?: Record<string, number>;
   snapshotEval?: {
     enabled: boolean;
     mode: "warn" | "fail_on_drift";
@@ -44,6 +46,8 @@ export function ScenarioForm({
   configId,
   configPath,
   defaultAssistantAgentName,
+  assistantInitialPromptByScenarioId,
+  assistantAutoOpenNonceByScenarioId,
   snapshotEval,
   onChange,
   readOnly,
@@ -86,6 +90,8 @@ export function ScenarioForm({
           configId={configId}
           configPath={configPath}
           defaultAssistantAgentName={defaultAssistantAgentName}
+          assistantInitialPrompt={assistantInitialPromptByScenarioId?.[sc.id]}
+          assistantAutoOpenNonce={assistantAutoOpenNonceByScenarioId?.[sc.id]}
           snapshotEval={snapshotEval}
           onUpdate={(patch) => update(i, patch)}
           onMoveUp={() => move(i, -1)}
@@ -101,11 +107,13 @@ export function ScenarioForm({
   );
 }
 
-function ScenarioCard({ scenario, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
+function ScenarioCard({ scenario, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, assistantInitialPrompt, assistantAutoOpenNonce, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
   scenario: Scenario; index: number; total: number; agents: AgentConfig[]; servers: ServerConfig[];
   configId?: string;
   configPath?: string;
   defaultAssistantAgentName?: string;
+  assistantInitialPrompt?: string;
+  assistantAutoOpenNonce?: number;
   snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
   onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean;
 }) {
@@ -157,6 +165,23 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
     response_not_contains: "border-amber-300/60 bg-amber-500/10 text-amber-700",
   };
   const hasScenarioBaselineOverride = scenario.snapshotEval?.baselineSnapshotId !== undefined;
+  const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>("");
+  const [consumedAutoOpenNonce, setConsumedAutoOpenNonce] = useState<number>(0);
+
+  useEffect(() => {
+    const handoff = (assistantInitialPrompt ?? "").trim();
+    if (!handoff) return;
+    if (consumedInitialPrompt === handoff) return;
+    setAssistantOpen(true);
+    setConsumedInitialPrompt(handoff);
+  }, [assistantInitialPrompt, consumedInitialPrompt]);
+
+  useEffect(() => {
+    if (!assistantAutoOpenNonce) return;
+    if (assistantAutoOpenNonce === consumedAutoOpenNonce) return;
+    setAssistantOpen(true);
+    setConsumedAutoOpenNonce(assistantAutoOpenNonce);
+  }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
 
   return (
     <Card className="border-dashed">
@@ -222,6 +247,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
           servers={servers}
           snapshotEval={snapshotEval}
           defaultAssistantAgentName={defaultAssistantAgentName}
+          initialUserMessage={assistantInitialPrompt}
           onApplyPatch={(patch) =>
             onUpdate({
               ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),

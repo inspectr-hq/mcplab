@@ -767,7 +767,6 @@ const ToolAnalysisPage = () => {
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <span>Progress</span>
-                  {activeJobId && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </CardTitle>
                 <CardDescription>
                   {activeJobId

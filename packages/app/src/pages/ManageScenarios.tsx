@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -8,13 +8,26 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, ExternalLink, Pencil, ArrowLeft, Search, Plus, Copy, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Scenario } from "@/types/eval";
 
+const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+
 const ManageScenarios = () => {
   const { scenarioId } = useParams<{ scenarioId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { mode, source } = useDataSource();
   const { scenarios, setScenarios, agents, servers, reload, loading } = useLibraries();
@@ -26,6 +39,9 @@ const ManageScenarios = () => {
   const [draftScenario, setDraftScenario] = useState<Scenario | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
+  const [assistantHandoffPrompt, setAssistantHandoffPrompt] = useState<string>("");
+  const [assistantHandoffNonce, setAssistantHandoffNonce] = useState<number>(0);
+  const [scenarioPendingDelete, setScenarioPendingDelete] = useState<Scenario | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const saveQueuedRef = useRef(false);
@@ -146,11 +162,7 @@ const ManageScenarios = () => {
     }
   };
 
-  const handleDeleteScenario = async (scenarioToDelete: Scenario) => {
-    const confirmed = window.confirm(
-      `Delete scenario '${scenarioToDelete.name || scenarioToDelete.id}'? This cannot be undone.`
-    );
-    if (!confirmed) return;
+  const confirmDeleteScenario = async (scenarioToDelete: Scenario) => {
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -247,6 +259,32 @@ const ManageScenarios = () => {
   }, [mode, source]);
 
   useEffect(() => {
+    if (!selectedScenarioId) return;
+    if (searchParams.get("assistantHandoff") !== "1") return;
+    try {
+      const raw = window.sessionStorage.getItem(RESULT_ASSISTANT_HANDOFF_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        scenarioId?: string;
+        prompt?: string;
+      };
+      if (!parsed || parsed.scenarioId !== selectedScenarioId || !parsed.prompt) return;
+      setAssistantHandoffPrompt(String(parsed.prompt));
+      setAssistantHandoffNonce(Date.now());
+      window.sessionStorage.removeItem(RESULT_ASSISTANT_HANDOFF_STORAGE_KEY);
+      const next = new URLSearchParams(searchParams);
+      next.delete("assistantHandoff");
+      setSearchParams(next, { replace: true });
+      toast({
+        title: "Suggestion sent to Scenario Assistant",
+        description: "Review the suggestion and apply changes in the scenario editor."
+      });
+    } catch {
+      // Ignore malformed handoff payloads.
+    }
+  }, [selectedScenarioId, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (selectedScenario) {
       setDraftScenario(structuredClone(selectedScenario));
       latestDraftRef.current = structuredClone(selectedScenario);
@@ -307,7 +345,7 @@ const ManageScenarios = () => {
               <div>
                 <CardTitle className="text-base">Scenario Overview</CardTitle>
                 <CardDescription>
-                  Click a scenario to deep-link to a focused editor at <code className="font-mono">/libraries/scenarios/&lt;scenario-id&gt;</code>.
+                  Browse reusable scenarios and open a focused scenario editor to manage checks, value capture rules, and prompts.
                 </CardDescription>
               </div>
               <Button type="button" size="sm" onClick={() => void handleAddScenario()}>
@@ -400,7 +438,9 @@ const ManageScenarios = () => {
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium truncate">{scenario.name || scenario.id}</span>
+                            <Link to={href} className="font-medium truncate hover:underline">
+                              {scenario.name || scenario.id}
+                            </Link>
                             <Badge variant="outline" className="font-mono text-[10px]">{scenario.id}</Badge>
                             {isSelected && <Badge>Selected</Badge>}
                           </div>
@@ -440,30 +480,10 @@ const ManageScenarios = () => {
                             size="sm"
                             variant="outline"
                             className="text-destructive hover:text-destructive"
-                            onClick={() => void handleDeleteScenario(scenario)}
+                            onClick={() => setScenarioPendingDelete(scenario)}
                           >
                             <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                             Delete
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={async () => {
-                              const absoluteUrl = `${window.location.origin}${href}`;
-                              try {
-                                await navigator.clipboard.writeText(absoluteUrl);
-                                toast({ title: "Deeplink copied", description: absoluteUrl });
-                              } catch {
-                                toast({
-                                  title: "Could not copy deeplink",
-                                  description: absoluteUrl,
-                                  variant: "destructive"
-                                });
-                              }
-                            }}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </div>
@@ -498,7 +518,7 @@ const ManageScenarios = () => {
                   size="sm"
                   variant="outline"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => void handleDeleteScenario(draftScenario)}
+                  onClick={() => setScenarioPendingDelete(draftScenario)}
                 >
                   <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                   Delete
@@ -546,6 +566,16 @@ const ManageScenarios = () => {
               agents={agents}
               servers={servers}
               defaultAssistantAgentName={effectiveAssistantAgentName}
+              assistantInitialPromptByScenarioId={
+                assistantHandoffPrompt && draftScenario?.id
+                  ? { [draftScenario.id]: assistantHandoffPrompt }
+                  : undefined
+              }
+              assistantAutoOpenNonceByScenarioId={
+                draftScenario?.id && assistantHandoffNonce
+                  ? { [draftScenario.id]: assistantHandoffNonce }
+                  : undefined
+              }
               onChange={(next) => {
                 const nextScenario = next[0];
                 if (!nextScenario) return;
@@ -557,6 +587,34 @@ const ManageScenarios = () => {
           </CardContent>
         </Card>
       ) : null}
+
+      <AlertDialog open={Boolean(scenarioPendingDelete)} onOpenChange={(open) => !open && setScenarioPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete scenario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{" "}
+              <span className="font-medium">
+                {scenarioPendingDelete?.name || scenarioPendingDelete?.id}
+              </span>
+              {" "}from the library. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!scenarioPendingDelete) return;
+                void confirmDeleteScenario(scenarioPendingDelete);
+                setScenarioPendingDelete(null);
+              }}
+            >
+              Delete Scenario
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
