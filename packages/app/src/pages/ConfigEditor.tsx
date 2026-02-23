@@ -61,7 +61,7 @@ const ConfigEditor = () => {
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
-    return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "servers";
+    return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
   }, [tabParam, searchParams]);
 
   useEffect(() => {
@@ -457,14 +457,6 @@ const ConfigEditor = () => {
       {/* Stats bar */}
       <div className="flex gap-4">
         <Badge
-          variant={activeTab === "servers" ? "default" : "outline"}
-          className="py-1 px-3 text-xs"
-        >
-          <Link to={`${configBasePath}/servers`} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <Server className="h-3 w-3" />{totalServerCount} server{totalServerCount !== 1 ? "s" : ""}
-          </Link>
-        </Badge>
-        <Badge
           variant={activeTab === "agents" ? "default" : "outline"}
           className="py-1 px-3 text-xs"
         >
@@ -478,6 +470,14 @@ const ConfigEditor = () => {
         >
           <Link to={`${configBasePath}/scenarios`} className="inline-flex items-center gap-1.5 whitespace-nowrap">
             <FileText className="h-3 w-3" />{totalScenarioCount} scenario{totalScenarioCount !== 1 ? "s" : ""}
+          </Link>
+        </Badge>
+        <Badge
+          variant={activeTab === "servers" ? "default" : "outline"}
+          className="py-1 px-3 text-xs"
+        >
+          <Link to={`${configBasePath}/servers`} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <Server className="h-3 w-3" />{totalServerCount} server{totalServerCount !== 1 ? "s" : ""}
           </Link>
         </Badge>
       </div>
@@ -724,9 +724,9 @@ const ConfigEditor = () => {
         className="space-y-4"
       >
         <TabsList>
-          <TabsTrigger value="servers" className="gap-1.5"><Server className="h-3.5 w-3.5" />Servers</TabsTrigger>
           <TabsTrigger value="agents" className="gap-1.5"><Bot className="h-3.5 w-3.5" />Agents</TabsTrigger>
           <TabsTrigger value="scenarios" className="gap-1.5"><FileText className="h-3.5 w-3.5" />Scenarios</TabsTrigger>
+          <TabsTrigger value="servers" className="gap-1.5"><Server className="h-3.5 w-3.5" />Servers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="servers">

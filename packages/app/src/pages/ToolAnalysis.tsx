@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -59,14 +60,10 @@ function toMarkdownReport(report: ToolAnalysisReport): string {
       lines.push(`- Safety: ${tool.safetyClassification} (${tool.classificationReason})`);
       if (tool.metadataReview) {
         if (tool.metadataReview.issues.length > 0) {
-          lines.push(`- Metadata issues:`);
+          lines.push(`#### Metadata issues`);
           for (const issue of tool.metadataReview.issues) {
             lines.push(`  - [${issue.severity}] ${issue.title}: ${issue.detail}`);
           }
-        }
-        if (tool.metadataReview.evalReadinessNotes.length > 0) {
-          lines.push(`- Eval readiness notes:`);
-          for (const note of tool.metadataReview.evalReadinessNotes) lines.push(`  - ${note}`);
         }
       }
       if (tool.deeperAnalysis) {
@@ -84,8 +81,12 @@ function toMarkdownReport(report: ToolAnalysisReport): string {
         }
       }
       if (tool.overallRecommendations.length > 0) {
-        lines.push(`- Recommendations:`);
+        lines.push(`#### Recommendations`);
         for (const rec of tool.overallRecommendations) lines.push(`  - ${rec}`);
+      }
+      if (tool.metadataReview && tool.metadataReview.evalReadinessNotes.length > 0) {
+        lines.push(`#### Agent/Eval readiness notes`);
+        for (const note of tool.metadataReview.evalReadinessNotes) lines.push(`  - ${note}`);
       }
       lines.push("");
     }
@@ -153,6 +154,22 @@ function severityBadgeClass(severity: "critical" | "high" | "medium" | "low" | "
   }
 }
 
+function severityBadgeInactiveClass(severity: "critical" | "high" | "medium" | "low" | "info"): string {
+  switch (severity) {
+    case "critical":
+      return "border-red-300 bg-background text-red-900";
+    case "high":
+      return "border-orange-300 bg-background text-orange-900";
+    case "medium":
+      return "border-amber-300 bg-background text-amber-900";
+    case "low":
+      return "border-sky-300 bg-background text-sky-900";
+    case "info":
+    default:
+      return "border-slate-300 bg-background text-slate-800";
+  }
+}
+
 const ToolAnalysisPage = () => {
   const { mode, source } = useDataSource();
   const { servers, agents, loading: librariesLoading, reload: reloadLibraries } = useLibraries();
@@ -181,6 +198,32 @@ const ToolAnalysisPage = () => {
   const cleanupRef = useRef<null | (() => void)>(null);
 
   const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || "";
+  const analysisProgress = useMemo(() => {
+    let totalTools = 0;
+    const started = new Set<string>();
+    const finished = new Set<string>();
+    for (const event of events) {
+      const message =
+        typeof event.payload?.message === "string" ? event.payload.message : "";
+      if (!message) continue;
+      const totalMatch = message.match(/\((\d+)\s+tools?\)/i);
+      if (totalMatch) {
+        totalTools = Math.max(totalTools, Number(totalMatch[1]) || 0);
+      }
+      const startedMatch = message.match(/^Started\s+(.+)$/);
+      if (startedMatch) started.add(startedMatch[1]);
+      const finishedMatch = message.match(/^Finished\s+(.+)$/);
+      if (finishedMatch) finished.add(finishedMatch[1]);
+    }
+    const percent =
+      totalTools > 0 ? Math.max(0, Math.min(100, Math.round((finished.size / totalTools) * 100))) : 0;
+    return {
+      totalTools,
+      startedTools: started.size,
+      finishedTools: finished.size,
+      percent
+    };
+  }, [events]);
 
   useEffect(() => {
     let active = true;
@@ -754,6 +797,19 @@ const ToolAnalysisPage = () => {
                 Analysis is still running...
               </div>
             )}
+            {(analysisProgress.totalTools > 0 || activeJobId) && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {analysisProgress.totalTools > 0
+                      ? `${analysisProgress.finishedTools}/${analysisProgress.totalTools} tools finished`
+                      : "Preparing analysis..."}
+                  </span>
+                  <span>{analysisProgress.totalTools > 0 ? `${analysisProgress.percent}%` : "0%"}</span>
+                </div>
+                <Progress value={analysisProgress.totalTools > 0 ? analysisProgress.percent : 0} className="h-2" />
+              </div>
+            )}
             {events.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {activeJobId ? "Starting analysis..." : "No progress events captured."}
@@ -850,8 +906,8 @@ const ToolAnalysisPage = () => {
                     >
                       <Badge
                         variant="outline"
-                        className={`capitalize ${severityBadgeClass(severity)} ${
-                          active ? "ring-1 ring-current" : "opacity-45"
+                        className={`capitalize font-normal ${active ? severityBadgeClass(severity) : severityBadgeInactiveClass(severity)} ${
+                          active ? "ring-1 ring-current" : "opacity-70"
                         }`}
                       >
                         {severity}: {report.summary.issueCounts[severity]}
