@@ -314,10 +314,6 @@ export async function startAppServer(options: AppServerOptions) {
           settings.scenarioAssistantAgentName = next || undefined;
           persistSettingsOverrides(settings);
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'oauthDebuggerEnabled')) {
-          settings.oauthDebuggerEnabled = body.oauthDebuggerEnabled === true;
-          persistSettingsOverrides(settings);
-        }
         asJson(res, 200, settings);
         return;
       }

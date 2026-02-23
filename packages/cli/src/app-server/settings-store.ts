@@ -5,7 +5,6 @@ import type { AppSettings } from './types.js';
 
 interface AppSettingsOverrides {
   scenario_assistant_agent_name?: string;
-  oauth_debugger_enabled?: boolean;
 }
 
 function settingsOverridesFilePath(settings: AppSettings): string {
@@ -27,15 +26,13 @@ export function applySettingsOverrides(settings: AppSettings): void {
   const overrides = loadSettingsOverrides(settings);
   settings.scenarioAssistantAgentName =
     overrides.scenario_assistant_agent_name?.trim() || undefined;
-  settings.oauthDebuggerEnabled = overrides.oauth_debugger_enabled === true;
 }
 
 export function persistSettingsOverrides(settings: AppSettings): void {
   const payload: AppSettingsOverrides = {
     ...(settings.scenarioAssistantAgentName
       ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
-      : {}),
-    ...(settings.oauthDebuggerEnabled ? { oauth_debugger_enabled: true } : {})
+      : {})
   };
   writeFileSync(settingsOverridesFilePath(settings), `${stringifyYaml(payload)}\n`, 'utf8');
 }

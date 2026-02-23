@@ -189,7 +189,19 @@ export async function handleRunsRoutes(params: {
 
     void (async () => {
       try {
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: { message: `Loading MCP Evaluation config: ${configPath}` }
+        });
         const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: `Loaded config (${loaded.config.scenarios.length} scenario(s), ${Object.keys(loaded.config.agents ?? {}).length} agent(s), ${Object.keys(loaded.config.servers ?? {}).length} server(s))`
+          }
+        });
         for (const warning of loaded.warnings ?? []) {
           addJobEvent(job, {
             type: 'log',
@@ -197,6 +209,18 @@ export async function handleRunsRoutes(params: {
             payload: { message: warning }
           });
         }
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message:
+              scenarioIds && scenarioIds.length > 0
+                ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
+                : scenarioId
+                  ? `Selecting requested scenario: ${scenarioId}`
+                  : 'Using all scenarios from config'
+          }
+        });
         const selectedBaseScenarios = selectScenarioIds(
           loaded.config,
           scenarioIds && scenarioIds.length > 0
@@ -205,13 +229,46 @@ export async function handleRunsRoutes(params: {
               ? [scenarioId]
               : undefined
         );
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: `Selected ${selectedBaseScenarios.scenarios.length} base scenario(s)`
+          }
+        });
+        const resolvedAgents = resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents);
+        const resolvedAgentList = Array.isArray(resolvedAgents) ? resolvedAgents : [];
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message:
+              requestedAgents && requestedAgents.length > 0
+                ? `Using requested agents: ${resolvedAgentList.join(', ')}`
+                : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
+          }
+        });
         const expandedConfig = expandConfigForAgents(
           selectedBaseScenarios,
-          resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents)
+          resolvedAgents
         );
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
+          }
+        });
         const cwdBefore = process.cwd();
         process.chdir(settings.workspaceRoot);
         try {
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
+            }
+          });
           const { runDir, results } = await runAll(expandedConfig, {
             runsPerScenario,
             scenarioId,
@@ -220,7 +277,19 @@ export async function handleRunsRoutes(params: {
             runsDir: settings.runsDir,
             signal: job.abortController.signal
           });
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
+            }
+          });
           if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
+            addJobEvent(job, {
+              type: 'log',
+              ts: new Date().toISOString(),
+              payload: { message: 'Applying snapshot evaluation policy ...' }
+            });
             const policy = expandedConfig.snapshot_eval;
             const enabledScenarioIds = new Set(
               selectedBaseScenarios.scenarios
@@ -258,6 +327,13 @@ export async function handleRunsRoutes(params: {
               scenarioIdsByBaseline.set(baselineId, list);
             }
             for (const [baselineId, scenarioIdsForBaseline] of scenarioIdsByBaseline) {
+              addJobEvent(job, {
+                type: 'log',
+                ts: new Date().toISOString(),
+                payload: {
+                  message: `Comparing ${scenarioIdsForBaseline.length} scenario(s) to snapshot baseline '${baselineId}'`
+                }
+              });
               const snapshot = loadSnapshot(baselineId, settings.snapshotsDir);
               const fullComparison = compareRunToSnapshot(results, snapshot);
               comparisons.push({
@@ -269,14 +345,51 @@ export async function handleRunsRoutes(params: {
             }
             if (comparisons.length > 0) {
               applySnapshotPolicyToRunResult({ results, comparisons, policy, enabledScenarioIds });
+              addJobEvent(job, {
+                type: 'log',
+                ts: new Date().toISOString(),
+                payload: {
+                  message: `Snapshot evaluation applied (${comparisons.length} baseline comparison group(s))`
+                }
+              });
+            } else {
+              addJobEvent(job, {
+                type: 'log',
+                ts: new Date().toISOString(),
+                payload: { message: 'Snapshot evaluation enabled, but no baseline comparisons were applied' }
+              });
             }
+          } else if (applySnapshotEval) {
+            addJobEvent(job, {
+              type: 'log',
+              ts: new Date().toISOString(),
+              payload: { message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled' }
+            });
+          } else {
+            addJobEvent(job, {
+              type: 'log',
+              ts: new Date().toISOString(),
+              payload: { message: 'Snapshot evaluation skipped for this run (disabled in run request)' }
+            });
           }
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: { message: `Writing results to ${runDir}` }
+          });
           writeFileSync(
             join(runDir, 'results.json'),
             `${JSON.stringify(results, null, 2)}\n`,
             'utf8'
           );
           writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(results.summary.pass_rate * 100)}%`
+            }
+          });
           addJobEvent(job, {
             type: 'completed',
             ts: new Date().toISOString(),

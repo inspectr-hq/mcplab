@@ -16,7 +16,6 @@ export interface AppSettings {
   snapshotsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
-  oauthDebuggerEnabled?: boolean;
 }
 
 export interface DevMcpServerRuntime {
