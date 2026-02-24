@@ -106,12 +106,20 @@ export async function preloadResultAssistantTools(
   const usedNames = new Set<string>();
   for (const tool of discovered) {
     if (!RESULT_ASSISTANT_ALLOWED_TOOLS.has(tool.name)) continue;
-    const publicName = makeAssistantToolPublicName(RESULT_ASSISTANT_MCP_SERVER_NAME, tool.name, usedNames);
-    session.toolPublicMap.set(publicName, { server: RESULT_ASSISTANT_MCP_SERVER_NAME, tool: tool.name });
+    const publicName = makeAssistantToolPublicName(
+      RESULT_ASSISTANT_MCP_SERVER_NAME,
+      tool.name,
+      usedNames
+    );
+    session.toolPublicMap.set(publicName, {
+      server: RESULT_ASSISTANT_MCP_SERVER_NAME,
+      tool: tool.name
+    });
     session.tools.push({
       ...tool,
       name: publicName,
-      description: `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${tool.name}]`.trim()
+      description:
+        `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${tool.name}]`.trim()
     });
   }
 }
@@ -188,7 +196,10 @@ export async function executeResultAssistantToolCall(
   const timeout = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
   });
-  return Promise.race([session.mcp.callTool(pending.server, pending.tool, pending.arguments), timeout]);
+  return Promise.race([
+    session.mcp.callTool(pending.server, pending.tool, pending.arguments),
+    timeout
+  ]);
 }
 
 export function summarizeToolResultForResultAssistant(result: unknown): string {
@@ -268,7 +279,8 @@ async function resultAssistantChatModel(
       const first = response.tool_calls[0];
       return {
         type: 'tool_call_request',
-        text: response.content?.trim() || `I need to call '${first.name}' to help with this request.`,
+        text:
+          response.content?.trim() || `I need to call '${first.name}' to help with this request.`,
         toolCall: { name: first.name, arguments: first.arguments ?? {} }
       };
     }
@@ -287,7 +299,8 @@ function parseModelOutput(text: string): ParsedModelOutput {
     if (!fenced) throw new Error('Assistant returned invalid JSON');
     parsed = JSON.parse(fenced[1]);
   }
-  if (!parsed || typeof parsed !== 'object') throw new Error('Assistant response must be a JSON object');
+  if (!parsed || typeof parsed !== 'object')
+    throw new Error('Assistant response must be a JSON object');
   const obj = parsed as Partial<ParsedModelOutput>;
   if (obj.type !== 'assistant_message' && obj.type !== 'tool_call_request') {
     throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
@@ -306,7 +319,11 @@ function normalizeAssistantToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
 }
 
-function makeAssistantToolPublicName(serverName: string, toolName: string, used: Set<string>): string {
+function makeAssistantToolPublicName(
+  serverName: string,
+  toolName: string,
+  used: Set<string>
+): string {
   const base = `${normalizeAssistantToolName(serverName)}__${normalizeAssistantToolName(toolName)}`;
   let candidate = base;
   let suffix = 2;

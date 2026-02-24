@@ -731,7 +731,9 @@ export interface EvalDataSource {
   createResultAssistantSession: (
     runId: string
   ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
-  getResultAssistantSession: (sessionId: string) => Promise<{ session: ResultAssistantSessionView }>;
+  getResultAssistantSession: (
+    sessionId: string
+  ) => Promise<{ session: ResultAssistantSessionView }>;
   sendResultAssistantMessage: (
     sessionId: string,
     message: string

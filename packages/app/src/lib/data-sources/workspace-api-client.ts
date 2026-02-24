@@ -75,9 +75,7 @@ export const workspaceApiClient = {
       librariesDir: string;
       scenarioAssistantAgentName?: string;
     }>('/api/settings'),
-  updateSettings: (patch: {
-    scenarioAssistantAgentName?: string;
-  }) =>
+  updateSettings: (patch: { scenarioAssistantAgentName?: string }) =>
     request<{
       workspaceRoot: string;
       configsDir: string;
@@ -127,7 +125,10 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify({ runId })
     }),
-  askResultAssistant: (runId: string, messages: Array<{ role: 'user' | 'assistant'; text: string }>) =>
+  askResultAssistant: (
+    runId: string,
+    messages: Array<{ role: 'user' | 'assistant'; text: string }>
+  ) =>
     request<{ reply: string; assistantAgentName: string; provider: string; model: string }>(
       `/api/runs/${encodeURIComponent(runId)}/assistant`,
       {
@@ -179,9 +180,7 @@ export const workspaceApiClient = {
       `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
       {
         method: 'POST',
-        body: JSON.stringify(
-          argumentsOverride === undefined ? {} : { argumentsOverride }
-        )
+        body: JSON.stringify(argumentsOverride === undefined ? {} : { argumentsOverride })
       }
     ),
   denyResultAssistantToolCall: (sessionId: string, callId: string) =>

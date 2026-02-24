@@ -1,7 +1,13 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, join } from 'node:path';
-import { McpClientManager, loadConfig, runAll, type EvalConfig, type LlmMessage } from '@inspectr/mcplab-core';
+import {
+  McpClientManager,
+  loadConfig,
+  runAll,
+  type EvalConfig,
+  type LlmMessage
+} from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
 import type { ActiveJobState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
@@ -256,10 +262,7 @@ export async function handleRunsRoutes(params: {
                 : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
           }
         });
-        const expandedConfig = expandConfigForAgents(
-          selectedBaseScenarios,
-          resolvedAgents
-        );
+        const expandedConfig = expandConfigForAgents(selectedBaseScenarios, resolvedAgents);
         addJobEvent(job, {
           type: 'log',
           ts: new Date().toISOString(),
@@ -364,20 +367,26 @@ export async function handleRunsRoutes(params: {
               addJobEvent(job, {
                 type: 'log',
                 ts: new Date().toISOString(),
-                payload: { message: 'Snapshot evaluation enabled, but no baseline comparisons were applied' }
+                payload: {
+                  message: 'Snapshot evaluation enabled, but no baseline comparisons were applied'
+                }
               });
             }
           } else if (applySnapshotEval) {
             addJobEvent(job, {
               type: 'log',
               ts: new Date().toISOString(),
-              payload: { message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled' }
+              payload: {
+                message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled'
+              }
             });
           } else {
             addJobEvent(job, {
               type: 'log',
               ts: new Date().toISOString(),
-              payload: { message: 'Snapshot evaluation skipped for this run (disabled in run request)' }
+              payload: {
+                message: 'Snapshot evaluation skipped for this run (disabled in run request)'
+              }
             });
           }
           addJobEvent(job, {
@@ -446,10 +455,12 @@ export async function handleRunsRoutes(params: {
     const messagesRaw = Array.isArray(body.messages) ? body.messages : [];
     const messages: LlmMessage[] = messagesRaw
       .filter((m): m is { role?: unknown; text?: unknown } => !!m && typeof m === 'object')
-      .map((m): LlmMessage => ({
-        role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
-        content: String(m.text ?? '')
-      }))
+      .map(
+        (m): LlmMessage => ({
+          role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
+          content: String(m.text ?? '')
+        })
+      )
       .filter((m) => m.content.trim().length > 0);
     if (messages.length === 0) {
       asJson(res, 400, { error: 'messages are required' });
@@ -463,7 +474,8 @@ export async function handleRunsRoutes(params: {
     });
     if (!assistantAgentName) {
       asJson(res, 400, {
-        error: 'No assistant agent available. Add an agent in Libraries > Agents or configure the Scenario Assistant Agent in Settings.'
+        error:
+          'No assistant agent available. Add an agent in Libraries > Agents or configure the Scenario Assistant Agent in Settings.'
       });
       return true;
     }
@@ -569,7 +581,9 @@ export async function handleRunsRoutes(params: {
         tool: 'mcplab_write_markdown_report',
         result: toolResult,
         path:
-          structured && typeof structured === 'object' && typeof (structured as any).path === 'string'
+          structured &&
+          typeof structured === 'object' &&
+          typeof (structured as any).path === 'string'
             ? (structured as any).path
             : undefined
       });

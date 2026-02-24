@@ -162,7 +162,10 @@ export async function handleToolAnalysisRoutes(params: {
         addJobEvent(job, {
           type: 'completed',
           ts: new Date().toISOString(),
-          payload: { summary: job.result?.summary ?? null, savedReportId: job.savedReportId ?? null }
+          payload: {
+            summary: job.result?.summary ?? null,
+            savedReportId: job.savedReportId ?? null
+          }
         });
       } catch (error: unknown) {
         const aborted = job.abortController.signal.aborted || job.status === 'stopped';

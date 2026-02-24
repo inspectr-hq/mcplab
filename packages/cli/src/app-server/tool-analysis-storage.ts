@@ -113,4 +113,3 @@ export function deleteToolAnalysisReportRecord(baseDir: string, reportId: string
     return false;
   }
 }
-

@@ -1125,7 +1125,9 @@ function toolAnalysisReportDirPath(baseDir: string, reportId: string): string {
 }
 
 function toolAnalysisReportFilePath(baseDir: string, reportId: string): string {
-  return resolvePathInsideWorkspace(join(toolAnalysisReportDirPath(baseDir, reportId), 'report.json'));
+  return resolvePathInsideWorkspace(
+    join(toolAnalysisReportDirPath(baseDir, reportId), 'report.json')
+  );
 }
 
 function latestToolAnalysisReportId(baseDir: string): string | undefined {
@@ -1210,7 +1212,10 @@ function listToolAnalysisReportsFromDisk(
         })
       );
     } catch (error) {
-      out.push({ report_id: reportId, error: error instanceof Error ? error.message : String(error) });
+      out.push({
+        report_id: reportId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
   return out;
