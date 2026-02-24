@@ -199,45 +199,14 @@ const ToolAnalysisPage = () => {
     }
     if (!storedJobId) return;
 
-    let cancelled = false;
     setViewStep("run");
     setRunState("running");
     setSubmitting(true);
     setActiveJobId(storedJobId);
     setEvents([]);
-
-    void source
-      .getToolAnalysisResult(storedJobId)
-      .then((result) => {
-        if (cancelled) return;
-        setReport(result.report);
-        setSavedReportId(result.savedReportId ?? null);
-        clearActiveToolAnalysisJob();
-        setActiveJobId(null);
-        setSubmitting(false);
-        setRunState("idle");
-        setViewStep("report");
-      })
-      .catch((error: any) => {
-        if (cancelled) return;
-        const msg = String(error?.message ?? error);
-        if (msg.includes("(404)")) {
-          clearActiveToolAnalysisJob();
-          setActiveJobId(null);
-          setSubmitting(false);
-          setRunState("error");
-          setViewStep("run");
-          toast({
-            title: "Previous tool analysis job not found",
-            description: "It may have expired from memory before you returned to this page."
-          });
-          return;
-        }
-        attachToJob(storedJobId);
-      });
-
+    attachToJob(storedJobId);
     return () => {
-      cancelled = true;
+      // no-op; cleanup handled by standard subscription cleanup
     };
   }, [mode, source, activeJobId, report]);
 

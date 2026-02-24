@@ -278,6 +278,101 @@ const RunEvaluation = () => {
     };
   }, [reload]);
 
+  const clearActiveRunJob = () => {
+    try {
+      sessionStorage.removeItem(RUN_EVAL_ACTIVE_JOB_KEY);
+    } catch {
+      // ignore storage access issues
+    }
+  };
+
+  const setActiveRunJob = (jobId: string) => {
+    try {
+      sessionStorage.setItem(RUN_EVAL_ACTIVE_JOB_KEY, jobId);
+    } catch {
+      // ignore storage access issues
+    }
+  };
+
+  const attachRunJob = (jobId: string) => {
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
+      const ts = new Date(event.ts).toLocaleTimeString();
+      if (event.type === "started") {
+        setLogs((prev) => {
+          const line = `[${ts}] Run started.`;
+          return prev.includes(line) ? prev : [...prev, line];
+        });
+        setProgress((prev) => Math.max(prev, 30));
+      }
+      if (event.type === "log") {
+        const message = String(event.payload.message ?? "").trim();
+        if (message) {
+          setLogs((prev) => {
+            const line = `[${ts}] ${message}`;
+            return prev.includes(line) ? prev : [...prev, line];
+          });
+          setProgress((prev) => {
+            const lower = message.toLowerCase();
+            if (lower.startsWith("loading mcp evaluation config")) return Math.max(prev, 15);
+            if (lower.startsWith("loaded config")) return Math.max(prev, 20);
+            if (lower.startsWith("selected ")) return Math.max(prev, 30);
+            if (lower.startsWith("using requested agents") || lower.startsWith("using resolved default agents")) return Math.max(prev, 35);
+            if (lower.startsWith("expanded to ")) return Math.max(prev, 45);
+            if (lower.startsWith("running evaluation")) return Math.max(prev, 55);
+            if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 75);
+            if (lower.startsWith("applying snapshot evaluation policy")) return Math.max(prev, 82);
+            if (lower.includes("snapshot evaluation applied") || lower.includes("snapshot evaluation enabled")) return Math.max(prev, 88);
+            if (lower.startsWith("writing results to ")) return Math.max(prev, 94);
+            if (lower.startsWith("run finished:")) return Math.max(prev, 98);
+            return prev;
+          });
+        }
+      }
+      if (event.type === "completed") {
+        const nextRunId = String(event.payload.runId ?? "");
+        setLogs((prev) => {
+          const line = `[${ts}] Run completed.`;
+          return prev.includes(line) ? prev : [...prev, line];
+        });
+        if (event.payload.snapshotEval && typeof event.payload.snapshotEval === "object") {
+          const snapshotEval = event.payload.snapshotEval as {
+            mode?: string;
+            baseline_snapshot_id?: string;
+            overall_score?: number;
+            status?: string;
+          };
+          setLogs((prev) => {
+            const line = `[${ts}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`;
+            return prev.includes(line) ? prev : [...prev, line];
+          });
+        }
+        setProgress(100);
+        setRunning(false);
+        setDone(true);
+        setRunId(nextRunId);
+        clearActiveRunJob();
+        setActiveJobId(null);
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+      }
+      if (event.type === "error") {
+        const message = String(event.payload.message ?? "Unknown error");
+        const extraHint = message.includes("Anthropic model not found")
+          ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
+          : "";
+        setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
+        setRunning(false);
+        setDone(false);
+        setProgress(0);
+        clearActiveRunJob();
+        setActiveJobId(null);
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -496,97 +591,3 @@ const RunEvaluation = () => {
 };
 
 export default RunEvaluation;
-  const clearActiveRunJob = () => {
-    try {
-      sessionStorage.removeItem(RUN_EVAL_ACTIVE_JOB_KEY);
-    } catch {
-      // ignore storage access issues
-    }
-  };
-
-  const setActiveRunJob = (jobId: string) => {
-    try {
-      sessionStorage.setItem(RUN_EVAL_ACTIVE_JOB_KEY, jobId);
-    } catch {
-      // ignore storage access issues
-    }
-  };
-
-  const attachRunJob = (jobId: string) => {
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
-      const ts = new Date(event.ts).toLocaleTimeString();
-      if (event.type === "started") {
-        setLogs((prev) => {
-          const line = `[${ts}] Run started.`;
-          return prev.includes(line) ? prev : [...prev, line];
-        });
-        setProgress((prev) => Math.max(prev, 30));
-      }
-      if (event.type === "log") {
-        const message = String(event.payload.message ?? "").trim();
-        if (message) {
-          setLogs((prev) => {
-            const line = `[${ts}] ${message}`;
-            return prev.includes(line) ? prev : [...prev, line];
-          });
-          setProgress((prev) => {
-            const lower = message.toLowerCase();
-            if (lower.startsWith("loading mcp evaluation config")) return Math.max(prev, 15);
-            if (lower.startsWith("loaded config")) return Math.max(prev, 20);
-            if (lower.startsWith("selected ")) return Math.max(prev, 30);
-            if (lower.startsWith("using requested agents") || lower.startsWith("using resolved default agents")) return Math.max(prev, 35);
-            if (lower.startsWith("expanded to ")) return Math.max(prev, 45);
-            if (lower.startsWith("running evaluation")) return Math.max(prev, 55);
-            if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 75);
-            if (lower.startsWith("applying snapshot evaluation policy")) return Math.max(prev, 82);
-            if (lower.includes("snapshot evaluation applied") || lower.includes("snapshot evaluation enabled")) return Math.max(prev, 88);
-            if (lower.startsWith("writing results to ")) return Math.max(prev, 94);
-            if (lower.startsWith("run finished:")) return Math.max(prev, 98);
-            return prev;
-          });
-        }
-      }
-      if (event.type === "completed") {
-        const nextRunId = String(event.payload.runId ?? "");
-        setLogs((prev) => {
-          const line = `[${ts}] Run completed.`;
-          return prev.includes(line) ? prev : [...prev, line];
-        });
-        if (event.payload.snapshotEval && typeof event.payload.snapshotEval === "object") {
-          const snapshotEval = event.payload.snapshotEval as {
-            mode?: string;
-            baseline_snapshot_id?: string;
-            overall_score?: number;
-            status?: string;
-          };
-          setLogs((prev) => {
-            const line = `[${ts}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`;
-            return prev.includes(line) ? prev : [...prev, line];
-          });
-        }
-        setProgress(100);
-        setRunning(false);
-        setDone(true);
-        setRunId(nextRunId);
-        clearActiveRunJob();
-        setActiveJobId(null);
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
-      }
-      if (event.type === "error") {
-        const message = String(event.payload.message ?? "Unknown error");
-        const extraHint = message.includes("Anthropic model not found")
-          ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
-          : "";
-        setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
-        setRunning(false);
-        setDone(false);
-        setProgress(0);
-        clearActiveRunJob();
-        setActiveJobId(null);
-        unsubscribeRef.current?.();
-        unsubscribeRef.current = null;
-      }
-    });
-  };
