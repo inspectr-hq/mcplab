@@ -174,10 +174,10 @@ const ResultDetail = () => {
   })));
   const toolData = Object.entries(toolFreq).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
-  const toggle = (sid: string) => {
+  const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
       const next = new Set(prev);
-      next.has(sid) ? next.delete(sid) : next.add(sid);
+      next.has(rowId) ? next.delete(rowId) : next.add(rowId);
       return next;
     });
   };
@@ -191,6 +191,7 @@ const ResultDetail = () => {
   };
 
   const runKey = (scenarioId: string, runIndex: number) => `${scenarioId}:${runIndex}`;
+  const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
   const comparisonByScenario = new Map(
     (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
   );
@@ -609,12 +610,14 @@ const ResultDetail = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.scenarios.map((sc) => (
-                <Collapsible key={sc.scenarioId} open={openScenarios.has(sc.scenarioId)} onOpenChange={() => toggle(sc.scenarioId)} asChild>
+              {result.scenarios.map((sc) => {
+                const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
+                return (
+                <Collapsible key={rowKey} open={openScenarios.has(rowKey)} onOpenChange={() => toggle(rowKey)} asChild>
                   <>
                     <CollapsibleTrigger asChild>
                       <TableRow className="cursor-pointer hover:bg-muted/50">
-                        <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(sc.scenarioId) ? "rotate-180" : ""}`} /></TableCell>
+                        <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(rowKey) ? "rotate-180" : ""}`} /></TableCell>
                         <TableCell className="font-medium text-sm">{sc.scenarioName}</TableCell>
                         <TableCell className="text-sm">{sc.agentName}</TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
@@ -898,7 +901,7 @@ const ResultDetail = () => {
                     </CollapsibleContent>
                   </>
                 </Collapsible>
-              ))}
+              )})}
             </TableBody>
           </Table>
         </CardContent>
