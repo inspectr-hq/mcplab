@@ -46,12 +46,18 @@ const Configurations = () => {
     navigate(`/mcp-evaluations/${cloned.id}`);
   };
 
+  const agentCount = (cfg: (typeof configs)[number]) =>
+    (cfg.agents?.length ?? 0) + (cfg.agentRefs?.length ?? 0);
+
+  const scenarioCount = (cfg: (typeof configs)[number]) =>
+    (cfg.scenarios?.length ?? 0) + (cfg.scenarioRefs?.length ?? 0);
+
   const sortedConfigs = useMemo(() => {
     const sorted = [...configs].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "name") cmp = a.name.localeCompare(b.name);
-      if (sortBy === "scenarios") cmp = a.scenarios.length - b.scenarios.length;
-      if (sortBy === "agents") cmp = a.agents.length - b.agents.length;
+      if (sortBy === "scenarios") cmp = scenarioCount(a) - scenarioCount(b);
+      if (sortBy === "agents") cmp = agentCount(a) - agentCount(b);
       if (sortBy === "updatedAt") cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -135,8 +141,8 @@ const Configurations = () => {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm">{cfg.scenarios.length}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{cfg.agents.length}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{scenarioCount(cfg)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">{agentCount(cfg)}</TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {new Date(cfg.updatedAt).toLocaleDateString()}
                   </TableCell>

@@ -177,7 +177,7 @@ const ToolAnalysisPage = () => {
             setActiveJobId(null);
             setSubmitting(false);
             setRunState("idle");
-            setViewStep("report");
+            setViewStep("run");
           });
       } else if (event.type === "error") {
         const message = String(event.payload?.message ?? "");
@@ -337,8 +337,8 @@ const ToolAnalysisPage = () => {
         setActiveJobId(null);
         setSubmitting(false);
         setRunState("idle");
-        setViewStep("report");
-        toast({ title: "Analysis already finished", description: "Showing the completed report." });
+        setViewStep("run");
+        toast({ title: "Analysis already finished", description: "Showing the result overview." });
         return;
       }
       if (response.status === "stopped") {
@@ -703,8 +703,10 @@ const ToolAnalysisPage = () => {
                   <span>Progress</span>
                 </CardTitle>
                 <CardDescription>
-                  {activeJobId
+                {activeJobId
                     ? "Live tool-analysis job events:"
+                    : report
+                      ? "Analysis finished. Review the summary below or open the saved report details."
                     : runState === "stopped"
                       ? "Analysis was stopped. You can return to Configure Analysis."
                       : runState === "error"
@@ -761,6 +763,54 @@ const ToolAnalysisPage = () => {
                   </div>
                 ))}
               </div>
+            )}
+            {!activeJobId && report && (
+              <Card className="mt-2 border-green-200 bg-green-50/40 dark:border-green-900/40 dark:bg-green-950/10">
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">Result overview</div>
+                      <p className="text-xs text-muted-foreground">
+                        {report.summary.toolsAnalyzed} tools analyzed, {report.summary.toolsSkipped} skipped, across{" "}
+                        {report.summary.serversAnalyzed} server{report.summary.serversAnalyzed !== 1 ? "s" : ""}.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {savedReportId && (
+                        <Button asChild size="sm">
+                          <Link to={`/tool-analysis-results/${savedReportId}`}>Open result details</Link>
+                        </Button>
+                      )}
+                      <Button asChild size="sm" variant="outline">
+                        <Link to="/tool-analysis-results">View all results</Link>
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" onClick={() => openStep("report")}>
+                        View inline report
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {report.summary.issueCounts.critical > 0 && (
+                      <Badge className="bg-red-600 text-white hover:bg-red-600">Critical: {report.summary.issueCounts.critical}</Badge>
+                    )}
+                    {report.summary.issueCounts.high > 0 && (
+                      <Badge className="bg-orange-500 text-white hover:bg-orange-500">High: {report.summary.issueCounts.high}</Badge>
+                    )}
+                    {report.summary.issueCounts.medium > 0 && (
+                      <Badge className="bg-amber-500 text-white hover:bg-amber-500">Medium: {report.summary.issueCounts.medium}</Badge>
+                    )}
+                    {report.summary.issueCounts.low > 0 && (
+                      <Badge className="bg-blue-500 text-white hover:bg-blue-500">Low: {report.summary.issueCounts.low}</Badge>
+                    )}
+                    {report.summary.issueCounts.info > 0 && (
+                      <Badge variant="outline">Info: {report.summary.issueCounts.info}</Badge>
+                    )}
+                    {Object.values(report.summary.issueCounts).every((n) => n === 0) && (
+                      <Badge className="bg-green-600 text-white hover:bg-green-600">No findings</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </CardContent>
         </Card>
