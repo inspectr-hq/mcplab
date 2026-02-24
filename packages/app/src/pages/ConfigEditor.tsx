@@ -468,6 +468,9 @@ const ConfigEditor = () => {
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
+          {isView && !editing && (
+            <Button size="sm" onClick={() => setEditing(true)}>Edit</Button>
+          )}
           {isView && !editing && existing && !isBrokenConfig && (
             <Button size="sm" variant="outline" asChild>
               <Link to={`/run?configId=${encodeURIComponent(existing.id)}`}>
@@ -475,9 +478,6 @@ const ConfigEditor = () => {
                 Run MCP Evaluation
               </Link>
             </Button>
-          )}
-          {isView && !editing && (
-            <Button size="sm" onClick={() => setEditing(true)}>Edit</Button>
           )}
           {isView && !editing && isBrokenConfig && (
             <Badge variant="destructive" className="py-1 px-3 text-xs">

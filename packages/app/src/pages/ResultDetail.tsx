@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1124,7 +1124,7 @@ const ResultDetail = () => {
                         </p>
                         <MarkdownText text={message.text} className="text-sm" />
                         {canShowHandoff && (
-                          <div className="mt-3 flex flex-wrap justify-end gap-2">
+                          <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
                               type="button"
                               variant="outline"
@@ -1148,7 +1148,7 @@ const ResultDetail = () => {
                           </div>
                         )}
                         {!canShowHandoff && isAssistant && (
-                          <div className="mt-3 flex justify-end">
+                          <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
                             <Button
                               type="button"
                               variant="outline"
@@ -1176,15 +1176,15 @@ const ResultDetail = () => {
                       Pending actions (approve/deny)
                     </div>
                     {assistantPendingToolCalls.map((call) => (
-                      <div key={call.id} className="rounded-md border bg-background p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-mono text-xs font-semibold">{call.publicToolName}</p>
-                            <p className="text-xs text-muted-foreground">
+                      <div key={call.id} className="min-w-0 rounded-md border bg-background p-3">
+                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>
+                            <p className="break-all text-xs text-muted-foreground">
                               {call.server}::{call.tool}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex shrink-0 items-center gap-2">
                             <Button
                               type="button"
                               size="sm"
@@ -1206,7 +1206,7 @@ const ResultDetail = () => {
                             </Button>
                           </div>
                         </div>
-                        <pre className="mt-2 max-h-48 overflow-auto rounded border bg-muted/50 p-2 text-xs">
+                        <pre className="mt-2 max-h-48 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
                           <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
                         </pre>
                       </div>
@@ -1243,8 +1243,22 @@ const ResultDetail = () => {
                     }
                   }}
                 />
-                <Button type="button" className="shrink-0" onClick={() => void askResultAssistant()} disabled={assistantLoading || !assistantInput.trim()}>
-                  Ask
+                <Button
+                  type="button"
+                  className="shrink-0"
+                  onClick={() => void askResultAssistant()}
+                  disabled={assistantLoading || !assistantInput.trim()}
+                  aria-label="Send assistant message"
+                  title="Send assistant message"
+                >
+                  {assistantLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Ask</span>
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

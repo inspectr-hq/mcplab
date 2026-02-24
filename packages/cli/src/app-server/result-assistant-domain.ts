@@ -52,7 +52,7 @@ export interface ResultAssistantSession {
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 const RESULT_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
 const RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS = 3;
-const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab-local';
+const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
 const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_write_markdown_report',
   'mcplab_list_runs',

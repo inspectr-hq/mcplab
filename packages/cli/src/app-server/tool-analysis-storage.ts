@@ -113,3 +113,36 @@ export function deleteToolAnalysisReportRecord(baseDir: string, reportId: string
     return false;
   }
 }
+
+export function listToolAnalysisReportsFromDirs(baseDirs: string[]): ToolAnalysisResultSummary[] {
+  const byId = new Map<string, ToolAnalysisResultSummary>();
+  for (const dir of baseDirs) {
+    for (const item of listToolAnalysisReports(dir)) {
+      if (!byId.has(item.reportId)) byId.set(item.reportId, item);
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function readToolAnalysisReportRecordFromDirs(
+  baseDirs: string[],
+  reportId: string
+): SavedToolAnalysisReportRecord | null {
+  for (const dir of baseDirs) {
+    const record = readToolAnalysisReportRecord(dir, reportId);
+    if (record) return record;
+  }
+  return null;
+}
+
+export function deleteToolAnalysisReportRecordFromDirs(
+  baseDirs: string[],
+  reportId: string
+): boolean {
+  for (const dir of baseDirs) {
+    const record = readToolAnalysisReportRecord(dir, reportId);
+    if (!record) continue;
+    return deleteToolAnalysisReportRecord(dir, reportId);
+  }
+  return false;
+}

@@ -1,11 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
 import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
 import {
   createToolAnalysisReportId,
   deleteToolAnalysisReportRecord,
+  deleteToolAnalysisReportRecordFromDirs,
   listToolAnalysisReports,
+  listToolAnalysisReportsFromDirs,
   readToolAnalysisReportRecord,
+  readToolAnalysisReportRecordFromDirs,
   writeToolAnalysisReportRecord
 } from './tool-analysis-storage.js';
 
@@ -19,6 +23,22 @@ export type ToolAnalysisRouteDeps = Pick<
   | 'discoverMcpToolsForServers'
   | 'runToolAnalysisJob'
 >;
+
+function defaultNewToolAnalysisResultsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/results/tool-analysis');
+}
+
+function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/tool-analysis-results');
+}
+
+function resolveToolAnalysisReadDirs(settings: AppRouteRequestContext['settings']): string[] {
+  const dirs = [settings.toolAnalysisResultsDir];
+  const expectedNew = defaultNewToolAnalysisResultsDir(settings.workspaceRoot);
+  const legacy = defaultLegacyToolAnalysisResultsDir(settings.workspaceRoot);
+  if (settings.toolAnalysisResultsDir === expectedNew && legacy !== expectedNew) dirs.push(legacy);
+  return dirs;
+}
 
 export async function handleToolAnalysisRoutes(params: {
   req: IncomingMessage;
@@ -190,7 +210,7 @@ export async function handleToolAnalysisRoutes(params: {
   }
 
   if (pathname === '/api/tool-analysis-results' && method === 'GET') {
-    asJson(res, 200, { items: listToolAnalysisReports(settings.toolAnalysisResultsDir) });
+    asJson(res, 200, { items: listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings)) });
     return true;
   }
 
@@ -200,7 +220,7 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 400, { error: 'Report id is required' });
       return true;
     }
-    const record = readToolAnalysisReportRecord(settings.toolAnalysisResultsDir, reportId);
+    const record = readToolAnalysisReportRecordFromDirs(resolveToolAnalysisReadDirs(settings), reportId);
     if (!record) {
       asJson(res, 404, { error: 'Tool analysis report not found' });
       return true;
@@ -215,7 +235,10 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 400, { error: 'Report id is required' });
       return true;
     }
-    const deleted = deleteToolAnalysisReportRecord(settings.toolAnalysisResultsDir, reportId);
+    const deleted = deleteToolAnalysisReportRecordFromDirs(
+      resolveToolAnalysisReadDirs(settings),
+      reportId
+    );
     if (!deleted) {
       asJson(res, 404, { error: 'Tool analysis report not found' });
       return true;

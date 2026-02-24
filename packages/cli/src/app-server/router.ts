@@ -155,6 +155,31 @@ function startBrowser(url: string) {
   spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
 }
 
+function defaultNewRunsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/results/evaluation-runs');
+}
+
+function defaultLegacyRunsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/runs');
+}
+
+function defaultNewToolAnalysisResultsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/results/tool-analysis');
+}
+
+function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'mcplab/tool-analysis-results');
+}
+
+function resolveRunReadDirs(settings: AppSettings, runsDirOverride?: string): string[] {
+  const primary = runsDirOverride ?? settings.runsDir;
+  const dirs = [primary];
+  const expectedNew = defaultNewRunsDir(settings.workspaceRoot);
+  const legacy = defaultLegacyRunsDir(settings.workspaceRoot);
+  if (primary === expectedNew && legacy !== primary) dirs.push(legacy);
+  return dirs;
+}
+
 export async function startAppServer(options: AppServerOptions) {
   const workspaceRoot = process.cwd();
   const settings: AppSettings = {
@@ -182,6 +207,39 @@ export async function startAppServer(options: AppServerOptions) {
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   let activeJobId: string | null = null;
+  const listRunsWithFallback: typeof listRuns = (runsDir) => {
+    const byId = new Map<string, ReturnType<typeof listRuns>[number]>();
+    for (const dir of resolveRunReadDirs(settings, runsDir)) {
+      for (const run of listRuns(dir)) {
+        if (!byId.has(run.runId)) byId.set(run.runId, run);
+      }
+    }
+    return [...byId.values()].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  };
+  const getRunResultsWithFallback: typeof getRunResults = (runId, runsDir) => {
+    let lastError: unknown;
+    for (const dir of resolveRunReadDirs(settings, runsDir)) {
+      try {
+        return getRunResults(runId, dir);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`Run not found: ${runId}`);
+  };
+  const getTraceEventsWithFallback: typeof getTraceEvents = (runId, runsDir) => {
+    for (const dir of resolveRunReadDirs(settings, runsDir)) {
+      try {
+        getRunResults(runId, dir);
+      } catch {
+        continue;
+      }
+      return getTraceEvents(runId, dir);
+    }
+    return [];
+  };
   const routeDeps: AppRouteDeps = {
     parseBody,
     asJson,
@@ -216,14 +274,14 @@ export async function startAppServer(options: AppServerOptions) {
     saveSnapshot,
     loadSnapshot,
     compareRunToSnapshot,
-    getRunResults,
+    getRunResults: getRunResultsWithFallback,
     decodeConfigId,
     readConfigRecord,
     listConfigs,
     safeFileName,
     readConfigRecordOrInvalid,
-    listRuns,
-    getTraceEvents,
+    listRuns: listRunsWithFallback,
+    getTraceEvents: getTraceEventsWithFallback,
     toTraceUiEvents,
     selectScenarioIds,
     expandConfigForAgents,
@@ -497,7 +555,22 @@ export async function startAppServer(options: AppServerOptions) {
   // eslint-disable-next-line no-console
   console.log(`  runs:    ${settings.runsDir}`);
   // eslint-disable-next-line no-console
+  console.log(`  tool analysis results: ${settings.toolAnalysisResultsDir}`);
+  // eslint-disable-next-line no-console
   console.log(`  libs:    ${settings.librariesDir}`);
+  const legacyRuns = defaultLegacyRunsDir(settings.workspaceRoot);
+  if (settings.runsDir === defaultNewRunsDir(settings.workspaceRoot) && existsSync(legacyRuns)) {
+    // eslint-disable-next-line no-console
+    console.log(`  legacy runs fallback: ${legacyRuns}`);
+  }
+  const legacyToolAnalysis = defaultLegacyToolAnalysisResultsDir(settings.workspaceRoot);
+  if (
+    settings.toolAnalysisResultsDir === defaultNewToolAnalysisResultsDir(settings.workspaceRoot) &&
+    existsSync(legacyToolAnalysis)
+  ) {
+    // eslint-disable-next-line no-console
+    console.log(`  legacy tool analysis fallback: ${legacyToolAnalysis}`);
+  }
   if (devMcp) {
     // eslint-disable-next-line no-console
     console.log(`  mcp:     ${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);

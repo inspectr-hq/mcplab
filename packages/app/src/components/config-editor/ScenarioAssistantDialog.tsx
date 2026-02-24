@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useRef } from "react";
-import { Bot, CheckCircle2, Loader2, Sparkles, User, Wrench } from "lucide-react";
+import { Bot, CheckCircle2, Loader2, Minimize2, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,8 @@ export function ScenarioAssistantDialog({
   );
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const initialMessageSentRef = useRef<string | null>(null);
+  const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
+  const preserveSessionOnCloseRef = useRef(false);
 
   useEffect(() => {
     if (open && !selectedAssistantAgentName && agents[0]?.name) {
@@ -146,20 +148,42 @@ export function ScenarioAssistantDialog({
     selectedAssistantAgentName
   ]);
 
-  useEffect(() => {
-    if (open) return;
-    if (!sessionId) return;
-    const id = sessionId;
+  const resetLocalSessionState = () => {
     setSessionId(null);
     setSession(null);
     setInput("");
     setAppliedSuggestionKeys(new Set());
     initialMessageSentRef.current = null;
+  };
+
+  const closeScenarioAssistantSession = (id: string) => {
+    resetLocalSessionState();
     void source.closeScenarioAssistantSession(id).catch(() => {});
-  }, [open, sessionId, source]);
+  };
+
+  useEffect(() => {
+    if (open) return;
+    if (!sessionId) return;
+    if (preserveSessionOnCloseRef.current || preserveSessionOnClose) return;
+    closeScenarioAssistantSession(sessionId);
+  }, [open, sessionId, source, preserveSessionOnClose]);
+
+  useEffect(() => {
+    return () => {
+      if (sessionId) {
+        void source.closeScenarioAssistantSession(sessionId).catch(() => {});
+      }
+    };
+  }, [sessionId, source]);
 
   useEffect(() => {
     if (!open) return;
+    if (preserveSessionOnClose) {
+      setPreserveSessionOnClose(false);
+    }
+    if (preserveSessionOnCloseRef.current) {
+      preserveSessionOnCloseRef.current = false;
+    }
     const timeout = window.setTimeout(() => {
       chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, 0);
@@ -275,17 +299,83 @@ export function ScenarioAssistantDialog({
     toast({ title: "Applied suggestion", description: `Updated ${labelByKey[key]}` });
   };
 
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setPreserveSessionOnClose(false);
+      preserveSessionOnCloseRef.current = false;
+    }
+    onOpenChange(nextOpen);
+  };
+
+  const handleMinimize = () => {
+    preserveSessionOnCloseRef.current = true;
+    setPreserveSessionOnClose(true);
+    onOpenChange(false);
+  };
+
+  const handleDiscardMinimizedSession = () => {
+    preserveSessionOnCloseRef.current = false;
+    setPreserveSessionOnClose(false);
+    if (sessionId) closeScenarioAssistantSession(sessionId);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      {!open && sessionId && (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Scenario Assistant (session active)</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Resume conversation for <span className="font-mono">{scenario.id}</span>
+              {session ? ` · ${session.messages.length} messages` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(true)}>
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              Resume
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-muted-foreground"
+              onClick={handleDiscardMinimizedSession}
+              aria-label="Discard assistant session"
+              title="Discard assistant session"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            Scenario Assistant
-          </DialogTitle>
-          <DialogDescription>
-            LLM-guided scenario authoring with MCP tool introspection and per-tool-call approval.
-          </DialogDescription>
+        {sessionId && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="absolute right-12 top-3 z-10 h-8 w-8 p-0 text-muted-foreground"
+            onClick={handleMinimize}
+            aria-label="Minimize assistant"
+            title="Minimize assistant"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </Button>
+        )}
+        <DialogHeader className="pr-20">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Scenario Assistant
+              </DialogTitle>
+              <DialogDescription>
+                LLM-guided scenario authoring with MCP tool introspection and per-tool-call approval.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         {!canUseAssistant ? (
@@ -471,14 +561,28 @@ export function ScenarioAssistantDialog({
                     }
                   }}
                 />
-                <Button type="button" onClick={() => void sendMessage(input)} disabled={!sessionId || loading || !input.trim()}>
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+                <Button
+                  type="button"
+                  onClick={() => void sendMessage(input)}
+                  disabled={!sessionId || loading || !input.trim()}
+                  aria-label="Send message"
+                  title="Send message"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">Send</span>
+                    </>
+                  )}
                 </Button>
               </div>
           </div>
         )}
       </DialogContent>
-    </Dialog>
+      </Dialog>
+    </>
   );
 }
 

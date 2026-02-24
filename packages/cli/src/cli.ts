@@ -46,7 +46,7 @@ program
   )
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
-  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .action(async (options) => {
     try {
@@ -175,7 +175,11 @@ program
       .description('Create snapshot from a run (only fully passing runs)')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option(
+        '--runs-dir <path>',
+        'Directory with run artifacts',
+        'mcplab/results/evaluation-runs'
+      )
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
@@ -197,7 +201,11 @@ program
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .requiredOption('--config <path>', 'Path to eval.yaml')
       .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option(
+        '--runs-dir <path>',
+        'Directory with run artifacts',
+        'mcplab/results/evaluation-runs'
+      )
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
@@ -381,7 +389,11 @@ program
       .requiredOption('--id <snapshotId>', 'Snapshot id')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--format <format>', 'Output format: table|json', 'table')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/runs')
+      .option(
+        '--runs-dir <path>',
+        'Directory with run artifacts',
+        'mcplab/results/evaluation-runs'
+      )
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
@@ -425,12 +437,12 @@ program
   .command('app')
   .description('Serve MCPLab app frontend and local API bridge')
   .option('--configs-dir <path>', 'Directory for YAML configs', 'mcplab/configs')
-  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
   .option(
     '--tool-analysis-results-dir <path>',
     'Directory for saved tool analysis reports',
-    'mcplab/tool-analysis-results'
+    'mcplab/results/tool-analysis'
   )
   .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
   .option('--port <number>', 'Port to bind', '8787')
@@ -467,7 +479,7 @@ program
   .requiredOption('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
-  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/runs')
+  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--debounce <ms>', 'Debounce delay in milliseconds', '500')
   .action(async (options) => {
     const configPath = resolve(options.config);

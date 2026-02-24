@@ -138,9 +138,10 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
   });
   return [
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
-    'Goal: help the user author deterministic scenario prompt, eval rules, extract rules, and snapshot settings.',
+    'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), Value Capture Rules, and snapshot settings.',
     'Use the available MCP tools and schemas to ground suggestions.',
     'If you need live MCP information, call a tool and wait for approval.',
+    'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
     'Respond ONLY as JSON with one of these envelopes:',
     `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
@@ -149,6 +150,8 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'evalRules: { replacement: [{ type, value }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'snapshotEval: { patch: { enabled?: boolean, baselineSnapshotId?: string }, rationale?: string }',
+    'If you propose any edits to the scenario (prompt, Checks, Value Capture Rules, or snapshot settings), you MUST include the corresponding structured suggestions payload.',
+    'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
     'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains.',
     'Ask clarifying questions if the scenario intent is unclear.',
     `Scenario context: ${JSON.stringify({
@@ -197,6 +200,21 @@ function makeAssistantToolPublicName(
   return candidate;
 }
 
+function formatAssistantMcpPreloadError(serverName: string, error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const htmlErrorMatch =
+    raw.match(/Error code\s+(\d{3})/i) ??
+    raw.match(/<title>[^<]*\b(\d{3})\b[^<]*<\/title>/i) ??
+    raw.match(/\b(502|503|504)\b/);
+  const cloudflare = /cloudflare/i.test(raw);
+  if (/<html/i.test(raw) || /<!doctype html/i.test(raw)) {
+    const code = htmlErrorMatch?.[1];
+    const provider = cloudflare ? ' (Cloudflare)' : '';
+    return `Scenario Assistant MCP preload failed for server '${serverName}': Upstream MCP endpoint returned an HTML error page${code ? ` (${code})` : ''}${provider}. Check that the MCP server is reachable and healthy.`;
+  }
+  return `Scenario Assistant MCP preload failed for server '${serverName}': ${raw}`;
+}
+
 export async function preloadAssistantTools(
   session: ScenarioAssistantSession,
   serversByName: Record<string, EvalConfig['servers'][string]>,
@@ -222,9 +240,7 @@ export async function preloadAssistantTools(
         });
       }
     } catch (error: unknown) {
-      session.warnings.push(
-        `Scenario Assistant MCP preload failed for server '${serverName}': ${error instanceof Error ? error.message : String(error)}`
-      );
+      session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
     }
   }
 }

@@ -558,7 +558,7 @@ export async function handleRunsRoutes(params: {
 
     try {
       const mcp = new McpClientManager();
-      const serverName = 'mcplab-local';
+      const serverName = 'mcplab';
       await mcp.connectAll({
         [serverName]: {
           transport: 'http',

@@ -19,7 +19,8 @@ import {
   selectScenarios,
   type EvalConfig,
   type ExecutableEvalConfig,
-  type ResultsJson
+  type ResultsJson,
+  type TraceEvent
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -441,7 +442,7 @@ export function registerTools(server: McpServer): void {
         runs_dir: z
           .string()
           .optional()
-          .describe('Output directory for run artifacts (default mcplab/runs).')
+          .describe('Output directory for run artifacts (default mcplab/results/evaluation-runs).')
       }
     },
     async ({ config_path, bundle_root, scenario_id, runs_per_scenario, runs_dir }) => {
@@ -456,7 +457,7 @@ export function registerTools(server: McpServer): void {
           scenarioId: scenario_id,
           configHash: loaded.hash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
-          runsDir: runs_dir ?? 'mcplab/runs'
+          runsDir: runs_dir ?? 'mcplab/results/evaluation-runs'
         });
 
         const reportHtml = renderReport(results);
@@ -482,7 +483,7 @@ export function registerTools(server: McpServer): void {
       description:
         'List MCPLab run artifact directories and optionally summarize each run from results.json when present.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/runs).'),
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         limit: z
           .number()
           .int()
@@ -498,8 +499,8 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, limit, include_summary }) => {
       return withToolHandling(async () => {
-        const base = resolve(runs_dir ?? 'mcplab/runs');
-        const entries = listRuns(base, limit ?? 10, Boolean(include_summary));
+        const base = resolveRunsDir(runs_dir);
+        const entries = listRunsWithFallback(base, limit ?? 10, Boolean(include_summary));
         return ok(`Found ${entries.length} run(s) in ${base}`, {
           runsDir: base,
           runs: entries
@@ -512,7 +513,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_list_tool_analysis_results',
     {
       description:
-        'List saved MCP tool analysis reports persisted by the MCPLab app (default: mcplab/tool-analysis-results).',
+        'List saved MCP tool analysis reports persisted by the MCPLab app (default: mcplab/results/tool-analysis).',
       inputSchema: {
         tool_analysis_results_dir: z
           .string()
@@ -530,7 +531,7 @@ export function registerTools(server: McpServer): void {
     async ({ tool_analysis_results_dir, limit }) => {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
-        const reports = listToolAnalysisReportsFromDisk(baseDir, limit ?? 20);
+        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
         return ok(`Found ${reports.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
           items: reports
@@ -566,11 +567,11 @@ export function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
         const resolvedReportId =
-          report_id === 'LATEST' ? latestToolAnalysisReportId(baseDir) : report_id.trim();
+          report_id === 'LATEST' ? latestToolAnalysisReportIdWithFallback(baseDir) : report_id.trim();
         if (!resolvedReportId) {
           throw new Error(`No tool analysis reports found in ${baseDir}`);
         }
-        const filePath = toolAnalysisReportFilePath(baseDir, resolvedReportId);
+        const filePath = toolAnalysisReportFilePathWithFallback(baseDir, resolvedReportId);
         if (!existsSync(filePath)) {
           throw new Error(`Tool analysis report not found: ${filePath}`);
         }
@@ -595,7 +596,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_delete_tool_analysis_result',
     {
       description:
-        'Delete a saved MCP tool analysis report directory by report id (from mcplab/tool-analysis-results by default).',
+        'Delete a saved MCP tool analysis report directory by report id (from mcplab/results/tool-analysis by default).',
       inputSchema: {
         report_id: z.string().describe('Report id directory name to delete.'),
         tool_analysis_results_dir: z
@@ -607,7 +608,7 @@ export function registerTools(server: McpServer): void {
     async ({ report_id, tool_analysis_results_dir }) => {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
-        const dirPath = toolAnalysisReportDirPath(baseDir, report_id.trim());
+        const dirPath = toolAnalysisReportDirPathWithFallback(baseDir, report_id.trim());
         if (!existsSync(dirPath)) {
           throw new Error(`Tool analysis report not found: ${dirPath}`);
         }
@@ -622,12 +623,304 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    'mcplab_trace_list_events',
+    {
+      description:
+        'List structured trace.jsonl events for a MCPLab run with optional type/scenario/agent filtering.',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'."),
+        event_types: z
+          .array(
+            z.enum([
+              'run_started',
+              'scenario_started',
+              'llm_request',
+              'llm_response',
+              'tool_call',
+              'tool_result',
+              'final_answer',
+              'scenario_finished'
+            ])
+          )
+          .optional()
+          .describe('Optional event type filters.'),
+        scenario_id: z.string().optional().describe('Optional scenario id filter (best-effort inferred context).'),
+        agent: z.string().optional().describe('Optional agent filter (best-effort inferred context).'),
+        limit: z.number().int().positive().max(1000).optional().describe('Max events to return (default 200).')
+      }
+    },
+    async ({ runs_dir, run_id, event_types, scenario_id, agent, limit }) => {
+      return withToolHandling(async () => {
+        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const typeSet = event_types?.length ? new Set(event_types) : null;
+        const filtered = events.filter((entry) => {
+          if (typeSet && !typeSet.has(entry.event.type)) return false;
+          if (scenario_id && entry.scenario_id !== scenario_id) return false;
+          if (agent && entry.agent !== agent) return false;
+          return true;
+        });
+        const max = limit ?? 200;
+        const items = filtered.slice(0, max).map((entry, index) => ({
+          index,
+          scenario_id: entry.scenario_id,
+          agent: entry.agent,
+          event: entry.event
+        }));
+        return ok(`Listed ${items.length}/${filtered.length} trace event(s) for run ${runId}`, {
+          run_id: runId,
+          total_matching: filtered.length,
+          items
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_trace_get_final_answers',
+    {
+      description:
+        'Extract final_answer events from a run trace with inferred scenario/agent context for easy agent output comparison.',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'."),
+        scenario_id: z.string().optional().describe('Optional scenario id filter.'),
+        agent: z.string().optional().describe('Optional agent filter.'),
+        max_chars_per_answer: z
+          .number()
+          .int()
+          .positive()
+          .max(20000)
+          .optional()
+          .describe('Optional truncation per final answer text (default 8000).')
+      }
+    },
+    async ({ runs_dir, run_id, scenario_id, agent, max_chars_per_answer }) => {
+      return withToolHandling(async () => {
+        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const maxChars = max_chars_per_answer ?? 8000;
+        const items = events
+          .filter((entry): entry is AnnotatedTraceEvent & { event: Extract<TraceEvent, { type: 'final_answer' }> } =>
+            entry.event.type === 'final_answer'
+          )
+          .filter((entry) => (!scenario_id || entry.scenario_id === scenario_id) && (!agent || entry.agent === agent))
+          .map((entry, index) => {
+            const full = entry.event.text;
+            const text = truncate(full, maxChars);
+            return removeUndefined({
+              index,
+              scenario_id: entry.scenario_id,
+              agent: entry.agent,
+              ts: entry.event.ts,
+              truncated: text.length < full.length,
+              text
+            });
+          });
+        return ok(`Extracted ${items.length} final answer(s) from run ${runId}`, {
+          run_id: runId,
+          items
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_trace_get_conversation',
+    {
+      description:
+        'Return a structured conversation timeline (LLM/tool/final-answer events) for a specific scenario+agent in a run trace.',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'."),
+        scenario_id: z.string().describe('Scenario id to filter.'),
+        agent: z.string().describe('Agent name to filter.'),
+        max_items: z.number().int().positive().max(1000).optional().describe('Max timeline items (default 300).'),
+        max_text_chars: z
+          .number()
+          .int()
+          .positive()
+          .max(20000)
+          .optional()
+          .describe('Max chars for text fields (default 4000).')
+      }
+    },
+    async ({ runs_dir, run_id, scenario_id, agent, max_items, max_text_chars }) => {
+      return withToolHandling(async () => {
+        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const textMax = max_text_chars ?? 4000;
+        const timeline = events
+          .filter((entry) => entry.scenario_id === scenario_id && entry.agent === agent)
+          .filter((entry) =>
+            ['llm_request', 'llm_response', 'tool_call', 'tool_result', 'final_answer'].includes(entry.event.type)
+          )
+          .slice(0, max_items ?? 300)
+          .map((entry, index) => {
+            const event = entry.event;
+            if (event.type === 'llm_request') {
+              return { index, type: 'llm_request', ts: event.ts, text: truncate(event.messages_summary, textMax) };
+            }
+            if (event.type === 'llm_response') {
+              return { index, type: 'llm_response', ts: event.ts, text: truncate(event.raw_or_summary, textMax) };
+            }
+            if (event.type === 'tool_call') {
+              return {
+                index,
+                type: 'tool_call',
+                ts: event.ts_start,
+                server: event.server,
+                tool: event.tool,
+                args: event.args
+              };
+            }
+            if (event.type === 'tool_result') {
+              return {
+                index,
+                type: 'tool_result',
+                ts: event.ts_end,
+                server: event.server,
+                tool: event.tool,
+                ok: event.ok,
+                duration_ms: event.duration_ms,
+                result_summary: truncate(event.result_summary, textMax)
+              };
+            }
+            if (event.type === 'final_answer') {
+              return { index, type: 'final_answer', ts: event.ts, text: truncate(event.text, textMax) };
+            }
+            return {
+              index,
+              type: event.type,
+              ts: 'ts' in event && typeof event.ts === 'string' ? event.ts : undefined,
+              note: 'Unsupported event in conversation timeline filter'
+            };
+          });
+
+        return ok(`Built conversation timeline (${timeline.length} items) for ${scenario_id} / ${agent}`, {
+          run_id: runId,
+          scenario_id,
+          agent,
+          timeline
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_trace_search',
+    {
+      description:
+        'Search trace.jsonl content for a text query and return matching structured events with inferred scenario/agent context.',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'."),
+        query: z.string().describe('Case-insensitive text query.'),
+        event_types: z
+          .array(
+            z.enum([
+              'llm_request',
+              'llm_response',
+              'tool_call',
+              'tool_result',
+              'final_answer',
+              'scenario_started',
+              'scenario_finished',
+              'run_started'
+            ])
+          )
+          .optional()
+          .describe('Optional event type filters.'),
+        limit: z.number().int().positive().max(200).optional().describe('Max matches to return (default 50).')
+      }
+    },
+    async ({ runs_dir, run_id, query, event_types, limit }) => {
+      return withToolHandling(async () => {
+        const q = query.trim().toLowerCase();
+        if (!q) throw new Error('query is required');
+        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const typeSet = event_types?.length ? new Set(event_types) : null;
+        const matches: Array<Record<string, unknown>> = [];
+        for (const [index, entry] of events.entries()) {
+          if (typeSet && !typeSet.has(entry.event.type)) continue;
+          const hay = JSON.stringify(entry.event).toLowerCase();
+          if (!hay.includes(q)) continue;
+          matches.push(
+            removeUndefined({
+              index,
+              scenario_id: entry.scenario_id,
+              agent: entry.agent,
+              event: entry.event
+            })
+          );
+          if (matches.length >= (limit ?? 50)) break;
+        }
+        return ok(`Found ${matches.length} trace match(es) for "${query}" in run ${runId}`, {
+          run_id: runId,
+          query,
+          matches
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_trace_stats',
+    {
+      description:
+        'Compute trace statistics for a run (event counts, tool usage, durations, and final-answer counts).',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'.")
+      }
+    },
+    async ({ runs_dir, run_id }) => {
+      return withToolHandling(async () => {
+        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const eventTypeCounts: Record<string, number> = {};
+        const toolUsage: Record<string, number> = {};
+        const scenarioAgentKeys = new Set<string>();
+        let toolCallCount = 0;
+        let toolResultCount = 0;
+        let finalAnswerCount = 0;
+        let totalToolDurationMs = 0;
+        for (const entry of events) {
+          eventTypeCounts[entry.event.type] = (eventTypeCounts[entry.event.type] ?? 0) + 1;
+          if (entry.scenario_id && entry.agent) scenarioAgentKeys.add(`${entry.scenario_id}::${entry.agent}`);
+          if (entry.event.type === 'tool_call') {
+            toolCallCount += 1;
+            const key = `${entry.event.server}::${entry.event.tool}`;
+            toolUsage[key] = (toolUsage[key] ?? 0) + 1;
+          } else if (entry.event.type === 'tool_result') {
+            toolResultCount += 1;
+            totalToolDurationMs += entry.event.duration_ms;
+          } else if (entry.event.type === 'final_answer') {
+            finalAnswerCount += 1;
+          }
+        }
+        return ok(`Computed trace stats for run ${runId}`, {
+          run_id: runId,
+          total_events: events.length,
+          event_type_counts: eventTypeCounts,
+          scenario_agent_pairs: scenarioAgentKeys.size,
+          tool_call_count: toolCallCount,
+          tool_result_count: toolResultCount,
+          final_answer_count: finalAnswerCount,
+          avg_tool_result_duration_ms:
+            toolResultCount > 0 ? Number((totalToolDurationMs / toolResultCount).toFixed(2)) : null,
+          tool_usage: Object.entries(toolUsage)
+            .sort((a, b) => b[1] - a[1])
+            .map(([tool, count]) => ({ tool, count }))
+        });
+      });
+    }
+  );
+
+  server.registerTool(
     'mcplab_read_run_artifact',
     {
       description:
         'Read MCPLab run artifacts such as results.json, summary.md, trace.jsonl, resolved-config.yaml, or report.html.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/runs).'),
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe('Run id directory name or LATEST.'),
         artifact: z
           .enum([
@@ -648,12 +941,13 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id, artifact, max_chars }) => {
       return withToolHandling(async () => {
-        const base = resolve(runs_dir ?? 'mcplab/runs');
-        const resolvedRunId = run_id === 'LATEST' ? latestRunId(base) : run_id;
+        const base = resolveRunsDir(runs_dir);
+        const readBase = resolveExistingRunReadDir(base, run_id === 'LATEST' ? undefined : run_id);
+        const resolvedRunId = run_id === 'LATEST' ? latestRunId(readBase) : run_id;
         if (!resolvedRunId) {
           throw new Error(`No runs found in ${base}`);
         }
-        const fullPath = join(base, resolvedRunId, artifact);
+        const fullPath = join(readBase, resolvedRunId, artifact);
         if (!existsSync(fullPath)) {
           throw new Error(`Artifact not found: ${fullPath}`);
         }
@@ -1063,6 +1357,54 @@ function listRuns(
   });
 }
 
+function defaultRunsDirPath(): string {
+  return resolvePathInsideWorkspace('mcplab/results/evaluation-runs');
+}
+
+function legacyRunsDirPath(): string {
+  return resolvePathInsideWorkspace('mcplab/runs');
+}
+
+function resolveRunsDir(input?: string): string {
+  return resolve(input?.trim() ? input : defaultRunsDirPath());
+}
+
+function runReadDirs(primaryRunsDir: string): string[] {
+  const dirs = [primaryRunsDir];
+  const defaultNew = defaultRunsDirPath();
+  const legacy = legacyRunsDirPath();
+  if (primaryRunsDir === defaultNew && legacy !== defaultNew) {
+    dirs.push(legacy);
+  }
+  return Array.from(new Set(dirs));
+}
+
+function listRunsWithFallback(
+  primaryRunsDir: string,
+  limit: number,
+  includeSummary: boolean
+): Array<Record<string, unknown>> {
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const dir of runReadDirs(primaryRunsDir)) {
+    for (const entry of listRuns(dir, limit, includeSummary)) {
+      const runId = String(entry.run_id ?? '');
+      if (!runId || merged.has(runId)) continue;
+      merged.set(runId, entry);
+    }
+  }
+  return Array.from(merged.values())
+    .sort((a, b) => String(b.run_id ?? '').localeCompare(String(a.run_id ?? '')))
+    .slice(0, limit);
+}
+
+function resolveExistingRunReadDir(primaryRunsDir: string, runId?: string): string {
+  if (!runId) return primaryRunsDir;
+  for (const dir of runReadDirs(primaryRunsDir)) {
+    if (existsSync(join(dir, runId))) return dir;
+  }
+  return primaryRunsDir;
+}
+
 function expandConfigForAgents(
   config: EvalConfig,
   requestedAgents?: string[]
@@ -1088,17 +1430,7 @@ function expandConfigForAgents(
 }
 
 function latestRunId(runsDir: string): string | undefined {
-  if (!existsSync(runsDir)) return undefined;
-  return readdirSync(runsDir)
-    .filter((name) => {
-      try {
-        return statSync(join(runsDir, name)).isDirectory();
-      } catch {
-        return false;
-      }
-    })
-    .sort()
-    .reverse()[0];
+  return listRunsWithFallback(runsDir, 1, false)[0]?.run_id as string | undefined;
 }
 
 function detectLikelyBundleRoot(configPath: string): string | null {
@@ -1115,7 +1447,21 @@ function detectLikelyBundleRoot(configPath: string): string | null {
 }
 
 function resolveToolAnalysisResultsDir(input?: string): string {
-  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/tool-analysis-results');
+  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/results/tool-analysis');
+}
+
+function legacyToolAnalysisResultsDir(): string {
+  return resolvePathInsideWorkspace('mcplab/tool-analysis-results');
+}
+
+function toolAnalysisReadDirs(baseDir: string): string[] {
+  const dirs = [baseDir];
+  const defaultNew = resolvePathInsideWorkspace('mcplab/results/tool-analysis');
+  const legacy = legacyToolAnalysisResultsDir();
+  if (baseDir === defaultNew && legacy !== defaultNew) {
+    dirs.push(legacy);
+  }
+  return Array.from(new Set(dirs));
 }
 
 function toolAnalysisReportDirPath(baseDir: string, reportId: string): string {
@@ -1142,6 +1488,15 @@ function latestToolAnalysisReportId(baseDir: string): string | undefined {
     })
     .sort()
     .reverse()[0];
+}
+
+function latestToolAnalysisReportIdWithFallback(baseDir: string): string | undefined {
+  const ids = new Set<string>();
+  for (const dir of toolAnalysisReadDirs(baseDir)) {
+    const id = latestToolAnalysisReportId(dir);
+    if (id) ids.add(id);
+  }
+  return Array.from(ids).sort().reverse()[0];
 }
 
 function parseToolAnalysisRecord(raw: string): Record<string, unknown> {
@@ -1219,6 +1574,86 @@ function listToolAnalysisReportsFromDisk(
     }
   }
   return out;
+}
+
+function listToolAnalysisReportsFromDiskWithFallback(
+  baseDir: string,
+  limit: number
+): Array<Record<string, unknown>> {
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const dir of toolAnalysisReadDirs(baseDir)) {
+    for (const item of listToolAnalysisReportsFromDisk(dir, limit)) {
+      const reportId = typeof item.report_id === 'string' ? item.report_id : '';
+      if (!reportId || merged.has(reportId)) continue;
+      merged.set(reportId, item);
+    }
+  }
+  return Array.from(merged.values())
+    .sort((a, b) => String(b.report_id ?? '').localeCompare(String(a.report_id ?? '')))
+    .slice(0, limit);
+}
+
+function toolAnalysisReportDirPathWithFallback(baseDir: string, reportId: string): string {
+  for (const dir of toolAnalysisReadDirs(baseDir)) {
+    const candidate = toolAnalysisReportDirPath(dir, reportId);
+    if (existsSync(candidate)) return candidate;
+  }
+  return toolAnalysisReportDirPath(baseDir, reportId);
+}
+
+function toolAnalysisReportFilePathWithFallback(baseDir: string, reportId: string): string {
+  for (const dir of toolAnalysisReadDirs(baseDir)) {
+    const candidate = toolAnalysisReportFilePath(dir, reportId);
+    if (existsSync(candidate)) return candidate;
+  }
+  return toolAnalysisReportFilePath(baseDir, reportId);
+}
+
+type AnnotatedTraceEvent = {
+  event: TraceEvent;
+  scenario_id?: string;
+  agent?: string;
+};
+
+function readAnnotatedTraceEventsForRun(
+  runsDirInput: string | undefined,
+  runIdInput: string
+): { runId: string; tracePath: string; events: AnnotatedTraceEvent[] } {
+  const base = resolveRunsDir(runsDirInput);
+  const readBase = resolveExistingRunReadDir(base, runIdInput === 'LATEST' ? undefined : runIdInput);
+  const runId = runIdInput === 'LATEST' ? latestRunId(readBase) : runIdInput;
+  if (!runId) throw new Error(`No runs found in ${base}`);
+  const tracePath = join(readBase, runId, 'trace.jsonl');
+  if (!existsSync(tracePath)) throw new Error(`Artifact not found: ${tracePath}`);
+  const raw = readFileSync(tracePath, 'utf8');
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  const events: AnnotatedTraceEvent[] = [];
+  let currentScenarioId: string | undefined;
+  let currentAgent: string | undefined;
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    const event = parsed as TraceEvent;
+    if (event.type === 'scenario_started') {
+      currentScenarioId = event.scenario_id;
+      currentAgent = event.agent;
+      events.push({ event, scenario_id: currentScenarioId, agent: currentAgent });
+      continue;
+    }
+    if (event.type === 'scenario_finished') {
+      events.push({ event, scenario_id: currentScenarioId ?? event.scenario_id, agent: currentAgent });
+      currentScenarioId = undefined;
+      currentAgent = undefined;
+      continue;
+    }
+    events.push({ event, scenario_id: currentScenarioId, agent: currentAgent });
+  }
+  return { runId, tracePath, events };
 }
 
 function resolvePathInsideWorkspace(pathInput: string): string {
