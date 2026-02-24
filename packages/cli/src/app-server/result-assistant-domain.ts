@@ -37,6 +37,9 @@ interface ResultAssistantChatMessage {
   text: string;
   createdAt: string;
   pendingToolCallId?: string;
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
 }
 
 export interface ResultAssistantSession {
@@ -168,7 +171,10 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       role: 'assistant',
       text: modelOutput.text,
       createdAt: new Date().toISOString(),
-      pendingToolCallId: pending.id
+      pendingToolCallId: pending.id,
+      toolRequestServer: pending.server,
+      toolRequestName: pending.tool,
+      toolRequestPublicName: pending.publicToolName
     });
     session.llmMessages.push({
       role: 'assistant',

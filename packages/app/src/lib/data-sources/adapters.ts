@@ -379,7 +379,8 @@ function toConversationItemsFromRecord(
 
   let lastAssistantTextItemIndex: number | undefined;
   const allMessages = record.messages ?? [];
-  for (const message of allMessages) {
+  for (let messageIndex = 0; messageIndex < allMessages.length; messageIndex += 1) {
+    const message = allMessages[messageIndex];
     if (message.role === 'user') {
       const textBlocks = message.content.filter(isTextBlock);
       for (const block of textBlocks) {
@@ -394,6 +395,9 @@ function toConversationItemsFromRecord(
     }
 
     if (message.role === 'assistant') {
+      const toolUses = message.content.filter(
+        (block): block is Extract<TraceMessageContentBlock, { type: 'tool_use' }> => block.type === 'tool_use'
+      );
       for (const block of message.content) {
         if (block.type === 'text') {
           items.push({
@@ -403,12 +407,74 @@ function toConversationItemsFromRecord(
             timestamp: message.ts
           });
           lastAssistantTextItemIndex = items.length - 1;
-        } else if (block.type === 'tool_use') {
+        }
+      }
+
+      const nextMessage = allMessages[messageIndex + 1];
+      const nextIsToolMessage = nextMessage?.role === 'tool';
+      if (toolUses.length > 0 && nextIsToolMessage) {
+        const resultByUseId = new Map<
+          string,
+          Extract<TraceMessageContentBlock, { type: 'tool_result' }>
+        >();
+        const unmatchedResults: Array<Extract<TraceMessageContentBlock, { type: 'tool_result' }>> = [];
+        for (const block of nextMessage.content) {
+          if (block.type !== 'tool_result') continue;
+          if (block.tool_use_id) resultByUseId.set(block.tool_use_id, block);
+          else unmatchedResults.push(block);
+        }
+
+        for (const use of toolUses) {
           items.push({
             id: `tool_call-${items.length}`,
             kind: 'tool_call',
-            text: stringifySafe(block.input ?? {}),
-            toolName: block.name,
+            text: stringifySafe(use.input ?? {}),
+            toolName: use.name,
+            timestamp: message.ts
+          });
+
+          const result = resultByUseId.get(use.id);
+          if (!result) continue;
+          const text = result.content
+            .filter(isTextBlock)
+            .map((part) => part.text)
+            .join('\n');
+          items.push({
+            id: `tool_result-${items.length}`,
+            kind: 'tool_result',
+            text,
+            toolName: result.name,
+            ok: !result.is_error,
+            durationMs: result.duration_ms,
+            timestamp: result.ts_end ?? nextMessage.ts
+          });
+          resultByUseId.delete(use.id);
+        }
+
+        for (const result of [...resultByUseId.values(), ...unmatchedResults]) {
+          const text = result.content
+            .filter(isTextBlock)
+            .map((part) => part.text)
+            .join('\n');
+          items.push({
+            id: `tool_result-${items.length}`,
+            kind: 'tool_result',
+            text,
+            toolName: result.name,
+            ok: !result.is_error,
+            durationMs: result.duration_ms,
+            timestamp: result.ts_end ?? nextMessage.ts
+          });
+        }
+
+        messageIndex += 1; // consumed the paired tool message
+      } else {
+        for (const use of toolUses) {
+          items.push({
+            id: `tool_call-${items.length}`,
+            kind: 'tool_call',
+            text: stringifySafe(use.input ?? {}),
+            toolName: use.name,
             timestamp: message.ts
           });
         }

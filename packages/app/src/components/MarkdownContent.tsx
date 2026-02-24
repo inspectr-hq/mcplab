@@ -22,6 +22,7 @@ type MarkdownBlock =
   | { type: "paragraph"; text: string }
   | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
   | { type: "hr" }
+  | { type: "blockquote"; text: string }
   | { type: "code"; lang?: string; code: string }
   | { type: "list"; ordered: boolean; items: string[] }
   | { type: "table"; headers: string[]; rows: string[][] };
@@ -58,6 +59,16 @@ function parseMarkdownBlocks(input: string): MarkdownBlock[] {
     if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
       blocks.push({ type: "hr" });
       i += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith(">")) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
+        i += 1;
+      }
+      blocks.push({ type: "blockquote", text: quoteLines.join("\n") });
       continue;
     }
 
@@ -113,6 +124,7 @@ function parseMarkdownBlocks(input: string): MarkdownBlock[] {
         isFence(next) ||
         /^---+$/.test(nextTrimmed) ||
         /^#{1,4}\s+/.test(nextTrimmed) ||
+        nextTrimmed.startsWith(">") ||
         looksLikeMarkdownTable(lines, i) ||
         /^\d+\.\s+/.test(nextTrimmed) ||
         /^[-*+]\s+/.test(nextTrimmed)
@@ -165,6 +177,13 @@ function renderMarkdownBlock(
       <p className={cn("whitespace-pre-wrap leading-relaxed", variant === "system" && "leading-normal")}>
         {renderInlineMarkdown(block.text, `${index}-p`)}
       </p>
+    );
+  }
+  if (block.type === "blockquote") {
+    return (
+      <blockquote className="border-l-2 border-muted-foreground/30 pl-3 text-muted-foreground italic">
+        {renderInlineMarkdown(block.text, `${index}-bq`)}
+      </blockquote>
     );
   }
   if (block.type === "code") {
@@ -228,7 +247,9 @@ function renderMarkdownBlock(
 }
 
 function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  const parts = text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\n]+\*|_[^_\n]+_|~~[^~\n]+~~|\[[^\]]+\]\([^)]+\))/g)
+    .filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
@@ -239,6 +260,23 @@ function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] 
     }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return <em key={`${keyBase}-${index}`}>{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith("_") && part.endsWith("_")) {
+      return <em key={`${keyBase}-${index}`}>{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith("~~") && part.endsWith("~~")) {
+      return <s key={`${keyBase}-${index}`}>{part.slice(2, -2)}</s>;
+    }
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a key={`${keyBase}-${index}`} href={linkMatch[2]} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+          {linkMatch[1]}
+        </a>
+      );
     }
     return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
   });

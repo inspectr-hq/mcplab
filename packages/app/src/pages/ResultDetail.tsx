@@ -1175,8 +1175,13 @@ const ResultDetail = () => {
                   const isAssistant = message.role === "assistant";
                   const isSystem = message.role === "system";
                   const isTool = message.role === "tool";
+                  const linkedPendingToolCall = message.pendingToolCallId
+                    ? assistantPendingToolCalls.find((call) => call.id === message.pendingToolCallId)
+                    : undefined;
+                  const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
                   const canShowHandoff =
                     isAssistant &&
+                    !isAssistantToolRequest &&
                     isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
                   return (
                     <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
@@ -1195,9 +1200,72 @@ const ResultDetail = () => {
                               : "border-border/80 bg-background shadow-sm"
                       }`}>
                         <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : "Assistant"}
+                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : isAssistantToolRequest ? "Tool step" : "Assistant"}
                         </p>
-                        <MarkdownText text={message.text} className="text-sm" />
+                        {isAssistantToolRequest ? (
+                          <details className="group rounded-md border border-border/60 bg-muted/20">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-2 text-sm">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="truncate font-medium">
+                                    {linkedPendingToolCall?.tool
+                                      ? linkedPendingToolCall.tool.replace(/^mcplab_/, "").replace(/_/g, " ")
+                                      : "Tool request"}
+                                  </span>
+                                  {linkedPendingToolCall ? (
+                                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                                      Needs approval
+                                    </span>
+                                  ) : (
+                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                      Completed / hidden
+                                    </span>
+                                  )}
+                                </div>
+                                {linkedPendingToolCall && (
+                                  <p className="mt-1 break-all text-[11px] text-muted-foreground">
+                                    {linkedPendingToolCall.server}::{linkedPendingToolCall.tool}
+                                  </p>
+                                )}
+                              </div>
+                              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                            </summary>
+                            <div className="space-y-2 border-t border-border/50 px-2 py-2">
+                              <MarkdownText text={message.text} className="text-sm" />
+                              {linkedPendingToolCall && (
+                                <>
+                                  <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                                    <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
+                                  </pre>
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs"
+                                      disabled={assistantLoading}
+                                      onClick={() => void denyResultAssistantToolCall(linkedPendingToolCall.id)}
+                                    >
+                                      Deny
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      disabled={assistantLoading}
+                                      onClick={() => void approveResultAssistantToolCall(linkedPendingToolCall.id)}
+                                    >
+                                      Approve
+                                    </Button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </details>
+                        ) : (
+                          <MarkdownText text={message.text} className="text-sm" />
+                        )}
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
@@ -1245,47 +1313,52 @@ const ResultDetail = () => {
                     </div>
                   );
                 })}
-                {assistantPendingToolCalls.length > 0 && (
+                {assistantPendingToolCalls.filter((call) => !assistantMessages.some((m) => m.pendingToolCallId === call.id)).length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Pending actions (approve/deny)
                     </div>
-                    {assistantPendingToolCalls.map((call) => (
-                      <div key={call.id} className="min-w-0 rounded-md border bg-background p-3">
-                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>
-                            <p className="break-all text-xs text-muted-foreground">
-                              {call.server}::{call.tool}
-                            </p>
+                    {assistantPendingToolCalls
+                      .filter((call) => !assistantMessages.some((m) => m.pendingToolCallId === call.id))
+                      .map((call) => (
+                        <details key={call.id} className="group min-w-0 rounded-md border bg-background">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>
+                              <p className="break-all text-xs text-muted-foreground">
+                                {call.server}::{call.tool}
+                              </p>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="border-t px-3 pb-3 pt-2">
+                            <pre className="max-h-48 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                              <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                            </pre>
+                            <div className="mt-2 flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void denyResultAssistantToolCall(call.id)}
+                              >
+                                Deny
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void approveResultAssistantToolCall(call.id)}
+                              >
+                                Approve
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-xs"
-                              disabled={assistantLoading}
-                              onClick={() => void denyResultAssistantToolCall(call.id)}
-                            >
-                              Deny
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              disabled={assistantLoading}
-                              onClick={() => void approveResultAssistantToolCall(call.id)}
-                            >
-                              Approve
-                            </Button>
-                          </div>
-                        </div>
-                        <pre className="mt-2 max-h-48 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-                        </pre>
-                      </div>
-                    ))}
+                        </details>
+                      ))}
                   </div>
                 )}
                 {assistantLoading && (

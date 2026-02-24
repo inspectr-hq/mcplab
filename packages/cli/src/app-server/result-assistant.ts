@@ -22,6 +22,20 @@ export type ResultAssistantRouteDeps = Pick<
   | 'resolveAssistantAgentFromLibraries'
 >;
 
+const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
+  'mcplab_list_runs',
+  'mcplab_read_run_artifact',
+  'mcplab_trace_stats',
+  'mcplab_trace_get_final_answers',
+  'mcplab_trace_get_conversation',
+  'mcplab_trace_list_events',
+  'mcplab_trace_search',
+  'mcplab_list_tool_analysis_results',
+  'mcplab_read_tool_analysis_result',
+  'mcplab_list_library',
+  'mcplab_get_library_item'
+]);
+
 export async function handleResultAssistantRoutes(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -41,6 +55,81 @@ export async function handleResultAssistantRoutes(params: {
     resolveAssistantAgentFromLibraries
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
+  const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const executePendingToolCall = async (
+    session: ResultAssistantSession,
+    pending: ResultAssistantSession['pendingToolCalls'][number],
+    approvalLabel: string,
+    options?: { emitApprovalChatMessage?: boolean }
+  ): Promise<void> => {
+    const emitApprovalChatMessage = options?.emitApprovalChatMessage ?? true;
+    pending.status = 'approved';
+    if (emitApprovalChatMessage) {
+      session.chatMessages.push({
+        id: makeMsgId(),
+        role: 'tool',
+        text: `${approvalLabel} tool call ${pending.server}::${pending.tool}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+    try {
+      const toolResult = await executeResultAssistantToolCall(session, pending);
+      pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
+      session.llmMessages.push({
+        role: 'tool',
+        content: pending.resultPreview,
+        tool_call_id: pending.id,
+        name: pending.publicToolName
+      });
+    } catch (error: unknown) {
+      pending.status = 'error';
+      pending.error = errorMessage(error);
+      session.llmMessages.push({
+        role: 'tool',
+        content: JSON.stringify({ error: pending.error }),
+        tool_call_id: pending.id,
+        name: pending.publicToolName
+      });
+      session.chatMessages.push({
+        id: makeMsgId(),
+        role: 'tool',
+        text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+  };
+
+  const continueWithAutoApprovedReads = async (session: ResultAssistantSession) => {
+    let output = await continueResultAssistantTurn(session);
+    const autoApprovedCalls: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      const pending = output.response.pendingToolCall;
+      if (output.response.type !== 'tool_call_request' || !pending) break;
+      if (!RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)) break;
+      autoApprovedCalls.push(`${pending.server}::${pending.tool}`);
+      await executePendingToolCall(session, pending, 'Auto-approved read-only', {
+        emitApprovalChatMessage: false
+      });
+      output = await continueResultAssistantTurn(session);
+    }
+    if (autoApprovedCalls.length > 0) {
+      session.chatMessages.push({
+        id: makeMsgId(),
+        role: 'system',
+        text: `Auto-approved read-only tool calls (${autoApprovedCalls.length}): ${autoApprovedCalls.join(', ')}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+    if (
+      output.response.type === 'tool_call_request' &&
+      output.response.pendingToolCall &&
+      RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(output.response.pendingToolCall.tool)
+    ) {
+      throw new Error('Result Assistant exceeded auto-approved tool-call chain limit');
+    }
+    return output;
+  };
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
     cleanupResultAssistantSessions(resultAssistantSessions);
@@ -147,7 +236,7 @@ export async function handleResultAssistantRoutes(params: {
       createdAt: new Date().toISOString()
     });
     session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueResultAssistantTurn(session);
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }
@@ -180,39 +269,8 @@ export async function handleResultAssistantRoutes(params: {
     if (Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')) {
       pending.arguments = body.argumentsOverride;
     }
-    pending.status = 'approved';
-    session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'tool',
-      text: `Approved tool call ${pending.server}::${pending.tool}`,
-      createdAt: new Date().toISOString()
-    });
-    try {
-      const toolResult = await executeResultAssistantToolCall(session, pending);
-      pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
-      session.llmMessages.push({
-        role: 'tool',
-        content: pending.resultPreview,
-        tool_call_id: pending.id,
-        name: pending.publicToolName
-      });
-    } catch (error: unknown) {
-      pending.status = 'error';
-      pending.error = errorMessage(error);
-      session.llmMessages.push({
-        role: 'tool',
-        content: JSON.stringify({ error: pending.error }),
-        tool_call_id: pending.id,
-        name: pending.publicToolName
-      });
-      session.chatMessages.push({
-        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        role: 'tool',
-        text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
-        createdAt: new Date().toISOString()
-      });
-    }
-    const output = await continueResultAssistantTurn(session);
+    await executePendingToolCall(session, pending, 'Approved');
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }
@@ -259,7 +317,7 @@ export async function handleResultAssistantRoutes(params: {
       tool_call_id: pending.id,
       name: pending.publicToolName
     });
-    const output = await continueResultAssistantTurn(session);
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }
