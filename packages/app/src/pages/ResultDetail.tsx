@@ -1222,7 +1222,7 @@ const ResultDetail = () => {
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
                           <Bot className="h-3 w-3" />
                         </div>
-                        <details className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
+                        <details open={Boolean(linkedPendingToolCall)} className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
