@@ -95,14 +95,27 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Compare" });
     return crumbs;
   }
+  if (matchPath("/compare/results", pathname)) {
+    crumbs.push({ label: "Compare", to: "/compare" }, { label: "Full Result Compare" });
+    return crumbs;
+  }
 
   return crumbs;
 };
 
 export function AppLayout() {
   const location = useLocation();
+  const embed = new URLSearchParams(location.search).get("embed") === "1";
   const crumbs = buildCrumbs(location.pathname);
   const { connection } = useDataSource();
+
+  if (embed) {
+    return (
+      <main className="min-h-screen overflow-auto bg-background p-4">
+        <Outlet />
+      </main>
+    );
+  }
 
   return (
     <SidebarProvider>

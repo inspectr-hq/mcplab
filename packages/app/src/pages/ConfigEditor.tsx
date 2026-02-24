@@ -16,7 +16,8 @@ import { ServerForm } from "@/components/config-editor/ServerForm";
 import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
-import type { EvalConfig } from "@/types/eval";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import type { AgentConfig, EvalConfig, ServerConfig } from "@/types/eval";
 import type { SnapshotRecord } from "@/lib/data-sources/types";
 
 const emptyConfig = (): EvalConfig => ({
@@ -33,12 +34,110 @@ const emptyConfig = (): EvalConfig => ({
   updatedAt: new Date().toISOString(),
 });
 
+const ServerListReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
+  <div className="space-y-2">
+    {servers.map((server) => (
+      <div key={server.id} className="rounded-md border p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-medium text-sm">{server.name || server.id}</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <Badge variant="secondary" className="text-xs capitalize">
+                {server.transport}
+              </Badge>
+              {server.authType && server.authType !== "none" && (
+                <Badge variant="outline" className="text-xs">
+                  Auth: {server.authType}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground">{server.id}</div>
+        </div>
+        {server.url && (
+          <div className="mt-2 text-xs text-muted-foreground break-all">
+            {server.url}
+          </div>
+        )}
+        {server.command && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            <span className="font-medium">Command:</span>{" "}
+            <span className="font-mono">{[server.command, ...(server.args ?? [])].join(" ")}</span>
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+);
+
+const InlineServersReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
+  <Card>
+    <CardContent className="pt-4 space-y-3">
+      <div className="text-sm font-medium">Inline servers</div>
+      <ServerListReadOnly servers={servers} />
+    </CardContent>
+  </Card>
+);
+
+const AgentListReadOnly = ({
+  agents,
+  defaultAgentNames = [],
+}: {
+  agents: AgentConfig[];
+  defaultAgentNames?: string[];
+}) => (
+  <div className="space-y-2">
+    {agents.map((agent) => (
+      <div key={agent.id} className="rounded-md border p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-medium text-sm">{agent.name || agent.id}</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {defaultAgentNames.includes(agent.name || agent.id) && (
+                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                  Default run agent
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-xs capitalize">
+                {agent.provider}
+              </Badge>
+              <Badge variant="outline" className="text-xs font-mono">
+                {agent.model}
+              </Badge>
+            </div>
+          </div>
+          <div className="text-xs font-mono text-muted-foreground">{agent.id}</div>
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">
+          Temp {agent.temperature} · Max tokens {agent.maxTokens}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const InlineAgentsReadOnly = ({
+  agents,
+  defaultAgentNames = [],
+}: {
+  agents: AgentConfig[];
+  defaultAgentNames?: string[];
+}) => (
+  <Card>
+    <CardContent className="pt-4 space-y-3">
+      <div className="text-sm font-medium">Inline agents</div>
+      <AgentListReadOnly agents={agents} defaultAgentNames={defaultAgentNames} />
+    </CardContent>
+  </Card>
+);
+
 const ConfigEditor = () => {
   const { id, tab: tabParam } = useParams<{ id: string; tab?: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
 
   const isNew = id === "new";
@@ -112,6 +211,7 @@ const ConfigEditor = () => {
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
   const readOnly = !editing;
+  const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
 
   const persistSnapshotPolicy = async (
     nextPolicy: {
@@ -505,6 +605,7 @@ const ConfigEditor = () => {
         </CardContent>
       </Card>
 
+      {!readOnly && (
       <Card>
         <CardContent className="pt-6 space-y-3">
           <div>
@@ -540,43 +641,64 @@ const ConfigEditor = () => {
                 </button>
               )}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[...config.agents, ...referencedAgents].map((agent) => {
-                const agentName = agent.name || agent.id;
-                const checked = (config.runDefaults?.selectedAgentNames ?? []).includes(agentName);
-                return (
-                  <label key={`run-default-${agent.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={readOnly}
-                      onChange={(e) => {
-                        const next = e.target.checked
-                          ? [...(config.runDefaults?.selectedAgentNames ?? []), agentName]
-                          : (config.runDefaults?.selectedAgentNames ?? []).filter((name) => name !== agentName);
-                        patch({
-                          runDefaults: {
-                            ...(config.runDefaults ?? {}),
-                            selectedAgentNames: Array.from(new Set(next))
-                          }
-                        });
-                      }}
-                    />
-                    <span>{agent.name || agent.id}</span>
-                    {referencedAgents.some((a) => a.id === agent.id) && (
-                      <span className="text-xs text-muted-foreground">(ref)</span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
+            {readOnly ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Default run agents are highlighted in the agent cards above.
+                </p>
+                {defaultRunAgentNames.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {defaultRunAgentNames.map((name) => (
+                      <Badge key={`default-run-agent-${name}`} variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                        {name}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No default agents selected.</p>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[...config.agents, ...referencedAgents].map((agent) => {
+                  const agentName = agent.name || agent.id;
+                  const checked = defaultRunAgentNames.includes(agentName);
+                  return (
+                    <label key={`run-default-${agent.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={readOnly}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...defaultRunAgentNames, agentName]
+                            : defaultRunAgentNames.filter((name) => name !== agentName);
+                          patch({
+                            runDefaults: {
+                              ...(config.runDefaults ?? {}),
+                              selectedAgentNames: Array.from(new Set(next))
+                            }
+                          });
+                        }}
+                      />
+                      <span>{agent.name || agent.id}</span>
+                      {referencedAgents.some((a) => a.id === agent.id) && (
+                        <span className="text-xs text-muted-foreground">(ref)</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
             {[...config.agents, ...referencedAgents].length === 0 && (
               <p className="text-xs text-muted-foreground">No agents available yet.</p>
             )}
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {snapshotsUiEnabled && (
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -713,6 +835,7 @@ const ConfigEditor = () => {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Tabbed sections */}
       <Tabs
@@ -804,7 +927,7 @@ const ConfigEditor = () => {
                     </Link>
                   </Button>
                 </div>
-                <ServerForm servers={referencedServers} onChange={() => {}} readOnly />
+                <ServerListReadOnly servers={referencedServers} />
               </CardContent>
             </Card>
           )}
@@ -812,6 +935,8 @@ const ConfigEditor = () => {
             <p className="text-sm text-muted-foreground text-center py-6">
               No inline servers configured. Using {referencedServers.length} referenced server{referencedServers.length !== 1 ? "s" : ""} above.
             </p>
+          ) : readOnly ? (
+            <InlineServersReadOnly servers={config.servers} />
           ) : (
             <ServerForm servers={config.servers} onChange={(servers) => patch({ servers })} readOnly={readOnly} />
           )}
@@ -883,7 +1008,7 @@ const ConfigEditor = () => {
                     </Link>
                   </Button>
                 </div>
-                <AgentForm agents={referencedAgents} onChange={() => {}} readOnly />
+                <AgentListReadOnly agents={referencedAgents} defaultAgentNames={defaultRunAgentNames} />
               </CardContent>
             </Card>
           )}
@@ -891,6 +1016,8 @@ const ConfigEditor = () => {
             <p className="text-sm text-muted-foreground text-center py-6">
               No inline agents configured. Using {referencedAgents.length} referenced agent{referencedAgents.length !== 1 ? "s" : ""} above.
             </p>
+          ) : readOnly ? (
+            <InlineAgentsReadOnly agents={config.agents} defaultAgentNames={defaultRunAgentNames} />
           ) : (
             <AgentForm agents={config.agents} onChange={(agents) => patch({ agents })} readOnly={readOnly} />
           )}

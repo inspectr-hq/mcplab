@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
 import { useEffect, useState } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -117,8 +119,14 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
   snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
   onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean;
 }) {
+  const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const [newRuleType, setNewRuleType] = useState<EvalRule["type"]>("required_tool");
   const [newRuleValue, setNewRuleValue] = useState("");
+  const [toolPickerValue, setToolPickerValue] = useState("");
+  const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
+  const [toolNamesLoading, setToolNamesLoading] = useState(false);
+  const [toolNamesError, setToolNamesError] = useState<string | null>(null);
   const [newExtractName, setNewExtractName] = useState("");
   const [newExtractPattern, setNewExtractPattern] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -127,6 +135,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
     if (!newRuleValue.trim()) return;
     onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }] });
     setNewRuleValue("");
+    setToolPickerValue("");
   };
 
   const removeRule = (ri: number) => {
@@ -164,6 +173,11 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
     response_contains: "border-violet-300/60 bg-violet-500/10 text-violet-700",
     response_not_contains: "border-amber-300/60 bg-amber-500/10 text-amber-700",
   };
+  const isToolRule = newRuleType === "required_tool" || newRuleType === "forbidden_tool";
+  const selectedServerNames = scenario.serverIds
+    .map((sid) => servers.find((srv) => srv.id === sid)?.name)
+    .filter((name): name is string => Boolean(name));
+  const canLoadToolNames = selectedServerNames.length > 0;
   const hasScenarioBaselineOverride = scenario.snapshotEval?.baselineSnapshotId !== undefined;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>("");
   const [consumedAutoOpenNonce, setConsumedAutoOpenNonce] = useState<number>(0);
@@ -182,6 +196,36 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
     setAssistantOpen(true);
     setConsumedAutoOpenNonce(assistantAutoOpenNonce);
   }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
+
+  useEffect(() => {
+    setAvailableToolNames(null);
+    setToolNamesError(null);
+    setToolPickerValue("");
+  }, [scenario.serverIds.join("|")]);
+
+  useEffect(() => {
+    setToolPickerValue("");
+  }, [newRuleType]);
+
+  const loadAvailableTools = async () => {
+    if (!canLoadToolNames || readOnly) return;
+    setToolNamesLoading(true);
+    setToolNamesError(null);
+    try {
+      const discovered = new Set<string>();
+      for (const serverName of selectedServerNames) {
+        const res = await source.discoverToolsForAnalysis({ serverNames: [serverName] });
+        for (const server of res.servers) {
+          for (const tool of server.tools) discovered.add(tool.name);
+        }
+      }
+      setAvailableToolNames(Array.from(discovered).sort((a, b) => a.localeCompare(b)));
+    } catch (err) {
+      setToolNamesError(err instanceof Error ? err.message : "Failed to load tools");
+    } finally {
+      setToolNamesLoading(false);
+    }
+  };
 
   return (
     <Card className="border-dashed">
@@ -372,20 +416,80 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
                   )}
                 </div>
                 {!readOnly && (
-                  <div className="flex gap-2 items-end">
-                    <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as EvalRule["type"])}>
-                      <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="required_tool">Required Tool</SelectItem>
-                        <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                        <SelectItem value="response_contains">Text matches pattern</SelectItem>
-                        <SelectItem value="response_not_contains">Text must not match</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} placeholder="Value" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())} />
-                    <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addRule}>Add</Button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2 items-end">
+                      <Select value={newRuleType} onValueChange={(v) => setNewRuleType(v as EvalRule["type"])}>
+                        <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="required_tool">Required Tool</SelectItem>
+                          <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+                          <SelectItem value="response_contains">Text matches pattern</SelectItem>
+                          <SelectItem value="response_not_contains">Text must not match</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} placeholder="Value" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())} />
+                      <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addRule}>Add</Button>
+                    </div>
+                    {isToolRule && (
+                      <div className="space-y-1">
+                        <div className="flex items-end gap-2">
+                          <div className="min-w-0 flex-1">
+                            <Label className="mb-1 block text-[11px] text-muted-foreground">
+                              Pick from selected server tools (optional)
+                            </Label>
+                            <Select
+                              value={toolPickerValue}
+                              onValueChange={(value) => {
+                                setToolPickerValue(value);
+                                setNewRuleValue(value);
+                              }}
+                              disabled={toolNamesLoading || !availableToolNames || availableToolNames.length === 0}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue
+                                  placeholder={
+                                    toolNamesLoading
+                                      ? "Loading tools..."
+                                      : availableToolNames && availableToolNames.length > 0
+                                        ? "Select tool to insert in value field"
+                                        : "Load tools first"
+                                  }
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(availableToolNames ?? []).map((toolName) => (
+                                  <SelectItem key={toolName} value={toolName}>
+                                    {toolName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 shrink-0"
+                            onClick={loadAvailableTools}
+                            disabled={!canLoadToolNames || toolNamesLoading}
+                          >
+                            {toolNamesLoading ? "Loading..." : availableToolNames ? "Refresh tools" : "Load tools"}
+                          </Button>
+                        </div>
+                        {!canLoadToolNames && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Select at least one server in this scenario to load tool names.
+                          </p>
+                        )}
+                        {toolNamesError && (
+                          <p className="text-[11px] text-destructive">
+                            Could not load tools: {toolNamesError}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -470,6 +574,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
           </Card>
         </div>
 
+        {snapshotsUiEnabled && (
         <Card className="border bg-amber-50/40">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Snapshot Evaluation</CardTitle>
@@ -548,6 +653,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
               </p>
             </CardContent>
           </Card>
+        )}
       </CardContent>
     </Card>
   );

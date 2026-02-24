@@ -22,6 +22,7 @@ import RunEvaluation from "./pages/RunEvaluation";
 import Results from "./pages/Results";
 import ResultDetail from "./pages/ResultDetail";
 import Compare from "./pages/Compare";
+import CompareResultDetails from "./pages/CompareResultDetails";
 import MarkdownReports from "./pages/MarkdownReports";
 import MarkdownReportDetail from "./pages/MarkdownReportDetail";
 import NotFound from "./pages/NotFound";
@@ -58,6 +59,7 @@ const App = () => (
                   <Route path="/markdown-reports" element={<MarkdownReports />} />
                   <Route path="/markdown-reports/view" element={<MarkdownReportDetail />} />
                   <Route path="/compare" element={<Compare />} />
+                  <Route path="/compare/results" element={<CompareResultDetails />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

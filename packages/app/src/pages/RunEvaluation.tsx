@@ -12,6 +12,7 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
 
 const RUN_EVAL_ACTIVE_JOB_KEY = "mcplab.runEvaluation.activeJobId";
 
@@ -46,6 +47,7 @@ const RunEvaluation = () => {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
+  const [stopped, setStopped] = useState(false);
   const [runId, setRunId] = useState<string>("");
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
@@ -58,6 +60,7 @@ const RunEvaluation = () => {
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const { agents: libraryAgents, scenarios: libraryScenarios } = useLibraries();
   const selectedConfig = configs.find((item) => item.id === configId);
   const requestedConfigId = searchParams.get("configId");
@@ -119,6 +122,7 @@ const RunEvaluation = () => {
   const runDemo = () => {
     setRunning(true);
     setDone(false);
+    setStopped(false);
     setRunId("");
     setLogs([]);
     setProgress(0);
@@ -154,6 +158,7 @@ const RunEvaluation = () => {
     }
     setRunning(true);
     setDone(false);
+    setStopped(false);
     setRunId("");
     const compositionMode =
       (selectedConfig.serverRefs?.length || 0) +
@@ -164,7 +169,7 @@ const RunEvaluation = () => {
         : "single-file/inline";
     setLogs([
       `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
-      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${applySnapshotEval ? "on" : "off"}`
+      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}`
     ]);
     setProgress(10);
     try {
@@ -173,7 +178,7 @@ const RunEvaluation = () => {
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.name || agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
-        applySnapshotEval,
+        applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -204,6 +209,8 @@ const RunEvaluation = () => {
     clearActiveRunJob();
     setActiveJobId(null);
     setRunning(false);
+    setDone(false);
+    setStopped(true);
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
   };
 
@@ -251,6 +258,7 @@ const RunEvaluation = () => {
     setActiveJobId(storedJobId);
     setRunning(true);
     setDone(false);
+    setStopped(false);
     setLogs((prev) =>
       prev.length > 0
         ? prev
@@ -300,6 +308,7 @@ const RunEvaluation = () => {
           return prev.includes(line) ? prev : [...prev, line];
         });
         setProgress((prev) => Math.max(prev, 30));
+        setStopped(false);
       }
       if (event.type === "log") {
         const message = String(event.payload.message ?? "").trim();
@@ -346,6 +355,7 @@ const RunEvaluation = () => {
         setProgress(100);
         setRunning(false);
         setDone(true);
+        setStopped(false);
         setRunId(nextRunId);
         clearActiveRunJob();
         setActiveJobId(null);
@@ -360,6 +370,7 @@ const RunEvaluation = () => {
         setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
         setRunning(false);
         setDone(false);
+        setStopped(false);
         setProgress(0);
         clearActiveRunJob();
         setActiveJobId(null);
@@ -408,7 +419,7 @@ const RunEvaluation = () => {
           </div>
           {selectedConfig && (
             <div className="space-y-2">
-              {selectedConfig.snapshotEval?.enabled && (
+              {snapshotsUiEnabled && selectedConfig.snapshotEval?.enabled && (
                 <div className="rounded-md border bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
                   Snapshot eval active ({selectedConfig.snapshotEval.mode}) · baseline:{" "}
                   <span className="font-mono">{selectedConfig.snapshotEval.baselineSnapshotId ?? "none"}</span>
@@ -498,10 +509,12 @@ const RunEvaluation = () => {
               </div>
             </div>
           )}
+          {snapshotsUiEnabled && (
           <label className="flex items-center gap-2 text-sm rounded-md border p-2">
             <Checkbox checked={applySnapshotEval} onCheckedChange={(v) => setApplySnapshotEval(v === true)} />
             <span>Apply snapshot evaluation policy (if configured)</span>
           </label>
+          )}
           <div className="flex gap-2">
             <Button
               onClick={startRun}
@@ -541,6 +554,34 @@ const RunEvaluation = () => {
               ))}
             </div>
           </CardContent>
+      </Card>
+      )}
+
+      {stopped && !running && !done && (
+        <Card className="border-amber-300/60 bg-amber-50/40">
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <Square className="h-5 w-5 text-amber-700" />
+              <div className="min-w-0">
+                <p className="font-medium">Run stopped</p>
+                <p className="text-sm text-muted-foreground">
+                  The evaluation was stopped before completion. You can start it again or clear the progress log.
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => {
+                  setLogs([]);
+                  setProgress(0);
+                  setStopped(false);
+                }}>
+                  Clear Progress
+                </Button>
+                <Button type="button" onClick={startRun} disabled={!configId}>
+                  <Play className="mr-2 h-4 w-4" />Run Again
+                </Button>
+              </div>
+            </div>
+          </CardContent>
         </Card>
       )}
 
@@ -557,7 +598,7 @@ const RunEvaluation = () => {
                 <Link to={`/results/${runId || "run-a1b2c3"}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
               </Button>
             </div>
-            {runId && (
+            {snapshotsUiEnabled && runId && (
               <div className="mt-4 flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Snapshot name (optional)</Label>

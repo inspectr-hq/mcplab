@@ -20,6 +20,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
   ResultAssistantPendingToolCall,
@@ -40,6 +41,7 @@ const ResultDetail = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
@@ -495,7 +497,7 @@ const ResultDetail = () => {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
             <PassRateBadge rate={result.overallPassRate} />
-            {result.snapshotEval?.applied && (
+            {snapshotsUiEnabled && result.snapshotEval?.applied && (
               <Badge variant="outline" className="text-xs">
                 Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
               </Badge>
@@ -504,13 +506,13 @@ const ResultDetail = () => {
           <p className="text-xs text-muted-foreground">
             {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
           </p>
-          {result.snapshotEval?.applied && (
+          {snapshotsUiEnabled && result.snapshotEval?.applied && (
             <p className="text-xs text-muted-foreground">
               Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
             </p>
           )}
         </div>
-        {result.snapshotEval?.applied && (
+        {snapshotsUiEnabled && result.snapshotEval?.applied && (
           <Button
             type="button"
             variant="outline"
@@ -558,7 +560,7 @@ const ResultDetail = () => {
       >
       <div className={`min-w-0 space-y-6 ${assistantOpen ? "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2" : ""}`}>
 
-      {result.snapshotEval?.applied && (
+      {snapshotsUiEnabled && result.snapshotEval?.applied && (
         <Card className="border-amber-500/30">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
@@ -704,37 +706,39 @@ const ResultDetail = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="flex flex-wrap items-end gap-2 border-b p-3">
-            <div className="min-w-60 space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
-              <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
-                <SelectTrigger className="h-8">
-                  <SelectValue placeholder="Select snapshot" />
-                </SelectTrigger>
-                <SelectContent>
-                  {snapshots.map((snapshot) => (
-                    <SelectItem key={snapshot.id} value={snapshot.id}>
-                      {snapshot.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {snapshotsUiEnabled && (
+            <div className="flex flex-wrap items-end gap-2 border-b p-3">
+              <div className="min-w-60 space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
+                <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Select snapshot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {snapshots.map((snapshot) => (
+                      <SelectItem key={snapshot.id} value={snapshot.id}>
+                        {snapshot.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedSnapshotId || comparing}
+                onClick={() => void compareWithSnapshot()}
+              >
+                {comparing ? "Comparing..." : "Compare Snapshot"}
+              </Button>
+              {snapshotComparison && (
+                <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
+                  Overall snapshot score: {snapshotComparison.overall_score}
+                </Badge>
+              )}
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!selectedSnapshotId || comparing}
-              onClick={() => void compareWithSnapshot()}
-            >
-              {comparing ? "Comparing..." : "Compare Snapshot"}
-            </Button>
-            {snapshotComparison && (
-              <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
-                Overall snapshot score: {snapshotComparison.overall_score}
-              </Badge>
-            )}
-          </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>

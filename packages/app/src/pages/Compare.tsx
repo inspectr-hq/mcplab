@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { EvalResult } from "@/types/eval";
 import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
@@ -15,6 +17,7 @@ const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)",
 
 const Compare = () => {
   const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const [results, setResults] = useState<EvalResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
@@ -106,14 +109,16 @@ const Compare = () => {
             >
               Run vs Run
             </Button>
-            <Button
-              type="button"
-              variant={mode === "snapshot" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("snapshot")}
-            >
-              Run vs Snapshot
-            </Button>
+            {snapshotsUiEnabled && (
+              <Button
+                type="button"
+                variant={mode === "snapshot" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMode("snapshot")}
+              >
+                Run vs Snapshot
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -176,6 +181,28 @@ const Compare = () => {
 
       {mode === "runs" && selectedRuns.length >= 2 && (
         <>
+          {selectedRuns.length === 2 && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Need a deeper comparison?</p>
+                    <p className="text-xs text-muted-foreground">
+                      Open the two selected runs in a dedicated side-by-side full result compare view.
+                    </p>
+                  </div>
+                  <Button asChild size="sm">
+                    <Link
+                      to={`/compare/results?left=${encodeURIComponent(selectedRuns[0].id)}&right=${encodeURIComponent(selectedRuns[1].id)}&leftConfig=${encodeURIComponent(selectedRuns[0].configId)}&rightConfig=${encodeURIComponent(selectedRuns[1].configId)}`}
+                    >
+                      Compare full results
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Summary Comparison</CardTitle></CardHeader>
             <CardContent className="p-0">
@@ -239,7 +266,7 @@ const Compare = () => {
         </>
       )}
 
-      {mode === "snapshot" && (
+      {snapshotsUiEnabled && mode === "snapshot" && (
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Run vs Snapshot</CardTitle></CardHeader>
           <CardContent className="space-y-3">
