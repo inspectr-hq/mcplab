@@ -110,34 +110,33 @@ const Compare = () => {
         <p className="text-sm text-muted-foreground">Select 2–5 runs to compare</p>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={mode === "runs" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("runs")}
-            >
-              Run vs Run
-            </Button>
-            {snapshotsUiEnabled && (
-              <Button
-                type="button"
-                variant={mode === "snapshot" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("snapshot")}
-              >
-                Run vs Snapshot
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/*<Card>*/}
+      {/*  <CardContent className="pt-6">*/}
+      {/*    <div className="flex flex-wrap gap-2">*/}
+      {/*      <Button*/}
+      {/*        type="button"*/}
+      {/*        variant={mode === "runs" ? "default" : "outline"}*/}
+      {/*        size="sm"*/}
+      {/*        onClick={() => setMode("runs")}*/}
+      {/*      >*/}
+      {/*        Run vs Run*/}
+      {/*      </Button>*/}
+      {/*      {snapshotsUiEnabled && (*/}
+      {/*        <Button*/}
+      {/*          type="button"*/}
+      {/*          variant={mode === "snapshot" ? "default" : "outline"}*/}
+      {/*          size="sm"*/}
+      {/*          onClick={() => setMode("snapshot")}*/}
+      {/*        >*/}
+      {/*          Run vs Snapshot*/}
+      {/*        </Button>*/}
+      {/*      )}*/}
+      {/*    </div>*/}
+      {/*  </CardContent>*/}
+      {/*</Card>*/}
 
       {mode === "runs" && (
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Select Runs</CardTitle></CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>

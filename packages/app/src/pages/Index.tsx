@@ -60,6 +60,18 @@ const Dashboard = () => {
     latency: r.avgLatency,
   }));
 
+  const runScopeSummary = (r: EvalResult) => {
+    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
+    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
+    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
+    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+    return {
+      scenarioCount: scenarioIds.length,
+      agentCount: agentNames.length,
+      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+    };
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -132,6 +144,7 @@ const Dashboard = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Run ID</TableHead>
+                  <TableHead>Evaluated</TableHead>
                   <TableHead>
                     <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
                       Timestamp
@@ -171,6 +184,19 @@ const Dashboard = () => {
                       <Link to={`/results/${run.id}`} className="font-mono text-xs text-primary hover:underline">
                         {run.id}
                       </Link>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">
+                      {(() => {
+                        const scope = runScopeSummary(run);
+                        return (
+                          <div className="space-y-0.5">
+                            <div>
+                              Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                            </div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">

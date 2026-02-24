@@ -23,6 +23,7 @@ import type { EvalResult } from "@/types/eval";
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const [deletingRun, setDeletingRun] = useState(false);
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls">("timestamp");
@@ -37,11 +38,40 @@ const Results = () => {
     setSortDir(next === "timestamp" ? "desc" : "asc");
   };
 
+  const loadResults = async () => {
+    setRefreshing(true);
+    try {
+      setResults(await source.listResults());
+    } catch (error: any) {
+      toast({
+        title: "Could not load results",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
-    source.listResults().then((next) => {
-      if (active) setResults(next);
-    });
+    setRefreshing(true);
+    source
+      .listResults()
+      .then((next) => {
+        if (active) setResults(next);
+      })
+      .catch((error: any) => {
+        if (!active) return;
+        toast({
+          title: "Could not load results",
+          description: String(error?.message ?? error),
+          variant: "destructive"
+        });
+      })
+      .finally(() => {
+        if (active) setRefreshing(false);
+      });
     return () => {
       active = false;
     };
@@ -125,9 +155,14 @@ const Results = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div>
-        <h1 className="text-2xl font-bold">Results</h1>
-        <p className="text-sm text-muted-foreground">Browse and compare evaluation results</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Results</h1>
+          <p className="text-sm text-muted-foreground">Browse and compare evaluation results</p>
+        </div>
+        <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </Button>
       </div>
 
       <Card>

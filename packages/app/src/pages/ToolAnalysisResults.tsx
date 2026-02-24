@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { ToolAnalysisResultSummary } from "@/lib/data-sources/types";
-import { Download, Trash2 } from "lucide-react";
+import {Clock, Download, MoreHorizontal, Trash2} from "lucide-react";
 import { toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -80,43 +82,65 @@ export default function ToolAnalysisResultsPage() {
           <h1 className="text-2xl font-bold">Tool Analysis Results</h1>
           <p className="text-sm text-muted-foreground">Browse persisted Analyze MCP Tools reports.</p>
         </div>
-        <Button asChild variant="outline">
-          <Link to="/tool-analysis">Analyze MCP Tools</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/tool-analysis">Analyze MCP Tools</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Saved reports</CardTitle>
-          <CardDescription>
-            {loading ? "Loading..." : `${items.length} saved report${items.length === 1 ? "" : "s"}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading tool analysis results...</p>
+            <p className="p-6 text-sm text-muted-foreground">Loading tool analysis results...</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No saved tool analysis reports yet.</p>
+            <p className="p-6 text-sm text-muted-foreground">No saved tool analysis reports yet.</p>
           ) : (
-            <div className="space-y-3">
-              {items.map((item) => (
-                <div key={item.reportId} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link to={`/tool-analysis-results/${item.reportId}`} className="font-mono text-sm font-medium hover:underline">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Report ID</TableHead>
+                  <TableHead>Evaluated</TableHead>
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Issues</TableHead>
+                  <TableHead>Modes</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.reportId}>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Link to={`/tool-analysis-results/${item.reportId}`} className="font-mono text-xs text-primary hover:underline">
                           {item.reportId}
                         </Link>
-                        <Badge variant="outline">{new Date(item.createdAt).toLocaleString()}</Badge>
-                        {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
-                        {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
+                        <div className="text-[11px] text-muted-foreground">
+                          {item.assistantAgentName} · {item.assistantAgentModel}
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Server: <span className="font-medium text-foreground">{item.serverNames.join(", ") || "—"}</span>
-                        {" · "}Tools analyzed: {item.summary.toolsAnalyzed}
-                        {" · "}Skipped: {item.summary.toolsSkipped}
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">
+                      <div className="space-y-0.5">
+                        <div>
+                          Servers: <span className="font-medium text-foreground">{item.serverNames.length}</span> · Tools:{" "}
+                          <span className="font-medium text-foreground">{item.summary.toolsAnalyzed}</span>
+                          {" · "}Skipped: <span className="font-medium text-foreground">{item.summary.toolsSkipped}</span>
+                        </div>
+                        <div className="font-mono text-xs text-foreground/80">
+                          {item.serverNames.slice(0, 2).join(", ")}
+                          {item.serverNames.length > 2 ? ` +${item.serverNames.length - 2}` : ""}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(item.createdAt).toLocaleString()}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
                         {(["critical", "high", "medium", "low", "info"] as const).map((sev) =>
                           item.summary.issueCounts[sev] > 0 ? (
                             <Badge key={`${item.reportId}-${sev}`} variant="outline" className="capitalize">
@@ -124,26 +148,50 @@ export default function ToolAnalysisResultsPage() {
                             </Badge>
                           ) : null
                         )}
+                        {Object.values(item.summary.issueCounts).every((n) => n === 0) && (
+                          <Badge variant="outline">No issues</Badge>
+                        )}
                       </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/tool-analysis-results/${item.reportId}`}>View</Link>
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void exportReport(item.reportId, "json")}>
-                        <Download className="mr-2 h-4 w-4" /> JSON
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => void exportReport(item.reportId, "markdown")}>
-                        <Download className="mr-2 h-4 w-4" /> MD
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => setDeleteId(item.reportId)}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
+                        {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link to={`/tool-analysis-results/${item.reportId}`}>View</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "json")}>
+                            <Download className="mr-2 h-3.5 w-3.5" /> Export JSON
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "markdown")}>
+                            <Download className="mr-2 h-3.5 w-3.5" /> Export Markdown
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              setDeleteId(item.reportId);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -169,4 +217,3 @@ export default function ToolAnalysisResultsPage() {
     </div>
   );
 }
-
