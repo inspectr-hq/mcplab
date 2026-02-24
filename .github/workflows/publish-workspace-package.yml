@@ -1,0 +1,166 @@
+name: Publish Workspace Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: "Workspace package name (e.g. @inspectr/mcplab-core)"
+        required: true
+        type: string
+      version:
+        description: "Version bump (patch/minor/major/...) or explicit version (e.g. 0.1.2)"
+        required: true
+        default: "patch"
+        type: string
+      publish_to_npm:
+        description: "Publish to npm registry"
+        required: true
+        default: true
+        type: boolean
+      notify_dependents:
+        description: "Create dependency bump PRs for workspace dependents"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      PACKAGE_NAME: ${{ inputs.package_name }}
+      INPUT_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Use a PAT so push/tag/dispatch actions can trigger downstream workflows.
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Configure git
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Resolve workspace package
+        id: workspace
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const pkgName = process.env.PACKAGE_NAME;
+          const root = process.cwd();
+          const packagesDir = path.join(root, 'packages');
+          if (!fs.existsSync(packagesDir)) {
+            console.error('packages directory not found');
+            process.exit(1);
+          }
+
+          let found = null;
+          for (const entry of fs.readdirSync(packagesDir)) {
+            const pkgPath = path.join(packagesDir, entry, 'package.json');
+            if (!fs.existsSync(pkgPath)) continue;
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            if (pkg.name === pkgName) {
+              found = { dir: path.join('packages', entry), private: !!pkg.private };
+              break;
+            }
+          }
+
+          if (!found) {
+            console.error(`Workspace package not found: ${pkgName}`);
+            process.exit(1);
+          }
+
+          if (found.private) {
+            console.error(`Package ${pkgName} is private and cannot be published.`);
+            process.exit(1);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `path=${found.dir}\n`);
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bump workspace version
+        id: bump
+        working-directory: ${{ steps.workspace.outputs.path }}
+        run: |
+          set -euo pipefail
+          RAW_VERSION="$(npm version "${INPUT_VERSION}" --no-git-tag-version)"
+          VERSION="${RAW_VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            echo "Failed to determine version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update root lockfile
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Build package
+        run: npm run build -w "${PACKAGE_NAME}"
+
+      - name: Publish to npm
+        if: ${{ inputs.publish_to_npm }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish -w "${PACKAGE_NAME}" --access public
+
+      - name: Commit and tag release
+        id: tag
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          PKG_PATH: ${{ steps.workspace.outputs.path }}
+        run: |
+          set -euo pipefail
+          TAG="${PACKAGE_NAME}@v${VERSION}"
+          SAFE_TAG="$(printf '%s' "$TAG" | tr '/ ' '--')"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "safe_tag=$SAFE_TAG" >> "$GITHUB_OUTPUT"
+
+          git add package-lock.json "${PKG_PATH}/package.json"
+          git commit -m "chore(release): ${PACKAGE_NAME}@${VERSION}"
+          git tag "${TAG}"
+          git push origin HEAD
+          git push origin "${TAG}"
+
+      - name: Notify dependent packages
+        if: ${{ inputs.notify_dependents }}
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          : "${GH_PAT:?GH_PAT secret is required to dispatch repository events}"
+
+          curl -fsS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dispatches" \
+            -d "$(cat <<EOF
+          {
+            "event_type": "workspace-package-released",
+            "client_payload": {
+              "package_name": "${PACKAGE_NAME}",
+              "version": "${VERSION}",
+              "repo": "${GITHUB_REPOSITORY}",
+              "tag": "${TAG}",
+              "tag_url": "https://github.com/${GITHUB_REPOSITORY}/tree/${TAG}"
+            }
+          }
+          EOF
+          )"

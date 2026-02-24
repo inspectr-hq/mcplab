@@ -1,0 +1,189 @@
+name: Bump Dependent Workspace Packages
+
+on:
+  repository_dispatch:
+    types: [workspace-package-released]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: "Released package name (e.g. @inspectr/mcplab-core)"
+        required: true
+        type: string
+      version:
+        description: "Released version (e.g. 0.1.2)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve released package and version
+        id: released
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PACKAGE: ${{ inputs.package_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          DISPATCH_PACKAGE: ${{ github.event.client_payload.package_name }}
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+          DISPATCH_REPO: ${{ github.event.client_payload.repo }}
+          DISPATCH_TAG_URL: ${{ github.event.client_payload.tag_url }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+
+          const eventName = process.env.EVENT_NAME;
+          let packageName = '';
+          let version = '';
+          let sourceRepo = process.env.GITHUB_REPO || '';
+          let sourceUrl = '';
+
+          if (eventName === 'workflow_dispatch') {
+            packageName = process.env.INPUT_PACKAGE || '';
+            version = process.env.INPUT_VERSION || '';
+          } else if (eventName === 'repository_dispatch') {
+            packageName = process.env.DISPATCH_PACKAGE || '';
+            version = process.env.DISPATCH_VERSION || '';
+            sourceRepo = process.env.DISPATCH_REPO || sourceRepo;
+            sourceUrl = process.env.DISPATCH_TAG_URL || '';
+          } else if (eventName === 'release') {
+            const tag = process.env.RELEASE_TAG || '';
+            const match = tag.match(/^(.*)@v?([^@]+)$/);
+            if (!match) {
+              console.error(`Release tag "${tag}" does not match "<package>@<version>" or "<package>@v<version>"`);
+              process.exit(1);
+            }
+            packageName = match[1];
+            version = match[2];
+            sourceUrl = process.env.RELEASE_URL || '';
+          }
+
+          version = version.replace(/^v/, '');
+          if (!packageName || !version) {
+            console.error('Missing package name or version from event payload');
+            process.exit(1);
+          }
+
+          const branchPackage = packageName
+            .replace(/^@/, '')
+            .replace(/[\/\s]+/g, '-')
+            .replace(/[^A-Za-z0-9._-]/g, '-');
+
+          const out = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(out, `package_name=${packageName}\n`);
+          fs.appendFileSync(out, `version=${version}\n`);
+          fs.appendFileSync(out, `branch_package=${branchPackage}\n`);
+          fs.appendFileSync(out, `source_repo=${sourceRepo}\n`);
+          fs.appendFileSync(out, `source_url=${sourceUrl}\n`);
+          NODE
+
+      - name: Update dependent package manifests
+        id: update
+        env:
+          RELEASED_PACKAGE: ${{ steps.released.outputs.package_name }}
+          RELEASED_VERSION: ${{ steps.released.outputs.version }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const releasedPackage = process.env.RELEASED_PACKAGE;
+          const releasedVersion = process.env.RELEASED_VERSION;
+          const targetRange = `^${releasedVersion}`;
+          const depFields = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+
+          const candidates = ['package.json'];
+          const packagesDir = path.join(process.cwd(), 'packages');
+          if (fs.existsSync(packagesDir)) {
+            for (const entry of fs.readdirSync(packagesDir)) {
+              candidates.push(path.join('packages', entry, 'package.json'));
+            }
+          }
+
+          const changedFiles = [];
+          const changedPackageNames = [];
+
+          for (const file of candidates) {
+            if (!fs.existsSync(file)) continue;
+            const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+            let changed = false;
+
+            for (const field of depFields) {
+              if (!pkg[field] || typeof pkg[field] !== 'object') continue;
+              if (Object.prototype.hasOwnProperty.call(pkg[field], releasedPackage) && pkg[field][releasedPackage] !== targetRange) {
+                pkg[field][releasedPackage] = targetRange;
+                changed = true;
+              }
+            }
+
+            if (changed) {
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+              changedFiles.push(file);
+              changedPackageNames.push(pkg.name || file);
+            }
+          }
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed=${changedFiles.length > 0}\n`);
+          if (changedFiles.length > 0) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed_files=${changedFiles.join(',')}\n`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed_packages=${changedPackageNames.join(', ')}\n`);
+          }
+          NODE
+
+      - name: Stop when no dependents use the released package
+        if: ${{ steps.update.outputs.changed != 'true' }}
+        run: |
+          echo "No workspace packages depend on ${{ steps.released.outputs.package_name }}. Nothing to do."
+
+      - name: Update root lockfile
+        if: ${{ steps.update.outputs.changed == 'true' }}
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Update nested lockfiles (if present)
+        if: ${{ steps.update.outputs.changed == 'true' }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a FILES <<< "${{ steps.update.outputs.changed_files }}"
+          for file in "${FILES[@]}"; do
+            dir="$(dirname "$file")"
+            lockfile="${dir}/package-lock.json"
+            if [ -f "$lockfile" ]; then
+              npm install --package-lock-only --ignore-scripts --prefix "$dir"
+            fi
+          done
+
+      - name: Create pull request
+        if: ${{ steps.update.outputs.changed == 'true' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/bump-${{ steps.released.outputs.branch_package }}-${{ steps.released.outputs.version }}
+          delete-branch: true
+          title: "chore: bump dependents for ${{ steps.released.outputs.package_name }}@${{ steps.released.outputs.version }}"
+          commit-message: "chore: bump dependents for ${{ steps.released.outputs.package_name }}@${{ steps.released.outputs.version }}"
+          labels: dependencies
+          body: |
+            Updates workspace dependents to use `${{ steps.released.outputs.package_name }}` version `${{ steps.released.outputs.version }}`.
+
+            Updated packages: ${{ steps.update.outputs.changed_packages }}
+
+            Source repo: `${{ steps.released.outputs.source_repo }}`
+            Source release/tag: ${{ steps.released.outputs.source_url || 'n/a' }}
