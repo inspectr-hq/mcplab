@@ -88,6 +88,18 @@ const Compare = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
+  const runScopeSummary = (r: EvalResult) => {
+    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
+    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
+    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
+    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+    return {
+      scenarioCount: scenarioIds.length,
+      agentCount: agentNames.length,
+      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+    };
+  };
+
   // All scenario IDs across selected runs
   const allScenarioIds = [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))];
 
@@ -137,6 +149,7 @@ const Compare = () => {
                     {sortIcon("id")}
                   </button>
                 </TableHead>
+                <TableHead>Evaluated</TableHead>
                 <TableHead>
                   <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
                     Timestamp
@@ -168,6 +181,19 @@ const Compare = () => {
                     />
                   </TableCell>
                   <TableCell className="font-mono text-xs">{r.id}</TableCell>
+                  <TableCell className="text-[11px] text-muted-foreground">
+                    {(() => {
+                      const scope = runScopeSummary(r);
+                      return (
+                        <div className="space-y-0.5">
+                          <div>
+                            Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                          </div>
+                          <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{new Date(r.timestamp).toLocaleString()}</TableCell>
                   <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                   <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>

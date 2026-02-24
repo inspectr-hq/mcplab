@@ -232,7 +232,10 @@ const ResultDetail = () => {
       return next;
     });
   };
-  const isRunSectionOpen = (key: string) => !collapsedRunSections.has(key);
+  const isRunSectionOpen = (key: string) => {
+    const defaultOpen = !key.endsWith(":conversation");
+    return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
+  };
   const comparisonByScenario = new Map(
     (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
   );

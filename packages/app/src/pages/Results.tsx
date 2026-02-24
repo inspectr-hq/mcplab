@@ -65,6 +65,18 @@ const Results = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
+  const runScopeSummary = (r: EvalResult) => {
+    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
+    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
+    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
+    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+    return {
+      scenarioCount: scenarioIds.length,
+      agentCount: agentNames.length,
+      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+    };
+  };
+
   const handleDeleteRun = async (runId: string) => {
     setDeletingRun(true);
     try {
@@ -129,6 +141,7 @@ const Results = () => {
                     {sortIcon("id")}
                   </button>
                 </TableHead>
+                <TableHead>Evaluated</TableHead>
                 <TableHead>
                   <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
                     Timestamp
@@ -153,7 +166,6 @@ const Results = () => {
                     {sortIcon("avgToolCalls")}
                   </button>
                 </TableHead>
-                <TableHead>Config Hash</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -161,7 +173,25 @@ const Results = () => {
               {sorted.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">{r.id}</Link>
+                    <div className="space-y-1">
+                      <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">{r.id}</Link>
+                      {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-[11px] text-muted-foreground">
+                    {(() => {
+                      const scope = runScopeSummary(r);
+                      return (
+                        <div className="space-y-0.5">
+                          <div>
+                            Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                          </div>
+                          <div className="font-mono text-xs text-foreground/80">
+                            {scope.scenarioPreview}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(r.timestamp).toLocaleString()}</div>
@@ -169,7 +199,6 @@ const Results = () => {
                   <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                   <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                   <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(1)}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{r.configHash.slice(0, 8)}…</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
