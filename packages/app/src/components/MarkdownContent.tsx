@@ -4,13 +4,15 @@ import { cn } from "@/lib/utils";
 export function MarkdownContent({
   text,
   variant = "assistant",
+  className,
 }: {
   text: string;
   variant?: "assistant" | "system";
+  className?: string;
 }) {
   const blocks = parseMarkdownBlocks(text);
   return (
-    <div className={cn("space-y-2", variant === "system" && "text-xs")}>
+    <div className={cn("space-y-2", variant === "system" && "text-xs", className)}>
       {blocks.map((block, index) => (
         <Fragment key={`md-${index}`}>{renderMarkdownBlock(block, index, variant)}</Fragment>
       ))}

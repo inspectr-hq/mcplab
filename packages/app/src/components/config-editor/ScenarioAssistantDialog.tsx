@@ -1,11 +1,10 @@
 import { Fragment, useEffect, useState, useRef } from "react";
-import { Bot, CheckCircle2, Loader2, Minimize2, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
+import { Bot, ChevronDown, CheckCircle2, Loader2, Minimize2, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -63,6 +62,7 @@ export function ScenarioAssistantDialog({
     defaultAssistantAgentName || agents[0]?.name || ""
   );
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const initialMessageSentRef = useRef<string | null>(null);
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
@@ -195,6 +195,14 @@ export function ScenarioAssistantDialog({
     session?.pendingToolCalls.length,
     session?.warnings.length
   ]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${Math.max(40, next)}px`;
+  }, [input, open]);
 
   const canUseAssistant =
     agents.length > 0 && scenario.serverIds.length > 0 && Boolean(selectedAssistantAgentName);
@@ -522,21 +530,48 @@ export function ScenarioAssistantDialog({
                     </Fragment>
                   ))}
                   {(session?.pendingToolCalls ?? []).map((call) => (
-                    <div key={call.id} className="rounded-md border border-dashed p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm font-medium">{call.server}::{call.tool}</div>
-                        <Badge variant="outline">{call.status}</Badge>
+                    <details key={call.id} className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="truncate text-sm font-medium">
+                              {`Tool call ${call.tool}`}
+                            </span>
+                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-900">
+                              Needs approval
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                        <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                        </pre>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs"
+                            disabled={loading}
+                            onClick={() => void handleDeny(call.id)}
+                          >
+                            Deny
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            disabled={loading}
+                            onClick={() => void handleApprove(call.id)}
+                          >
+                            Approve & Run
+                          </Button>
+                        </div>
                       </div>
-                      <pre className="max-h-40 overflow-auto rounded bg-muted p-2 text-xs">{JSON.stringify(call.arguments, null, 2)}</pre>
-                      <div className="flex gap-2">
-                        <Button type="button" size="sm" onClick={() => void handleApprove(call.id)} disabled={loading}>
-                          Approve & Run
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void handleDeny(call.id)} disabled={loading}>
-                          Deny
-                        </Button>
-                      </div>
-                    </div>
+                    </details>
                   ))}
                   {!session && loading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -548,14 +583,17 @@ export function ScenarioAssistantDialog({
                 </div>
               </ScrollArea>
 
-              <div className="flex gap-2">
-                <Input
+              <div className="flex items-end gap-2">
+                <Textarea
+                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Get assistance with creating or refining this scenario ..."
                   disabled={!sessionId || loading}
+                  rows={1}
+                  className="min-h-10 max-h-40 resize-none text-sm"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       void sendMessage(input);
                     }

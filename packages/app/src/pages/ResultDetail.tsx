@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -1243,7 +1244,7 @@ const ResultDetail = () => {
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </summary>
                           <div className="space-y-2 border-t border-border/50 px-3 py-2">
-                            <MarkdownText text={message.text} className="text-sm" />
+                            <MarkdownContent text={message.text} className="text-sm" />
                             {linkedPendingToolCall && (
                               <>
                                 <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
@@ -1298,7 +1299,7 @@ const ResultDetail = () => {
                             {isTool ? "Tool" : "Assistant"}
                           </p>
                         )}
-                        <MarkdownText text={message.text} className="text-sm" />
+                        <MarkdownContent text={message.text} className="text-sm" />
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
@@ -1674,7 +1675,7 @@ function ExpandableText({ text, maxLength, className }: { text: string; maxLengt
 
   return (
     <div>
-      <MarkdownText text={display} className={className} />
+      <MarkdownContent text={display} className={className} />
       {isLong && (
         <button
           type="button"
@@ -1686,265 +1687,6 @@ function ExpandableText({ text, maxLength, className }: { text: string; maxLengt
       )}
     </div>
   );
-}
-
-type MarkdownBlock =
-  | { type: "paragraph"; text: string }
-  | { type: "heading"; level: number; text: string }
-  | { type: "hr" }
-  | { type: "list"; ordered: boolean; items: string[] }
-  | { type: "code"; lang?: string; code: string }
-  | { type: "table"; headers: string[]; rows: string[][] };
-
-function MarkdownText({ text, className }: { text: string; className?: string }) {
-  const blocks = parseMarkdownBlocks(text);
-  return (
-    <div className={`space-y-2 ${className ?? ""}`}>
-      {blocks.map((block, index) => renderMarkdownBlock(block, index))}
-    </div>
-  );
-}
-
-function parseMarkdownBlocks(text: string): MarkdownBlock[] {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const blocks: MarkdownBlock[] = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    if (/^---+$/.test(trimmed)) {
-      blocks.push({ type: "hr" });
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,4})\s+(.*)$/);
-    if (headingMatch) {
-      blocks.push({
-        type: "heading",
-        level: headingMatch[1].length,
-        text: headingMatch[2],
-      });
-      continue;
-    }
-
-    const codeMatch = trimmed.match(/^```(\w+)?\s*$/);
-    if (codeMatch) {
-      const codeLines: string[] = [];
-      let j = i + 1;
-      for (; j < lines.length; j += 1) {
-        if (lines[j].trim().startsWith("```")) break;
-        codeLines.push(lines[j]);
-      }
-      blocks.push({ type: "code", lang: codeMatch[1], code: codeLines.join("\n") });
-      i = j;
-      continue;
-    }
-
-    if (looksLikeMarkdownTable(lines, i)) {
-      const headers = splitTableRow(lines[i]);
-      const rows: string[][] = [];
-      let j = i + 2;
-      while (j < lines.length && lines[j].includes("|") && lines[j].trim()) {
-        rows.push(splitTableRow(lines[j]));
-        j += 1;
-      }
-      blocks.push({ type: "table", headers, rows });
-      i = j - 1;
-      continue;
-    }
-
-    const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
-    if (orderedMatch) {
-      const items = [orderedMatch[2]];
-      let j = i + 1;
-      while (j < lines.length) {
-        const m = lines[j].trim().match(/^\d+\.\s+(.*)$/);
-        if (!m) break;
-        items.push(m[1]);
-        j += 1;
-      }
-      blocks.push({ type: "list", ordered: true, items });
-      i = j - 1;
-      continue;
-    }
-
-    const bulletMatch = trimmed.match(/^[-*+]\s+(.*)$/);
-    if (bulletMatch) {
-      const items = [bulletMatch[1]];
-      let j = i + 1;
-      while (j < lines.length) {
-        const m = lines[j].trim().match(/^[-*+]\s+(.*)$/);
-        if (!m) break;
-        items.push(m[1]);
-        j += 1;
-      }
-      blocks.push({ type: "list", ordered: false, items });
-      i = j - 1;
-      continue;
-    }
-
-    const paragraphLines = [line];
-    let j = i + 1;
-    while (j < lines.length) {
-      const nextTrimmed = lines[j].trim();
-      if (
-        !nextTrimmed ||
-        /^---+$/.test(nextTrimmed) ||
-        /^#{1,4}\s+/.test(nextTrimmed) ||
-        looksLikeMarkdownTable(lines, j) ||
-        /^\d+\.\s+/.test(nextTrimmed) ||
-        /^[-*+]\s+/.test(nextTrimmed) ||
-        /^```/.test(nextTrimmed)
-      ) {
-        break;
-      }
-      paragraphLines.push(lines[j]);
-      j += 1;
-    }
-    blocks.push({ type: "paragraph", text: paragraphLines.join("\n") });
-    i = j - 1;
-  }
-
-  return blocks.length > 0 ? blocks : [{ type: "paragraph", text }];
-}
-
-function looksLikeMarkdownTable(lines: string[], index: number): boolean {
-  if (index + 1 >= lines.length) return false;
-  const header = lines[index].trim();
-  const separator = lines[index + 1].trim();
-  if (!header.includes("|")) return false;
-  return /^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(separator);
-}
-
-function splitTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-
-function renderMarkdownBlock(block: MarkdownBlock, index: number) {
-  if (block.type === "hr") {
-    return <hr key={`hr-${index}`} className="border-border/60" />;
-  }
-  if (block.type === "heading") {
-    const className =
-      block.level === 1
-        ? "text-sm font-semibold"
-        : block.level === 2
-          ? "text-xs font-semibold"
-          : "text-xs font-medium";
-    return (
-      <h4 key={`h-${index}`} className={className}>
-        {renderInlineMarkdown(block.text, `${index}-h`)}
-      </h4>
-    );
-  }
-  if (block.type === "paragraph") {
-    return (
-      <p key={`p-${index}`} className="whitespace-pre-wrap leading-relaxed">
-        {renderInlineMarkdown(block.text, `${index}-p`)}
-      </p>
-    );
-  }
-  if (block.type === "code") {
-    return (
-      <div key={`code-${index}`} className="rounded-md border bg-muted/70">
-        {block.lang && (
-          <div className="border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-            {block.lang}
-          </div>
-        )}
-        <pre className="max-h-64 overflow-auto p-2 text-[11px]">
-          <code>{block.code}</code>
-        </pre>
-      </div>
-    );
-  }
-  if (block.type === "list") {
-    const Tag = block.ordered ? "ol" : "ul";
-    return (
-      <Tag
-        key={`list-${index}`}
-        className={`space-y-1 pl-5 ${block.ordered ? "list-decimal" : "list-disc"}`}
-      >
-        {block.items.map((item, itemIndex) => (
-          <li key={`${index}-li-${itemIndex}`} className="leading-relaxed">
-            {renderInlineMarkdown(item, `${index}-li-${itemIndex}`)}
-          </li>
-        ))}
-      </Tag>
-    );
-  }
-  if (block.type === "table") {
-    return (
-      <div key={`table-${index}`} className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[420px] border-collapse text-[11px]">
-          <thead className="bg-muted/40">
-            <tr>
-              {block.headers.map((header, headerIndex) => (
-                <th
-                  key={`${index}-th-${headerIndex}`}
-                  className="border-b px-2 py-1 text-left font-semibold align-top"
-                >
-                  {renderInlineMarkdown(header, `${index}-thc-${headerIndex}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.map((row, rowIndex) => (
-              <tr key={`${index}-row-${rowIndex}`} className="border-t">
-                {row.map((cell, cellIndex) => (
-                  <td key={`${index}-td-${rowIndex}-${cellIndex}`} className="px-2 py-1 align-top">
-                    {renderInlineMarkdown(cell, `${index}-tdc-${rowIndex}-${cellIndex}`)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  return null;
-}
-
-function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
-  const parts = text
-    .split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g)
-    .filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code key={`${keyBase}-${index}`} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
-    }
-    const linkMatch = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
-    if (linkMatch) {
-      return (
-        <a
-          key={`${keyBase}-${index}`}
-          href={linkMatch[2]}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="text-primary underline underline-offset-2 hover:opacity-80"
-        >
-          {linkMatch[1]}
-        </a>
-      );
-    }
-    return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
-  });
 }
 
 function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
