@@ -43,14 +43,21 @@ const buildCrumbs = (pathname: string): Crumb[] => {
   if (matchPath("/tool-analysis-results/:id", pathname)) {
     const match = matchPath("/tool-analysis-results/:id", pathname);
     crumbs.push(
-      { label: "Analyze MCP Tools", to: "/tool-analysis" },
-      { label: "Results", to: "/tool-analysis-results" },
+      { label: "Tool Analysis Results", to: "/tool-analysis-results" },
       { label: match?.params.id ?? "Report" }
     );
     return crumbs;
   }
   if (matchPath("/tool-analysis-results", pathname)) {
-    crumbs.push({ label: "Analyze MCP Tools", to: "/tool-analysis" }, { label: "Results" });
+    crumbs.push({ label: "Tool Analysis Results" });
+    return crumbs;
+  }
+  if (matchPath("/markdown-reports/view", pathname)) {
+    crumbs.push({ label: "Markdown Reports", to: "/markdown-reports" }, { label: "View Report" });
+    return crumbs;
+  }
+  if (matchPath("/markdown-reports", pathname)) {
+    crumbs.push({ label: "Markdown Reports" });
     return crumbs;
   }
   if (matchPath("/oauth-debugger", pathname)) {
@@ -58,11 +65,11 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     return crumbs;
   }
   if (matchPath("/results/:id", pathname)) {
-    crumbs.push({ label: "Results", to: "/results" }, { label: "Result" });
+    crumbs.push({ label: "Evaluation Results", to: "/results" }, { label: "Result" });
     return crumbs;
   }
   if (matchPath("/results", pathname)) {
-    crumbs.push({ label: "Results" });
+    crumbs.push({ label: "Evaluation Results" });
     return crumbs;
   }
   if (matchPath("/run", pathname)) {
@@ -92,11 +99,11 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     return crumbs;
   }
   if (matchPath("/compare", pathname)) {
-    crumbs.push({ label: "Compare" });
+    crumbs.push({ label: "Compare Evaluations" });
     return crumbs;
   }
   if (matchPath("/compare/results", pathname)) {
-    crumbs.push({ label: "Compare", to: "/compare" }, { label: "Full Result Compare" });
+    crumbs.push({ label: "Compare Evaluations", to: "/compare" }, { label: "Full Result Compare" });
     return crumbs;
   }
 
