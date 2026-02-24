@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useRef } from "react";
-import { Bot, CheckCircle2, Loader2, Minimize2, Send, Sparkles, User, Wrench, X } from "lucide-react";
+import { Bot, CheckCircle2, Loader2, Minimize2, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -644,7 +644,9 @@ function AssistantChatMessageRow({
   if (role === "system") {
     return (
       <div className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        <div className="mb-1 font-semibold uppercase tracking-wide">System</div>
+        <div className="mb-1 flex items-center gap-1 text-amber-900/90">
+          <RectangleEllipsis className="h-3.5 w-3.5" />
+        </div>
         <MarkdownContent text={message.text} variant="system" />
       </div>
     );
@@ -667,7 +669,7 @@ function AssistantChatMessageRow({
         }`}
       >
         <div className={`mb-1 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "justify-end" : ""}`}>
-          <span>{isUser ? "You" : "Assistant"}</span>
+          {!isUser && <span>Assistant</span>}
           <span className="font-normal">{new Date(message.createdAt).toLocaleTimeString()}</span>
         </div>
         {isUser ? (

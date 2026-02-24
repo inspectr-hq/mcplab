@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1209,9 +1209,10 @@ const ResultDetail = () => {
                     !isAssistantToolRequest &&
                     isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
                   if (isAssistantToolRequest) {
+                    const displayToolName = toolStepName ?? toolStepPublicName ?? "unknown_tool";
                     const compactTitle = toolStepName
                       ? toolStepName.replace(/^mcplab_/, "").replace(/_/g, " ")
-                      : toolStepPublicName ?? "Tool call";
+                      : toolStepPublicName ?? "tool call";
                     return (
                       <div key={message.id ?? `${message.role}-${index}`} className="flex items-start gap-2">
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
@@ -1222,7 +1223,9 @@ const ResultDetail = () => {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span className="truncate text-sm font-medium">{compactTitle}</span>
+                                <span className="truncate text-sm font-medium">
+                                  {`Tool call ${displayToolName}`}
+                                </span>
                                 <span
                                   className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                                     linkedPendingToolCall
@@ -1230,14 +1233,9 @@ const ResultDetail = () => {
                                       : "bg-muted text-muted-foreground"
                                   }`}
                                 >
-                                  {toolStepName ?? toolStepPublicName ?? "tool call"}
+                                  {linkedPendingToolCall ? "Needs approval" : "Completed"}
                                 </span>
                               </div>
-                              {(toolStepServer || toolStepName) && (
-                                <p className="mt-1 break-all text-[11px] text-muted-foreground">
-                                  {toolStepServer ?? "mcplab"}::{toolStepName ?? toolStepPublicName ?? "unknown"}
-                                </p>
-                              )}
                             </div>
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </summary>
@@ -1280,7 +1278,7 @@ const ResultDetail = () => {
                     <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                       {!isUser && (
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                          <Bot className="h-3 w-3" />
+                          {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                         </div>
                       )}
                       <div className={`max-w-[92%] rounded-md border p-3 text-sm ${
@@ -1292,9 +1290,11 @@ const ResultDetail = () => {
                               ? "border-blue-300/30 bg-blue-50/50"
                               : "border-border/80 bg-background shadow-sm"
                       }`}>
-                        <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : "Assistant"}
-                        </p>
+                        {!(isUser || isSystem) && (
+                          <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
+                            {isTool ? "Tool" : "Assistant"}
+                          </p>
+                        )}
                         <MarkdownText text={message.text} className="text-sm" />
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">

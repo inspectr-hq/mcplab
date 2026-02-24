@@ -882,10 +882,22 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe('Optional content truncation limit.')
+          .describe('Optional content truncation limit.'),
+        line_start: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('1-indexed line to start reading from (inclusive). Use with line_end to read a specific range.'),
+        line_end: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('1-indexed line to stop reading at (inclusive).')
       }
     },
-    async ({ runs_dir, run_id, artifact, max_chars }) => {
+    async ({ runs_dir, run_id, artifact, max_chars, line_start, line_end }) => {
       return withToolHandling(async () => {
         const base = resolveRunsDir(runs_dir);
         const readBase = resolveExistingRunReadDir(base, run_id === 'LATEST' ? undefined : run_id);
@@ -898,12 +910,22 @@ export function registerTools(server: McpServer): void {
           throw new Error(`Artifact not found: ${fullPath}`);
         }
         const raw = readFileSync(fullPath, 'utf8');
-        const content = truncate(raw, max_chars ?? 20_000);
+        let sliced = raw;
+        let lineRangeNote: string | undefined;
+        if (line_start !== undefined || line_end !== undefined) {
+          const allLines = raw.split('\n');
+          const from = Math.max(0, (line_start ?? 1) - 1);
+          const to = line_end !== undefined ? Math.min(allLines.length, line_end) : allLines.length;
+          sliced = allLines.slice(from, to).join('\n');
+          lineRangeNote = `lines ${from + 1}–${to} of ${allLines.length}`;
+        }
+        const content = truncate(sliced, max_chars ?? 20_000);
         const structured: Record<string, unknown> = {
           path: fullPath,
           run_id: resolvedRunId,
           artifact,
-          truncated: content.length < raw.length,
+          ...(lineRangeNote ? { line_range: lineRangeNote } : {}),
+          truncated: content.length < sliced.length,
           content
         };
         if (artifact === 'results.json') {
@@ -921,6 +943,91 @@ export function registerTools(server: McpServer): void {
           }
         }
         return ok(`Read ${artifact} from run ${resolvedRunId}`, structured);
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_grep_run_artifact',
+    {
+      description:
+        'Search for text within a MCPLab run artifact and return matching lines with surrounding context. Use this to find specific sections in large files (e.g. a tool name in report.html) without reading the full file. Returns line numbers so you can follow up with mcplab_read_run_artifact line_start/line_end to read the full section.',
+      inputSchema: {
+        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_id: z.string().describe("Run id directory name or 'LATEST'."),
+        artifact: z
+          .enum(['results.json', 'summary.md', 'trace.jsonl', 'resolved-config.yaml', 'report.html'])
+          .describe('Artifact filename to search.'),
+        query: z.string().describe('Text to search for (case-insensitive by default).'),
+        context_lines: z
+          .number()
+          .int()
+          .min(0)
+          .max(50)
+          .optional()
+          .describe('Lines of context before and after each match (default 5).'),
+        max_matches: z
+          .number()
+          .int()
+          .positive()
+          .max(50)
+          .optional()
+          .describe('Maximum number of matches to return (default 10).'),
+        case_sensitive: z.boolean().optional().describe('Case-sensitive search (default false).')
+      }
+    },
+    async ({ runs_dir, run_id, artifact, query, context_lines, max_matches, case_sensitive }) => {
+      return withToolHandling(async () => {
+        const base = resolveRunsDir(runs_dir);
+        const readBase = resolveExistingRunReadDir(base, run_id === 'LATEST' ? undefined : run_id);
+        const resolvedRunId = run_id === 'LATEST' ? latestRunId(readBase) : run_id;
+        if (!resolvedRunId) throw new Error(`No runs found in ${base}`);
+
+        const fullPath = join(readBase, resolvedRunId, artifact);
+        if (!existsSync(fullPath)) throw new Error(`Artifact not found: ${fullPath}`);
+
+        const lines = readFileSync(fullPath, 'utf8').split('\n');
+        const q = case_sensitive ? query.trim() : query.trim().toLowerCase();
+        if (!q) throw new Error('query must not be empty');
+        const ctx = context_lines ?? 5;
+        const limit = max_matches ?? 10;
+
+        const matchIndices: number[] = [];
+        for (let i = 0; i < lines.length; i++) {
+          const hay = case_sensitive ? lines[i] : lines[i].toLowerCase();
+          if (hay.includes(q)) {
+            matchIndices.push(i);
+            if (matchIndices.length >= limit) break;
+          }
+        }
+
+        const matches = matchIndices.map((matchIdx) => {
+          const start = Math.max(0, matchIdx - ctx);
+          const end = Math.min(lines.length - 1, matchIdx + ctx);
+          return {
+            match_line: matchIdx + 1,
+            context_start_line: start + 1,
+            context_end_line: end + 1,
+            lines: lines.slice(start, end + 1).map((text, offset) => ({
+              line: start + offset + 1,
+              text,
+              is_match: start + offset === matchIdx
+            }))
+          };
+        });
+
+        return ok(
+          `Found ${matchIndices.length} match(es) for "${query}" in ${artifact} (run ${resolvedRunId})`,
+          {
+            run_id: resolvedRunId,
+            artifact,
+            query,
+            total_lines: lines.length,
+            match_count: matches.length,
+            truncated_at_limit: matchIndices.length >= limit,
+            matches
+          }
+        );
       });
     }
   );

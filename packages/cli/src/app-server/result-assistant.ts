@@ -102,24 +102,14 @@ export async function handleResultAssistantRoutes(params: {
 
   const continueWithAutoApprovedReads = async (session: ResultAssistantSession) => {
     let output = await continueResultAssistantTurn(session);
-    const autoApprovedCalls: string[] = [];
     for (let i = 0; i < 10; i += 1) {
       const pending = output.response.pendingToolCall;
       if (output.response.type !== 'tool_call_request' || !pending) break;
       if (!RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)) break;
-      autoApprovedCalls.push(`${pending.server}::${pending.tool}`);
       await executePendingToolCall(session, pending, 'Auto-approved read-only', {
         emitApprovalChatMessage: false
       });
       output = await continueResultAssistantTurn(session);
-    }
-    if (autoApprovedCalls.length > 0) {
-      session.chatMessages.push({
-        id: makeMsgId(),
-        role: 'system',
-        text: `Auto-approved read-only tool calls (${autoApprovedCalls.length}): ${autoApprovedCalls.join(', ')}`,
-        createdAt: new Date().toISOString()
-      });
     }
     if (
       output.response.type === 'tool_call_request' &&
