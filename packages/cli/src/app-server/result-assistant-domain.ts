@@ -1,13 +1,11 @@
 import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
-import { McpClientManager } from '@inspectr/mcplab-core';
+import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
-  chatWithJsonRetry,
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   newAssistantEntityId,
   touchSession,
   truncateJson,
-  withTimeout
 } from './assistant-common.js';
 
 interface ParsedAssistantToolCall {
@@ -66,6 +64,11 @@ const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_write_markdown_report',
   'mcplab_list_runs',
   'mcplab_read_run_artifact',
+  'mcplab_trace_stats',
+  'mcplab_trace_get_final_answers',
+  'mcplab_trace_get_conversation',
+  'mcplab_trace_list_events',
+  'mcplab_trace_search',
   'mcplab_list_tool_analysis_results',
   'mcplab_read_tool_analysis_result',
   'mcplab_list_library',
@@ -185,7 +188,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     text: modelOutput.text,
     createdAt: new Date().toISOString()
   });
-  session.llmMessages.push({ role: 'assistant', content: JSON.stringify(modelOutput) });
+  session.llmMessages.push({ role: 'assistant', content: modelOutput.text });
   touchResultAssistantSession(session);
   return {
     session: resultAssistantSessionView(session),
@@ -198,11 +201,20 @@ export async function executeResultAssistantToolCall(
   pending: ResultAssistantPendingToolCall
 ): Promise<unknown> {
   const timeoutMs = 10_000;
-  return withTimeout(
-    () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
-    timeoutMs,
-    `Tool call timed out after ${timeoutMs}ms`
-  );
+  let handle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    handle = setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      session.mcp.callTool(pending.server, pending.tool, pending.arguments).finally(() => {
+        if (handle) clearTimeout(handle);
+      }),
+      timeout
+    ]);
+  } finally {
+    if (handle) clearTimeout(handle);
+  }
 }
 
 export function summarizeToolResultForResultAssistant(result: unknown): string {
@@ -232,12 +244,10 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'If you need a tool, request exactly one tool call and wait for approval.',
+    'Respond in plain text. If you need to call a tool, use the available tools directly.',
     omittedScenarioCount > 0
       ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
       : 'All scenarios are included in the prompt context.',
-    'Respond ONLY as JSON with one of these envelopes:',
-    `{"type":"assistant_message","text":"..."}`,
-    `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}}}`,
     `Run result context: ${JSON.stringify({
       run_id: session.resultSummary.metadata.run_id,
       timestamp: session.resultSummary.metadata.timestamp,
@@ -260,40 +270,24 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
 async function resultAssistantChatModel(
   session: ResultAssistantSession
 ): Promise<ParsedModelOutput> {
-  return chatWithJsonRetry({
+  const response = await chatWithAgent({
     agent: session.agentConfig,
     messages: session.llmMessages,
     tools: session.tools,
-    system: resultAssistantSystemPrompt(session),
-    parse: parseModelOutput,
-    toolCallFallbackText: (toolName) =>
-      `I need to call '${toolName}' to help with this request.`
+    system: resultAssistantSystemPrompt(session)
   });
-}
-
-function parseModelOutput(text: string): ParsedModelOutput {
-  const cleaned = text.trim();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (!fenced) throw new Error('Assistant returned invalid JSON');
-    parsed = JSON.parse(fenced[1]);
+  if (response.tool_calls && response.tool_calls.length > 0) {
+    const [first, ...rest] = response.tool_calls;
+    const baseText =
+      response.content?.trim() || `I need to call '${first.name}' to help with this request.`;
+    return {
+      type: 'tool_call_request',
+      text:
+        rest.length > 0
+          ? `${baseText}\n\nNote: I requested multiple tool calls, but this UI supports one tool call at a time. Please approve this one first, then I can request the next one if still needed.`
+          : baseText,
+      toolCall: { name: first.name, arguments: first.arguments ?? {} }
+    };
   }
-  if (!parsed || typeof parsed !== 'object')
-    throw new Error('Assistant response must be a JSON object');
-  const obj = parsed as Partial<ParsedModelOutput>;
-  if (obj.type !== 'assistant_message' && obj.type !== 'tool_call_request') {
-    throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
-  }
-  if (typeof obj.text !== 'string') throw new Error('Assistant response missing text');
-  if (obj.type === 'tool_call_request') {
-    if (!obj.toolCall || typeof obj.toolCall !== 'object') throw new Error('toolCall is required');
-    if (typeof obj.toolCall.name !== 'string' || !obj.toolCall.name.trim()) {
-      throw new Error('toolCall.name must be a non-empty string');
-    }
-  }
-  return obj as ParsedModelOutput;
+  return { type: 'assistant_message', text: response.content?.trim() ?? '' };
 }

@@ -47,7 +47,7 @@ const ResultDetail = () => {
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
-  const [openConversations, setOpenConversations] = useState<Set<string>>(new Set());
+  const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
   const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
@@ -218,16 +218,21 @@ const ResultDetail = () => {
     });
   };
 
-  const toggleConversation = (key: string) => {
-    setOpenConversations((prev) => {
+  const runSectionKey = (
+    scenarioId: string,
+    agentName: string,
+    runIndex: number,
+    section: "checks" | "extracts" | "tools" | "final" | "conversation"
+  ) => `${scenarioId}:${agentName}:${runIndex}:${section}`;
+  const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
+  const toggleRunSection = (key: string) => {
+    setCollapsedRunSections((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
   };
-
-  const runKey = (scenarioId: string, runIndex: number) => `${scenarioId}:${runIndex}`;
-  const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
+  const isRunSectionOpen = (key: string) => !collapsedRunSections.has(key);
   const comparisonByScenario = new Map(
     (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
   );
@@ -864,176 +869,246 @@ const ResultDetail = () => {
                                     </div>
                                   )}
                                   {checks.length > 0 && (
-                                    <div className="rounded-md border bg-muted/20 p-2">
-                                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                          Checks
-                                        </p>
-                                        <Badge
-                                          variant="outline"
-                                          className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
-                                        >
-                                          {passedChecks.length} passed
-                                        </Badge>
-                                        <Badge
-                                          variant="outline"
-                                          className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
-                                        >
-                                          {failedChecks.length} failed
-                                        </Badge>
-                                      </div>
-                                      <div className="space-y-1">
-                                        {checks.map((check, idx) => (
-                                          <div
-                                            key={`${check.rule.type}-${check.rule.value}-${idx}`}
-                                            className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
-                                              check.status === "failed"
-                                                ? "border-destructive/20 bg-destructive/5"
-                                                : "border-success/20 bg-success/5"
-                                            }`}
-                                          >
-                                            <div className="min-w-0">
-                                              <div className="flex items-center gap-2">
-                                                {check.status === "failed" ? (
-                                                  <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                                                ) : (
-                                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
-                                                )}
-                                                <span className="font-medium">{formatEvalRuleLabel(check.rule)}</span>
-                                              </div>
-                                              {check.failureReason && (
-                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
-                                                  {formatFailureReason(check.failureReason)}
-                                                </p>
-                                              )}
-                                            </div>
+                                    <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
+                                    >
+                                      <div className="rounded-md border bg-muted/20 p-2">
+                                        <CollapsibleTrigger asChild>
+                                          <button type="button" className="mb-2 flex w-full flex-wrap items-center gap-2 text-left">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks")) ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              Checks
+                                            </p>
                                             <Badge
                                               variant="outline"
-                                              className={`shrink-0 text-[10px] ${
-                                                check.status === "failed"
-                                                  ? "border-destructive/30 text-destructive"
-                                                  : "border-success/30 text-success"
-                                              }`}
+                                              className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
                                             >
-                                              {check.status}
+                                              {passedChecks.length} passed
                                             </Badge>
+                                            <Badge
+                                              variant="outline"
+                                              className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
+                                            >
+                                              {failedChecks.length} failed
+                                            </Badge>
+                                          </button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                          <div className="space-y-1">
+                                            {checks.map((check, idx) => (
+                                              <div
+                                                key={`${check.rule.type}-${check.rule.value}-${idx}`}
+                                                className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                                  check.status === "failed"
+                                                    ? "border-destructive/20 bg-destructive/5"
+                                                    : "border-success/20 bg-success/5"
+                                                }`}
+                                              >
+                                                <div className="min-w-0">
+                                                  <div className="flex items-center gap-2">
+                                                    {check.status === "failed" ? (
+                                                      <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                    ) : (
+                                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                                                    )}
+                                                    <span className="font-medium">{formatEvalRuleLabel(check.rule)}</span>
+                                                  </div>
+                                                  {check.failureReason && (
+                                                    <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                      {formatFailureReason(check.failureReason)}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                <Badge
+                                                  variant="outline"
+                                                  className={`shrink-0 text-[10px] ${
+                                                    check.status === "failed"
+                                                      ? "border-destructive/30 text-destructive"
+                                                      : "border-success/30 text-success"
+                                                  }`}
+                                                >
+                                                  {check.status}
+                                                </Badge>
+                                              </div>
+                                            ))}
                                           </div>
-                                        ))}
+                                        </CollapsibleContent>
                                       </div>
-                                    </div>
+                                    </Collapsible>
                                   )}
                                       </>
                                     );
                                   })()}
-                                  <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
-                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                      <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                        <Layers className="h-3.5 w-3.5 text-violet-600" />
-                                        Extracted values
-                                      </p>
-                                      <Badge variant="outline" className="h-5 text-[10px]">
-                                        {Object.keys(run.extractedValues ?? {}).length} total
-                                      </Badge>
-                                    </div>
-                                    {Object.keys(run.extractedValues ?? {}).length === 0 ? (
-                                      <p className="text-xs text-muted-foreground">No extracted values captured for this run.</p>
-                                    ) : (
-                                      <div className="grid gap-1.5 sm:grid-cols-2">
-                                        {Object.entries(run.extractedValues ?? {}).map(([key, value]) => (
-                                          <div key={key} className="rounded-md border bg-background px-2 py-1.5 text-xs">
-                                            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              {key}
-                                            </div>
-                                            <div className="font-mono break-all text-foreground">
-                                              {value === null ? "null" : String(value)}
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
-                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                      <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                        <Wrench className="h-3.5 w-3.5 text-sky-600" />
-                                        Tool call sequence
-                                      </p>
-                                      <Badge variant="outline" className="h-5 text-[10px]">
-                                        {run.toolCalls.length} total
-                                      </Badge>
-                                    </div>
-                                    <div className="flex flex-wrap gap-1">
-                                      {run.toolCalls.map((tc, i) => (
-                                        <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
-                                          <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                          {tc.name}
-                                          <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
-                                    <p className="mb-2 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                      <Bot className="h-3.5 w-3.5" />
-                                      Final answer
-                                    </p>
-                                    <ExpandableText
-                                      text={run.finalAnswer || "No final answer captured."}
-                                      maxLength={1200}
-                                      className="text-xs text-foreground"
-                                    />
-                                  </div>
-                                  <div className="rounded-md border bg-muted/10 p-2">
-                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                        Conversation trace
-                                      </p>
-                                      <div className="flex flex-wrap gap-2">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 px-2 text-xs"
-                                          onClick={() => toggleConversation(runKey(sc.scenarioId, run.runIndex))}
-                                        >
-                                          {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? "Hide conversation" : "Show conversation"}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 gap-1.5 px-2 text-xs"
-                                          onClick={() =>
-                                            openAssistantWithPrompt(
-                                              `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
-                                            , { scenarioId: sc.scenarioId })
-                                          }
-                                        >
-                                          <Sparkles className="h-3.5 w-3.5" />
-                                          Ask Assistant
-                                        </Button>
-                                      </div>
-                                    </div>
-                                    {openConversations.has(runKey(sc.scenarioId, run.runIndex)) ? (
-                                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                                        {run.conversation.length === 0 ? (
-                                          <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
-                                        ) : (
-                                          run.conversation.map((item) => (
-                                            <ConversationRow
-                                              key={item.id}
-                                              item={item}
-                                              fallbackUserPrompt={scenarioDefinitionByResultId.get(sc.scenarioId)?.prompt}
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
+                                  >
+                                    <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts")) ? "rotate-180" : ""
+                                              }`}
                                             />
-                                          ))
+                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              <Layers className="h-3.5 w-3.5 text-violet-600" />
+                                              Extracted values
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline" className="h-5 text-[10px]">
+                                            {Object.keys(run.extractedValues ?? {}).length} total
+                                          </Badge>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        {Object.keys(run.extractedValues ?? {}).length === 0 ? (
+                                          <p className="text-xs text-muted-foreground">No extracted values captured for this run.</p>
+                                        ) : (
+                                          <div className="grid gap-1.5 sm:grid-cols-2">
+                                            {Object.entries(run.extractedValues ?? {}).map(([key, value]) => (
+                                              <div key={key} className="rounded-md border bg-background px-2 py-1.5 text-xs">
+                                                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  {key}
+                                                </div>
+                                                <div className="font-mono break-all text-foreground">
+                                                  {value === null ? "null" : String(value)}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
                                         )}
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
+                                  >
+                                    <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools")) ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              <Wrench className="h-3.5 w-3.5 text-sky-600" />
+                                              Tool call sequence
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline" className="h-5 text-[10px]">
+                                            {run.toolCalls.length} total
+                                          </Badge>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        <div className="flex flex-wrap gap-1">
+                                          {run.toolCalls.map((tc, i) => (
+                                            <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
+                                              <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                              {tc.name}
+                                              <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
+                                  >
+                                    <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full items-center gap-2 text-left">
+                                          <ChevronDown
+                                            className={`h-3.5 w-3.5 transition-transform ${
+                                              isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final")) ? "rotate-180" : ""
+                                            }`}
+                                          />
+                                          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                            <Bot className="h-3.5 w-3.5" />
+                                            Final answer
+                                          </p>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        <ExpandableText
+                                          text={run.finalAnswer || "No final answer captured."}
+                                          maxLength={1200}
+                                          className="text-xs text-foreground"
+                                        />
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
+                                  >
+                                    <div className="rounded-md border bg-muted/10 p-2">
+                                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                        <CollapsibleTrigger asChild>
+                                          <button type="button" className="flex min-w-0 items-center gap-2 text-left">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))
+                                                  ? "rotate-180"
+                                                  : ""
+                                              }`}
+                                            />
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              Conversation trace
+                                            </p>
+                                          </button>
+                                        </CollapsibleTrigger>
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 gap-1.5 px-2 text-xs"
+                                            onClick={() =>
+                                              openAssistantWithPrompt(
+                                                `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                              , { scenarioId: sc.scenarioId })
+                                            }
+                                          >
+                                            <Sparkles className="h-3.5 w-3.5" />
+                                            Ask Assistant
+                                          </Button>
+                                        </div>
                                       </div>
-                                    ) : (
-                                      <p className="text-xs text-muted-foreground">
-                                        Expand to inspect user/assistant/tool messages for this run.
-                                      </p>
-                                    )}
-                                  </div>
+                                      <CollapsibleContent>
+                                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                          {run.conversation.length === 0 ? (
+                                            <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
+                                          ) : (
+                                            run.conversation.map((item) => (
+                                              <ConversationRow
+                                                key={item.id}
+                                                item={item}
+                                                fallbackUserPrompt={scenarioDefinitionByResultId.get(sc.scenarioId)?.prompt}
+                                              />
+                                            ))
+                                          )}
+                                        </div>
+                                      </CollapsibleContent>
+                                      {!isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation")) && (
+                                        <p className="text-xs text-muted-foreground">
+                                          Expand to inspect user/assistant/tool messages for this run.
+                                        </p>
+                                      )}
+                                    </div>
+                                  </Collapsible>
                                 </div>
                               </div>
                             ))}
