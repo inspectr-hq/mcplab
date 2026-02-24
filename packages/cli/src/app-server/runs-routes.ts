@@ -1,7 +1,7 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, join } from 'node:path';
-import { loadConfig, runAll, type EvalConfig, type LlmMessage } from '@inspectr/mcplab-core';
+import { McpClientManager, loadConfig, runAll, type EvalConfig, type LlmMessage } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
 import type { ActiveJobState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
@@ -522,6 +522,68 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
+  if (
+    pathname.startsWith('/api/runs/') &&
+    pathname.endsWith('/assistant/apply-report') &&
+    method === 'POST'
+  ) {
+    const runId = pathname.split('/')[3];
+    // Validate run exists before writing a report for it.
+    getRunResults(runId, settings.runsDir);
+    const body = (await parseBody(req)) as {
+      markdown?: unknown;
+      outputPath?: unknown;
+      overwrite?: unknown;
+    };
+    const markdown = String(body.markdown ?? '');
+    const outputPath =
+      String(body.outputPath ?? '').trim() || defaultResultAssistantReportPath(runId, new Date());
+    const overwrite = Boolean(body.overwrite);
+    if (!markdown.trim()) {
+      asJson(res, 400, { error: 'markdown is required' });
+      return true;
+    }
+
+    try {
+      const mcp = new McpClientManager();
+      const serverName = 'mcplab-local';
+      await mcp.connectAll({
+        [serverName]: {
+          transport: 'http',
+          url: localMcplabMcpUrl()
+        }
+      });
+      const toolResult = await mcp.callTool(serverName, 'mcplab_write_markdown_report', {
+        output_path: outputPath,
+        markdown,
+        overwrite
+      });
+      const structured =
+        toolResult && typeof toolResult === 'object' && 'structuredContent' in (toolResult as any)
+          ? (toolResult as any).structuredContent
+          : undefined;
+      asJson(res, 200, {
+        ok: true,
+        runId,
+        outputPath,
+        tool: 'mcplab_write_markdown_report',
+        result: toolResult,
+        path:
+          structured && typeof structured === 'object' && typeof (structured as any).path === 'string'
+            ? (structured as any).path
+            : undefined
+      });
+    } catch (error: unknown) {
+      asJson(res, 500, {
+        error:
+          error instanceof Error
+            ? `${error.message}. Ensure the MCPLab MCP server is running and exposes mcplab_write_markdown_report.`
+            : String(error)
+      });
+    }
+    return true;
+  }
+
   if (pathname.startsWith('/api/runs/') && method === 'GET') {
     const runId = pathname.replace('/api/runs/', '');
     asJson(res, 200, { runId, results: getRunResults(runId, settings.runsDir) });
@@ -545,4 +607,16 @@ export async function handleRunsRoutes(params: {
   }
 
   return false;
+}
+
+function localMcplabMcpUrl(): string {
+  const host = process.env.MCP_HOST || '127.0.0.1';
+  const port = process.env.MCP_PORT || '3011';
+  const path = process.env.MCP_PATH || '/mcp';
+  return `http://${host}:${port}${path}`;
+}
+
+function defaultResultAssistantReportPath(runId: string, now: Date): string {
+  const stamp = now.toISOString().replace(/[:]/g, '-').replace(/\..+/, '');
+  return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
 }

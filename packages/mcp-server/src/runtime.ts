@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { dirname, resolve, join } from 'node:path';
+import { dirname, extname, resolve, join, sep } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
@@ -123,6 +131,58 @@ export function createConfiguredServer(): McpServer {
 }
 
 export function registerTools(server: McpServer): void {
+  server.registerTool(
+    'mcplab_write_markdown_report',
+    {
+      description:
+        'Write a Markdown report file to disk (for example under mcplab/reports/) and return the resolved path. Paths must stay inside the current workspace.',
+      inputSchema: {
+        output_path: z
+          .string()
+          .describe(
+            'Target .md/.markdown path, relative to the current workspace or absolute within it.'
+          ),
+        markdown: z.string().describe('Markdown content to write.'),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe('Overwrite existing file if true. Defaults to false.'),
+        create_dirs: z
+          .boolean()
+          .optional()
+          .describe('Create missing parent directories if true. Defaults to true.')
+      }
+    },
+    async ({ output_path, markdown, overwrite, create_dirs }) => {
+      return withToolHandling(async () => {
+        const targetPath = resolvePathInsideWorkspace(output_path);
+        const extension = extname(targetPath).toLowerCase();
+        if (extension !== '.md' && extension !== '.markdown') {
+          throw new Error('output_path must end with .md or .markdown');
+        }
+        const parentDir = dirname(targetPath);
+        if (Boolean(create_dirs ?? true)) {
+          mkdirSync(parentDir, { recursive: true });
+        } else if (!existsSync(parentDir)) {
+          throw new Error(`Parent directory does not exist: ${parentDir}`);
+        }
+        const fileExists = existsSync(targetPath);
+        if (fileExists && !Boolean(overwrite)) {
+          throw new Error(`File already exists: ${targetPath} (set overwrite=true to replace it)`);
+        }
+        const normalized = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
+        writeFileSync(targetPath, normalized, 'utf8');
+        return ok(`Wrote Markdown report to ${targetPath}`, {
+          path: targetPath,
+          bytes: Buffer.byteLength(normalized, 'utf8'),
+          chars: normalized.length,
+          overwritten: fileExists,
+          workspace_root: process.cwd()
+        });
+      });
+    }
+  );
+
   server.registerTool(
     'mcplab_list_library',
     {
@@ -443,6 +503,119 @@ export function registerTools(server: McpServer): void {
         return ok(`Found ${entries.length} run(s) in ${base}`, {
           runsDir: base,
           runs: entries
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_list_tool_analysis_results',
+    {
+      description:
+        'List saved MCP tool analysis reports persisted by the MCPLab app (default: mcplab/tool-analysis-results).',
+      inputSchema: {
+        tool_analysis_results_dir: z
+          .string()
+          .optional()
+          .describe('Directory containing saved tool analysis report folders.'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .optional()
+          .describe('Max reports to return (default 20).')
+      }
+    },
+    async ({ tool_analysis_results_dir, limit }) => {
+      return withToolHandling(async () => {
+        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const reports = listToolAnalysisReportsFromDisk(baseDir, limit ?? 20);
+        return ok(`Found ${reports.length} tool analysis report(s) in ${baseDir}`, {
+          tool_analysis_results_dir: baseDir,
+          items: reports
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_read_tool_analysis_result',
+    {
+      description:
+        'Read a saved MCP tool analysis report record (report.json) by report id and return parsed metadata plus optional raw JSON preview.',
+      inputSchema: {
+        report_id: z.string().describe("Report id directory name (or 'LATEST')."),
+        tool_analysis_results_dir: z
+          .string()
+          .optional()
+          .describe('Directory containing saved tool analysis reports.'),
+        max_chars: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Optional truncation for raw JSON preview (default 20000).'),
+        include_record: z
+          .boolean()
+          .optional()
+          .describe('Include the full parsed record in structured content. Defaults to true.')
+      }
+    },
+    async ({ report_id, tool_analysis_results_dir, max_chars, include_record }) => {
+      return withToolHandling(async () => {
+        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const resolvedReportId =
+          report_id === 'LATEST' ? latestToolAnalysisReportId(baseDir) : report_id.trim();
+        if (!resolvedReportId) {
+          throw new Error(`No tool analysis reports found in ${baseDir}`);
+        }
+        const filePath = toolAnalysisReportFilePath(baseDir, resolvedReportId);
+        if (!existsSync(filePath)) {
+          throw new Error(`Tool analysis report not found: ${filePath}`);
+        }
+        const raw = readFileSync(filePath, 'utf8');
+        const parsed = parseToolAnalysisRecord(raw);
+        const content = truncate(raw, max_chars ?? 20_000);
+        const summary = summarizeToolAnalysisRecord(parsed);
+        const structured = removeUndefined({
+          path: filePath,
+          report_id: resolvedReportId,
+          truncated: content.length < raw.length,
+          raw_json_preview: content,
+          summary,
+          record: include_record === false ? undefined : parsed
+        });
+        return ok(`Read tool analysis report ${resolvedReportId}`, structured);
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_delete_tool_analysis_result',
+    {
+      description:
+        'Delete a saved MCP tool analysis report directory by report id (from mcplab/tool-analysis-results by default).',
+      inputSchema: {
+        report_id: z.string().describe('Report id directory name to delete.'),
+        tool_analysis_results_dir: z
+          .string()
+          .optional()
+          .describe('Directory containing saved tool analysis reports.')
+      }
+    },
+    async ({ report_id, tool_analysis_results_dir }) => {
+      return withToolHandling(async () => {
+        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const dirPath = toolAnalysisReportDirPath(baseDir, report_id.trim());
+        if (!existsSync(dirPath)) {
+          throw new Error(`Tool analysis report not found: ${dirPath}`);
+        }
+        rmSync(dirPath, { recursive: true, force: false });
+        return ok(`Deleted tool analysis report ${report_id}`, {
+          report_id: report_id.trim(),
+          path: dirPath,
+          tool_analysis_results_dir: baseDir
         });
       });
     }
@@ -939,6 +1112,118 @@ function detectLikelyBundleRoot(configPath: string): string | null {
   }
   const fallback = resolveBundleRoot();
   return existsSync(fallback) ? fallback : null;
+}
+
+function resolveToolAnalysisResultsDir(input?: string): string {
+  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/tool-analysis-results');
+}
+
+function toolAnalysisReportDirPath(baseDir: string, reportId: string): string {
+  const trimmed = reportId.trim();
+  if (!trimmed) throw new Error('report_id is required');
+  return resolvePathInsideWorkspace(join(baseDir, trimmed));
+}
+
+function toolAnalysisReportFilePath(baseDir: string, reportId: string): string {
+  return resolvePathInsideWorkspace(join(toolAnalysisReportDirPath(baseDir, reportId), 'report.json'));
+}
+
+function latestToolAnalysisReportId(baseDir: string): string | undefined {
+  if (!existsSync(baseDir)) return undefined;
+  return readdirSync(baseDir)
+    .filter((name) => {
+      try {
+        return statSync(join(baseDir, name)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .sort()
+    .reverse()[0];
+}
+
+function parseToolAnalysisRecord(raw: string): Record<string, unknown> {
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid tool analysis report record');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function summarizeToolAnalysisRecord(record: Record<string, unknown>): Record<string, unknown> {
+  const report = record.report;
+  const reportObj =
+    report && typeof report === 'object' && !Array.isArray(report)
+      ? (report as Record<string, unknown>)
+      : undefined;
+  return removeUndefined({
+    reportId: typeof record.reportId === 'string' ? record.reportId : undefined,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : undefined,
+    sourceJobId: typeof record.sourceJobId === 'string' ? record.sourceJobId : undefined,
+    serverNames: Array.isArray(record.serverNames) ? record.serverNames : undefined,
+    assistantAgentName:
+      reportObj && typeof reportObj.assistantAgentName === 'string'
+        ? reportObj.assistantAgentName
+        : undefined,
+    assistantAgentModel:
+      reportObj && typeof reportObj.assistantAgentModel === 'string'
+        ? reportObj.assistantAgentModel
+        : undefined,
+    modes:
+      reportObj && typeof reportObj.modes === 'object' && !Array.isArray(reportObj.modes)
+        ? reportObj.modes
+        : undefined,
+    summary:
+      reportObj && typeof reportObj.summary === 'object' && !Array.isArray(reportObj.summary)
+        ? reportObj.summary
+        : undefined
+  });
+}
+
+function listToolAnalysisReportsFromDisk(
+  baseDir: string,
+  limit: number
+): Array<Record<string, unknown>> {
+  if (!existsSync(baseDir)) return [];
+  const ids = readdirSync(baseDir)
+    .filter((name) => {
+      try {
+        return statSync(join(baseDir, name)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .sort()
+    .reverse()
+    .slice(0, limit);
+  const out: Array<Record<string, unknown>> = [];
+  for (const reportId of ids) {
+    try {
+      const filePath = toolAnalysisReportFilePath(baseDir, reportId);
+      if (!existsSync(filePath)) continue;
+      const parsed = parseToolAnalysisRecord(readFileSync(filePath, 'utf8'));
+      out.push(
+        removeUndefined({
+          report_id: reportId,
+          path: toolAnalysisReportDirPath(baseDir, reportId),
+          ...summarizeToolAnalysisRecord(parsed)
+        })
+      );
+    } catch (error) {
+      out.push({ report_id: reportId, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return out;
+}
+
+function resolvePathInsideWorkspace(pathInput: string): string {
+  const workspaceRoot = resolve(process.cwd());
+  const target = resolve(workspaceRoot, pathInput);
+  const withinWorkspace = target === workspaceRoot || target.startsWith(`${workspaceRoot}${sep}`);
+  if (!withinWorkspace) {
+    throw new Error(`Path escapes workspace root: ${pathInput}`);
+  }
+  return target;
 }
 
 function ok(summary: string, structuredContent?: Record<string, unknown>): ToolResult {

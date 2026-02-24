@@ -74,6 +74,12 @@ export const demoSource: EvalDataSource = {
   async deleteResult() {
     // demo source is static; no-op
   },
+  async listMarkdownReports() {
+    throw new Error('Markdown Reports are only available in workspace mode.');
+  },
+  async getMarkdownReport() {
+    throw new Error('Markdown Reports are only available in workspace mode.');
+  },
   async startRun() {
     return { jobId: `demo-${Date.now()}` };
   },
@@ -103,6 +109,9 @@ export const demoSource: EvalDataSource = {
     throw new Error('Snapshots are only available in workspace mode.');
   },
   async askResultAssistant() {
+    throw new Error('Result Assistant is only available in workspace mode.');
+  },
+  async applyResultAssistantReport() {
     throw new Error('Result Assistant is only available in workspace mode.');
   },
   async generateSnapshotEvalBaseline() {

@@ -208,6 +208,24 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
 }
 
+export interface MarkdownReportSummary {
+  path: string;
+  relativePath: string;
+  name: string;
+  sizeBytes: number;
+  mtime: string;
+}
+
+export interface MarkdownReportContent {
+  root: string;
+  path: string;
+  relativePath: string;
+  name: string;
+  sizeBytes: number;
+  mtime: string;
+  content: string;
+}
+
 export interface SnapshotItem {
   scenario_id: string;
   baseline_agents: string[];
@@ -344,6 +362,15 @@ export interface ScenarioAssistantTurnResponse {
 export interface ResultAssistantChatMessage {
   role: 'user' | 'assistant';
   text: string;
+}
+
+export interface ResultAssistantApplyReportResponse {
+  ok: boolean;
+  runId: string;
+  outputPath: string;
+  tool: string;
+  path?: string;
+  result: unknown;
 }
 
 export interface ToolAnalysisFinding {
@@ -659,6 +686,12 @@ export interface EvalDataSource {
     runId: string,
     messages: ResultAssistantChatMessage[]
   ) => Promise<{ reply: string; assistantAgentName: string; provider: string; model: string }>;
+  applyResultAssistantReport: (params: {
+    runId: string;
+    markdown: string;
+    outputPath?: string;
+    overwrite?: boolean;
+  }) => Promise<ResultAssistantApplyReportResponse>;
   generateSnapshotEvalBaseline: (
     runId: string,
     configId: string,
@@ -760,6 +793,8 @@ export interface EvalDataSource {
   listToolAnalysisResults: () => Promise<ToolAnalysisResultSummary[]>;
   getToolAnalysisSavedResult: (id: string) => Promise<SavedToolAnalysisReportRecord>;
   deleteToolAnalysisSavedResult: (id: string) => Promise<void>;
+  listMarkdownReports: () => Promise<MarkdownReportSummary[]>;
+  getMarkdownReport: (relativePath: string) => Promise<MarkdownReportContent>;
   createOAuthDebuggerSession: (
     config: OAuthDebuggerSessionConfig
   ) => Promise<{ sessionId: string; session: OAuthDebuggerSessionView }>;

@@ -4,8 +4,10 @@ import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, C
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
@@ -22,6 +24,11 @@ import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule
 import type { ResultAssistantChatMessage, SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+
+function defaultResultAssistantReportPath(runId: string): string {
+  const stamp = new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
+  return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
+}
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -52,6 +59,11 @@ const ResultDetail = () => {
     provider: string;
     model: string;
   } | null>(null);
+  const [applyReportOpen, setApplyReportOpen] = useState(false);
+  const [applyReportMarkdown, setApplyReportMarkdown] = useState("");
+  const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
+  const [applyReportOverwrite, setApplyReportOverwrite] = useState(false);
+  const [applyReportPending, setApplyReportPending] = useState(false);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -363,6 +375,52 @@ const ResultDetail = () => {
     }
   };
 
+  const openApplyReportDialog = (assistantReply: string) => {
+    if (!result) return;
+    setApplyReportMarkdown(assistantReply);
+    setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
+    setApplyReportOverwrite(false);
+    setApplyReportOpen(true);
+  };
+
+  const applyAssistantReport = async () => {
+    if (!result) return;
+    const markdown = applyReportMarkdown.trim();
+    if (!markdown) {
+      toast({
+        title: "No markdown to write",
+        description: "The selected assistant response is empty.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setApplyReportPending(true);
+    try {
+      const response = await source.applyResultAssistantReport({
+        runId: result.id,
+        markdown: applyReportMarkdown,
+        outputPath: applyReportOutputPath.trim() || undefined,
+        overwrite: applyReportOverwrite
+      });
+      toast({
+        title: "Markdown report written",
+        description:
+          typeof response.path === "string" && response.path
+            ? response.path
+            : response.outputPath
+      });
+      setApplyReportOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "Could not write markdown report",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setApplyReportPending(false);
+    }
+  };
+
   return (
     <div
       className={`${
@@ -564,7 +622,25 @@ const ResultDetail = () => {
       </div>
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Scenarios</CardTitle></CardHeader>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Scenarios</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-xs"
+              onClick={() =>
+                openAssistantWithPrompt(
+                  `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
+                )
+              }
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Ask Assistant
+            </Button>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="flex flex-wrap items-end gap-2 border-b p-3">
             <div className="min-w-60 space-y-1">
@@ -971,7 +1047,7 @@ const ResultDetail = () => {
                         </p>
                         <MarkdownText text={message.text} className="text-sm" />
                         {canShowHandoff && (
-                          <div className="mt-3 flex justify-end">
+                          <div className="mt-3 flex flex-wrap justify-end gap-2">
                             <Button
                               type="button"
                               variant="outline"
@@ -981,6 +1057,30 @@ const ResultDetail = () => {
                             >
                               <Sparkles className="h-3.5 w-3.5" />
                               Send to Scenario Assistant
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2 text-xs"
+                              onClick={() => openApplyReportDialog(message.text)}
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                              Apply: Write Markdown Report
+                            </Button>
+                          </div>
+                        )}
+                        {!canShowHandoff && !isUser && (
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2 text-xs"
+                              onClick={() => openApplyReportDialog(message.text)}
+                            >
+                              <Wrench className="h-3.5 w-3.5" />
+                              Apply: Write Markdown Report
                             </Button>
                           </div>
                         )}
@@ -1031,6 +1131,57 @@ const ResultDetail = () => {
           </CardContent>
         </Card>
       )}
+      <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve MCP action: write markdown report</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will call <code>mcplab_write_markdown_report</code> via the local MCPLab MCP server.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Output path</p>
+              <Input
+                value={applyReportOutputPath}
+                onChange={(e) => setApplyReportOutputPath(e.target.value)}
+                placeholder="mcplab/reports/result-assistant/my-report.md"
+                disabled={applyReportPending}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={applyReportOverwrite}
+                onCheckedChange={(v) => setApplyReportOverwrite(v === true)}
+                disabled={applyReportPending}
+              />
+              <span>Overwrite if file exists</span>
+            </label>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Markdown preview (to be written)</p>
+              <Textarea
+                value={applyReportMarkdown}
+                onChange={(e) => setApplyReportMarkdown(e.target.value)}
+                rows={10}
+                className="font-mono text-xs"
+                disabled={applyReportPending}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={applyReportPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void applyAssistantReport();
+              }}
+              disabled={applyReportPending}
+            >
+              {applyReportPending ? "Writing..." : "Approve & Write"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ const navSections = [
       { title: "Run Evaluation", url: "/run", icon: Play },
       { title: "Evaluation Results", url: "/results", icon: BarChart3 },
       { title: "Compare Evaluations", url: "/compare", icon: GitCompare },
+      { title: "Markdown Reports", url: "/markdown-reports", icon: FileCode },
       { title: "MCP Analysis Results", url: "/tool-analysis-results", icon: BarChart3 },
     ]
   },

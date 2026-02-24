@@ -69,6 +69,12 @@ export const workspaceSource: EvalDataSource = {
   async deleteResult(id) {
     await workspaceApiClient.deleteRun(id);
   },
+  async listMarkdownReports() {
+    return workspaceApiClient.listMarkdownReports();
+  },
+  async getMarkdownReport(relativePath) {
+    return workspaceApiClient.getMarkdownReport(relativePath);
+  },
   async startRun(params) {
     return workspaceApiClient.startRun(params);
   },
@@ -96,6 +102,9 @@ export const workspaceSource: EvalDataSource = {
   },
   async askResultAssistant(runId, messages) {
     return workspaceApiClient.askResultAssistant(runId, messages);
+  },
+  async applyResultAssistantReport(params) {
+    return workspaceApiClient.applyResultAssistantReport(params);
   },
   async generateSnapshotEvalBaseline(runId, configId, name) {
     const response = await workspaceApiClient.generateSnapshotEvalBaseline(runId, configId, name);

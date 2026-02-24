@@ -16,7 +16,10 @@ import type {
   ToolAnalysisResultSummary,
   SavedToolAnalysisReportRecord,
   WorkspaceConfigRecord,
-  WorkspaceRunSummary
+  WorkspaceRunSummary,
+  MarkdownReportSummary,
+  MarkdownReportContent,
+  ResultAssistantApplyReportResponse
 } from './types';
 
 function getBaseUrl(): string {
@@ -98,6 +101,12 @@ export const workspaceApiClient = {
   deleteConfig: (id: string) =>
     request<{ ok: boolean }>(`/api/configs/${id}`, { method: 'DELETE' }),
   listRuns: () => request<WorkspaceRunSummary[]>('/api/runs'),
+  listMarkdownReports: () =>
+    request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),
+  getMarkdownReport: (path: string) =>
+    request<MarkdownReportContent>(
+      `/api/markdown-reports/content?path=${encodeURIComponent(path)}`
+    ),
   getRun: (runId: string) =>
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   deleteRun: (runId: string) =>
@@ -122,6 +131,23 @@ export const workspaceApiClient = {
       {
         method: 'POST',
         body: JSON.stringify({ messages })
+      }
+    ),
+  applyResultAssistantReport: (params: {
+    runId: string;
+    markdown: string;
+    outputPath?: string;
+    overwrite?: boolean;
+  }) =>
+    request<ResultAssistantApplyReportResponse>(
+      `/api/runs/${encodeURIComponent(params.runId)}/assistant/apply-report`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          markdown: params.markdown,
+          outputPath: params.outputPath,
+          overwrite: params.overwrite
+        })
       }
     ),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>

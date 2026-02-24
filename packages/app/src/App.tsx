@@ -22,6 +22,8 @@ import RunEvaluation from "./pages/RunEvaluation";
 import Results from "./pages/Results";
 import ResultDetail from "./pages/ResultDetail";
 import Compare from "./pages/Compare";
+import MarkdownReports from "./pages/MarkdownReports";
+import MarkdownReportDetail from "./pages/MarkdownReportDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +55,8 @@ const App = () => (
                   <Route path="/run" element={<RunEvaluation />} />
                   <Route path="/results" element={<Results />} />
                   <Route path="/results/:id" element={<ResultDetail />} />
+                  <Route path="/markdown-reports" element={<MarkdownReports />} />
+                  <Route path="/markdown-reports/view" element={<MarkdownReportDetail />} />
                   <Route path="/compare" element={<Compare />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />

@@ -44,6 +44,7 @@ import {
 } from './runs-store.js';
 import { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
+import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleSnapshotsRoutes } from './snapshots-routes.js';
@@ -346,6 +347,19 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           oauthDebuggerSessions,
+          deps: routeDeps
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleMarkdownReportsRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          settings,
           deps: routeDeps
         })
       ) {
