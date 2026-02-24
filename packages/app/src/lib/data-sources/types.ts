@@ -1,4 +1,9 @@
 import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
+import type {
+  ScenarioRunTraceRecord as CoreScenarioRunTraceRecord,
+  TraceMessage as CoreTraceMessage,
+  TraceMessageContentBlock as CoreTraceMessageContentBlock
+} from '@inspectr/mcplab-core';
 
 export interface CoreServerAuthBearer {
   type: 'bearer';
@@ -124,9 +129,13 @@ export interface CoreResultsJson {
   scenarios: CoreScenarioAggregate[];
 }
 
+export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
+export type ScenarioRunTraceMessage = CoreTraceMessage;
+export type ScenarioRunTraceRecord = CoreScenarioRunTraceRecord;
+
 export interface TraceUiMetaEvent {
   type: 'trace_meta';
-  trace_version: 2;
+  trace_version: 3;
   run_id: string;
   ts: string;
 }

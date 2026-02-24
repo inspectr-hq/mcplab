@@ -9,8 +9,9 @@ import type {
 import type {
   CoreEvalConfig,
   CoreResultsJson,
-  TraceUiEvent,
-  TraceUiToolCallEvent,
+  ScenarioRunTraceMessage,
+  ScenarioRunTraceRecord,
+  TraceMessageContentBlock,
   WorkspaceConfigRecord
 } from './types';
 
@@ -302,127 +303,144 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
   };
 }
 
-function toToolCalls(
-  run: CoreResultsJson['scenarios'][number]['runs'][number],
-  traceCalls: TraceUiToolCallEvent[]
-): ToolCall[] {
-  return run.tool_calls.map((name, idx) => {
-    const trace = traceCalls[idx];
-    return {
-      name,
-      arguments: (trace?.args as Record<string, unknown>) ?? {},
-      duration: run.tool_durations_ms[idx] ?? 0,
-      timestamp: trace?.ts_start ?? new Date().toISOString()
-    };
-  });
-}
-
 function traceScenarioKey(scenarioId?: string, agent?: string): string | undefined {
   if (!scenarioId) return undefined;
   return `${scenarioId}::${agent ?? ''}`;
 }
 
-function groupScenarioRunEvents(traceEvents: TraceUiEvent[]): Map<string, TraceUiEvent[][]> {
-  const grouped = new Map<string, TraceUiEvent[][]>();
-  let activeKey: string | undefined;
-  let activeRunEvents: TraceUiEvent[] | undefined;
+function isTextBlock(block: TraceMessageContentBlock): block is Extract<TraceMessageContentBlock, { type: 'text' }> {
+  return block.type === 'text';
+}
 
-  for (const event of traceEvents) {
-    if (event.type === 'scenario_started') {
-      activeKey = traceScenarioKey(event.scenario_id, event.agent) ?? event.scenario_id;
-      const runs = grouped.get(activeKey) ?? [];
-      activeRunEvents = [event];
-      runs.push(activeRunEvents);
-      grouped.set(activeKey, runs);
-      continue;
-    }
+function toToolCallsFromRecord(
+  run: CoreResultsJson['scenarios'][number]['runs'][number],
+  record?: ScenarioRunTraceRecord
+): ToolCall[] {
+  if (!record) {
+    return run.tool_calls.map((name, idx) => ({
+      name,
+      arguments: {},
+      duration: run.tool_durations_ms[idx] ?? 0,
+      timestamp: new Date().toISOString()
+    }));
+  }
 
-    if (!activeKey || !activeRunEvents) {
-      continue;
-    }
+  const uses: Array<{ id: string; name: string; input: Record<string, unknown>; ts?: string }> = [];
+  const resultByUseId = new Map<
+    string,
+    { durationMs?: number; tsEnd?: string }
+  >();
 
-    activeRunEvents.push(event);
-    if (event.type === 'scenario_finished') {
-      const finishedKey = traceScenarioKey(event.scenario_id, event.agent) ?? event.scenario_id;
-      if (finishedKey !== activeKey) continue;
-      activeKey = undefined;
-      activeRunEvents = undefined;
+  for (const message of record.messages) {
+    for (const block of message.content) {
+      if (block.type === 'tool_use') {
+        uses.push({
+          id: block.id,
+          name: block.name,
+          input: (block.input as Record<string, unknown>) ?? {},
+          ts: message.ts
+        });
+      } else if (block.type === 'tool_result') {
+        resultByUseId.set(block.tool_use_id, {
+          durationMs: block.duration_ms,
+          tsEnd: block.ts_end
+        });
+      }
     }
   }
 
-  return grouped;
+  return uses.map((use, idx) => {
+    const result = resultByUseId.get(use.id);
+    return {
+      name: use.name,
+      arguments: use.input,
+      duration: result?.durationMs ?? run.tool_durations_ms[idx] ?? 0,
+      timestamp: result?.tsEnd ?? use.ts ?? new Date().toISOString()
+    };
+  });
 }
 
-function toConversationItems(events: TraceUiEvent[]): ConversationItem[] {
+function toConversationItemsFromRecord(
+  record: ScenarioRunTraceRecord | undefined,
+  fallbackUserPrompt?: string
+): ConversationItem[] {
   const items: ConversationItem[] = [];
-  let sawPrompt = false;
-
-  for (const event of events) {
-    if (event.type === 'llm_request') {
-      if (sawPrompt) continue;
-      const promptText = (event as { messages_summary?: string; summary?: string }).messages_summary ?? event.summary;
-      if (!promptText) continue;
-      sawPrompt = true;
+  if (!record) {
+    if (fallbackUserPrompt) {
       items.push({
-        id: `user_prompt-${items.length}`,
+        id: 'user_prompt-0',
         kind: 'user_prompt',
-        text: promptText,
-        timestamp: event.ts
+        text: fallbackUserPrompt,
+        timestamp: undefined
       });
-      continue;
     }
-    if (event.type === 'agent_message') {
-      items.push({
-        id: `assistant_msg-${items.length}`,
-        kind: event.phase === 'final' ? 'assistant_final' : 'assistant_thought',
-        text: event.text,
-        timestamp: event.ts
-      });
-      continue;
-    }
-    if (event.type === 'llm_response') {
-      const llmText = event.raw_or_summary ?? event.summary ?? '';
-      if (!normalizeText(llmText)) {
-        continue;
+    return items;
+  }
+
+  let lastAssistantTextItemIndex: number | undefined;
+  const allMessages = record.messages ?? [];
+  for (const message of allMessages) {
+    if (message.role === 'user') {
+      const textBlocks = message.content.filter(isTextBlock);
+      for (const block of textBlocks) {
+        items.push({
+          id: `user_prompt-${items.length}`,
+          kind: 'user_prompt',
+          text: block.text,
+          timestamp: message.ts
+        });
       }
-      items.push({
-        id: `assistant_thought-${items.length}`,
-        kind: 'assistant_thought',
-        text: llmText,
-        timestamp: event.ts
-      });
       continue;
     }
-    if (event.type === 'tool_call') {
-      items.push({
-        id: `tool_call-${items.length}`,
-        kind: 'tool_call',
-        text: stringifySafe(event.args ?? {}),
-        toolName: event.tool,
-        timestamp: event.ts_start
-      });
+
+    if (message.role === 'assistant') {
+      for (const block of message.content) {
+        if (block.type === 'text') {
+          items.push({
+            id: `assistant_thought-${items.length}`,
+            kind: 'assistant_thought',
+            text: block.text,
+            timestamp: message.ts
+          });
+          lastAssistantTextItemIndex = items.length - 1;
+        } else if (block.type === 'tool_use') {
+          items.push({
+            id: `tool_call-${items.length}`,
+            kind: 'tool_call',
+            text: stringifySafe(block.input ?? {}),
+            toolName: block.name,
+            timestamp: message.ts
+          });
+        }
+      }
       continue;
     }
-    if (event.type === 'tool_result') {
-      items.push({
-        id: `tool_result-${items.length}`,
-        kind: 'tool_result',
-        text: event.result_summary,
-        toolName: event.tool,
-        ok: event.ok,
-        durationMs: event.duration_ms,
-        timestamp: event.ts_end
-      });
-      continue;
+
+    if (message.role === 'tool') {
+      for (const block of message.content) {
+        if (block.type !== 'tool_result') continue;
+        const text = block.content
+          .filter(isTextBlock)
+          .map((part) => part.text)
+          .join('\n');
+        items.push({
+          id: `tool_result-${items.length}`,
+          kind: 'tool_result',
+          text,
+          toolName: block.name,
+          ok: !block.is_error,
+          durationMs: block.duration_ms,
+          timestamp: block.ts_end ?? message.ts
+        });
+      }
     }
-    if (event.type === 'final_answer') {
-      items.push({
-        id: `assistant_final-${items.length}`,
-        kind: 'assistant_final',
-        text: event.text,
-        timestamp: event.ts
-      });
-    }
+  }
+
+  if (typeof lastAssistantTextItemIndex === 'number' && items[lastAssistantTextItemIndex]) {
+    items[lastAssistantTextItemIndex] = {
+      ...items[lastAssistantTextItemIndex],
+      kind: 'assistant_final'
+    };
   }
 
   return items;
@@ -436,28 +454,32 @@ function stringifySafe(value: unknown): string {
   }
 }
 
-function normalizeText(value: string): string {
-  return value.trim().replace(/\s+/g, ' ');
-}
-
 export function fromCoreResultsJson(
   results: CoreResultsJson,
-  traceEvents: TraceUiEvent[] = []
+  traceRecords: ScenarioRunTraceRecord[] = []
 ): EvalResult {
-  const traceByScenario = groupScenarioRunEvents(traceEvents);
+  const traceByScenario = new Map<string, ScenarioRunTraceRecord[]>();
+  for (const record of traceRecords) {
+    const key = traceScenarioKey(record.scenario_id, record.agent);
+    if (!key) continue;
+    const existing = traceByScenario.get(key) ?? [];
+    existing.push(record);
+    traceByScenario.set(key, existing);
+  }
   const scenarios = results.scenarios.map((scenario) => {
-    const runEvents = traceByScenario.get(`${scenario.scenario_id}::${scenario.agent}`) ?? [];
+    const runRecords = traceByScenario.get(`${scenario.scenario_id}::${scenario.agent}`) ?? [];
+    const runRecordByIndex = new Map<number, ScenarioRunTraceRecord>();
+    for (const record of runRecords) {
+      runRecordByIndex.set(record.run_index, record);
+    }
     const runs: ScenarioRun[] = scenario.runs.map((run, index) => {
-      const events = runEvents[run.run_index] ?? runEvents[index] ?? [];
-      const toolCallEvents = events.filter(
-        (event): event is TraceUiToolCallEvent => event.type === 'tool_call'
-      );
+      const record = runRecordByIndex.get(run.run_index) ?? runRecords[index];
       return {
         runIndex: run.run_index,
         passed: run.pass,
-        toolCalls: toToolCalls(run, toolCallEvents),
+        toolCalls: toToolCallsFromRecord(run, record),
         finalAnswer: run.final_text,
-        conversation: toConversationItems(events),
+        conversation: toConversationItemsFromRecord(record),
         duration: run.tool_durations_ms.reduce((sum, value) => sum + value, 0),
         extractedValues: Object.fromEntries(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])

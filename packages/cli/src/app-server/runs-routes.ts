@@ -22,8 +22,7 @@ export type RunsRouteDeps = Pick<
   | 'ensureInsideRoot'
   | 'listRuns'
   | 'getRunResults'
-  | 'getTraceEvents'
-  | 'toTraceUiEvents'
+  | 'getScenarioRunTraceRecords'
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
   | 'resolveRunSelectedAgents'
@@ -75,8 +74,7 @@ export async function handleRunsRoutes(params: {
     ensureInsideRoot,
     listRuns,
     getRunResults,
-    getTraceEvents,
-    toTraceUiEvents,
+    getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
@@ -97,7 +95,7 @@ export async function handleRunsRoutes(params: {
 
   if (pathname.startsWith('/api/runs/') && pathname.endsWith('/trace') && method === 'GET') {
     const runId = pathname.split('/')[3];
-    asJson(res, 200, { runId, events: toTraceUiEvents(getTraceEvents(runId, settings.runsDir)) });
+    asJson(res, 200, { runId, records: getScenarioRunTraceRecords(runId, settings.runsDir) });
     return true;
   }
 

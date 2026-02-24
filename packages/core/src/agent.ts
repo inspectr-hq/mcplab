@@ -1,13 +1,27 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import type { AgentConfig, ExecutableScenario, LlmMessage, LlmResponse, ToolCall, ToolDef } from './types.js';
+import type {
+  AgentConfig,
+  ExecutableScenario,
+  LlmMessage,
+  LlmResponse,
+  ToolCall,
+  ToolDef,
+  TraceMessage,
+  TraceMessageContentBlock,
+  TraceMessageUsage
+} from './types.js';
 import type { McpClientManager } from './mcp.js';
-import type { TraceWriter } from './trace.js';
 
 export interface AgentRunResult {
   finalText: string;
   toolSequence: string[];
   toolDurationsMs: number[];
+  traceMessages: TraceMessage[];
+  traceStartedAt: string;
+  traceEndedAt: string;
+  traceProvider: string;
+  traceModel: string;
 }
 
 export type AgentRunProgressEvent =
@@ -70,12 +84,11 @@ export async function runAgentScenario(params: {
   scenario: ExecutableScenario;
   agent: AgentConfig;
   mcp: McpClientManager;
-  trace: TraceWriter;
   maxTurns?: number;
   signal?: AbortSignal;
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
 }): Promise<AgentRunResult> {
-  const { scenario, agent, mcp, trace } = params;
+  const { scenario, agent, mcp } = params;
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
     const tools = await mcp.listTools(serverName);
@@ -94,6 +107,14 @@ export async function runAgentScenario(params: {
     messages.push({ role: 'system', content: agent.system });
   }
   messages.push({ role: 'user', content: scenario.prompt });
+  const traceMessages: TraceMessage[] = [
+    {
+      role: 'user',
+      ts: new Date().toISOString(),
+      content: [{ type: 'text', text: scenario.prompt }]
+    }
+  ];
+  const traceStartedAt = new Date().toISOString();
 
   const toolSequence: string[] = [];
   const toolDurationsMs: number[] = [];
@@ -113,18 +134,6 @@ export async function runAgentScenario(params: {
       model: agent.model,
       turn
     });
-    const llmTs = new Date().toISOString();
-    trace.write({
-      type: 'llm_request',
-      scenario_id: scenario.id,
-      agent: scenario.agent,
-      provider: agent.provider,
-      model: agent.model,
-      message_count: messages.length,
-      summary: summarizeMessages(messages),
-      ts: llmTs
-    });
-
     const response = await adapter.chat(messages, tools, {
       model: agent.model,
       temperature: agent.temperature,
@@ -144,42 +153,37 @@ export async function runAgentScenario(params: {
       hasText: responseText.length > 0,
       toolCallCount: toolCallNames.length
     });
-    trace.write({
-      type: 'llm_response',
-      scenario_id: scenario.id,
-      agent: scenario.agent,
-      provider: agent.provider,
-      model: agent.model,
-      tool_calls: toolCallNames.length > 0 ? toolCallNames : undefined,
-      has_text: responseText.length > 0,
-      summary: summarizeResponse(response),
-      raw_or_summary: summarizeResponse(response),
-      ts: new Date().toISOString()
-    });
-
     if (response.tool_calls && response.tool_calls.length > 0) {
-      if (responseText) {
-        trace.write({
-          type: 'agent_message',
-          scenario_id: scenario.id,
-          agent: scenario.agent,
-          phase: 'intermediate',
-          text: responseText,
-          provider: agent.provider,
-          model: agent.model,
-          ts: new Date().toISOString()
+      const assistantBlocks: TraceMessageContentBlock[] = [];
+      if (responseText) assistantBlocks.push({ type: 'text', text: responseText });
+      const resolvedToolCalls = response.tool_calls.map((toolCall, index) => {
+        const resolved = toolsByName.get(toolCall.name);
+        if (!resolved) {
+          throw new Error(`Tool not found: ${toolCall.name}`);
+        }
+        const toolUseId = toolCall.id ?? `tool_use_${turn}_${index}`;
+        assistantBlocks.push({
+          type: 'tool_use',
+          id: toolUseId,
+          name: toolCall.name,
+          input: toolCall.arguments,
+          server: resolved.server
         });
-      }
+        return { toolCall, resolved, toolUseId };
+      });
+      traceMessages.push({
+        role: 'assistant',
+        ts: new Date().toISOString(),
+        usage: toTraceUsage(response.usage),
+        content: assistantBlocks
+      });
       messages.push({
         role: 'assistant',
         content: response.content ?? '',
         tool_calls: response.tool_calls
       });
-      for (const toolCall of response.tool_calls) {
-        const resolved = toolsByName.get(toolCall.name);
-        if (!resolved) {
-          throw new Error(`Tool not found: ${toolCall.name}`);
-        }
+      const toolResultBlocks: TraceMessageContentBlock[] = [];
+      for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
         await emitProgress({
           type: 'tool_call_started',
           scenarioId: scenario.id,
@@ -189,15 +193,6 @@ export async function runAgentScenario(params: {
           turn
         });
         const tsStart = new Date();
-        trace.write({
-          type: 'tool_call',
-          scenario_id: scenario.id,
-          agent: scenario.agent,
-          server: resolved.server,
-          tool: toolCall.name,
-          args: toolCall.arguments,
-          ts_start: tsStart.toISOString()
-        });
 
         let ok = true;
         let result: any;
@@ -210,16 +205,21 @@ export async function runAgentScenario(params: {
 
         const tsEnd = new Date();
         const durationMs = tsEnd.getTime() - tsStart.getTime();
-        trace.write({
+        toolResultBlocks.push({
           type: 'tool_result',
-          scenario_id: scenario.id,
-          agent: scenario.agent,
+          tool_use_id: toolUseId,
+          name: toolCall.name,
           server: resolved.server,
-          tool: toolCall.name,
-          ok,
-          result_summary: summarizeToolResult(result),
+          is_error: !ok,
+          duration_ms: durationMs,
+          ts_start: tsStart.toISOString(),
           ts_end: tsEnd.toISOString(),
-          duration_ms: durationMs
+          content: [
+            {
+              type: 'text',
+              text: truncateToolResultContent(stringifySafe(result))
+            }
+          ]
         });
         await emitProgress({
           type: 'tool_call_finished',
@@ -238,8 +238,15 @@ export async function runAgentScenario(params: {
         messages.push({
           role: 'tool',
           content: stringifySafe(result),
-          tool_call_id: toolCall.id,
+          tool_call_id: toolCall.id ?? toolUseId,
           name: toolCall.name
+        });
+      }
+      if (toolResultBlocks.length > 0) {
+        traceMessages.push({
+          role: 'tool',
+          ts: new Date().toISOString(),
+          content: toolResultBlocks
         });
       }
       continue;
@@ -247,6 +254,12 @@ export async function runAgentScenario(params: {
 
     if (response.content) {
       finalText = response.content;
+      traceMessages.push({
+        role: 'assistant',
+        ts: new Date().toISOString(),
+        usage: toTraceUsage(response.usage),
+        content: [{ type: 'text', text: truncate(finalText, 4000) }]
+      });
     }
     break;
   }
@@ -259,15 +272,16 @@ export async function runAgentScenario(params: {
     hasText: finalText.trim().length > 0
   });
 
-  trace.write({
-    type: 'final_answer',
-    scenario_id: scenario.id,
-    agent: scenario.agent,
-    text: finalText,
-    ts: new Date().toISOString()
-  });
-
-  return { finalText, toolSequence, toolDurationsMs };
+  return {
+    finalText,
+    toolSequence,
+    toolDurationsMs,
+    traceMessages,
+    traceStartedAt,
+    traceEndedAt: new Date().toISOString(),
+    traceProvider: agent.provider,
+    traceModel: agent.model
+  };
 }
 
 export async function chatWithAgent(params: {
@@ -334,7 +348,14 @@ class OpenAiAdapter implements LlmAdapter {
     return {
       content: message?.content ?? '',
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-      raw: response
+      raw: response,
+      usage: response.usage
+        ? {
+            input_tokens: response.usage.prompt_tokens,
+            output_tokens: response.usage.completion_tokens,
+            total_tokens: response.usage.total_tokens
+          }
+        : undefined
     };
   }
 }
@@ -421,7 +442,14 @@ class AzureOpenAiAdapter implements LlmAdapter {
     return {
       content: message?.content ?? '',
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-      raw: response
+      raw: response,
+      usage: response.usage
+        ? {
+            input_tokens: response.usage.prompt_tokens,
+            output_tokens: response.usage.completion_tokens,
+            total_tokens: response.usage.total_tokens
+          }
+        : undefined
     };
   }
 }
@@ -469,7 +497,18 @@ class AnthropicAdapter implements LlmAdapter {
     return {
       content: textContent,
       tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-      raw: response
+      raw: response,
+      usage: response.usage
+        ? {
+            input_tokens: response.usage.input_tokens,
+            output_tokens: response.usage.output_tokens,
+            total_tokens:
+              typeof response.usage.input_tokens === 'number' &&
+              typeof response.usage.output_tokens === 'number'
+                ? response.usage.input_tokens + response.usage.output_tokens
+                : undefined
+          }
+        : undefined
     };
   }
 
@@ -640,28 +679,24 @@ function safeJsonParse(value: string): unknown {
   }
 }
 
-function summarizeMessages(messages: LlmMessage[]): string {
-  const parts = messages.map((msg) => {
-    if (msg.role === 'assistant' && msg.tool_calls?.length) {
-      return `assistant(tool_calls:${msg.tool_calls.map((call) => call.name).join(',')})`;
-    }
-    if (msg.role === 'tool') {
-      return `tool:${msg.name ?? 'tool'}:${truncate(msg.content, 80)}`;
-    }
-    return `${msg.role}:${truncate(msg.content, 80)}`;
-  });
-  return truncate(parts.join(' | '), 400);
+function truncateToolResultContent(value: string): string {
+  return truncate(value, 12000);
 }
 
-function summarizeResponse(response: LlmResponse): string {
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    return `tool_calls:${response.tool_calls.map((call) => call.name).join(',')}`;
+function toTraceUsage(usage?: LlmResponse['usage']): TraceMessageUsage | undefined {
+  if (!usage) return undefined;
+  if (
+    typeof usage.input_tokens !== 'number' &&
+    typeof usage.output_tokens !== 'number' &&
+    typeof usage.total_tokens !== 'number'
+  ) {
+    return undefined;
   }
-  return truncate(response.content ?? '', 200);
-}
-
-function summarizeToolResult(result: unknown): string {
-  return stringifySafe(result);
+  return {
+    input_tokens: usage.input_tokens,
+    output_tokens: usage.output_tokens,
+    total_tokens: usage.total_tokens
+  };
 }
 
 function stringifySafe(value: unknown): string {

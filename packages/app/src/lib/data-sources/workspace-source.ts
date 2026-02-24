@@ -51,7 +51,7 @@ export const workspaceSource: EvalDataSource = {
         workspaceApiClient.getRun(summary.runId),
         workspaceApiClient.getRunTrace(summary.runId)
       ]);
-      return fromCoreResultsJson(results, trace.events);
+      return fromCoreResultsJson(results, trace.records);
     });
     return Promise.all(resultPromises);
   },
@@ -61,7 +61,7 @@ export const workspaceSource: EvalDataSource = {
         workspaceApiClient.getRun(id),
         workspaceApiClient.getRunTrace(id)
       ]);
-      return fromCoreResultsJson(results, trace.events);
+      return fromCoreResultsJson(results, trace.records);
     } catch {
       return undefined;
     }

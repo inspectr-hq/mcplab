@@ -20,7 +20,9 @@ import {
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
-  type TraceEvent
+  type ScenarioRunTraceRecord,
+  type TraceMessage,
+  type TraceMessageContentBlock
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -626,51 +628,38 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_list_events',
     {
       description:
-        'List structured trace.jsonl events for a MCPLab run with optional type/scenario/agent filtering.',
+        'List structured trace timeline items for a MCPLab run (flattened from scenario_run trace records) with optional type/scenario/agent filtering.',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         event_types: z
-          .array(
-            z.enum([
-              'trace_meta',
-              'run_started',
-              'scenario_started',
-              'agent_message',
-              'llm_request',
-              'llm_response',
-              'tool_call',
-              'tool_result',
-              'final_answer',
-              'scenario_finished'
-            ])
-          )
+          .array(z.string())
           .optional()
-          .describe('Optional event type filters.'),
+          .describe('Optional timeline item type filters (e.g. text, tool_use, tool_result).'),
         scenario_id: z.string().optional().describe('Optional scenario id filter.'),
         agent: z.string().optional().describe('Optional agent filter.'),
-        limit: z.number().int().positive().max(1000).optional().describe('Max events to return (default 200).')
+        limit: z.number().int().positive().max(1000).optional().describe('Max items to return (default 200).')
       }
     },
     async ({ runs_dir, run_id, event_types, scenario_id, agent, limit }) => {
       return withToolHandling(async () => {
-        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
-        const typeSet = event_types?.length ? new Set(event_types) : null;
-        const filtered = events.filter((entry) => {
-          if (typeSet && !typeSet.has(entry.event.type)) return false;
-          if (scenario_id && entry.scenario_id !== scenario_id) return false;
-          if (agent && entry.agent !== agent) return false;
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const typeSet: Set<string> | null = event_types?.length ? new Set<string>(event_types) : null;
+        const flattened = flattenScenarioRunTraceRecords(records);
+        const filtered = flattened.filter((item) => {
+          const itemType = typeof item.type === 'string' ? item.type : '';
+          const itemScenario = typeof item.scenario_id === 'string' ? item.scenario_id : undefined;
+          const itemAgent = typeof item.agent === 'string' ? item.agent : undefined;
+          if (typeSet && !typeSet.has(itemType)) return false;
+          if (scenario_id && itemScenario !== scenario_id) return false;
+          if (agent && itemAgent !== agent) return false;
           return true;
         });
         const max = limit ?? 200;
-        const items = filtered.slice(0, max).map((entry, index) => ({
-          index,
-          scenario_id: entry.scenario_id,
-          agent: entry.agent,
-          event: entry.event
-        }));
-        return ok(`Listed ${items.length}/${filtered.length} trace event(s) for run ${runId}`, {
+        const items = filtered.slice(0, max);
+        return ok(`Listed ${items.length}/${filtered.length} trace item(s) for run ${runId}`, {
           run_id: runId,
+          legacy_trace_detected: legacyDetected || undefined,
           total_matching: filtered.length,
           items
         });
@@ -682,7 +671,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_get_final_answers',
     {
       description:
-        'Extract final_answer events from a run trace with inferred scenario/agent context for easy agent output comparison.',
+        'Extract final assistant answers from a run trace (scenario_run documents) for easy agent output comparison.',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
@@ -699,27 +688,27 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id, scenario_id, agent, max_chars_per_answer }) => {
       return withToolHandling(async () => {
-        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
         const maxChars = max_chars_per_answer ?? 8000;
-        const items = events
-          .filter((entry): entry is AnnotatedTraceEvent & { event: Extract<TraceEvent, { type: 'final_answer' }> } =>
-            entry.event.type === 'final_answer'
-          )
-          .filter((entry) => (!scenario_id || entry.scenario_id === scenario_id) && (!agent || entry.agent === agent))
-          .map((entry, index) => {
-            const full = entry.event.text;
+        const items = records
+          .filter((record) => (!scenario_id || record.scenario_id === scenario_id) && (!agent || record.agent === agent))
+          .map((record, index) => {
+            const full = extractFinalAssistantText(record);
+            if (!full) return null;
             const text = truncate(full, maxChars);
             return removeUndefined({
               index,
-              scenario_id: entry.scenario_id,
-              agent: entry.agent,
-              ts: entry.event.ts,
+              scenario_id: record.scenario_id,
+              agent: record.agent,
+              ts: record.ts_end,
               truncated: text.length < full.length,
               text
             });
-          });
+          })
+          .filter(Boolean);
         return ok(`Extracted ${items.length} final answer(s) from run ${runId}`, {
           run_id: runId,
+          legacy_trace_detected: legacyDetected || undefined,
           items
         });
       });
@@ -730,7 +719,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_get_conversation',
     {
       description:
-        'Return a structured conversation timeline (LLM/tool/final-answer events) for a specific scenario+agent in a run trace.',
+        'Return a structured conversation timeline (messages + tool blocks) for a specific scenario+agent in a scenario_run trace.',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
@@ -748,83 +737,16 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id, scenario_id, agent, max_items, max_text_chars }) => {
       return withToolHandling(async () => {
-        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
         const textMax = max_text_chars ?? 4000;
-        const timeline = events
-          .filter((entry) => entry.scenario_id === scenario_id && entry.agent === agent)
-          .filter((entry) =>
-            ['agent_message', 'llm_request', 'llm_response', 'tool_call', 'tool_result', 'final_answer'].includes(
-              entry.event.type
-            )
-          )
-          .slice(0, max_items ?? 300)
-          .map((entry, index) => {
-            const event = entry.event;
-            if (event.type === 'agent_message') {
-              return {
-                index,
-                type: 'agent_message',
-                phase: event.phase,
-                ts: event.ts,
-                text: truncate(event.text, textMax)
-              };
-            }
-            if (event.type === 'llm_request') {
-              return {
-                index,
-                type: 'llm_request',
-                ts: event.ts,
-                text: truncate((event.summary ?? ''), textMax),
-                message_count: event.message_count
-              };
-            }
-            if (event.type === 'llm_response') {
-              return {
-                index,
-                type: 'llm_response',
-                ts: event.ts,
-                text: truncate((event.summary ?? event.raw_or_summary ?? ''), textMax),
-                tool_calls: event.tool_calls,
-                has_text: event.has_text
-              };
-            }
-            if (event.type === 'tool_call') {
-              return {
-                index,
-                type: 'tool_call',
-                ts: event.ts_start,
-                server: event.server,
-                tool: event.tool,
-                args: event.args
-              };
-            }
-            if (event.type === 'tool_result') {
-              return {
-                index,
-                type: 'tool_result',
-                ts: event.ts_end,
-                server: event.server,
-                tool: event.tool,
-                ok: event.ok,
-                duration_ms: event.duration_ms,
-                result_summary: truncate(event.result_summary, textMax)
-              };
-            }
-            if (event.type === 'final_answer') {
-              return { index, type: 'final_answer', ts: event.ts, text: truncate(event.text, textMax) };
-            }
-            return {
-              index,
-              type: event.type,
-              ts: 'ts' in event && typeof event.ts === 'string' ? event.ts : undefined,
-              note: 'Unsupported event in conversation timeline filter'
-            };
-          });
+        const record = records.find((r) => r.scenario_id === scenario_id && r.agent === agent);
+        const timeline = record ? buildConversationTimeline(record, textMax).slice(0, max_items ?? 300) : [];
 
         return ok(`Built conversation timeline (${timeline.length} items) for ${scenario_id} / ${agent}`, {
           run_id: runId,
           scenario_id,
           agent,
+          legacy_trace_detected: legacyDetected || undefined,
           timeline
         });
       });
@@ -835,7 +757,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_search',
     {
       description:
-        'Search trace.jsonl content for a text query and return matching structured events with inferred scenario/agent context.',
+        'Search scenario_run trace content for a text query and return matching message/block items.',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
@@ -843,20 +765,14 @@ export function registerTools(server: McpServer): void {
         event_types: z
           .array(
             z.enum([
-              'trace_meta',
-              'agent_message',
-              'llm_request',
-              'llm_response',
-              'tool_call',
-              'tool_result',
-              'final_answer',
-              'scenario_started',
-              'scenario_finished',
-              'run_started'
+              'message',
+              'text',
+              'tool_use',
+              'tool_result'
             ])
           )
           .optional()
-          .describe('Optional event type filters.'),
+          .describe('Optional item type filters.'),
         limit: z.number().int().positive().max(200).optional().describe('Max matches to return (default 50).')
       }
     },
@@ -864,26 +780,21 @@ export function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const q = query.trim().toLowerCase();
         if (!q) throw new Error('query is required');
-        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
-        const typeSet = event_types?.length ? new Set(event_types) : null;
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const typeSet: Set<string> | null = event_types?.length ? new Set<string>(event_types) : null;
         const matches: Array<Record<string, unknown>> = [];
-        for (const [index, entry] of events.entries()) {
-          if (typeSet && !typeSet.has(entry.event.type)) continue;
-          const hay = JSON.stringify(entry.event).toLowerCase();
+        for (const item of flattenScenarioRunTraceRecords(records)) {
+          const itemType = typeof item.type === 'string' ? item.type : '';
+          if (typeSet && !typeSet.has(itemType)) continue;
+          const hay = JSON.stringify(item).toLowerCase();
           if (!hay.includes(q)) continue;
-          matches.push(
-            removeUndefined({
-              index,
-              scenario_id: entry.scenario_id,
-              agent: entry.agent,
-              event: entry.event
-            })
-          );
+          matches.push(item);
           if (matches.length >= (limit ?? 50)) break;
         }
         return ok(`Found ${matches.length} trace match(es) for "${query}" in run ${runId}`, {
           run_id: runId,
           query,
+          legacy_trace_detected: legacyDetected || undefined,
           matches
         });
       });
@@ -894,7 +805,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_stats',
     {
       description:
-        'Compute trace statistics for a run (event counts, tool usage, durations, and final-answer counts).',
+        'Compute trace statistics for a run (message/block counts, tool usage, durations, and final-answer counts).',
       inputSchema: {
         runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'.")
@@ -902,32 +813,39 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id }) => {
       return withToolHandling(async () => {
-        const { runId, events } = readAnnotatedTraceEventsForRun(runs_dir, run_id);
-        const eventTypeCounts: Record<string, number> = {};
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const messageRoleCounts: Record<string, number> = {};
+        const blockTypeCounts: Record<string, number> = {};
         const toolUsage: Record<string, number> = {};
         const scenarioAgentKeys = new Set<string>();
         let toolCallCount = 0;
         let toolResultCount = 0;
         let finalAnswerCount = 0;
         let totalToolDurationMs = 0;
-        for (const entry of events) {
-          eventTypeCounts[entry.event.type] = (eventTypeCounts[entry.event.type] ?? 0) + 1;
-          if (entry.scenario_id && entry.agent) scenarioAgentKeys.add(`${entry.scenario_id}::${entry.agent}`);
-          if (entry.event.type === 'tool_call') {
-            toolCallCount += 1;
-            const key = `${entry.event.server}::${entry.event.tool}`;
-            toolUsage[key] = (toolUsage[key] ?? 0) + 1;
-          } else if (entry.event.type === 'tool_result') {
-            toolResultCount += 1;
-            totalToolDurationMs += entry.event.duration_ms;
-          } else if (entry.event.type === 'final_answer') {
-            finalAnswerCount += 1;
+        for (const record of records) {
+          scenarioAgentKeys.add(`${record.scenario_id}::${record.agent}`);
+          finalAnswerCount += extractFinalAssistantText(record) ? 1 : 0;
+          for (const message of record.messages) {
+            messageRoleCounts[message.role] = (messageRoleCounts[message.role] ?? 0) + 1;
+            for (const block of message.content) {
+              blockTypeCounts[block.type] = (blockTypeCounts[block.type] ?? 0) + 1;
+              if (block.type === 'tool_use') {
+                toolCallCount += 1;
+                const key = `${block.server}::${block.name}`;
+                toolUsage[key] = (toolUsage[key] ?? 0) + 1;
+              } else if (block.type === 'tool_result') {
+                toolResultCount += 1;
+                totalToolDurationMs += block.duration_ms ?? 0;
+              }
+            }
           }
         }
         return ok(`Computed trace stats for run ${runId}`, {
           run_id: runId,
-          total_events: events.length,
-          event_type_counts: eventTypeCounts,
+          legacy_trace_detected: legacyDetected || undefined,
+          total_scenario_records: records.length,
+          message_role_counts: messageRoleCounts,
+          block_type_counts: blockTypeCounts,
           scenario_agent_pairs: scenarioAgentKeys.size,
           tool_call_count: toolCallCount,
           tool_result_count: toolResultCount,
@@ -1637,16 +1555,43 @@ function toolAnalysisReportFilePathWithFallback(baseDir: string, reportId: strin
   return toolAnalysisReportFilePath(baseDir, reportId);
 }
 
-type AnnotatedTraceEvent = {
-  event: TraceEvent;
-  scenario_id?: string;
-  agent?: string;
+type ReadScenarioRunTraceResult = {
+  runId: string;
+  tracePath: string;
+  records: ScenarioRunTraceRecord[];
+  legacyDetected: boolean;
 };
 
-function readAnnotatedTraceEventsForRun(
+function isTraceMessage(value: unknown): value is TraceMessage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  if (v.role !== 'user' && v.role !== 'assistant' && v.role !== 'tool') return false;
+  if (!Array.isArray(v.content)) return false;
+  return true;
+}
+
+function isScenarioRunTraceRecord(value: unknown): value is ScenarioRunTraceRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.type === 'scenario_run' &&
+    v.trace_version === 3 &&
+    typeof v.scenario_id === 'string' &&
+    typeof v.agent === 'string' &&
+    typeof v.provider === 'string' &&
+    typeof v.model === 'string' &&
+    typeof v.ts_start === 'string' &&
+    typeof v.ts_end === 'string' &&
+    typeof v.pass === 'boolean' &&
+    Array.isArray(v.messages) &&
+    v.messages.every(isTraceMessage)
+  );
+}
+
+function readScenarioRunTraceRecordsForRun(
   runsDirInput: string | undefined,
   runIdInput: string
-): { runId: string; tracePath: string; events: AnnotatedTraceEvent[] } {
+): ReadScenarioRunTraceResult {
   const base = resolveRunsDir(runsDirInput);
   const readBase = resolveExistingRunReadDir(base, runIdInput === 'LATEST' ? undefined : runIdInput);
   const runId = runIdInput === 'LATEST' ? latestRunId(readBase) : runIdInput;
@@ -1655,9 +1600,8 @@ function readAnnotatedTraceEventsForRun(
   if (!existsSync(tracePath)) throw new Error(`Artifact not found: ${tracePath}`);
   const raw = readFileSync(tracePath, 'utf8');
   const lines = raw.split(/\r?\n/).filter(Boolean);
-  const events: AnnotatedTraceEvent[] = [];
-  let currentScenarioId: string | undefined;
-  let currentAgent: string | undefined;
+  const records: ScenarioRunTraceRecord[] = [];
+  let legacyDetected = false;
   for (const line of lines) {
     let parsed: unknown;
     try {
@@ -1665,40 +1609,157 @@ function readAnnotatedTraceEventsForRun(
     } catch {
       continue;
     }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-    const event = parsed as TraceEvent;
-    const eventRecord = event as unknown as Record<string, unknown>;
-    const explicitScenario =
-      'scenario_id' in eventRecord && typeof eventRecord.scenario_id === 'string'
-        ? (eventRecord.scenario_id as string)
-        : undefined;
-    const explicitAgent =
-      'agent' in eventRecord && typeof eventRecord.agent === 'string'
-        ? (eventRecord.agent as string)
-        : undefined;
-    if (event.type === 'scenario_started') {
-      currentScenarioId = event.scenario_id;
-      currentAgent = event.agent;
-      events.push({ event, scenario_id: currentScenarioId, agent: currentAgent });
+    if (isScenarioRunTraceRecord(parsed)) {
+      records.push(parsed);
       continue;
     }
-    if (event.type === 'scenario_finished') {
-      events.push({
-        event,
-        scenario_id: explicitScenario ?? currentScenarioId ?? event.scenario_id,
-        agent: explicitAgent ?? currentAgent
-      });
-      currentScenarioId = undefined;
-      currentAgent = undefined;
-      continue;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const p = parsed as Record<string, unknown>;
+      if (typeof p.type === 'string' && p.type !== 'trace_meta') {
+        legacyDetected = true;
+      }
     }
-    events.push({
-      event,
-      scenario_id: explicitScenario ?? currentScenarioId,
-      agent: explicitAgent ?? currentAgent
-    });
   }
-  return { runId, tracePath, events };
+  return { runId, tracePath, records, legacyDetected };
+}
+
+function flattenScenarioRunTraceRecords(records: ScenarioRunTraceRecord[]): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const [recordIndex, record] of records.entries()) {
+    for (const [messageIndex, message] of record.messages.entries()) {
+      out.push(
+        removeUndefined({
+          type: 'message',
+          record_index: recordIndex,
+          message_index: messageIndex,
+          scenario_id: record.scenario_id,
+          agent: record.agent,
+          role: message.role,
+          ts: message.ts,
+          usage: message.usage
+        })
+      );
+      for (const [blockIndex, block] of message.content.entries()) {
+        if (block.type === 'text') {
+          out.push({
+            type: 'text',
+            record_index: recordIndex,
+            message_index: messageIndex,
+            block_index: blockIndex,
+            scenario_id: record.scenario_id,
+            agent: record.agent,
+            role: message.role,
+            ts: message.ts,
+            text: block.text
+          });
+          continue;
+        }
+        if (block.type === 'tool_use') {
+          out.push({
+            type: 'tool_use',
+            record_index: recordIndex,
+            message_index: messageIndex,
+            block_index: blockIndex,
+            scenario_id: record.scenario_id,
+            agent: record.agent,
+            role: message.role,
+            ts: message.ts,
+            id: block.id,
+            name: block.name,
+            server: block.server,
+            input: block.input
+          });
+          continue;
+        }
+        out.push(
+          removeUndefined({
+            type: 'tool_result',
+            record_index: recordIndex,
+            message_index: messageIndex,
+            block_index: blockIndex,
+            scenario_id: record.scenario_id,
+            agent: record.agent,
+            role: message.role,
+            ts: block.ts_end ?? block.ts_start ?? message.ts,
+            tool_use_id: block.tool_use_id,
+            name: block.name,
+            server: block.server,
+            is_error: block.is_error,
+            duration_ms: block.duration_ms,
+            content: block.content
+          })
+        );
+      }
+    }
+  }
+  return out;
+}
+
+function extractTextBlocks(blocks: TraceMessageContentBlock[]): string[] {
+  return blocks.filter((b): b is Extract<TraceMessageContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text);
+}
+
+function extractFinalAssistantText(record: ScenarioRunTraceRecord): string {
+  for (let i = record.messages.length - 1; i >= 0; i -= 1) {
+    const message = record.messages[i];
+    if (message.role !== 'assistant') continue;
+    const text = extractTextBlocks(message.content).join('\n\n').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function buildConversationTimeline(
+  record: ScenarioRunTraceRecord,
+  textMax: number
+): Array<Record<string, unknown>> {
+  const timeline: Array<Record<string, unknown>> = [];
+  for (const [messageIndex, message] of record.messages.entries()) {
+    for (const [blockIndex, block] of message.content.entries()) {
+      if (block.type === 'text') {
+        timeline.push({
+          index: timeline.length,
+          type: message.role === 'assistant' ? 'agent_message' : message.role === 'user' ? 'user_message' : 'tool_text',
+          role: message.role,
+          ts: message.ts,
+          message_index: messageIndex,
+          block_index: blockIndex,
+          text: truncate(block.text, textMax)
+        });
+        continue;
+      }
+      if (block.type === 'tool_use') {
+        timeline.push({
+          index: timeline.length,
+          type: 'tool_call',
+          role: message.role,
+          ts: message.ts,
+          message_index: messageIndex,
+          block_index: blockIndex,
+          id: block.id,
+          server: block.server,
+          tool: block.name,
+          args: block.input
+        });
+        continue;
+      }
+      timeline.push({
+        index: timeline.length,
+        type: 'tool_result',
+        role: message.role,
+        ts: block.ts_end ?? block.ts_start ?? message.ts,
+        message_index: messageIndex,
+        block_index: blockIndex,
+        tool_use_id: block.tool_use_id,
+        server: block.server,
+        tool: block.name,
+        ok: !block.is_error,
+        duration_ms: block.duration_ms,
+        content: block.content.map((c) => ({ ...c, text: truncate(c.text, textMax) }))
+      });
+    }
+  }
+  return timeline;
 }
 
 function resolvePathInsideWorkspace(pathInput: string): string {

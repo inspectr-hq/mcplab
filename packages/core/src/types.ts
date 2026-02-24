@@ -146,7 +146,73 @@ export interface LlmResponse {
   content?: string;
   tool_calls?: ToolCall[];
   raw?: unknown;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  };
 }
+
+export interface TraceMessageUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+}
+
+export type TraceMessageContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      server: string;
+    }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      name: string;
+      content: Array<{ type: 'text'; text: string }>;
+      is_error: boolean;
+      duration_ms?: number;
+      ts_start?: string;
+      ts_end?: string;
+      server?: string;
+    };
+
+export interface TraceMessage {
+  role: 'user' | 'assistant' | 'tool';
+  ts?: string;
+  usage?: TraceMessageUsage;
+  content: TraceMessageContentBlock[];
+}
+
+export interface ScenarioRunTraceRecord {
+  type: 'scenario_run';
+  trace_version: 3;
+  run_index: number;
+  scenario_id: string;
+  agent: string;
+  provider: string;
+  model: string;
+  ts_start: string;
+  ts_end: string;
+  pass: boolean;
+  messages: TraceMessage[];
+  metrics?: {
+    tool_call_count: number;
+    total_tool_duration_ms: number;
+  };
+}
+
+export interface TraceFileLegacyMeta {
+  type: 'trace_meta';
+  trace_version: number;
+  run_id: string;
+  ts: string;
+}
+
+export type PersistedTraceRecord = ScenarioRunTraceRecord | TraceFileLegacyMeta | Record<string, unknown>;
 
 export interface TraceRunStarted {
   type: 'run_started';
@@ -157,7 +223,7 @@ export interface TraceRunStarted {
 
 export interface TraceMeta {
   type: 'trace_meta';
-  trace_version: 2;
+  trace_version: 3;
   run_id: string;
   ts: string;
 }

@@ -44,13 +44,12 @@ import type {
 import type {
   getRunResults,
   listRuns,
-  getTraceEvents,
-  toTraceUiEvents,
+  getScenarioRunTraceRecords,
   selectScenarioIds
 } from './runs-store.js';
 import type { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import type { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
-import type { RunSummary, TraceUiEvent } from './runs-store.js';
+import type { RunSummary } from './runs-store.js';
 import type { ConfigRecord } from './config-store.js';
 import type {
   ResultsJson,
@@ -143,8 +142,7 @@ export interface RunDeps {
   ensureInsideRoot: typeof ensureInsideRoot;
   listRuns: typeof listRuns;
   getRunResults: typeof getRunResults;
-  getTraceEvents: typeof getTraceEvents;
-  toTraceUiEvents: typeof toTraceUiEvents;
+  getScenarioRunTraceRecords: typeof getScenarioRunTraceRecords;
   selectScenarioIds: typeof selectScenarioIds;
   expandConfigForAgents: (config: EvalConfig, requestedAgents?: string[]) => ExecutableEvalConfig;
   resolveRunSelectedAgents: (
@@ -178,5 +176,4 @@ export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
 export type RunsResults = ResultsJson;
 export type RunsList = RunSummary[];
 export type RunsTraceEvents = TraceEvent[];
-export type RunsTraceUiEvents = TraceUiEvent[];
 export type ConfigRecords = ConfigRecord[];

@@ -39,8 +39,7 @@ import {
   listRuns,
   getRunResults,
   selectScenarioIds,
-  getTraceEvents,
-  toTraceUiEvents
+  getScenarioRunTraceRecords
 } from './runs-store.js';
 import { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
@@ -229,14 +228,14 @@ export async function startAppServer(options: AppServerOptions) {
     }
     throw lastError instanceof Error ? lastError : new Error(`Run not found: ${runId}`);
   };
-  const getTraceEventsWithFallback: typeof getTraceEvents = (runId, runsDir) => {
+  const getScenarioRunTraceRecordsWithFallback: typeof getScenarioRunTraceRecords = (runId, runsDir) => {
     for (const dir of resolveRunReadDirs(settings, runsDir)) {
       try {
         getRunResults(runId, dir);
       } catch {
         continue;
       }
-      return getTraceEvents(runId, dir);
+      return getScenarioRunTraceRecords(runId, dir);
     }
     return [];
   };
@@ -281,8 +280,7 @@ export async function startAppServer(options: AppServerOptions) {
     safeFileName,
     readConfigRecordOrInvalid,
     listRuns: listRunsWithFallback,
-    getTraceEvents: getTraceEventsWithFallback,
-    toTraceUiEvents,
+    getScenarioRunTraceRecords: getScenarioRunTraceRecordsWithFallback,
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,

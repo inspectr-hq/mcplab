@@ -1,12 +1,12 @@
 import type {
   CoreEvalConfig,
   CoreResultsJson,
+  ScenarioRunTraceRecord,
   ScenarioAssistantSessionView,
   ScenarioAssistantTurnResponse,
   RunJobEvent,
   SnapshotComparison,
   SnapshotRecord,
-  TraceUiEvent,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
   OAuthDebuggerSessionEvent,
@@ -112,7 +112,7 @@ export const workspaceApiClient = {
   deleteRun: (runId: string) =>
     request<{ ok: boolean }>(`/api/runs/${runId}`, { method: 'DELETE' }),
   getRunTrace: (runId: string) =>
-    request<{ runId: string; events: TraceUiEvent[] }>(`/api/runs/${runId}/trace`),
+    request<{ runId: string; records: ScenarioRunTraceRecord[] }>(`/api/runs/${runId}/trace`),
   listSnapshots: () => request<SnapshotRecord[]>('/api/snapshots'),
   createSnapshotFromRun: (runId: string, name?: string) =>
     request<SnapshotRecord>('/api/snapshots', {

@@ -5,7 +5,8 @@ import type {
   ExecutableEvalConfig,
   ScenarioRunResult,
   ResultsJson,
-  ExecutableScenario
+  ExecutableScenario,
+  ScenarioRunTraceRecord
 } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -82,15 +83,9 @@ export async function runAll(
   const trace = new TraceWriter(tracePath);
   trace.write({
     type: 'trace_meta',
-    trace_version: 2,
+    trace_version: 3,
     run_id: runId,
     ts: new Date().toISOString()
-  });
-  trace.write({
-    type: 'run_started',
-    run_id: runId,
-    ts: new Date().toISOString(),
-    config_hash: options.configHash
   });
   const totalScenarioRuns = config.scenarios.length * options.runsPerScenario;
   await emitProgress({
@@ -138,18 +133,10 @@ export async function runAll(
         runIndex,
         runsPerScenario: options.runsPerScenario
       });
-      trace.write({
-        type: 'scenario_started',
-        scenario_id: scenario.id,
-        agent: scenario.agent,
-        ts: new Date().toISOString()
-      });
-
       const runResult = await runAgentScenario({
         scenario,
         agent,
         mcp,
-        trace,
         signal: options.signal,
         onProgress: async (event) => {
           await emitProgress({
@@ -188,18 +175,24 @@ export async function runAll(
         extracted
       };
       runs.push(scenarioRun);
-
-      trace.write({
-        type: 'scenario_finished',
+      const traceRecord: ScenarioRunTraceRecord = {
+        type: 'scenario_run',
+        trace_version: 3,
+        run_index: runIndex,
         scenario_id: scenario.id,
         agent: scenario.agent,
+        provider: runResult.traceProvider,
+        model: runResult.traceModel,
+        ts_start: runResult.traceStartedAt,
+        ts_end: runResult.traceEndedAt,
         pass: evalResult.pass,
+        messages: runResult.traceMessages,
         metrics: {
           tool_call_count: runResult.toolSequence.length,
-          failures: evalResult.failures
-        },
-        ts: new Date().toISOString()
-      });
+          total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)
+        }
+      };
+      trace.write(traceRecord);
       await emitProgress({
         type: 'scenario_run_finished',
         scenarioId: scenario.id,
