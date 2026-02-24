@@ -29,7 +29,7 @@ const ManageScenarios = () => {
   const { scenarioId } = useParams<{ scenarioId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { mode, source } = useDataSource();
+  const { source } = useDataSource();
   const { scenarios, setScenarios, agents, servers, reload, loading } = useLibraries();
   const [query, setQuery] = useState("");
   const [serverFilter, setServerFilter] = useState<string>("all");
@@ -241,7 +241,6 @@ const ManageScenarios = () => {
   }, [scenarios, query, serverFilter, sortBy, sortDir, servers]);
 
   useEffect(() => {
-    if (mode !== "workspace") return;
     let active = true;
     source
       .getWorkspaceSettings()
@@ -256,7 +255,7 @@ const ManageScenarios = () => {
     return () => {
       active = false;
     };
-  }, [mode, source]);
+  }, [source]);
 
   useEffect(() => {
     if (!selectedScenarioId) return;

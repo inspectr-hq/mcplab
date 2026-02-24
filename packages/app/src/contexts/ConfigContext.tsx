@@ -16,7 +16,7 @@ interface ConfigContextValue {
 const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
-  const { source, mode } = useDataSource();
+  const { source } = useDataSource();
   const [configs, setConfigs] = useState<EvalConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,7 +32,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void reload();
-  }, [reload, mode]);
+  }, [reload]);
 
   const getConfig = useCallback((id: string) => configs.find((c) => c.id === id), [configs]);
 

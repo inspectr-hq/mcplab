@@ -73,7 +73,7 @@ function toMarkdownClient(session: OAuthDebuggerSessionView, events: OAuthDebugg
 }
 
 export default function OAuthDebuggerPage() {
-  const { source, mode } = useDataSource();
+  const { source } = useDataSource();
   const { servers, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
 
   const [viewStep, setViewStep] = useState<ViewStep>('configure');
@@ -244,10 +244,6 @@ export default function OAuthDebuggerPage() {
   };
 
   const createAndStart = async () => {
-    if (mode !== 'workspace') {
-      toast({ title: 'OAuth Debugger is only available in workspace mode', variant: 'destructive' });
-      return;
-    }
     setSubmitting(true);
     try {
       const config = buildConfig();
@@ -635,7 +631,7 @@ export default function OAuthDebuggerPage() {
           </details>
 
           <div className="flex justify-end">
-            <Button type="button" onClick={() => void createAndStart()} disabled={submitting || mode !== 'workspace'}>
+            <Button type="button" onClick={() => void createAndStart()} disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Start OAuth Debug Session
             </Button>

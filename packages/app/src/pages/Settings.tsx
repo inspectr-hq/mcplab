@@ -9,7 +9,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 
 const SettingsPage = () => {
-  const { mode, source } = useDataSource();
+  const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingAssistantAgent, setSavingAssistantAgent] = useState(false);
@@ -21,10 +21,6 @@ const SettingsPage = () => {
   );
 
   const loadSettings = async () => {
-    if (mode !== "workspace") {
-      setScenarioAssistantAgentName("");
-      return;
-    }
     setLoadingSettings(true);
     try {
       const settings = await source.getWorkspaceSettings();
@@ -43,11 +39,10 @@ const SettingsPage = () => {
 
   useEffect(() => {
     void loadSettings();
-  }, [mode, source]);
+  }, [source]);
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
     setScenarioAssistantAgentName(nextAgentName);
-    if (mode !== "workspace") return;
     setSavingAssistantAgent(true);
     try {
       await source.updateWorkspaceSettings({
@@ -110,7 +105,7 @@ const SettingsPage = () => {
               onValueChange={(value) =>
                 void saveAssistantAgentSetting(value === "__none__" ? "" : value)
               }
-              disabled={savingAssistantAgent || mode !== "workspace"}
+              disabled={savingAssistantAgent}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select assistant agent" />
@@ -129,7 +124,7 @@ const SettingsPage = () => {
             </p>
           </div>
           <div className="text-xs text-muted-foreground">
-            {mode === "workspace" ? "Saved in workspace settings" : "Workspace mode required"}
+            Saved in workspace settings
           </div>
         </CardContent>
       </Card>

@@ -38,7 +38,7 @@ const ConfigEditor = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
-  const { mode, source } = useDataSource();
+  const { source } = useDataSource();
   const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
 
   const isNew = id === "new";
@@ -71,7 +71,6 @@ const ConfigEditor = () => {
   }, [existing, editing]);
 
   useEffect(() => {
-    if (mode !== "workspace") return;
     let active = true;
     source.listSnapshots().then((next) => {
       if (active) setSnapshots(next);
@@ -81,10 +80,10 @@ const ConfigEditor = () => {
     return () => {
       active = false;
     };
-  }, [mode, source]);
+  }, [source]);
 
   useEffect(() => {
-    if (mode !== "workspace" || !snapshotRunId.trim()) {
+    if (!snapshotRunId.trim()) {
       setSnapshotRunIsFullyPassing(null);
       return;
     }
@@ -108,7 +107,7 @@ const ConfigEditor = () => {
     return () => {
       active = false;
     };
-  }, [mode, snapshotRunId, source]);
+  }, [snapshotRunId, source]);
 
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
@@ -122,7 +121,7 @@ const ConfigEditor = () => {
       baselineSourceRunId?: string;
     }
   ) => {
-    if (mode !== "workspace" || !config.id || readOnly === false) {
+    if (!config.id || readOnly === false) {
       patch({
         snapshotEval: {
           enabled: nextPolicy.enabled,
@@ -182,7 +181,15 @@ const ConfigEditor = () => {
       toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
       return;
     }
-    const nextConfig = { ...config, updatedAt: new Date().toISOString() };
+    const normalizedScenarioRefs = (config.scenarioRefs ?? []).map((ref) => {
+      const matched = libScenarios.find((item) => item.id === ref || item.name === ref);
+      return matched?.id || ref;
+    });
+    const nextConfig = {
+      ...config,
+      scenarioRefs: normalizedScenarioRefs,
+      updatedAt: new Date().toISOString()
+    };
     if (isNew) {
       const created = await addConfig(nextConfig);
       setConfig(created);
@@ -287,7 +294,7 @@ const ConfigEditor = () => {
   const addScenarioReference = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
-    const refId = template.name || template.id;
+    const refId = template.id;
     const nextRefs = Array.from(new Set([...(config.scenarioRefs ?? []), refId]));
     patch({ scenarioRefs: nextRefs });
     setSelectedLibraryScenarioId("");
@@ -319,7 +326,7 @@ const ConfigEditor = () => {
   const findLibraryAgentByRef = (ref: string) =>
     libAgents.find((item) => (item.name || item.id) === ref);
   const findLibraryScenarioByRef = (ref: string) =>
-    libScenarios.find((item) => (item.name || item.id) === ref);
+    libScenarios.find((item) => item.id === ref || item.name === ref);
   const referencedServers = (config.serverRefs ?? [])
     .map(findLibraryServerByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -627,7 +634,7 @@ const ConfigEditor = () => {
             </div>
           </div>
 
-          {mode === "workspace" && config.id && (
+          {config.id && (
             <div className="grid gap-2 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Generate baseline from passing run</Label>

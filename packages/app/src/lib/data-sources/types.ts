@@ -1,7 +1,5 @@
 import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
 
-export type DataMode = 'demo' | 'workspace';
-
 export interface CoreServerAuthBearer {
   type: 'bearer';
   env: string;
@@ -373,6 +371,44 @@ export interface ResultAssistantApplyReportResponse {
   result: unknown;
 }
 
+export interface ResultAssistantSessionMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  text: string;
+  createdAt: string;
+  pendingToolCallId?: string;
+}
+
+export interface ResultAssistantPendingToolCall {
+  id: string;
+  server: string;
+  tool: string;
+  publicToolName: string;
+  arguments: unknown;
+  status: 'pending' | 'approved' | 'denied' | 'error';
+  createdAt: string;
+  resultPreview?: string;
+  error?: string;
+}
+
+export interface ResultAssistantSessionView {
+  id: string;
+  runId: string;
+  createdAt: string;
+  updatedAt: string;
+  selectedAssistantAgentName: string;
+  model: string;
+  provider: string;
+  messages: ResultAssistantSessionMessage[];
+  pendingToolCalls: ResultAssistantPendingToolCall[];
+}
+
+export interface ResultAssistantTurnResponse {
+  type: 'assistant_message' | 'tool_call_request';
+  text: string;
+  pendingToolCall?: ResultAssistantPendingToolCall;
+}
+
 export interface ToolAnalysisFinding {
   id: string;
   scope:
@@ -692,6 +728,24 @@ export interface EvalDataSource {
     outputPath?: string;
     overwrite?: boolean;
   }) => Promise<ResultAssistantApplyReportResponse>;
+  createResultAssistantSession: (
+    runId: string
+  ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
+  getResultAssistantSession: (sessionId: string) => Promise<{ session: ResultAssistantSessionView }>;
+  sendResultAssistantMessage: (
+    sessionId: string,
+    message: string
+  ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
+  approveResultAssistantToolCall: (
+    sessionId: string,
+    callId: string,
+    argumentsOverride?: unknown
+  ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
+  denyResultAssistantToolCall: (
+    sessionId: string,
+    callId: string
+  ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
+  closeResultAssistantSession: (sessionId: string) => Promise<void>;
   generateSnapshotEvalBaseline: (
     runId: string,
     configId: string,

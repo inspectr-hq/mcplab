@@ -53,7 +53,7 @@ export function ScenarioAssistantDialog({
   initialUserMessage,
   onApplyPatch
 }: ScenarioAssistantDialogProps) {
-  const { mode, source } = useDataSource();
+  const { source } = useDataSource();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
   const [input, setInput] = useState("");
@@ -73,7 +73,6 @@ export function ScenarioAssistantDialog({
 
   useEffect(() => {
     if (!open) return;
-    if (mode !== "workspace") return;
     if (!selectedAssistantAgentName || sessionId) return;
     let cancelled = false;
     setLoading(true);
@@ -136,7 +135,6 @@ export function ScenarioAssistantDialog({
     };
   }, [
     open,
-    mode,
     source,
     sessionId,
     configId,
@@ -175,7 +173,7 @@ export function ScenarioAssistantDialog({
   ]);
 
   const canUseAssistant =
-    mode === "workspace" && agents.length > 0 && scenario.serverIds.length > 0 && Boolean(selectedAssistantAgentName);
+    agents.length > 0 && scenario.serverIds.length > 0 && Boolean(selectedAssistantAgentName);
 
   const sendMessage = async (message: string) => {
     if (!sessionId) return;
@@ -292,7 +290,7 @@ export function ScenarioAssistantDialog({
 
         {!canUseAssistant ? (
           <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            Scenario Assistant is available in workspace mode with a configured assistant agent and at least one selected server on the scenario.
+            Scenario Assistant requires a configured assistant agent and at least one selected server on the scenario.
           </div>
         ) : (
           <div className="min-h-0 flex flex-1 flex-col gap-3">

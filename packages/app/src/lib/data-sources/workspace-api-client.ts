@@ -19,7 +19,9 @@ import type {
   WorkspaceRunSummary,
   MarkdownReportSummary,
   MarkdownReportContent,
-  ResultAssistantApplyReportResponse
+  ResultAssistantApplyReportResponse,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse
 } from './types';
 
 function getBaseUrl(): string {
@@ -150,6 +152,50 @@ export const workspaceApiClient = {
         })
       }
     ),
+  createResultAssistantSession: (runId: string) =>
+    request<{ sessionId: string; session: ResultAssistantSessionView }>(
+      '/api/result-assistant/sessions',
+      {
+        method: 'POST',
+        body: JSON.stringify({ runId })
+      }
+    ),
+  getResultAssistantSession: (sessionId: string) =>
+    request<{ session: ResultAssistantSessionView }>(`/api/result-assistant/sessions/${sessionId}`),
+  sendResultAssistantMessage: (sessionId: string, message: string) =>
+    request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
+      `/api/result-assistant/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ message })
+      }
+    ),
+  approveResultAssistantToolCall: (
+    sessionId: string,
+    callId: string,
+    argumentsOverride?: unknown
+  ) =>
+    request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
+      `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          argumentsOverride === undefined ? {} : { argumentsOverride }
+        )
+      }
+    ),
+  denyResultAssistantToolCall: (sessionId: string, callId: string) =>
+    request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
+      `/api/result-assistant/sessions/${sessionId}/tool-calls/${callId}/deny`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
+  closeResultAssistantSession: (sessionId: string) =>
+    request<{ ok: boolean }>(`/api/result-assistant/sessions/${sessionId}`, {
+      method: 'DELETE'
+    }).then(() => undefined),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
     request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
       '/api/snapshots/generate-eval',

@@ -21,7 +21,12 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
-import type { ResultAssistantChatMessage, SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
+import type {
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionView,
+  SnapshotComparison,
+  SnapshotRecord
+} from "@/lib/data-sources/types";
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
 
@@ -49,7 +54,9 @@ const ResultDetail = () => {
   const [acceptSnapshotName, setAcceptSnapshotName] = useState("");
   const [acceptingBaseline, setAcceptingBaseline] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantMessages, setAssistantMessages] = useState<ResultAssistantChatMessage[]>([]);
+  const [assistantSessionId, setAssistantSessionId] = useState<string | null>(null);
+  const [assistantMessages, setAssistantMessages] = useState<ResultAssistantSessionView["messages"]>([]);
+  const [assistantPendingToolCalls, setAssistantPendingToolCalls] = useState<ResultAssistantPendingToolCall[]>([]);
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
@@ -70,6 +77,14 @@ const ResultDetail = () => {
   useEffect(() => {
     if (!id) return;
     let active = true;
+    const previousSessionId = assistantSessionId;
+    if (previousSessionId) {
+      void source.closeResultAssistantSession(previousSessionId).catch(() => undefined);
+      setAssistantSessionId(null);
+      setAssistantMessages([]);
+      setAssistantPendingToolCalls([]);
+      setAssistantMeta(null);
+    }
     setLoading(true);
     source.getResult(id).then((next) => {
       if (active) {
@@ -160,6 +175,13 @@ const ResultDetail = () => {
     }, 0);
     return () => window.clearTimeout(t);
   }, [assistantOpen, assistantMessages.length, assistantLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (!assistantSessionId) return;
+      void source.closeResultAssistantSession(assistantSessionId).catch(() => undefined);
+    };
+  }, [assistantSessionId, source]);
 
   useEffect(() => {
     const el = assistantInputRef.current;
@@ -280,27 +302,65 @@ const ResultDetail = () => {
   const askResultAssistant = async () => {
     const question = assistantInput.trim();
     if (!question || !result) return;
-    const nextMessages: ResultAssistantChatMessage[] = [
-      ...assistantMessages,
-      { role: "user", text: question }
-    ];
-    setAssistantMessages(nextMessages);
     setAssistantInput("");
     setAssistantLoading(true);
     try {
-      const response = await source.askResultAssistant(result.id, nextMessages);
-      setAssistantMeta({
-        assistantAgentName: response.assistantAgentName,
-        provider: response.provider,
-        model: response.model
-      });
-      setAssistantMessages([
-        ...nextMessages,
-        { role: "assistant", text: response.reply || "(No response)" }
-      ]);
+      let sessionId = assistantSessionId;
+      if (!sessionId) {
+        const created = await source.createResultAssistantSession(result.id);
+        sessionId = created.sessionId;
+        syncResultAssistantSession(created.session);
+      }
+      const response = await source.sendResultAssistantMessage(sessionId, question);
+      syncResultAssistantSession(response.session);
     } catch (error: any) {
       toast({
         title: "MCP Labs Assistant error",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const syncResultAssistantSession = (session: ResultAssistantSessionView) => {
+    setAssistantSessionId(session.id);
+    setAssistantMessages(session.messages);
+    setAssistantPendingToolCalls(session.pendingToolCalls);
+    setAssistantMeta({
+      assistantAgentName: session.selectedAssistantAgentName,
+      provider: session.provider,
+      model: session.model
+    });
+  };
+
+  const approveResultAssistantToolCall = async (callId: string) => {
+    if (!assistantSessionId) return;
+    setAssistantLoading(true);
+    try {
+      const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
+      syncResultAssistantSession(response.session);
+    } catch (error: any) {
+      toast({
+        title: "Could not approve assistant action",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const denyResultAssistantToolCall = async (callId: string) => {
+    if (!assistantSessionId) return;
+    setAssistantLoading(true);
+    try {
+      const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
+      syncResultAssistantSession(response.session);
+    } catch (error: any) {
+      toast({
+        title: "Could not deny assistant action",
         description: String(error?.message ?? error),
         variant: "destructive"
       });
@@ -315,8 +375,10 @@ const ResultDetail = () => {
     if (assistantMessages.length === 0) {
       setAssistantMessages([
         {
+          id: `msg-${Date.now()}`,
           role: "assistant",
-          text: "Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result."
+          text: "Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result.",
+          createdAt: new Date().toISOString()
         }
       ]);
     }
@@ -1031,19 +1093,30 @@ const ResultDetail = () => {
               <div className="space-y-3 pr-2">
                 {assistantMessages.map((message, index) => {
                   const isUser = message.role === "user";
+                  const isAssistant = message.role === "assistant";
+                  const isSystem = message.role === "system";
+                  const isTool = message.role === "tool";
                   const canShowHandoff =
-                    !isUser &&
+                    isAssistant &&
                     isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
                   return (
-                    <div key={`${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+                    <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                       {!isUser && (
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
                           <Bot className="h-3 w-3" />
                         </div>
                       )}
-                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${isUser ? "border-primary/20 bg-primary/10" : "border-border/80 bg-background shadow-sm"}`}>
+                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${
+                        isUser
+                          ? "border-primary/20 bg-primary/10"
+                          : isSystem
+                            ? "border-amber-400/30 bg-amber-50/70"
+                            : isTool
+                              ? "border-blue-300/30 bg-blue-50/50"
+                              : "border-border/80 bg-background shadow-sm"
+                      }`}>
                         <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                          {isUser ? "You" : "Assistant"}
+                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : "Assistant"}
                         </p>
                         <MarkdownText text={message.text} className="text-sm" />
                         {canShowHandoff && (
@@ -1070,7 +1143,7 @@ const ResultDetail = () => {
                             </Button>
                           </div>
                         )}
-                        {!canShowHandoff && !isUser && (
+                        {!canShowHandoff && isAssistant && (
                           <div className="mt-3 flex justify-end">
                             <Button
                               type="button"
@@ -1093,6 +1166,49 @@ const ResultDetail = () => {
                     </div>
                   );
                 })}
+                {assistantPendingToolCalls.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Pending actions (approve/deny)
+                    </div>
+                    {assistantPendingToolCalls.map((call) => (
+                      <div key={call.id} className="rounded-md border bg-background p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-mono text-xs font-semibold">{call.publicToolName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {call.server}::{call.tool}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              disabled={assistantLoading}
+                              onClick={() => void denyResultAssistantToolCall(call.id)}
+                            >
+                              Deny
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              disabled={assistantLoading}
+                              onClick={() => void approveResultAssistantToolCall(call.id)}
+                            >
+                              Approve
+                            </Button>
+                          </div>
+                        </div>
+                        <pre className="mt-2 max-h-48 overflow-auto rounded border bg-muted/50 p-2 text-xs">
+                          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {assistantLoading && (
                   <div className="flex items-start gap-2">
                     <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">

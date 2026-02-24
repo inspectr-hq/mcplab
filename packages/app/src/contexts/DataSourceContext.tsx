@@ -1,11 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { workspaceSource } from "@/lib/data-sources/workspace-source";
 import { workspaceApiClient } from "@/lib/data-sources/workspace-api-client";
-import type { DataMode, EvalDataSource } from "@/lib/data-sources/types";
+import type { EvalDataSource } from "@/lib/data-sources/types";
 
 interface DataSourceContextValue {
-  mode: DataMode;
-  setMode: (mode: DataMode) => void;
+  mode: "workspace";
   connection: "connected" | "disconnected" | "checking";
   source: EvalDataSource;
 }
@@ -13,7 +12,7 @@ interface DataSourceContextValue {
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 
 export function DataSourceProvider({ children }: { children: ReactNode }) {
-  const mode: DataMode = "workspace";
+  const mode = "workspace" as const;
   const [connection, setConnection] = useState<"connected" | "disconnected" | "checking">(
     "checking",
   );
@@ -28,12 +27,8 @@ export function DataSourceProvider({ children }: { children: ReactNode }) {
 
   const source = useMemo<EvalDataSource>(() => workspaceSource, []);
 
-  const setMode = () => {
-    // Workspace-only mode; kept for compatibility with existing consumers.
-  };
-
   return (
-    <DataSourceContext.Provider value={{ mode, setMode, connection, source }}>
+    <DataSourceContext.Provider value={{ mode, connection, source }}>
       {children}
     </DataSourceContext.Provider>
   );

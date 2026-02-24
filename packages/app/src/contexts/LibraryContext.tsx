@@ -19,7 +19,7 @@ interface LibraryContextValue extends LibraryState {
 const LibraryContext = createContext<LibraryContextValue | null>(null);
 
 export function LibraryProvider({ children }: { children: ReactNode }) {
-  const { source, mode } = useDataSource();
+  const { source } = useDataSource();
   const [state, setState] = useState<LibraryState>({ servers: [], agents: [], scenarios: [] });
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +35,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void reload();
-  }, [source, mode]);
+  }, [source]);
 
   useEffect(() => {
     const handleFocus = () => {
@@ -45,7 +45,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
-  }, [source, mode]);
+  }, [source]);
 
   const save = async (next: LibraryState) => {
     setState(next);

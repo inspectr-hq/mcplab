@@ -47,6 +47,7 @@ import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
+import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleSnapshotsRoutes } from './snapshots-routes.js';
 import { handleConfigsRoutes } from './configs-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
@@ -64,6 +65,7 @@ import {
   pickDefaultAssistantAgentName,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
+import type { ResultAssistantSession } from './result-assistant-domain.js';
 import {
   discoverMcpToolsForServers,
   runToolAnalysisJob,
@@ -178,6 +180,7 @@ export async function startAppServer(options: AppServerOptions) {
   const toolAnalysisJobs = new Map<string, ToolAnalysisJob>();
   const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
+  const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   let activeJobId: string | null = null;
   const routeDeps: AppRouteDeps = {
     parseBody,
@@ -374,6 +377,20 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           toolAnalysisJobs,
+          deps: routeDeps
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleResultAssistantRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          settings,
+          resultAssistantSessions,
           deps: routeDeps
         })
       ) {

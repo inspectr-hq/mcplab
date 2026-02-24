@@ -57,7 +57,7 @@ const RunEvaluation = () => {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const { configs, reload } = useConfigs();
-  const { source, mode } = useDataSource();
+  const { source } = useDataSource();
   const { agents: libraryAgents, scenarios: libraryScenarios } = useLibraries();
   const selectedConfig = configs.find((item) => item.id === configId);
   const requestedConfigId = searchParams.get("configId");
@@ -191,16 +191,12 @@ const RunEvaluation = () => {
   };
 
   const startRun = () => {
-    if (mode === "workspace") {
-      void startWorkspaceRun();
-      return;
-    }
-    runDemo();
+    void startWorkspaceRun();
   };
 
   const stopRun = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    if (mode === "workspace" && activeJobId) {
+    if (activeJobId) {
       void source.stopRun(activeJobId);
     }
     unsubscribeRef.current?.();
@@ -244,7 +240,7 @@ const RunEvaluation = () => {
   }, []);
 
   useEffect(() => {
-    if (mode !== "workspace" || activeJobId || done) return;
+    if (activeJobId || done) return;
     let storedJobId = "";
     try {
       storedJobId = sessionStorage.getItem(RUN_EVAL_ACTIVE_JOB_KEY) ?? "";
@@ -265,7 +261,7 @@ const RunEvaluation = () => {
       // no-op; cleanup handled by existing unmount and attach replacement
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, activeJobId, done]);
+  }, [activeJobId, done]);
 
   useEffect(() => {
     void reload();
@@ -561,7 +557,7 @@ const RunEvaluation = () => {
                 <Link to={`/results/${runId || "run-a1b2c3"}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
               </Button>
             </div>
-            {mode === "workspace" && runId && (
+            {runId && (
               <div className="mt-4 flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Snapshot name (optional)</Label>

@@ -63,7 +63,7 @@ function formatToolDiscoveryWarning(serverName: string, warning: string): string
 
 
 const ToolAnalysisPage = () => {
-  const { mode, source } = useDataSource();
+  const { source } = useDataSource();
   const { servers, agents, loading: librariesLoading, reload: reloadLibraries } = useLibraries();
 
   const [settingsAssistantAgentName, setSettingsAssistantAgentName] = useState("");
@@ -117,7 +117,6 @@ const ToolAnalysisPage = () => {
 
   useEffect(() => {
     let active = true;
-    if (mode !== "workspace") return;
     source
       .getWorkspaceSettings()
       .then((settings) => {
@@ -130,7 +129,7 @@ const ToolAnalysisPage = () => {
     return () => {
       active = false;
     };
-  }, [mode, source]);
+  }, [source]);
 
   useEffect(() => {
     return () => {
@@ -190,7 +189,7 @@ const ToolAnalysisPage = () => {
   };
 
   useEffect(() => {
-    if (mode !== "workspace" || activeJobId || report) return;
+    if (activeJobId || report) return;
     let storedJobId = "";
     try {
       storedJobId = sessionStorage.getItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY) ?? "";
@@ -208,10 +207,9 @@ const ToolAnalysisPage = () => {
     return () => {
       // no-op; cleanup handled by standard subscription cleanup
     };
-  }, [mode, source, activeJobId, report]);
+  }, [source, activeJobId, report]);
 
   const discoverTools = async () => {
-    if (mode !== "workspace") return;
     if (selectedServerNames.length === 0) {
       setDiscovered([]);
       setSelectedToolsByServer({});
@@ -245,7 +243,7 @@ const ToolAnalysisPage = () => {
   useEffect(() => {
     void discoverTools();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, selectedServerNames.join("|")]);
+  }, [selectedServerNames.join("|")]);
 
   const filteredDiscovered = useMemo(() => {
     const q = toolQuery.trim().toLowerCase();
@@ -269,14 +267,6 @@ const ToolAnalysisPage = () => {
   const selectedServerLabel = selectedServerNames[0] ?? "";
 
   const startAnalysis = async () => {
-    if (mode !== "workspace") {
-      toast({
-        title: "Workspace mode required",
-        description: "Analyze MCP Tools is only available in workspace mode.",
-        variant: "destructive"
-      });
-      return;
-    }
     if (!metadataReview && !deeperAnalysis) {
       toast({ title: "Select at least one mode", variant: "destructive" });
       return;
@@ -469,15 +459,6 @@ const ToolAnalysisPage = () => {
           </button>
         </div>
       </div>
-
-      {mode !== "workspace" && (
-        <Alert>
-          <AlertTitle>Workspace mode required</AlertTitle>
-          <AlertDescription>
-            Analyze MCP Tools uses the local app server, configured agents, and MCP connections. Switch Data Source to Workspace.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {viewStep === "configure" && (
       <Card>
@@ -685,7 +666,7 @@ const ToolAnalysisPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => void startAnalysis()} disabled={submitting || !!activeJobId || mode !== "workspace"}>
+            <Button type="button" onClick={() => void startAnalysis()} disabled={submitting || !!activeJobId}>
               {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Analyze Tools
             </Button>

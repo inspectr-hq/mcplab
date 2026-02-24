@@ -106,6 +106,24 @@ export const workspaceSource: EvalDataSource = {
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },
+  async createResultAssistantSession(runId) {
+    return workspaceApiClient.createResultAssistantSession(runId);
+  },
+  async getResultAssistantSession(sessionId) {
+    return workspaceApiClient.getResultAssistantSession(sessionId);
+  },
+  async sendResultAssistantMessage(sessionId, message) {
+    return workspaceApiClient.sendResultAssistantMessage(sessionId, message);
+  },
+  async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
+    return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
+  },
+  async denyResultAssistantToolCall(sessionId, callId) {
+    return workspaceApiClient.denyResultAssistantToolCall(sessionId, callId);
+  },
+  async closeResultAssistantSession(sessionId) {
+    await workspaceApiClient.closeResultAssistantSession(sessionId);
+  },
   async generateSnapshotEvalBaseline(runId, configId, name) {
     const response = await workspaceApiClient.generateSnapshotEvalBaseline(runId, configId, name);
     return {
