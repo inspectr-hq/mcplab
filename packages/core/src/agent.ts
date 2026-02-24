@@ -124,6 +124,7 @@ export async function runAgentScenario(params: {
     if (!params.onProgress) return;
     await params.onProgress(event);
   };
+  let finalAnswerTurn = 0;
 
   for (let turn = 0; turn < maxTurns; turn += 1) {
     await emitProgress({
@@ -254,6 +255,7 @@ export async function runAgentScenario(params: {
 
     if (response.content) {
       finalText = response.content;
+      finalAnswerTurn = turn;
       traceMessages.push({
         role: 'assistant',
         ts: new Date().toISOString(),
@@ -268,7 +270,7 @@ export async function runAgentScenario(params: {
     type: 'final_answer',
     scenarioId: scenario.id,
     agentName: scenario.agent,
-    turn: Math.max(0, maxTurns - 1),
+    turn: finalAnswerTurn,
     hasText: finalText.trim().length > 0
   });
 

@@ -1,233 +1,36 @@
 import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
 import type {
+  AgentConfig as CoreAgentConfig,
+  EvalConfig as CoreEvalConfig,
+  ResultsJson as CoreResultsJson,
+  Scenario as CoreScenario,
+  ScenarioAggregate as CoreScenarioAggregate,
+  ScenarioRunResult as CoreScenarioRun,
   ScenarioRunTraceRecord as CoreScenarioRunTraceRecord,
+  ServerAuthBearer as CoreServerAuthBearer,
+  ServerAuthOauthAuthorizationCode as CoreServerAuthOauthAuthorizationCode,
+  ServerAuthOauthClientCredentials as CoreServerAuthOauth,
+  ServerConfig as CoreServerConfig,
   TraceMessage as CoreTraceMessage,
   TraceMessageContentBlock as CoreTraceMessageContentBlock
 } from '@inspectr/mcplab-core';
 
-export interface CoreServerAuthBearer {
-  type: 'bearer';
-  env: string;
-}
-
-export interface CoreServerAuthOauth {
-  type: 'oauth_client_credentials';
-  token_url: string;
-  client_id_env: string;
-  client_secret_env: string;
-  scope?: string;
-  audience?: string;
-  token_params?: Record<string, string>;
-}
-
-export interface CoreServerAuthOauthAuthorizationCode {
-  type: 'oauth_authorization_code';
-  client_id: string;
-  client_secret?: string;
-  redirect_url: string;
-  scope?: string;
-}
-
-export interface CoreServerConfig {
-  transport: 'http';
-  url: string;
-  auth?: CoreServerAuthBearer | CoreServerAuthOauth | CoreServerAuthOauthAuthorizationCode;
-}
-
-export interface CoreAgentConfig {
-  provider: 'openai' | 'anthropic' | 'azure_openai';
-  model: string;
-  temperature?: number;
-  max_tokens?: number;
-  system?: string;
-}
-
-export interface CoreScenario {
-  id: string;
-  servers: string[];
-  prompt: string;
-  snapshot_eval?: {
-    enabled?: boolean;
-    baseline_snapshot_id?: string;
-    baseline_source_run_id?: string;
-    last_updated_at?: string;
-  };
-  eval?: {
-    tool_constraints?: {
-      required_tools?: string[];
-      forbidden_tools?: string[];
-    };
-    response_assertions?: Array<
-      | { type: 'regex'; pattern: string }
-      | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
-    >;
-  };
-  extract?: Array<{ name: string; from: 'final_text'; regex: string }>;
-}
-
-export interface CoreEvalConfig {
-  servers: Record<string, CoreServerConfig>;
-  server_refs?: string[];
-  agents: Record<string, CoreAgentConfig>;
-  agent_refs?: string[];
-  scenarios: CoreScenario[];
-  scenario_refs?: string[];
-  run_defaults?: {
-    selected_agents?: string[];
-  };
-  snapshot_eval?: {
-    enabled: boolean;
-    mode: 'warn' | 'fail_on_drift';
-    baseline_snapshot_id?: string;
-    baseline_source_run_id?: string;
-    last_updated_at?: string;
-  };
-}
-
-export interface CoreScenarioRun {
-  run_index: number;
-  pass: boolean;
-  failures: string[];
-  tool_calls: string[];
-  tool_call_count: number;
-  tool_sequence: string[];
-  tool_usage: Record<string, number>;
-  tool_durations_ms: number[];
-  final_text: string;
-  extracted: Record<string, string | number | boolean | null>;
-}
-
-export interface CoreScenarioAggregate {
-  scenario_id: string;
-  agent: string;
-  runs: CoreScenarioRun[];
-  pass_rate: number;
-}
-
-export interface CoreResultsJson {
-  metadata: {
-    run_id: string;
-    timestamp: string;
-    config_hash: string;
-    snapshot_eval?: {
-      applied: boolean;
-      mode: 'warn' | 'fail_on_drift';
-      baseline_snapshot_id: string;
-      baseline_source_run_id?: string;
-      overall_score: number;
-      status: 'Match' | 'Warn' | 'Drift';
-      impacted_scenarios: string[];
-    };
-  };
-  summary: {
-    total_scenarios: number;
-    total_runs: number;
-    pass_rate: number;
-    avg_tool_calls_per_run: number;
-    avg_tool_latency_ms: number | null;
-  };
-  scenarios: CoreScenarioAggregate[];
-}
+export type {
+  CoreServerAuthBearer,
+  CoreServerAuthOauth,
+  CoreServerAuthOauthAuthorizationCode,
+  CoreServerConfig,
+  CoreAgentConfig,
+  CoreScenario,
+  CoreEvalConfig,
+  CoreScenarioRun,
+  CoreScenarioAggregate,
+  CoreResultsJson
+};
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
 export type ScenarioRunTraceMessage = CoreTraceMessage;
 export type ScenarioRunTraceRecord = CoreScenarioRunTraceRecord;
-
-export interface TraceUiMetaEvent {
-  type: 'trace_meta';
-  trace_version: 3;
-  run_id: string;
-  ts: string;
-}
-
-export interface TraceUiScenarioStartedEvent {
-  type: 'scenario_started';
-  scenario_id: string;
-  agent: string;
-  ts: string;
-}
-
-export interface TraceUiLlmRequestEvent {
-  type: 'llm_request';
-  scenario_id?: string;
-  agent?: string;
-  provider?: string;
-  model?: string;
-  message_count?: number;
-  summary?: string;
-  ts: string;
-}
-
-export interface TraceUiLlmResponseEvent {
-  type: 'llm_response';
-  scenario_id?: string;
-  agent?: string;
-  provider?: string;
-  model?: string;
-  tool_calls?: string[];
-  has_text?: boolean;
-  summary?: string;
-  raw_or_summary?: string;
-  ts: string;
-}
-
-export interface TraceUiAgentMessageEvent {
-  type: 'agent_message';
-  scenario_id?: string;
-  agent?: string;
-  phase?: 'intermediate' | 'final';
-  text: string;
-  provider?: string;
-  model?: string;
-  ts: string;
-}
-
-export interface TraceUiToolCallEvent {
-  type: 'tool_call';
-  scenario_id?: string;
-  agent?: string;
-  tool: string;
-  args?: unknown;
-  ts_start?: string;
-}
-
-export interface TraceUiToolResultEvent {
-  type: 'tool_result';
-  scenario_id?: string;
-  agent?: string;
-  tool: string;
-  ok: boolean;
-  result_summary: string;
-  duration_ms?: number;
-  ts_end?: string;
-}
-
-export interface TraceUiFinalAnswerEvent {
-  type: 'final_answer';
-  scenario_id?: string;
-  agent?: string;
-  text: string;
-  ts: string;
-}
-
-export interface TraceUiScenarioFinishedEvent {
-  type: 'scenario_finished';
-  scenario_id: string;
-  agent?: string;
-  pass: boolean;
-  ts: string;
-}
-
-export type TraceUiEvent =
-  | TraceUiMetaEvent
-  | TraceUiScenarioStartedEvent
-  | TraceUiLlmRequestEvent
-  | TraceUiLlmResponseEvent
-  | TraceUiAgentMessageEvent
-  | TraceUiToolCallEvent
-  | TraceUiToolResultEvent
-  | TraceUiFinalAnswerEvent
-  | TraceUiScenarioFinishedEvent;
 
 export interface WorkspaceConfigRecord {
   id: string;

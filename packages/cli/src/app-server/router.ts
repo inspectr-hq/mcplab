@@ -20,8 +20,7 @@ import type {
   ExecutableEvalConfig,
   LlmMessage,
   ResultsJson,
-  ToolDef,
-  TraceEvent
+  ToolDef
 } from '@inspectr/mcplab-core';
 import { chatWithAgent, loadConfig, McpClientManager, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';

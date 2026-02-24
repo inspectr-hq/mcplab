@@ -1,6 +1,14 @@
 import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
-import { truncateJson } from './scenario-assistant-domain.js';
+import { McpClientManager } from '@inspectr/mcplab-core';
+import {
+  chatWithJsonRetry,
+  cleanupSessionsByTtl,
+  makeAssistantToolPublicName,
+  newAssistantEntityId,
+  touchSession,
+  truncateJson,
+  withTimeout
+} from './assistant-common.js';
 
 interface ParsedAssistantToolCall {
   name: string;
@@ -47,6 +55,7 @@ export interface ResultAssistantSession {
   pendingToolCalls: ResultAssistantPendingToolCall[];
   chatMessages: ResultAssistantChatMessage[];
   llmMessages: LlmMessage[];
+  systemPromptCache?: string;
 }
 
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -67,15 +76,11 @@ export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
   now = Date.now()
 ): void {
-  for (const [id, session] of sessions) {
-    if (now - session.lastTouchedAt > RESULT_ASSISTANT_SESSION_TTL_MS) {
-      sessions.delete(id);
-    }
-  }
+  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now);
 }
 
 export function touchResultAssistantSession(session: ResultAssistantSession): void {
-  session.lastTouchedAt = Date.now();
+  touchSession(session);
 }
 
 export function resultAssistantSessionView(session: ResultAssistantSession) {
@@ -146,7 +151,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       );
     }
     const pending: ResultAssistantPendingToolCall = {
-      id: `ratc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newAssistantEntityId('ratc'),
       server: mapping.server,
       tool: mapping.tool,
       publicToolName: requested.name,
@@ -156,7 +161,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     };
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newAssistantEntityId('msg'),
       role: 'assistant',
       text: modelOutput.text,
       createdAt: new Date().toISOString(),
@@ -175,7 +180,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
   }
 
   session.chatMessages.push({
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newAssistantEntityId('msg'),
     role: 'assistant',
     text: modelOutput.text,
     createdAt: new Date().toISOString()
@@ -193,13 +198,11 @@ export async function executeResultAssistantToolCall(
   pending: ResultAssistantPendingToolCall
 ): Promise<unknown> {
   const timeoutMs = 10_000;
-  const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
-  });
-  return Promise.race([
-    session.mcp.callTool(pending.server, pending.tool, pending.arguments),
-    timeout
-  ]);
+  return withTimeout(
+    () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
+    timeoutMs,
+    `Tool call timed out after ${timeoutMs}ms`
+  );
 }
 
 export function summarizeToolResultForResultAssistant(result: unknown): string {
@@ -207,7 +210,11 @@ export function summarizeToolResultForResultAssistant(result: unknown): string {
 }
 
 function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
-  const scenarioSummaries = session.resultSummary.scenarios.slice(0, 30).map((sc) => ({
+  if (session.systemPromptCache) return session.systemPromptCache;
+  const totalScenarioCount = session.resultSummary.scenarios.length;
+  const scenarioLimit = 30;
+  const omittedScenarioCount = Math.max(0, totalScenarioCount - scenarioLimit);
+  const scenarioSummaries = session.resultSummary.scenarios.slice(0, scenarioLimit).map((sc) => ({
     scenario_id: sc.scenario_id,
     agent: sc.agent,
     pass_rate: sc.pass_rate,
@@ -219,12 +226,15 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
     return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${mapping?.tool ?? tool.name}) schema=${schemaText}`;
   });
-  return [
+  const prompt = [
     'You are the MCP Labs Result Assistant.',
     'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'If you need a tool, request exactly one tool call and wait for approval.',
+    omittedScenarioCount > 0
+      ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
+      : 'All scenarios are included in the prompt context.',
     'Respond ONLY as JSON with one of these envelopes:',
     `{"type":"assistant_message","text":"..."}`,
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}}}`,
@@ -234,58 +244,31 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
       config_hash: session.resultSummary.metadata.config_hash,
       summary: session.resultSummary.summary,
       snapshot_eval: session.resultSummary.metadata.snapshot_eval ?? null,
+      scenario_count_total: totalScenarioCount,
+      scenario_count_included: scenarioSummaries.length,
+      scenario_count_omitted: omittedScenarioCount,
       scenarios: scenarioSummaries
     })}`,
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'
   ].join('\n');
+  session.systemPromptCache = prompt;
+  return prompt;
 }
 
 async function resultAssistantChatModel(
   session: ResultAssistantSession
 ): Promise<ParsedModelOutput> {
-  let response = await chatWithAgent({
+  return chatWithJsonRetry({
     agent: session.agentConfig,
     messages: session.llmMessages,
     tools: session.tools,
-    system: resultAssistantSystemPrompt(session)
+    system: resultAssistantSystemPrompt(session),
+    parse: parseModelOutput,
+    toolCallFallbackText: (toolName) =>
+      `I need to call '${toolName}' to help with this request.`
   });
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    const first = response.tool_calls[0];
-    return {
-      type: 'tool_call_request',
-      text: response.content?.trim() || `I need to call '${first.name}' to help with this request.`,
-      toolCall: { name: first.name, arguments: first.arguments ?? {} }
-    };
-  }
-  const rawText = response.content?.trim() ?? '';
-  try {
-    return parseModelOutput(rawText);
-  } catch {
-    session.llmMessages.push({ role: 'assistant', content: rawText });
-    session.llmMessages.push({
-      role: 'user',
-      content:
-        'Your previous response was not valid JSON. Reply ONLY with a valid JSON envelope matching the specified schema.'
-    });
-    response = await chatWithAgent({
-      agent: session.agentConfig,
-      messages: session.llmMessages,
-      tools: session.tools,
-      system: resultAssistantSystemPrompt(session)
-    });
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      const first = response.tool_calls[0];
-      return {
-        type: 'tool_call_request',
-        text:
-          response.content?.trim() || `I need to call '${first.name}' to help with this request.`,
-        toolCall: { name: first.name, arguments: first.arguments ?? {} }
-      };
-    }
-    return parseModelOutput(response.content?.trim() ?? '');
-  }
 }
 
 function parseModelOutput(text: string): ParsedModelOutput {
@@ -313,24 +296,4 @@ function parseModelOutput(text: string): ParsedModelOutput {
     }
   }
   return obj as ParsedModelOutput;
-}
-
-function normalizeAssistantToolName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
-}
-
-function makeAssistantToolPublicName(
-  serverName: string,
-  toolName: string,
-  used: Set<string>
-): string {
-  const base = `${normalizeAssistantToolName(serverName)}__${normalizeAssistantToolName(toolName)}`;
-  let candidate = base;
-  let suffix = 2;
-  while (used.has(candidate)) {
-    candidate = `${base}_${suffix}`;
-    suffix += 1;
-  }
-  used.add(candidate);
-  return candidate;
 }

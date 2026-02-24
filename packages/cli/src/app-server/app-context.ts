@@ -55,8 +55,7 @@ import type {
   ResultsJson,
   EvalConfig,
   ExecutableEvalConfig,
-  chatWithAgent,
-  TraceEvent
+  chatWithAgent
 } from '@inspectr/mcplab-core';
 
 export interface AppRouteRequestContext {
@@ -175,5 +174,4 @@ export type OAuthDebuggerSessionsMap = Map<string, OAuthDebuggerSession>;
 export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
 export type RunsResults = ResultsJson;
 export type RunsList = RunSummary[];
-export type RunsTraceEvents = TraceEvent[];
 export type ConfigRecords = ConfigRecord[];

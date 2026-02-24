@@ -4,10 +4,10 @@ import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
+import { truncateJson } from './assistant-common.js';
 import {
   pickDefaultAssistantAgentName,
-  resolveAssistantAgentFromLibraries,
-  truncateJson
+  resolveAssistantAgentFromLibraries
 } from './scenario-assistant-domain.js';
 
 type JobEvent = {

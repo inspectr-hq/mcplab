@@ -1,6 +1,17 @@
 import type { AgentConfig, EvalConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
+import { McpClientManager } from '@inspectr/mcplab-core';
+import {
+  chatWithJsonRetry,
+  cleanupSessionsByTtl,
+  makeAssistantToolPublicName,
+  newAssistantEntityId,
+  touchSession,
+  truncateJson,
+  withTimeout
+} from './assistant-common.js';
 import { readLibraries } from './libraries-store.js';
+
+export { truncateJson } from './assistant-common.js';
 
 interface ScenarioAssistantContextInput {
   configSnapshotPolicy?: {
@@ -92,6 +103,7 @@ export interface ScenarioAssistantSession {
   chatMessages: AssistantChatMessage[];
   llmMessages: LlmMessage[];
   warnings: string[];
+  systemPromptCache?: string;
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -102,15 +114,11 @@ export function cleanupAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
-  for (const [id, session] of sessions) {
-    if (now - session.lastTouchedAt > SCENARIO_ASSISTANT_SESSION_TTL_MS) {
-      sessions.delete(id);
-    }
-  }
+  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now);
 }
 
 export function touchAssistantSession(session: ScenarioAssistantSession): void {
-  session.lastTouchedAt = Date.now();
+  touchSession(session);
 }
 
 export function assistantSessionView(session: ScenarioAssistantSession) {
@@ -130,13 +138,14 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
 }
 
 function assistantSystemPrompt(session: ScenarioAssistantSession): string {
+  if (session.systemPromptCache) return session.systemPromptCache;
   const { scenario, configSnapshotPolicy } = session.context;
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
     return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${mapping?.tool ?? tool.name}) schema=${schemaText}`;
   });
-  return [
+  const prompt = [
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), Value Capture Rules, and snapshot settings.',
     'Use the available MCP tools and schemas to ground suggestions.',
@@ -168,36 +177,8 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
       ? `Available MCP tools:\n${toolLines.join('\n')}`
       : 'No MCP tools available.'
   ].join('\n');
-}
-
-export function truncateJson(value: unknown, maxChars: number): string {
-  try {
-    const text = JSON.stringify(value);
-    if (text.length <= maxChars) return text;
-    return `${text.slice(0, maxChars)}…`;
-  } catch {
-    return String(value);
-  }
-}
-
-function normalizeAssistantToolName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
-}
-
-function makeAssistantToolPublicName(
-  serverName: string,
-  toolName: string,
-  used: Set<string>
-): string {
-  const base = `${normalizeAssistantToolName(serverName)}__${normalizeAssistantToolName(toolName)}`;
-  let candidate = base;
-  let suffix = 2;
-  while (used.has(candidate)) {
-    candidate = `${base}_${suffix}`;
-    suffix += 1;
-  }
-  used.add(candidate);
-  return candidate;
+  session.systemPromptCache = prompt;
+  return prompt;
 }
 
 function formatAssistantMcpPreloadError(serverName: string, error: unknown): string {
@@ -291,52 +272,14 @@ function safeAssistantTextFromResponse(rawText: string): string {
 async function assistantChatModel(
   session: ScenarioAssistantSession
 ): Promise<ReturnType<typeof parseAssistantModelOutput>> {
-  let response = await chatWithAgent({
+  return chatWithJsonRetry({
     agent: session.agentConfig,
     messages: session.llmMessages,
     tools: session.tools,
-    system: assistantSystemPrompt(session)
+    system: assistantSystemPrompt(session),
+    parse: parseAssistantModelOutput,
+    toolCallFallbackText: (toolName) => `I need to call '${toolName}' to help answer.`
   });
-  if (response.tool_calls && response.tool_calls.length > 0) {
-    const first = response.tool_calls[0];
-    return {
-      type: 'tool_call_request',
-      text: response.content?.trim() || `I need to call '${first.name}' to help answer.`,
-      toolCall: {
-        name: first.name,
-        arguments: first.arguments ?? {}
-      }
-    };
-  }
-  const rawText = response.content?.trim() ?? '';
-  try {
-    return parseAssistantModelOutput(rawText);
-  } catch (error) {
-    session.llmMessages.push({
-      role: 'assistant',
-      content: rawText
-    });
-    session.llmMessages.push({
-      role: 'user',
-      content:
-        'Your previous response was not valid JSON. Reply ONLY with a valid JSON envelope matching the specified schema.'
-    });
-    response = await chatWithAgent({
-      agent: session.agentConfig,
-      messages: session.llmMessages,
-      tools: session.tools,
-      system: assistantSystemPrompt(session)
-    });
-    if (response.tool_calls && response.tool_calls.length > 0) {
-      const first = response.tool_calls[0];
-      return {
-        type: 'tool_call_request',
-        text: response.content?.trim() || `I need to call '${first.name}' to help answer.`,
-        toolCall: { name: first.name, arguments: first.arguments ?? {} }
-      };
-    }
-    return parseAssistantModelOutput(response.content?.trim() ?? '');
-  }
 }
 
 export async function continueAssistantTurn(session: ScenarioAssistantSession): Promise<{
@@ -362,7 +305,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
       );
     }
     const pending: AssistantPendingToolCall = {
-      id: `satc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newAssistantEntityId('satc'),
       server: mapping.server,
       tool: mapping.tool,
       publicToolName: requested.name,
@@ -372,7 +315,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
     };
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: newAssistantEntityId('msg'),
       role: 'assistant',
       text: modelOutput.text,
       createdAt: new Date().toISOString(),
@@ -403,7 +346,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
   }
 
   session.chatMessages.push({
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newAssistantEntityId('msg'),
     role: 'assistant',
     text: modelOutput.text,
     createdAt: new Date().toISOString(),
@@ -429,18 +372,15 @@ export async function executeAssistantToolCall(
   pending: AssistantPendingToolCall
 ): Promise<unknown> {
   const timeoutMs = 10_000;
-  const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
-  });
-  return Promise.race([
-    session.mcp.callTool(pending.server, pending.tool, pending.arguments),
-    timeout
-  ]);
+  return withTimeout(
+    () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
+    timeoutMs,
+    `Tool call timed out after ${timeoutMs}ms`
+  );
 }
 
 export function summarizeToolResultForAssistant(result: unknown): string {
-  const text = truncateJson(result, SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
-  return text;
+  return truncateJson(result, SCENARIO_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS);
 }
 
 export function resolveAssistantAgentFromConfig(
