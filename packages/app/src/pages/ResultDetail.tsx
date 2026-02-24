@@ -309,18 +309,39 @@ const ResultDetail = () => {
   const askResultAssistant = async () => {
     const question = assistantInput.trim();
     if (!question || !result) return;
+    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage = {
+      id: optimisticMessageId,
+      role: "user" as const,
+      text: question,
+      createdAt: new Date().toISOString()
+    };
     setAssistantInput("");
+    setAssistantMessages((prev) => [...prev, optimisticMessage]);
     setAssistantLoading(true);
     try {
       let sessionId = assistantSessionId;
       if (!sessionId) {
         const created = await source.createResultAssistantSession(result.id);
         sessionId = created.sessionId;
-        syncResultAssistantSession(created.session);
+        setAssistantSessionId(created.session.id);
+        setAssistantPendingToolCalls(created.session.pendingToolCalls);
+        setAssistantMeta({
+          assistantAgentName: created.session.selectedAssistantAgentName,
+          provider: created.session.provider,
+          model: created.session.model
+        });
+        setAssistantMessages((prev) => {
+          const optimisticStillPresent = prev.some((m) => m.id === optimisticMessageId);
+          const serverMessages = created.session.messages;
+          if (!optimisticStillPresent) return serverMessages;
+          return [...serverMessages, optimisticMessage];
+        });
       }
       const response = await source.sendResultAssistantMessage(sessionId, question);
       syncResultAssistantSession(response.session);
     } catch (error: any) {
+      setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
         title: "MCP Labs Assistant error",
         description: String(error?.message ?? error),
@@ -1179,10 +1200,82 @@ const ResultDetail = () => {
                     ? assistantPendingToolCalls.find((call) => call.id === message.pendingToolCallId)
                     : undefined;
                   const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
+                  const toolStepServer = linkedPendingToolCall?.server ?? message.toolRequestServer;
+                  const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
+                  const toolStepPublicName =
+                    linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
                   const canShowHandoff =
                     isAssistant &&
                     !isAssistantToolRequest &&
                     isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
+                  if (isAssistantToolRequest) {
+                    const compactTitle = toolStepName
+                      ? toolStepName.replace(/^mcplab_/, "").replace(/_/g, " ")
+                      : toolStepPublicName ?? "Tool call";
+                    return (
+                      <div key={message.id ?? `${message.role}-${index}`} className="flex items-start gap-2">
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          <Bot className="h-3 w-3" />
+                        </div>
+                        <details className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="truncate text-sm font-medium">{compactTitle}</span>
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    linkedPendingToolCall
+                                      ? "bg-amber-100 text-amber-900"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {toolStepName ?? toolStepPublicName ?? "tool call"}
+                                </span>
+                              </div>
+                              {(toolStepServer || toolStepName) && (
+                                <p className="mt-1 break-all text-[11px] text-muted-foreground">
+                                  {toolStepServer ?? "mcplab"}::{toolStepName ?? toolStepPublicName ?? "unknown"}
+                                </p>
+                              )}
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                            <MarkdownText text={message.text} className="text-sm" />
+                            {linkedPendingToolCall && (
+                              <>
+                                <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                                  <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
+                                </pre>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() => void denyResultAssistantToolCall(linkedPendingToolCall.id)}
+                                  >
+                                    Deny
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() => void approveResultAssistantToolCall(linkedPendingToolCall.id)}
+                                  >
+                                    Approve
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                       {!isUser && (
@@ -1200,72 +1293,9 @@ const ResultDetail = () => {
                               : "border-border/80 bg-background shadow-sm"
                       }`}>
                         <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : isAssistantToolRequest ? "Tool step" : "Assistant"}
+                          {isUser ? "You" : isSystem ? "System" : isTool ? "Tool" : "Assistant"}
                         </p>
-                        {isAssistantToolRequest ? (
-                          <details className="group rounded-md border border-border/60 bg-muted/20">
-                            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2 py-2 text-sm">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <span className="truncate font-medium">
-                                    {linkedPendingToolCall?.tool
-                                      ? linkedPendingToolCall.tool.replace(/^mcplab_/, "").replace(/_/g, " ")
-                                      : "Tool request"}
-                                  </span>
-                                  {linkedPendingToolCall ? (
-                                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
-                                      Needs approval
-                                    </span>
-                                  ) : (
-                                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                      Completed / hidden
-                                    </span>
-                                  )}
-                                </div>
-                                {linkedPendingToolCall && (
-                                  <p className="mt-1 break-all text-[11px] text-muted-foreground">
-                                    {linkedPendingToolCall.server}::{linkedPendingToolCall.tool}
-                                  </p>
-                                )}
-                              </div>
-                              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                            </summary>
-                            <div className="space-y-2 border-t border-border/50 px-2 py-2">
-                              <MarkdownText text={message.text} className="text-sm" />
-                              {linkedPendingToolCall && (
-                                <>
-                                  <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                                    <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
-                                  </pre>
-                                  <div className="flex justify-end gap-2">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 px-2 text-xs"
-                                      disabled={assistantLoading}
-                                      onClick={() => void denyResultAssistantToolCall(linkedPendingToolCall.id)}
-                                    >
-                                      Deny
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-7 px-2 text-xs"
-                                      disabled={assistantLoading}
-                                      onClick={() => void approveResultAssistantToolCall(linkedPendingToolCall.id)}
-                                    >
-                                      Approve
-                                    </Button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </details>
-                        ) : (
-                          <MarkdownText text={message.text} className="text-sm" />
-                        )}
+                        <MarkdownText text={message.text} className="text-sm" />
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
@@ -1290,7 +1320,7 @@ const ResultDetail = () => {
                             </Button>
                           </div>
                         )}
-                        {!canShowHandoff && isAssistant && (
+                        {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
                           <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
                             <Button
                               type="button"

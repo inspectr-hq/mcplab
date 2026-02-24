@@ -226,6 +226,9 @@ export interface ResultAssistantSessionMessage {
   text: string;
   createdAt: string;
   pendingToolCallId?: string;
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
 }
 
 export interface ResultAssistantPendingToolCall {

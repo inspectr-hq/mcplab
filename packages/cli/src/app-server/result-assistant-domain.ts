@@ -283,15 +283,12 @@ async function resultAssistantChatModel(
     system: resultAssistantSystemPrompt(session)
   });
   if (response.tool_calls && response.tool_calls.length > 0) {
-    const [first, ...rest] = response.tool_calls;
+    const [first] = response.tool_calls;
     const baseText =
       response.content?.trim() || `I need to call '${first.name}' to help with this request.`;
     return {
       type: 'tool_call_request',
-      text:
-        rest.length > 0
-          ? `${baseText}\n\nNote: I requested multiple tool calls, but this UI supports one tool call at a time. Please approve this one first, then I can request the next one if still needed.`
-          : baseText,
+      text: baseText,
       toolCall: { name: first.name, arguments: first.arguments ?? {} }
     };
   }
