@@ -67,6 +67,7 @@ const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_write_markdown_report',
   'mcplab_list_runs',
   'mcplab_read_run_artifact',
+  'mcplab_grep_run_artifact',
   'mcplab_trace_stats',
   'mcplab_trace_get_final_answers',
   'mcplab_trace_get_conversation',
