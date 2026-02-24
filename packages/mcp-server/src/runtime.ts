@@ -633,8 +633,10 @@ export function registerTools(server: McpServer): void {
         event_types: z
           .array(
             z.enum([
+              'trace_meta',
               'run_started',
               'scenario_started',
+              'agent_message',
               'llm_request',
               'llm_response',
               'tool_call',
@@ -645,8 +647,8 @@ export function registerTools(server: McpServer): void {
           )
           .optional()
           .describe('Optional event type filters.'),
-        scenario_id: z.string().optional().describe('Optional scenario id filter (best-effort inferred context).'),
-        agent: z.string().optional().describe('Optional agent filter (best-effort inferred context).'),
+        scenario_id: z.string().optional().describe('Optional scenario id filter.'),
+        agent: z.string().optional().describe('Optional agent filter.'),
         limit: z.number().int().positive().max(1000).optional().describe('Max events to return (default 200).')
       }
     },
@@ -751,16 +753,40 @@ export function registerTools(server: McpServer): void {
         const timeline = events
           .filter((entry) => entry.scenario_id === scenario_id && entry.agent === agent)
           .filter((entry) =>
-            ['llm_request', 'llm_response', 'tool_call', 'tool_result', 'final_answer'].includes(entry.event.type)
+            ['agent_message', 'llm_request', 'llm_response', 'tool_call', 'tool_result', 'final_answer'].includes(
+              entry.event.type
+            )
           )
           .slice(0, max_items ?? 300)
           .map((entry, index) => {
             const event = entry.event;
+            if (event.type === 'agent_message') {
+              return {
+                index,
+                type: 'agent_message',
+                phase: event.phase,
+                ts: event.ts,
+                text: truncate(event.text, textMax)
+              };
+            }
             if (event.type === 'llm_request') {
-              return { index, type: 'llm_request', ts: event.ts, text: truncate(event.messages_summary, textMax) };
+              return {
+                index,
+                type: 'llm_request',
+                ts: event.ts,
+                text: truncate((event.summary ?? ''), textMax),
+                message_count: event.message_count
+              };
             }
             if (event.type === 'llm_response') {
-              return { index, type: 'llm_response', ts: event.ts, text: truncate(event.raw_or_summary, textMax) };
+              return {
+                index,
+                type: 'llm_response',
+                ts: event.ts,
+                text: truncate((event.summary ?? event.raw_or_summary ?? ''), textMax),
+                tool_calls: event.tool_calls,
+                has_text: event.has_text
+              };
             }
             if (event.type === 'tool_call') {
               return {
@@ -817,6 +843,8 @@ export function registerTools(server: McpServer): void {
         event_types: z
           .array(
             z.enum([
+              'trace_meta',
+              'agent_message',
               'llm_request',
               'llm_response',
               'tool_call',
@@ -1639,6 +1667,15 @@ function readAnnotatedTraceEventsForRun(
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
     const event = parsed as TraceEvent;
+    const eventRecord = event as unknown as Record<string, unknown>;
+    const explicitScenario =
+      'scenario_id' in eventRecord && typeof eventRecord.scenario_id === 'string'
+        ? (eventRecord.scenario_id as string)
+        : undefined;
+    const explicitAgent =
+      'agent' in eventRecord && typeof eventRecord.agent === 'string'
+        ? (eventRecord.agent as string)
+        : undefined;
     if (event.type === 'scenario_started') {
       currentScenarioId = event.scenario_id;
       currentAgent = event.agent;
@@ -1646,12 +1683,20 @@ function readAnnotatedTraceEventsForRun(
       continue;
     }
     if (event.type === 'scenario_finished') {
-      events.push({ event, scenario_id: currentScenarioId ?? event.scenario_id, agent: currentAgent });
+      events.push({
+        event,
+        scenario_id: explicitScenario ?? currentScenarioId ?? event.scenario_id,
+        agent: explicitAgent ?? currentAgent
+      });
       currentScenarioId = undefined;
       currentAgent = undefined;
       continue;
     }
-    events.push({ event, scenario_id: currentScenarioId, agent: currentAgent });
+    events.push({
+      event,
+      scenario_id: explicitScenario ?? currentScenarioId,
+      agent: explicitAgent ?? currentAgent
+    });
   }
   return { runId, tracePath, events };
 }

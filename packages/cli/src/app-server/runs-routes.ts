@@ -6,7 +6,8 @@ import {
   loadConfig,
   runAll,
   type EvalConfig,
-  type LlmMessage
+  type LlmMessage,
+  type RunProgressEvent
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
@@ -286,7 +287,16 @@ export async function handleRunsRoutes(params: {
             configHash: loaded.hash,
             cliVersion: pkgVersion,
             runsDir: settings.runsDir,
-            signal: job.abortController.signal
+            signal: job.abortController.signal,
+            onProgress: async (event: RunProgressEvent) => {
+              const message = formatRunProgressMessage(event);
+              if (!message) return;
+              addJobEvent(job, {
+                type: 'log',
+                ts: new Date().toISOString(),
+                payload: { message }
+              });
+            }
           });
           addJobEvent(job, {
             type: 'log',
@@ -621,6 +631,42 @@ export async function handleRunsRoutes(params: {
   }
 
   return false;
+}
+
+function formatRunProgressMessage(event: RunProgressEvent): string | null {
+  switch (event.type) {
+    case 'run_started':
+      return `Run initialized (id: ${event.runId}, ${event.totalScenarioRuns} scenario run(s))`;
+    case 'mcp_connect_started':
+      return `Connecting to ${event.serverCount} MCP server(s) ...`;
+    case 'mcp_connect_finished':
+      return `Connected to ${event.serverCount} MCP server(s)`;
+    case 'scenario_run_started':
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${event.scenarioId} [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
+    case 'scenario_run_finished':
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${event.toolCallCount} tool call(s))`;
+    case 'agent_progress': {
+      const p = event.event;
+      switch (p.type) {
+        case 'llm_request_started':
+          return `LLM turn ${p.turn + 1} started for ${p.scenarioId} [${p.agentName}] (${p.provider}/${p.model})`;
+        case 'llm_response_received':
+          return `LLM turn ${p.turn + 1} response for ${p.scenarioId} [${p.agentName}] (text=${p.hasText ? 'yes' : 'no'}, tool_calls=${p.toolCallCount})`;
+        case 'tool_call_started':
+          return `Tool call started: ${p.server}.${p.tool} (turn ${p.turn + 1})`;
+        case 'tool_call_finished':
+          return `Tool call ${p.ok ? 'finished' : 'failed'}: ${p.server}.${p.tool} in ${p.durationMs}ms`;
+        case 'final_answer':
+          return `Final answer produced for ${p.scenarioId} [${p.agentName}] (text=${p.hasText ? 'yes' : 'no'})`;
+        default:
+          return null;
+      }
+    }
+    case 'run_finished':
+      return `Run finished (id: ${event.runId})`;
+    default:
+      return null;
+  }
 }
 
 function localMcplabMcpUrl(): string {

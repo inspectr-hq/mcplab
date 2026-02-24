@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import type { AgentConfig, LlmMessage, LlmResponse, Scenario, ToolCall, ToolDef } from './types.js';
+import type { AgentConfig, ExecutableScenario, LlmMessage, LlmResponse, ToolCall, ToolDef } from './types.js';
 import type { McpClientManager } from './mcp.js';
 import type { TraceWriter } from './trace.js';
 
@@ -9,6 +9,51 @@ export interface AgentRunResult {
   toolSequence: string[];
   toolDurationsMs: number[];
 }
+
+export type AgentRunProgressEvent =
+  | {
+      type: 'llm_request_started';
+      scenarioId: string;
+      agentName: string;
+      provider: string;
+      model: string;
+      turn: number;
+    }
+  | {
+      type: 'llm_response_received';
+      scenarioId: string;
+      agentName: string;
+      provider: string;
+      model: string;
+      turn: number;
+      hasText: boolean;
+      toolCallCount: number;
+    }
+  | {
+      type: 'tool_call_started';
+      scenarioId: string;
+      agentName: string;
+      server: string;
+      tool: string;
+      turn: number;
+    }
+  | {
+      type: 'tool_call_finished';
+      scenarioId: string;
+      agentName: string;
+      server: string;
+      tool: string;
+      turn: number;
+      ok: boolean;
+      durationMs: number;
+    }
+  | {
+      type: 'final_answer';
+      scenarioId: string;
+      agentName: string;
+      turn: number;
+      hasText: boolean;
+    };
 
 interface LlmAdapter {
   chat(messages: LlmMessage[], tools: ToolDef[], options: AdapterOptions): Promise<LlmResponse>;
@@ -22,12 +67,13 @@ interface AdapterOptions {
 }
 
 export async function runAgentScenario(params: {
-  scenario: Scenario;
+  scenario: ExecutableScenario;
   agent: AgentConfig;
   mcp: McpClientManager;
   trace: TraceWriter;
   maxTurns?: number;
   signal?: AbortSignal;
+  onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp, trace } = params;
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
@@ -53,12 +99,30 @@ export async function runAgentScenario(params: {
   const toolDurationsMs: number[] = [];
   let finalText = '';
   const maxTurns = params.maxTurns ?? 8;
+  const emitProgress = async (event: AgentRunProgressEvent): Promise<void> => {
+    if (!params.onProgress) return;
+    await params.onProgress(event);
+  };
 
   for (let turn = 0; turn < maxTurns; turn += 1) {
+    await emitProgress({
+      type: 'llm_request_started',
+      scenarioId: scenario.id,
+      agentName: scenario.agent,
+      provider: agent.provider,
+      model: agent.model,
+      turn
+    });
+    const llmTs = new Date().toISOString();
     trace.write({
       type: 'llm_request',
-      messages_summary: summarizeMessages(messages),
-      ts: new Date().toISOString()
+      scenario_id: scenario.id,
+      agent: scenario.agent,
+      provider: agent.provider,
+      model: agent.model,
+      message_count: messages.length,
+      summary: summarizeMessages(messages),
+      ts: llmTs
     });
 
     const response = await adapter.chat(messages, tools, {
@@ -68,13 +132,44 @@ export async function runAgentScenario(params: {
       system: agent.system
     });
 
+    const responseText = truncate((response.content ?? '').trim(), 4000);
+    const toolCallNames = response.tool_calls?.map((call) => call.name) ?? [];
+    await emitProgress({
+      type: 'llm_response_received',
+      scenarioId: scenario.id,
+      agentName: scenario.agent,
+      provider: agent.provider,
+      model: agent.model,
+      turn,
+      hasText: responseText.length > 0,
+      toolCallCount: toolCallNames.length
+    });
     trace.write({
       type: 'llm_response',
+      scenario_id: scenario.id,
+      agent: scenario.agent,
+      provider: agent.provider,
+      model: agent.model,
+      tool_calls: toolCallNames.length > 0 ? toolCallNames : undefined,
+      has_text: responseText.length > 0,
+      summary: summarizeResponse(response),
       raw_or_summary: summarizeResponse(response),
       ts: new Date().toISOString()
     });
 
     if (response.tool_calls && response.tool_calls.length > 0) {
+      if (responseText) {
+        trace.write({
+          type: 'agent_message',
+          scenario_id: scenario.id,
+          agent: scenario.agent,
+          phase: 'intermediate',
+          text: responseText,
+          provider: agent.provider,
+          model: agent.model,
+          ts: new Date().toISOString()
+        });
+      }
       messages.push({
         role: 'assistant',
         content: response.content ?? '',
@@ -85,9 +180,19 @@ export async function runAgentScenario(params: {
         if (!resolved) {
           throw new Error(`Tool not found: ${toolCall.name}`);
         }
+        await emitProgress({
+          type: 'tool_call_started',
+          scenarioId: scenario.id,
+          agentName: scenario.agent,
+          server: resolved.server,
+          tool: toolCall.name,
+          turn
+        });
         const tsStart = new Date();
         trace.write({
           type: 'tool_call',
+          scenario_id: scenario.id,
+          agent: scenario.agent,
           server: resolved.server,
           tool: toolCall.name,
           args: toolCall.arguments,
@@ -107,12 +212,24 @@ export async function runAgentScenario(params: {
         const durationMs = tsEnd.getTime() - tsStart.getTime();
         trace.write({
           type: 'tool_result',
+          scenario_id: scenario.id,
+          agent: scenario.agent,
           server: resolved.server,
           tool: toolCall.name,
           ok,
           result_summary: summarizeToolResult(result),
           ts_end: tsEnd.toISOString(),
           duration_ms: durationMs
+        });
+        await emitProgress({
+          type: 'tool_call_finished',
+          scenarioId: scenario.id,
+          agentName: scenario.agent,
+          server: resolved.server,
+          tool: toolCall.name,
+          turn,
+          ok,
+          durationMs
         });
 
         toolSequence.push(toolCall.name);
@@ -134,8 +251,18 @@ export async function runAgentScenario(params: {
     break;
   }
 
+  await emitProgress({
+    type: 'final_answer',
+    scenarioId: scenario.id,
+    agentName: scenario.agent,
+    turn: Math.max(0, maxTurns - 1),
+    hasText: finalText.trim().length > 0
+  });
+
   trace.write({
     type: 'final_answer',
+    scenario_id: scenario.id,
+    agent: scenario.agent,
     text: finalText,
     ts: new Date().toISOString()
   });
@@ -514,7 +641,16 @@ function safeJsonParse(value: string): unknown {
 }
 
 function summarizeMessages(messages: LlmMessage[]): string {
-  return messages.map((msg) => `${msg.role}:${truncate(msg.content, 120)}`).join(' | ');
+  const parts = messages.map((msg) => {
+    if (msg.role === 'assistant' && msg.tool_calls?.length) {
+      return `assistant(tool_calls:${msg.tool_calls.map((call) => call.name).join(',')})`;
+    }
+    if (msg.role === 'tool') {
+      return `tool:${msg.name ?? 'tool'}:${truncate(msg.content, 80)}`;
+    }
+    return `${msg.role}:${truncate(msg.content, 80)}`;
+  });
+  return truncate(parts.join(' | '), 400);
 }
 
 function summarizeResponse(response: LlmResponse): string {

@@ -155,6 +155,18 @@ export interface TraceRunStarted {
   config_hash: string;
 }
 
+export interface TraceMeta {
+  type: 'trace_meta';
+  trace_version: 2;
+  run_id: string;
+  ts: string;
+}
+
+export interface TraceContextual {
+  scenario_id?: string;
+  agent?: string;
+}
+
 export interface TraceScenarioStarted {
   type: 'scenario_started';
   scenario_id: string;
@@ -162,20 +174,39 @@ export interface TraceScenarioStarted {
   ts: string;
 }
 
-export interface TraceLlmRequest {
+export interface TraceLlmRequest extends TraceContextual {
   type: 'llm_request';
-  messages_summary: string;
+  provider?: string;
+  model?: string;
+  message_count: number;
+  summary?: string;
   ts: string;
 }
 
-export interface TraceLlmResponse {
+export interface TraceLlmResponse extends TraceContextual {
   type: 'llm_response';
-  raw_or_summary: string;
+  provider?: string;
+  model?: string;
+  tool_calls?: string[];
+  has_text?: boolean;
+  summary?: string;
+  raw_or_summary?: string;
+  ts: string;
+}
+
+export interface TraceAgentMessage extends TraceContextual {
+  type: 'agent_message';
+  phase: 'intermediate' | 'final';
+  text: string;
+  provider?: string;
+  model?: string;
   ts: string;
 }
 
 export interface TraceToolCall {
   type: 'tool_call';
+  scenario_id: string;
+  agent: string;
   server: string;
   tool: string;
   args: unknown;
@@ -184,6 +215,8 @@ export interface TraceToolCall {
 
 export interface TraceToolResult {
   type: 'tool_result';
+  scenario_id: string;
+  agent: string;
   server: string;
   tool: string;
   ok: boolean;
@@ -194,6 +227,8 @@ export interface TraceToolResult {
 
 export interface TraceFinalAnswer {
   type: 'final_answer';
+  scenario_id: string;
+  agent: string;
   text: string;
   ts: string;
 }
@@ -201,16 +236,19 @@ export interface TraceFinalAnswer {
 export interface TraceScenarioFinished {
   type: 'scenario_finished';
   scenario_id: string;
+  agent: string;
   pass: boolean;
   metrics: Record<string, unknown>;
   ts: string;
 }
 
 export type TraceEvent =
+  | TraceMeta
   | TraceRunStarted
   | TraceScenarioStarted
   | TraceLlmRequest
   | TraceLlmResponse
+  | TraceAgentMessage
   | TraceToolCall
   | TraceToolResult
   | TraceFinalAnswer

@@ -124,27 +124,59 @@ export interface CoreResultsJson {
   scenarios: CoreScenarioAggregate[];
 }
 
+export interface TraceUiMetaEvent {
+  type: 'trace_meta';
+  trace_version: 2;
+  run_id: string;
+  ts: string;
+}
+
 export interface TraceUiScenarioStartedEvent {
   type: 'scenario_started';
   scenario_id: string;
+  agent: string;
   ts: string;
 }
 
 export interface TraceUiLlmRequestEvent {
   type: 'llm_request';
-  messages_summary: string;
+  scenario_id?: string;
+  agent?: string;
+  provider?: string;
+  model?: string;
+  message_count?: number;
+  summary?: string;
   ts: string;
 }
 
 export interface TraceUiLlmResponseEvent {
   type: 'llm_response';
-  raw_or_summary: string;
+  scenario_id?: string;
+  agent?: string;
+  provider?: string;
+  model?: string;
+  tool_calls?: string[];
+  has_text?: boolean;
+  summary?: string;
+  raw_or_summary?: string;
+  ts: string;
+}
+
+export interface TraceUiAgentMessageEvent {
+  type: 'agent_message';
+  scenario_id?: string;
+  agent?: string;
+  phase?: 'intermediate' | 'final';
+  text: string;
+  provider?: string;
+  model?: string;
   ts: string;
 }
 
 export interface TraceUiToolCallEvent {
   type: 'tool_call';
   scenario_id?: string;
+  agent?: string;
   tool: string;
   args?: unknown;
   ts_start?: string;
@@ -153,6 +185,7 @@ export interface TraceUiToolCallEvent {
 export interface TraceUiToolResultEvent {
   type: 'tool_result';
   scenario_id?: string;
+  agent?: string;
   tool: string;
   ok: boolean;
   result_summary: string;
@@ -163,6 +196,7 @@ export interface TraceUiToolResultEvent {
 export interface TraceUiFinalAnswerEvent {
   type: 'final_answer';
   scenario_id?: string;
+  agent?: string;
   text: string;
   ts: string;
 }
@@ -170,14 +204,17 @@ export interface TraceUiFinalAnswerEvent {
 export interface TraceUiScenarioFinishedEvent {
   type: 'scenario_finished';
   scenario_id: string;
+  agent?: string;
   pass: boolean;
   ts: string;
 }
 
 export type TraceUiEvent =
+  | TraceUiMetaEvent
   | TraceUiScenarioStartedEvent
   | TraceUiLlmRequestEvent
   | TraceUiLlmResponseEvent
+  | TraceUiAgentMessageEvent
   | TraceUiToolCallEvent
   | TraceUiToolResultEvent
   | TraceUiFinalAnswerEvent

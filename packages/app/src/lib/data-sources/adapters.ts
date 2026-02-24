@@ -317,28 +317,35 @@ function toToolCalls(
   });
 }
 
+function traceScenarioKey(scenarioId?: string, agent?: string): string | undefined {
+  if (!scenarioId) return undefined;
+  return `${scenarioId}::${agent ?? ''}`;
+}
+
 function groupScenarioRunEvents(traceEvents: TraceUiEvent[]): Map<string, TraceUiEvent[][]> {
   const grouped = new Map<string, TraceUiEvent[][]>();
-  let activeScenarioId: string | undefined;
+  let activeKey: string | undefined;
   let activeRunEvents: TraceUiEvent[] | undefined;
 
   for (const event of traceEvents) {
     if (event.type === 'scenario_started') {
-      activeScenarioId = event.scenario_id;
-      const runs = grouped.get(event.scenario_id) ?? [];
+      activeKey = traceScenarioKey(event.scenario_id, event.agent) ?? event.scenario_id;
+      const runs = grouped.get(activeKey) ?? [];
       activeRunEvents = [event];
       runs.push(activeRunEvents);
-      grouped.set(event.scenario_id, runs);
+      grouped.set(activeKey, runs);
       continue;
     }
 
-    if (!activeScenarioId || !activeRunEvents) {
+    if (!activeKey || !activeRunEvents) {
       continue;
     }
 
     activeRunEvents.push(event);
-    if (event.type === 'scenario_finished' && event.scenario_id === activeScenarioId) {
-      activeScenarioId = undefined;
+    if (event.type === 'scenario_finished') {
+      const finishedKey = traceScenarioKey(event.scenario_id, event.agent) ?? event.scenario_id;
+      if (finishedKey !== activeKey) continue;
+      activeKey = undefined;
       activeRunEvents = undefined;
     }
   }
@@ -349,37 +356,39 @@ function groupScenarioRunEvents(traceEvents: TraceUiEvent[]): Map<string, TraceU
 function toConversationItems(events: TraceUiEvent[]): ConversationItem[] {
   const items: ConversationItem[] = [];
   let sawPrompt = false;
-  const finalAnswers = events
-    .filter(
-      (event): event is Extract<TraceUiEvent, { type: 'final_answer' }> =>
-        event.type === 'final_answer'
-    )
-    .map((event) => normalizeText(event.text))
-    .filter(Boolean);
-  const finalAnswerSet = new Set(finalAnswers);
 
   for (const event of events) {
     if (event.type === 'llm_request') {
       if (sawPrompt) continue;
+      const promptText = (event as { messages_summary?: string; summary?: string }).messages_summary ?? event.summary;
+      if (!promptText) continue;
       sawPrompt = true;
       items.push({
         id: `user_prompt-${items.length}`,
         kind: 'user_prompt',
-        text: event.messages_summary,
+        text: promptText,
+        timestamp: event.ts
+      });
+      continue;
+    }
+    if (event.type === 'agent_message') {
+      items.push({
+        id: `assistant_msg-${items.length}`,
+        kind: event.phase === 'final' ? 'assistant_final' : 'assistant_thought',
+        text: event.text,
         timestamp: event.ts
       });
       continue;
     }
     if (event.type === 'llm_response') {
-      // Some providers emit the same content in llm_response and final_answer.
-      // Keep only the final message bubble in that case.
-      if (isDuplicateAssistantResponse(event.raw_or_summary, finalAnswers, finalAnswerSet)) {
+      const llmText = event.raw_or_summary ?? event.summary ?? '';
+      if (!normalizeText(llmText)) {
         continue;
       }
       items.push({
         id: `assistant_thought-${items.length}`,
         kind: 'assistant_thought',
-        text: event.raw_or_summary,
+        text: llmText,
         timestamp: event.ts
       });
       continue;
@@ -431,39 +440,13 @@ function normalizeText(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-function stripTrailingEllipsis(value: string): string {
-  return value.replace(/(\.{3}|…)$/, '').trim();
-}
-
-function isDuplicateAssistantResponse(
-  responseText: string,
-  finalAnswers: string[],
-  finalAnswerSet: Set<string>
-): boolean {
-  const normalized = normalizeText(responseText);
-  if (!normalized || normalized.startsWith('tool_calls:')) {
-    return false;
-  }
-
-  if (finalAnswerSet.has(normalized)) {
-    return true;
-  }
-
-  const withoutEllipsis = stripTrailingEllipsis(normalized);
-  if (withoutEllipsis.length < 24) {
-    return false;
-  }
-
-  return finalAnswers.some((finalText) => finalText.includes(withoutEllipsis));
-}
-
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceEvents: TraceUiEvent[] = []
 ): EvalResult {
   const traceByScenario = groupScenarioRunEvents(traceEvents);
   const scenarios = results.scenarios.map((scenario) => {
-    const runEvents = traceByScenario.get(scenario.scenario_id) ?? [];
+    const runEvents = traceByScenario.get(`${scenario.scenario_id}::${scenario.agent}`) ?? [];
     const runs: ScenarioRun[] = scenario.runs.map((run, index) => {
       const events = runEvents[run.run_index] ?? runEvents[index] ?? [];
       const toolCallEvents = events.filter(
