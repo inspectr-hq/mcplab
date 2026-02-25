@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -58,24 +57,17 @@ export function ScenarioAssistantDialog({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
-  const [selectedAssistantAgentName, setSelectedAssistantAgentName] = useState(
-    defaultAssistantAgentName || agents[0]?.name || ""
-  );
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const initialMessageSentRef = useRef<string | null>(null);
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
-
-  useEffect(() => {
-    if (open && !selectedAssistantAgentName && agents[0]?.name) {
-      setSelectedAssistantAgentName(defaultAssistantAgentName || agents[0].name);
-    }
-  }, [open, agents, defaultAssistantAgentName, selectedAssistantAgentName]);
+  const resolvedAssistantAgentName =
+    defaultAssistantAgentName || agents[0]?.name || agents[0]?.id || "";
 
   useEffect(() => {
     if (!open) return;
-    if (!selectedAssistantAgentName || sessionId) return;
+    if (!resolvedAssistantAgentName || sessionId) return;
     let cancelled = false;
     setLoading(true);
     source
@@ -83,7 +75,7 @@ export function ScenarioAssistantDialog({
         configId,
         configPath,
         scenarioId: scenario.id,
-        selectedAssistantAgentName,
+        selectedAssistantAgentName: resolvedAssistantAgentName,
         context: {
           configSnapshotPolicy: snapshotEval
             ? {
@@ -145,7 +137,7 @@ export function ScenarioAssistantDialog({
     snapshotEval,
     agents,
     servers,
-    selectedAssistantAgentName
+    resolvedAssistantAgentName
   ]);
 
   const resetLocalSessionState = () => {
@@ -205,18 +197,42 @@ export function ScenarioAssistantDialog({
   }, [input, open]);
 
   const canUseAssistant =
-    agents.length > 0 && scenario.serverIds.length > 0 && Boolean(selectedAssistantAgentName);
+    agents.length > 0 && scenario.serverIds.length > 0 && Boolean(resolvedAssistantAgentName);
 
   const sendMessage = async (message: string) => {
     if (!sessionId) return;
     const trimmed = message.trim();
     if (!trimmed) return;
+    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage: ScenarioAssistantSessionView["messages"][number] = {
+      id: optimisticMessageId,
+      role: "user",
+      text: trimmed,
+      createdAt: new Date().toISOString()
+    };
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            messages: [...prev.messages, optimisticMessage]
+          }
+        : prev
+    );
+    setInput("");
     setLoading(true);
     try {
       const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed);
       setSession(resp.session);
-      setInput("");
     } catch (error: any) {
+      setSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              messages: prev.messages.filter((m) => m.id !== optimisticMessageId)
+            }
+          : prev
+      );
+      setInput((prev) => (prev.trim() ? prev : trimmed));
       toast({
         title: "Scenario Assistant error",
         description: String(error?.message ?? error),
@@ -360,17 +376,16 @@ export function ScenarioAssistantDialog({
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
         {sessionId && (
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant="ghost"
-            className="absolute right-12 top-3 z-10 h-8 w-8 p-0 text-muted-foreground"
+            className="absolute right-12 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             onClick={handleMinimize}
             aria-label="Minimize assistant"
             title="Minimize assistant"
           >
             <Minimize2 className="h-4 w-4" />
-          </Button>
+            <span className="sr-only">Minimize</span>
+          </button>
         )}
         <DialogHeader className="pr-20">
           <div className="flex items-start justify-between gap-3">
@@ -392,30 +407,7 @@ export function ScenarioAssistantDialog({
           </div>
         ) : (
           <div className="min-h-0 flex flex-1 flex-col gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Assistant Agent</Label>
-                  <Select
-                    value={selectedAssistantAgentName}
-                    onValueChange={(value) => {
-                      setSelectedAssistantAgentName(value);
-                      setSessionId(null);
-                      setSession(null);
-                    }}
-                    disabled={loading}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select agent" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {agents.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.name || agent.id}>
-                          {(agent.name || agent.id)} · {agent.model}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-1">
                 <div className="space-y-1.5">
                   <Label className="text-xs">MCP Context</Label>
                   <div className="h-8 rounded-md border px-2 text-xs flex items-center gap-2">
@@ -456,14 +448,89 @@ export function ScenarioAssistantDialog({
                   ))}
                   {session?.messages.map((message) => (
                     <Fragment key={message.id}>
-                      <div className="space-y-2">
-                        <AssistantChatMessageRow message={message} />
-                        {message.pendingToolCallId && (
-                          <div className="text-xs text-muted-foreground">
-                            Tool call approval required below.
+                      {(() => {
+                        const linkedPendingToolCall = message.pendingToolCallId
+                          ? (session?.pendingToolCalls ?? []).find((call) => call.id === message.pendingToolCallId)
+                          : undefined;
+                        const isAssistantToolRequest =
+                          message.role === "assistant" && Boolean(message.pendingToolCallId);
+                        if (!isAssistantToolRequest) {
+                          return (
+                            <div className="space-y-2">
+                              <AssistantChatMessageRow message={message} />
+                            </div>
+                          );
+                        }
+                        const fallbackToolNameFromText =
+                          message.text.match(/I need to call ['"]([^'"]+)['"]/i)?.[1]?.replace(/^.*__/, "") ??
+                          undefined;
+                        const toolName =
+                          linkedPendingToolCall?.tool ?? message.toolRequestName ?? fallbackToolNameFromText;
+                        const publicToolName =
+                          linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
+                        const displayToolName = toolName ?? publicToolName ?? "unknown_tool";
+                        return (
+                          <div className="flex items-start gap-2">
+                            <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                              <Bot className="h-3 w-3" />
+                            </div>
+                            <details
+                              open={Boolean(linkedPendingToolCall)}
+                              className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background"
+                            >
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
+                                    <span
+                                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                        linkedPendingToolCall
+                                          ? "bg-amber-100 text-amber-900"
+                                          : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {linkedPendingToolCall ? "Needs approval" : "Completed"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                              </summary>
+                              <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                                <MarkdownContent text={message.text} variant="assistant" />
+                                {linkedPendingToolCall && (
+                                  <>
+                                    <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                                      <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
+                                    </pre>
+                                    <div className="mt-2 flex justify-end gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 px-2 text-xs"
+                                        disabled={loading}
+                                        onClick={() => void handleDeny(linkedPendingToolCall.id)}
+                                      >
+                                        Deny
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        disabled={loading}
+                                        onClick={() => void handleApprove(linkedPendingToolCall.id)}
+                                      >
+                                        Approve
+                                      </Button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </details>
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                       {message.suggestions && (
                         <div className="ml-0 space-y-3 rounded-md border border-dashed bg-muted/10 p-3">
                           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -529,27 +596,29 @@ export function ScenarioAssistantDialog({
                       )}
                     </Fragment>
                   ))}
-                  {(session?.pendingToolCalls ?? []).map((call) => (
-                    <details key={call.id} open className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                        <div className="min-w-0">
+                  {(session?.pendingToolCalls ?? [])
+                    .filter((call) => !(session?.messages ?? []).some((m) => m.pendingToolCallId === call.id))
+                    .map((call) => (
+                    <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="truncate text-sm font-medium">
-                              {`Tool call ${call.tool}`}
-                            </span>
-                            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-900">
+                            <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <p className="min-w-0 truncate font-mono text-xs font-semibold">
+                              {call.publicToolName || call.tool}
+                            </p>
+                            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
                               Needs approval
                             </span>
                           </div>
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                      <div className="border-t px-3 pb-3 pt-2">
                         <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
                           <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
                         </pre>
-                        <div className="flex justify-end gap-2">
+                        <div className="mt-2 flex justify-end gap-2">
                           <Button
                             type="button"
                             size="sm"
@@ -567,7 +636,7 @@ export function ScenarioAssistantDialog({
                             disabled={loading}
                             onClick={() => void handleApprove(call.id)}
                           >
-                            Approve & Run
+                            Approve
                           </Button>
                         </div>
                       </div>
@@ -577,6 +646,17 @@ export function ScenarioAssistantDialog({
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Starting assistant session...
+                    </div>
+                  )}
+                  {session && loading && (
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                        <Bot className="h-3 w-3" />
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Thinking...
+                      </div>
                     </div>
                   )}
                   <div ref={chatEndRef} />
@@ -665,6 +745,10 @@ function AssistantChatMessageRow({
 }) {
   const role = message.role;
   if (role === "tool") {
+    const trimmed = String(message.text ?? "").trim();
+    if (/^(Approved|Denied) tool call\b/i.test(trimmed)) {
+      return null;
+    }
     return (
       <div className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm">
         <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
@@ -681,11 +765,13 @@ function AssistantChatMessageRow({
 
   if (role === "system") {
     return (
-      <div className="rounded-md border border-amber-400/40 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        <div className="mb-1 flex items-center gap-1 text-amber-900/90">
-          <RectangleEllipsis className="h-3.5 w-3.5" />
+      <div className="flex items-start gap-2 text-xs">
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+          <RectangleEllipsis className="h-3 w-3" />
         </div>
-        <MarkdownContent text={message.text} variant="system" />
+        <div className="max-w-[92%] rounded-md border border-amber-400/30 bg-amber-50/70 p-3 text-sm">
+          <MarkdownContent text={message.text} variant="assistant" />
+        </div>
       </div>
     );
   }
@@ -702,14 +788,11 @@ function AssistantChatMessageRow({
       <div
         className={`max-w-[92%] rounded-md border px-3 py-2 text-sm ${
           isUser
-            ? "border-primary/30 bg-primary/10"
-            : "border-border/80 bg-muted/30 shadow-sm"
+            ? "border-primary/20 bg-primary/10"
+            : "border-border/80 bg-background shadow-sm"
         }`}
       >
-        <div className={`mb-1 flex items-center gap-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "justify-end" : ""}`}>
-          {!isUser && <span>Assistant</span>}
-          <span className="font-normal">{new Date(message.createdAt).toLocaleTimeString()}</span>
-        </div>
+        {!isUser && <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Assistant</p>}
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.text}</p>
         ) : (

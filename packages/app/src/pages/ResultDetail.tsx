@@ -1355,7 +1355,7 @@ const ResultDetail = () => {
                     {assistantPendingToolCalls
                       .filter((call) => !assistantMessages.some((m) => m.pendingToolCallId === call.id))
                       .map((call) => (
-                        <details key={call.id} className="group min-w-0 rounded-md border bg-background">
+                        <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
                             <div className="min-w-0 flex-1">
                               <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>

@@ -171,6 +171,9 @@ export interface ScenarioAssistantMessage {
   createdAt: string;
   suggestions?: ScenarioAssistantSuggestionBundle;
   pendingToolCallId?: string;
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
 }
 
 export interface ScenarioAssistantPendingToolCall {

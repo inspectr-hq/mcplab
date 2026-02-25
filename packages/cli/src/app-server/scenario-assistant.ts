@@ -245,12 +245,6 @@ export async function handleScenarioAssistantRoutes(params: {
       pending.arguments = body.argumentsOverride;
     }
     pending.status = 'approved';
-    session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'tool',
-      text: `Approved tool call ${pending.server}::${pending.tool}`,
-      createdAt: new Date().toISOString()
-    });
     try {
       const toolResult = await executeAssistantToolCall(session, pending);
       pending.resultPreview = summarizeToolResultForAssistant(toolResult);
@@ -306,12 +300,6 @@ export async function handleScenarioAssistantRoutes(params: {
       return true;
     }
     pending.status = 'denied';
-    session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'tool',
-      text: `Denied tool call ${pending.server}::${pending.tool}`,
-      createdAt: new Date().toISOString()
-    });
     session.llmMessages.push({
       role: 'tool',
       content: JSON.stringify({

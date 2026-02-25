@@ -86,6 +86,9 @@ interface AssistantChatMessage {
   createdAt: string;
   suggestions?: ScenarioAssistantSuggestionBundle;
   pendingToolCallId?: string;
+  toolRequestServer?: string;
+  toolRequestName?: string;
+  toolRequestPublicName?: string;
 }
 
 export interface ScenarioAssistantSession {
@@ -320,7 +323,10 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
       text: modelOutput.text,
       createdAt: new Date().toISOString(),
       suggestions: modelOutput.suggestions,
-      pendingToolCallId: pending.id
+      pendingToolCallId: pending.id,
+      toolRequestServer: pending.server,
+      toolRequestName: pending.tool,
+      toolRequestPublicName: pending.publicToolName
     });
     session.llmMessages.push({
       role: 'assistant',
