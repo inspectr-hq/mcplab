@@ -317,10 +317,9 @@ describe('fromCoreResultsJson conversation mapping', () => {
       'tool_result',
       'assistant_final'
     ]);
-    expect(run.conversation.filter((item) => item.kind === 'tool_result').map((item) => item.text)).toEqual([
-      '{"hits":1}',
-      '{"hits":2}'
-    ]);
+    expect(
+      run.conversation.filter((item) => item.kind === 'tool_result').map((item) => item.text)
+    ).toEqual(['{"hits":1}', '{"hits":2}']);
   });
 
   it('does not crash on malformed tool_result content and emits an empty tool_result text', () => {
@@ -363,7 +362,9 @@ describe('fromCoreResultsJson conversation mapping', () => {
     ]);
 
     const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
-    const toolResults = mapped.scenarios[0].runs[0].conversation.filter((item) => item.kind === 'tool_result');
+    const toolResults = mapped.scenarios[0].runs[0].conversation.filter(
+      (item) => item.kind === 'tool_result'
+    );
 
     expect(toolResults).toHaveLength(1);
     expect(toolResults[0].text).toBe('');

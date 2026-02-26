@@ -22,7 +22,13 @@ import type {
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
-import { chatWithAgent, expandConfigForAgents, loadConfig, McpClientManager, runAll } from '@inspectr/mcplab-core';
+import {
+  chatWithAgent,
+  expandConfigForAgents,
+  loadConfig,
+  McpClientManager,
+  runAll
+} from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../../package.json' with { type: 'json' };
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';

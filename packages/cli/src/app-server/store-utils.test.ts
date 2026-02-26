@@ -20,7 +20,7 @@ describe('ensureInsideRoot', () => {
 
   it('throws for a path traversal attempt via ../', () => {
     expect(() => ensureInsideRoot(ROOT, `${ROOT}/../etc/passwd`)).toThrow(
-      'Path outside allowed root',
+      'Path outside allowed root'
     );
   });
 

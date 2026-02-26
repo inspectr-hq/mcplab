@@ -6,7 +6,7 @@ function makeRun(
   pass: boolean,
   tools: string[] = [],
   toolUsage: Record<string, number> = {},
-  durations: number[] = [],
+  durations: number[] = []
 ): ScenarioRunResult {
   return {
     run_index: 0,
@@ -18,7 +18,7 @@ function makeRun(
     tool_usage: toolUsage,
     tool_durations_ms: durations,
     final_text: 'final answer',
-    extracted: {},
+    extracted: {}
   };
 }
 
@@ -26,7 +26,7 @@ const BASE = {
   runId: 'run-001',
   timestamp: '2024-01-01T00:00:00Z',
   configHash: 'abc123',
-  cliVersion: '1.0.0',
+  cliVersion: '1.0.0'
 };
 
 describe('aggregateResults', () => {
@@ -41,7 +41,7 @@ describe('aggregateResults', () => {
   it('computes pass_rate 1.0 when all runs pass', () => {
     const result = aggregateResults({
       ...BASE,
-      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [makeRun(true), makeRun(true)] }],
+      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [makeRun(true), makeRun(true)] }]
     });
     expect(result.summary.pass_rate).toBe(1);
     expect(result.scenarios[0].pass_rate).toBe(1);
@@ -51,8 +51,8 @@ describe('aggregateResults', () => {
     const result = aggregateResults({
       ...BASE,
       scenarioRuns: [
-        { scenario_id: 's1', agent: 'gpt-4', runs: [makeRun(true), makeRun(false), makeRun(true)] },
-      ],
+        { scenario_id: 's1', agent: 'gpt-4', runs: [makeRun(true), makeRun(false), makeRun(true)] }
+      ]
     });
     expect(result.summary.pass_rate).toBeCloseTo(2 / 3);
     expect(result.scenarios[0].pass_rate).toBeCloseTo(2 / 3);
@@ -61,7 +61,7 @@ describe('aggregateResults', () => {
   it('sets pass_rate to 0 when there are no runs', () => {
     const result = aggregateResults({
       ...BASE,
-      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [] }],
+      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [] }]
     });
     expect(result.scenarios[0].pass_rate).toBe(0);
   });
@@ -75,10 +75,10 @@ describe('aggregateResults', () => {
           agent: 'gpt-4',
           runs: [
             makeRun(true, ['search', 'fetch'], { search: 1, fetch: 1 }),
-            makeRun(true, ['search'], { search: 2 }),
-          ],
-        },
-      ],
+            makeRun(true, ['search'], { search: 2 })
+          ]
+        }
+      ]
     });
     expect(result.scenarios[0].tool_usage_frequency).toEqual({ search: 3, fetch: 1 });
   });
@@ -90,9 +90,9 @@ describe('aggregateResults', () => {
         {
           scenario_id: 's1',
           agent: 'gpt-4',
-          runs: [makeRun(true, ['a', 'b']), makeRun(true, ['a', 'b']), makeRun(true, ['c'])],
-        },
-      ],
+          runs: [makeRun(true, ['a', 'b']), makeRun(true, ['a', 'b']), makeRun(true, ['c'])]
+        }
+      ]
     });
     expect(Object.keys(result.scenarios[0].distinct_sequences)).toHaveLength(2);
   });
@@ -117,9 +117,9 @@ describe('aggregateResults', () => {
         {
           scenario_id: 's1',
           agent: 'gpt-4',
-          runs: [makeRun(true, ['a', 'b']), makeRun(true, ['c'])],
-        },
-      ],
+          runs: [makeRun(true, ['a', 'b']), makeRun(true, ['c'])]
+        }
+      ]
     });
     expect(result.summary.avg_tool_calls_per_run).toBe(1.5);
   });
@@ -128,7 +128,7 @@ describe('aggregateResults', () => {
     const run = makeRun(true, ['a', 'b'], {}, [100, 200]);
     const result = aggregateResults({
       ...BASE,
-      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [run] }],
+      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [run] }]
     });
     expect(result.summary.avg_tool_latency_ms).toBe(150);
   });
@@ -137,14 +137,14 @@ describe('aggregateResults', () => {
     const run = makeRun(true, [], {}, []);
     const result = aggregateResults({
       ...BASE,
-      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [run] }],
+      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [run] }]
     });
     expect(result.summary.avg_tool_latency_ms).toBeNull();
   });
 
   it('tracks required and forbidden tool stats when eval rules are present', () => {
     const eval_: EvalRules = {
-      tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
+      tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] }
     };
     const result = aggregateResults({
       ...BASE,
@@ -153,9 +153,9 @@ describe('aggregateResults', () => {
           scenario_id: 's1',
           agent: 'gpt-4',
           eval: eval_,
-          runs: [makeRun(true, ['search'], { search: 1 }), makeRun(true, [], {})],
-        },
-      ],
+          runs: [makeRun(true, ['search'], { search: 1 }), makeRun(true, [], {})]
+        }
+      ]
     });
     const stats = result.scenarios[0].tool_constraints_stats!;
     expect(stats.required.search).toBe(1);
@@ -168,8 +168,8 @@ describe('renderSummaryMarkdown', () => {
     const results = aggregateResults({
       ...BASE,
       scenarioRuns: [
-        { scenario_id: 'scenario-1', agent: 'gpt-4', runs: [makeRun(true), makeRun(true)] },
-      ],
+        { scenario_id: 'scenario-1', agent: 'gpt-4', runs: [makeRun(true), makeRun(true)] }
+      ]
     });
     const md = renderSummaryMarkdown(results);
     expect(md).toContain('# MCP Eval Summary');

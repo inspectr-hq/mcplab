@@ -6,12 +6,12 @@ const BASE_CONFIG: EvalConfig = {
   servers: {},
   agents: {
     'gpt-4': { provider: 'openai', model: 'gpt-4' },
-    'claude': { provider: 'anthropic', model: 'claude-opus-4-6' },
+    claude: { provider: 'anthropic', model: 'claude-opus-4-6' }
   },
   scenarios: [
     { id: 'scenario-1', servers: [], prompt: 'test prompt 1' },
-    { id: 'scenario-2', servers: [], prompt: 'test prompt 2' },
-  ],
+    { id: 'scenario-2', servers: [], prompt: 'test prompt 2' }
+  ]
 };
 
 describe('expandConfigForAgents', () => {
@@ -42,7 +42,7 @@ describe('expandConfigForAgents', () => {
 
   it('throws for an unknown agent name', () => {
     expect(() => expandConfigForAgents(BASE_CONFIG, ['unknown-agent'])).toThrow(
-      'Unknown agents: unknown-agent',
+      'Unknown agents: unknown-agent'
     );
   });
 
