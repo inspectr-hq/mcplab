@@ -102,6 +102,7 @@ export async function runAll(
 
   const scenarioRuns: Array<{
     scenario_id: string;
+    scenario_name?: string;
     agent: string;
     eval?: ExecutableScenario['eval'];
     runs: ScenarioRunResult[];
@@ -208,6 +209,7 @@ export async function runAll(
 
     scenarioRuns.push({
       scenario_id: scenario.id,
+      scenario_name: scenario.name,
       agent: scenario.agent,
       eval: scenario.eval,
       runs

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/MarkdownContent";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { MarkdownReportContent } from "@/lib/data-sources/types";
@@ -13,6 +14,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function detectRunId(report: MarkdownReportContent): string | null {
+  const pathMatch = report.relativePath.match(/(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i);
+  if (pathMatch?.[1]) return pathMatch[1];
+  const contentMatch =
+    report.content.match(/(?:^|\n)\s*\*\*Run:\*\*\s*`([^`]+)`/i) ??
+    report.content.match(/(?:^|\n)\s*Run ID:\s*([^\s]+)/i);
+  return contentMatch?.[1]?.trim() || null;
+}
+
 export default function MarkdownReportDetailPage() {
   const { source } = useDataSource();
   const [searchParams] = useSearchParams();
@@ -20,6 +30,7 @@ export default function MarkdownReportDetailPage() {
   const [report, setReport] = useState<MarkdownReportContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [resultPanelOpen, setResultPanelOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -85,6 +96,8 @@ export default function MarkdownReportDetailPage() {
     );
   }
 
+  const linkedRunId = detectRunId(report);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -95,9 +108,21 @@ export default function MarkdownReportDetailPage() {
             {new Date(report.mtime).toLocaleString()} {" · "} {formatBytes(report.sizeBytes)}
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/markdown-reports">Back to reports</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {linkedRunId ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setResultPanelOpen(true)}>
+                Open Result Panel
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/results/${encodeURIComponent(linkedRunId)}`}>Open Result</Link>
+              </Button>
+            </>
+          ) : null}
+          <Button asChild variant="outline" size="sm">
+            <Link to="/markdown-reports">Back to reports</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -105,6 +130,30 @@ export default function MarkdownReportDetailPage() {
           <MarkdownContent text={report.content} variant="assistant" />
         </CardContent>
       </Card>
+
+      {linkedRunId ? (
+        <Sheet open={resultPanelOpen} onOpenChange={setResultPanelOpen}>
+          <SheetContent side="right" className="w-[96vw] max-w-none p-0 sm:max-w-5xl">
+            <SheetHeader className="border-b px-4 py-3 pr-12">
+              <div className="flex items-center justify-between gap-2">
+                <SheetTitle className="text-base">Result {linkedRunId}</SheetTitle>
+                <Button asChild variant="outline" size="sm">
+                  <Link to={`/results/${encodeURIComponent(linkedRunId)}`} target="_blank" rel="noreferrer">
+                    Open full page
+                  </Link>
+                </Button>
+              </div>
+            </SheetHeader>
+            <div className="h-[calc(100vh-64px)]">
+              <iframe
+                title={`Result ${linkedRunId}`}
+                src={`/results/${encodeURIComponent(linkedRunId)}?embed=1`}
+                className="h-full w-full border-0"
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : null}
     </div>
   );
 }

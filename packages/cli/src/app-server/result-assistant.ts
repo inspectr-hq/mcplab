@@ -259,7 +259,9 @@ export async function handleResultAssistantRoutes(params: {
     if (Object.prototype.hasOwnProperty.call(body ?? {}, 'argumentsOverride')) {
       pending.arguments = body.argumentsOverride;
     }
-    await executePendingToolCall(session, pending, 'Approved');
+    await executePendingToolCall(session, pending, 'Approved', {
+      emitApprovalChatMessage: false
+    });
     const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;

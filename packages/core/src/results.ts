@@ -8,6 +8,7 @@ export function aggregateResults(params: {
   cliVersion: string;
   scenarioRuns: Array<{
     scenario_id: string;
+    scenario_name?: string;
     agent: string;
     eval?: EvalRules;
     runs: ScenarioRunResult[];
@@ -63,6 +64,7 @@ export function aggregateResults(params: {
 
     return {
       scenario_id: entry.scenario_id,
+      scenario_name: entry.scenario_name,
       agent: entry.agent,
       eval: entry.eval,
       tool_constraints_stats: toolConstraintsStats,

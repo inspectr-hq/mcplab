@@ -565,7 +565,7 @@ export function fromCoreResultsJson(
 
     return {
       scenarioId: scenario.scenario_id,
-      scenarioName: scenario.scenario_id,
+      scenarioName: scenario.scenario_name || scenario.scenario_id,
       agentId: scenario.agent,
       agentName: scenario.agent,
       runs,

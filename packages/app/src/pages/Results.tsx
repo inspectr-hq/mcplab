@@ -96,12 +96,23 @@ const Results = () => {
   };
 
   const runScopeSummary = (r: EvalResult) => {
-    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
+    const scenarioLabels = Array.from(
+      new Map(
+        r.scenarios
+          .map((s) => {
+            const id = String(s.scenarioId ?? "").trim();
+            const name = String(s.scenarioName ?? "").trim();
+            if (!id && !name) return null;
+            return [id || name, name || id] as const;
+          })
+          .filter((entry): entry is readonly [string, string] => Boolean(entry))
+      ).values()
+    );
     const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
-    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
-    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+    const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
+    const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
     return {
-      scenarioCount: scenarioIds.length,
+      scenarioCount: scenarioLabels.length,
       agentCount: agentNames.length,
       scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
     };

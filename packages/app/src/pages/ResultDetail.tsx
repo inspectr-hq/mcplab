@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -515,68 +515,87 @@ const ResultDetail = () => {
     }
   };
 
+  const copyAssistantChatText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copied" });
+    } catch (error: any) {
+      toast({
+        title: "Could not copy",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <div
       className={`${
         assistantOpen ? "xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden" : ""
       }`}
     >
-      <div className={`flex items-center gap-3 ${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
-        <Button variant="ghost" size="icon" asChild><Link to="/results"><ArrowLeft className="h-4 w-4" /></Link></Button>
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
-            <PassRateBadge rate={result.overallPassRate} />
-            {snapshotsUiEnabled && result.snapshotEval?.applied && (
-              <Badge variant="outline" className="text-xs">
-                Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
-              </Badge>
-            )}
+      <div className={`${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <Button variant="ghost" size="icon" asChild><Link to="/results"><ArrowLeft className="h-4 w-4" /></Link></Button>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
+                <PassRateBadge rate={result.overallPassRate} />
+                {snapshotsUiEnabled && result.snapshotEval?.applied && (
+                  <Badge variant="outline" className="text-xs">
+                    Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
+              </p>
+              {snapshotsUiEnabled && result.snapshotEval?.applied && (
+                <p className="text-xs text-muted-foreground">
+                  Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
+                </p>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
-          </p>
-          {snapshotsUiEnabled && result.snapshotEval?.applied && (
-            <p className="text-xs text-muted-foreground">
-              Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
-            </p>
-          )}
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {snapshotsUiEnabled && result.snapshotEval?.applied && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => void reviewDrift()}
+                disabled={comparing}
+              >
+                <GitCompare className="h-3.5 w-3.5" />
+                {comparing ? "Reviewing drift..." : "Review Drift"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
+              const html = generateHtmlReport(result);
+              const blob = new Blob([html], { type: "text/html" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `mcplab-report-${result.id}.html`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="h-3.5 w-3.5" />Download Report
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openAssistantWithPrompt()}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              MCP Labs Assistant
+            </Button>
+          </div>
         </div>
-        {snapshotsUiEnabled && result.snapshotEval?.applied && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-            onClick={() => void reviewDrift()}
-            disabled={comparing}
-          >
-            <GitCompare className="h-3.5 w-3.5" />
-            {comparing ? "Reviewing drift..." : "Review Drift"}
-          </Button>
-        )}
-        <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
-          const html = generateHtmlReport(result);
-          const blob = new Blob([html], { type: "text/html" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `mcplab-report-${result.id}.html`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }}>
-          <Download className="h-3.5 w-3.5" />Download Report
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 gap-1.5"
-          onClick={() => openAssistantWithPrompt()}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          MCP Labs Assistant
-        </Button>
       </div>
 
       <div
@@ -784,6 +803,7 @@ const ResultDetail = () => {
             <TableBody>
               {result.scenarios.map((sc) => {
                 const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
+                const scenarioLabel = sc.scenarioName || sc.scenarioId;
                 return (
                 <Collapsible key={rowKey} open={openScenarios.has(rowKey)} onOpenChange={() => toggle(rowKey)} asChild>
                   <>
@@ -822,7 +842,7 @@ const ResultDetail = () => {
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold">Scenario details</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {sc.scenarioId} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate
+                                  {scenarioLabel} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate
                                 </p>
                               </div>
                               <Button
@@ -832,7 +852,7 @@ const ResultDetail = () => {
                                 className="h-7 gap-1.5 px-2 text-xs shrink-0"
                                 onClick={() =>
                                   openAssistantWithPrompt(
-                                    `Explain why scenario '${sc.scenarioId}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
+                                    `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
                                   , { scenarioId: sc.scenarioId })
                                 }
                               >
@@ -1103,7 +1123,7 @@ const ResultDetail = () => {
                                             className="h-7 gap-1.5 px-2 text-xs"
                                             onClick={() =>
                                               openAssistantWithPrompt(
-                                                `Explain Run #${run.runIndex + 1} for scenario '${sc.scenarioId}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                                `Explain Run #${run.runIndex + 1} for scenario '${scenarioLabel}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
                                               , { scenarioId: sc.scenarioId })
                                             }
                                           >
@@ -1204,6 +1224,9 @@ const ResultDetail = () => {
                     ? assistantPendingToolCalls.find((call) => call.id === message.pendingToolCallId)
                     : undefined;
                   const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
+                  if (isTool && /^(Approved|Denied) tool call\b/i.test(String(message.text ?? "").trim())) {
+                    return null;
+                  }
                   const toolStepServer = linkedPendingToolCall?.server ?? message.toolRequestServer;
                   const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
                   const toolStepPublicName =
@@ -1218,11 +1241,17 @@ const ResultDetail = () => {
                       ? toolStepName.replace(/^mcplab_/, "").replace(/_/g, " ")
                       : toolStepPublicName ?? "tool call";
                     return (
-                      <div key={message.id ?? `${message.role}-${index}`} className="flex items-start gap-2">
+                      <div
+                        key={`${message.id ?? `${message.role}-${index}`}:${linkedPendingToolCall ? "pending" : "completed"}`}
+                        className="flex items-start gap-2"
+                      >
                         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
                           <Bot className="h-3 w-3" />
                         </div>
-                        <details open={Boolean(linkedPendingToolCall)} className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background">
+                        <details
+                          open={Boolean(linkedPendingToolCall)}
+                          className="group min-w-0 w-full max-w-[92%] rounded-md border border-border/60 bg-background"
+                        >
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
@@ -1243,12 +1272,12 @@ const ResultDetail = () => {
                             </div>
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </summary>
-                          <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                          <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
                             <MarkdownContent text={message.text} className="text-sm" />
                             {linkedPendingToolCall && (
                               <>
-                                <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                                  <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
+                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                                  <code className="break-words">{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
                                 </pre>
                                 <div className="flex justify-end gap-2">
                                   <Button
@@ -1300,6 +1329,21 @@ const ResultDetail = () => {
                           </p>
                         )}
                         <MarkdownContent text={message.text} className="text-sm" />
+                        {(isUser || (isAssistant && !isTool && !isSystem)) && (
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground"
+                              onClick={() => void copyAssistantChatText(message.text)}
+                              aria-label="Copy message"
+                              title="Copy message"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
@@ -1366,8 +1410,8 @@ const ResultDetail = () => {
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </summary>
                           <div className="border-t px-3 pb-3 pt-2">
-                            <pre className="max-h-48 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                              <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                              <code className="break-words">{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
                             </pre>
                             <div className="mt-2 flex justify-end gap-2">
                               <Button
