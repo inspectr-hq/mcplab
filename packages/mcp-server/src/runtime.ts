@@ -485,7 +485,10 @@ export function registerTools(server: McpServer): void {
       description:
         'List MCPLab run artifact directories and optionally summarize each run from results.json when present.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         limit: z
           .number()
           .int()
@@ -569,7 +572,9 @@ export function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
         const resolvedReportId =
-          report_id === 'LATEST' ? latestToolAnalysisReportIdWithFallback(baseDir) : report_id.trim();
+          report_id === 'LATEST'
+            ? latestToolAnalysisReportIdWithFallback(baseDir)
+            : report_id.trim();
         if (!resolvedReportId) {
           throw new Error(`No tool analysis reports found in ${baseDir}`);
         }
@@ -630,7 +635,10 @@ export function registerTools(server: McpServer): void {
       description:
         'List structured trace timeline items for a MCPLab run (flattened from scenario_run trace records) with optional type/scenario/agent filtering.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         event_types: z
           .array(z.string())
@@ -638,13 +646,24 @@ export function registerTools(server: McpServer): void {
           .describe('Optional timeline item type filters (e.g. text, tool_use, tool_result).'),
         scenario_id: z.string().optional().describe('Optional scenario id filter.'),
         agent: z.string().optional().describe('Optional agent filter.'),
-        limit: z.number().int().positive().max(1000).optional().describe('Max items to return (default 200).')
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(1000)
+          .optional()
+          .describe('Max items to return (default 200).')
       }
     },
     async ({ runs_dir, run_id, event_types, scenario_id, agent, limit }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
-        const typeSet: Set<string> | null = event_types?.length ? new Set<string>(event_types) : null;
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
+          runs_dir,
+          run_id
+        );
+        const typeSet: Set<string> | null = event_types?.length
+          ? new Set<string>(event_types)
+          : null;
         const flattened = flattenScenarioRunTraceRecords(records);
         const filtered = flattened.filter((item) => {
           const itemType = typeof item.type === 'string' ? item.type : '';
@@ -673,7 +692,10 @@ export function registerTools(server: McpServer): void {
       description:
         'Extract final assistant answers from a run trace (scenario_run documents) for easy agent output comparison.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         scenario_id: z.string().optional().describe('Optional scenario id filter.'),
         agent: z.string().optional().describe('Optional agent filter.'),
@@ -688,10 +710,17 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id, scenario_id, agent, max_chars_per_answer }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
+          runs_dir,
+          run_id
+        );
         const maxChars = max_chars_per_answer ?? 8000;
         const items = records
-          .filter((record) => (!scenario_id || record.scenario_id === scenario_id) && (!agent || record.agent === agent))
+          .filter(
+            (record) =>
+              (!scenario_id || record.scenario_id === scenario_id) &&
+              (!agent || record.agent === agent)
+          )
           .map((record, index) => {
             const full = extractFinalAssistantText(record);
             if (!full) return null;
@@ -721,11 +750,20 @@ export function registerTools(server: McpServer): void {
       description:
         'Return a structured conversation timeline (messages + tool blocks) for a specific scenario+agent in a scenario_run trace.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         scenario_id: z.string().describe('Scenario id to filter.'),
         agent: z.string().describe('Agent name to filter.'),
-        max_items: z.number().int().positive().max(1000).optional().describe('Max timeline items (default 300).'),
+        max_items: z
+          .number()
+          .int()
+          .positive()
+          .max(1000)
+          .optional()
+          .describe('Max timeline items (default 300).'),
         max_text_chars: z
           .number()
           .int()
@@ -737,18 +775,26 @@ export function registerTools(server: McpServer): void {
     },
     async ({ runs_dir, run_id, scenario_id, agent, max_items, max_text_chars }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
+          runs_dir,
+          run_id
+        );
         const textMax = max_text_chars ?? 4000;
         const record = records.find((r) => r.scenario_id === scenario_id && r.agent === agent);
-        const timeline = record ? buildConversationTimeline(record, textMax).slice(0, max_items ?? 300) : [];
+        const timeline = record
+          ? buildConversationTimeline(record, textMax).slice(0, max_items ?? 300)
+          : [];
 
-        return ok(`Built conversation timeline (${timeline.length} items) for ${scenario_id} / ${agent}`, {
-          run_id: runId,
-          scenario_id,
-          agent,
-          legacy_trace_detected: legacyDetected || undefined,
-          timeline
-        });
+        return ok(
+          `Built conversation timeline (${timeline.length} items) for ${scenario_id} / ${agent}`,
+          {
+            run_id: runId,
+            scenario_id,
+            agent,
+            legacy_trace_detected: legacyDetected || undefined,
+            timeline
+          }
+        );
       });
     }
   );
@@ -759,29 +805,36 @@ export function registerTools(server: McpServer): void {
       description:
         'Search scenario_run trace content for a text query and return matching message/block items.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         query: z.string().describe('Case-insensitive text query.'),
         event_types: z
-          .array(
-            z.enum([
-              'message',
-              'text',
-              'tool_use',
-              'tool_result'
-            ])
-          )
+          .array(z.enum(['message', 'text', 'tool_use', 'tool_result']))
           .optional()
           .describe('Optional item type filters.'),
-        limit: z.number().int().positive().max(200).optional().describe('Max matches to return (default 50).')
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe('Max matches to return (default 50).')
       }
     },
     async ({ runs_dir, run_id, query, event_types, limit }) => {
       return withToolHandling(async () => {
         const q = query.trim().toLowerCase();
         if (!q) throw new Error('query is required');
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
-        const typeSet: Set<string> | null = event_types?.length ? new Set<string>(event_types) : null;
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
+          runs_dir,
+          run_id
+        );
+        const typeSet: Set<string> | null = event_types?.length
+          ? new Set<string>(event_types)
+          : null;
         const matches: Array<Record<string, unknown>> = [];
         for (const item of flattenScenarioRunTraceRecords(records)) {
           const itemType = typeof item.type === 'string' ? item.type : '';
@@ -807,13 +860,19 @@ export function registerTools(server: McpServer): void {
       description:
         'Compute trace statistics for a run (message/block counts, tool usage, durations, and final-answer counts).',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'.")
       }
     },
     async ({ runs_dir, run_id }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(runs_dir, run_id);
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
+          runs_dir,
+          run_id
+        );
         const messageRoleCounts: Record<string, number> = {};
         const blockTypeCounts: Record<string, number> = {};
         const toolUsage: Record<string, number> = {};
@@ -866,7 +925,10 @@ export function registerTools(server: McpServer): void {
       description:
         'Read MCPLab run artifacts such as results.json, summary.md, trace.jsonl, resolved-config.yaml, or report.html.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe('Run id directory name or LATEST.'),
         artifact: z
           .enum([
@@ -888,7 +950,9 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe('1-indexed line to start reading from (inclusive). Use with line_end to read a specific range.'),
+          .describe(
+            '1-indexed line to start reading from (inclusive). Use with line_end to read a specific range.'
+          ),
         line_end: z
           .number()
           .int()
@@ -953,10 +1017,19 @@ export function registerTools(server: McpServer): void {
       description:
         'Search for text within a MCPLab run artifact and return matching lines with surrounding context. Use this to find specific sections in large files (e.g. a tool name in report.html) without reading the full file. Returns line numbers so you can follow up with mcplab_read_run_artifact line_start/line_end to read the full section.',
       inputSchema: {
-        runs_dir: z.string().optional().describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         artifact: z
-          .enum(['results.json', 'summary.md', 'trace.jsonl', 'resolved-config.yaml', 'report.html'])
+          .enum([
+            'results.json',
+            'summary.md',
+            'trace.jsonl',
+            'resolved-config.yaml',
+            'report.html'
+          ])
           .describe('Artifact filename to search.'),
         query: z.string().describe('Text to search for (case-insensitive by default).'),
         context_lines: z
@@ -1700,7 +1773,10 @@ function readScenarioRunTraceRecordsForRun(
   runIdInput: string
 ): ReadScenarioRunTraceResult {
   const base = resolveRunsDir(runsDirInput);
-  const readBase = resolveExistingRunReadDir(base, runIdInput === 'LATEST' ? undefined : runIdInput);
+  const readBase = resolveExistingRunReadDir(
+    base,
+    runIdInput === 'LATEST' ? undefined : runIdInput
+  );
   const runId = runIdInput === 'LATEST' ? latestRunId(readBase) : runIdInput;
   if (!runId) throw new Error(`No runs found in ${base}`);
   const tracePath = join(readBase, runId, 'trace.jsonl');
@@ -1730,7 +1806,9 @@ function readScenarioRunTraceRecordsForRun(
   return { runId, tracePath, records, legacyDetected };
 }
 
-function flattenScenarioRunTraceRecords(records: ScenarioRunTraceRecord[]): Array<Record<string, unknown>> {
+function flattenScenarioRunTraceRecords(
+  records: ScenarioRunTraceRecord[]
+): Array<Record<string, unknown>> {
   const out: Array<Record<string, unknown>> = [];
   for (const [recordIndex, record] of records.entries()) {
     for (const [messageIndex, message] of record.messages.entries()) {
@@ -1803,7 +1881,9 @@ function flattenScenarioRunTraceRecords(records: ScenarioRunTraceRecord[]): Arra
 }
 
 function extractTextBlocks(blocks: TraceMessageContentBlock[]): string[] {
-  return blocks.filter((b): b is Extract<TraceMessageContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text);
+  return blocks
+    .filter((b): b is Extract<TraceMessageContentBlock, { type: 'text' }> => b.type === 'text')
+    .map((b) => b.text);
 }
 
 function extractFinalAssistantText(record: ScenarioRunTraceRecord): string {
@@ -1826,7 +1906,12 @@ function buildConversationTimeline(
       if (block.type === 'text') {
         timeline.push({
           index: timeline.length,
-          type: message.role === 'assistant' ? 'agent_message' : message.role === 'user' ? 'user_message' : 'tool_text',
+          type:
+            message.role === 'assistant'
+              ? 'agent_message'
+              : message.role === 'user'
+                ? 'user_message'
+                : 'tool_text',
           role: message.role,
           ts: message.ts,
           message_index: messageIndex,

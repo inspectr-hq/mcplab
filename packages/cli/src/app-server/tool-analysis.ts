@@ -210,7 +210,9 @@ export async function handleToolAnalysisRoutes(params: {
   }
 
   if (pathname === '/api/tool-analysis-results' && method === 'GET') {
-    asJson(res, 200, { items: listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings)) });
+    asJson(res, 200, {
+      items: listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings))
+    });
     return true;
   }
 
@@ -220,7 +222,10 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 400, { error: 'Report id is required' });
       return true;
     }
-    const record = readToolAnalysisReportRecordFromDirs(resolveToolAnalysisReadDirs(settings), reportId);
+    const record = readToolAnalysisReportRecordFromDirs(
+      resolveToolAnalysisReadDirs(settings),
+      reportId
+    );
     if (!record) {
       asJson(res, 404, { error: 'Tool analysis report not found' });
       return true;

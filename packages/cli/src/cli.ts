@@ -175,11 +175,7 @@ program
       .description('Create snapshot from a run (only fully passing runs)')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--name <name>', 'Snapshot name')
-      .option(
-        '--runs-dir <path>',
-        'Directory with run artifacts',
-        'mcplab/results/evaluation-runs'
-      )
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
@@ -201,11 +197,7 @@ program
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .requiredOption('--config <path>', 'Path to eval.yaml')
       .option('--name <name>', 'Snapshot name')
-      .option(
-        '--runs-dir <path>',
-        'Directory with run artifacts',
-        'mcplab/results/evaluation-runs'
-      )
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {
@@ -389,11 +381,7 @@ program
       .requiredOption('--id <snapshotId>', 'Snapshot id')
       .requiredOption('--run <runId>', 'Run id from runs/<runId>')
       .option('--format <format>', 'Output format: table|json', 'table')
-      .option(
-        '--runs-dir <path>',
-        'Directory with run artifacts',
-        'mcplab/results/evaluation-runs'
-      )
+      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
       .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
       .action((options) => {
         try {

@@ -212,7 +212,10 @@ export interface TraceFileLegacyMeta {
   ts: string;
 }
 
-export type PersistedTraceRecord = ScenarioRunTraceRecord | TraceFileLegacyMeta | Record<string, unknown>;
+export type PersistedTraceRecord =
+  | ScenarioRunTraceRecord
+  | TraceFileLegacyMeta
+  | Record<string, unknown>;
 
 export interface ScenarioRunResult {
   run_index: number;

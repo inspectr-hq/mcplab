@@ -69,7 +69,10 @@ export function selectScenarioIds(config: EvalConfig, requestedScenarioIds?: str
   return { ...config, scenarios };
 }
 
-export function getScenarioRunTraceRecords(runId: string, runsDir: string): ScenarioRunTraceRecord[] {
+export function getScenarioRunTraceRecords(
+  runId: string,
+  runsDir: string
+): ScenarioRunTraceRecord[] {
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const tracePath = ensureInsideRoot(runsDir, join(runDir, 'trace.jsonl'));
   if (!existsSync(tracePath)) return [];

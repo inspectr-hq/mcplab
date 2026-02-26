@@ -5,7 +5,7 @@ import {
   makeAssistantToolPublicName,
   newAssistantEntityId,
   touchSession,
-  truncateJson,
+  truncateJson
 } from './assistant-common.js';
 
 interface ParsedAssistantToolCall {
@@ -210,7 +210,10 @@ export async function executeResultAssistantToolCall(
   const timeoutMs = 10_000;
   let handle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    handle = setTimeout(() => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)), timeoutMs);
+    handle = setTimeout(
+      () => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
   });
   try {
     return await Promise.race([

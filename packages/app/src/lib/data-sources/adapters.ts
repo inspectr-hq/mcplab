@@ -308,7 +308,9 @@ function traceScenarioKey(scenarioId?: string, agent?: string): string | undefin
   return `${scenarioId}::${agent ?? ''}`;
 }
 
-function isTextBlock(block: TraceMessageContentBlock): block is Extract<TraceMessageContentBlock, { type: 'text' }> {
+function isTextBlock(
+  block: TraceMessageContentBlock
+): block is Extract<TraceMessageContentBlock, { type: 'text' }> {
   return block.type === 'text';
 }
 
@@ -326,10 +328,7 @@ function toToolCallsFromRecord(
   }
 
   const uses: Array<{ id: string; name: string; input: Record<string, unknown>; ts?: string }> = [];
-  const resultByUseId = new Map<
-    string,
-    { durationMs?: number; tsEnd?: string }
-  >();
+  const resultByUseId = new Map<string, { durationMs?: number; tsEnd?: string }>();
 
   for (const message of record.messages) {
     for (const block of message.content) {
@@ -396,7 +395,8 @@ function toConversationItemsFromRecord(
 
     if (message.role === 'assistant') {
       const toolUses = message.content.filter(
-        (block): block is Extract<TraceMessageContentBlock, { type: 'tool_use' }> => block.type === 'tool_use'
+        (block): block is Extract<TraceMessageContentBlock, { type: 'tool_use' }> =>
+          block.type === 'tool_use'
       );
       for (const block of message.content) {
         if (block.type === 'text') {
@@ -417,7 +417,8 @@ function toConversationItemsFromRecord(
           string,
           Extract<TraceMessageContentBlock, { type: 'tool_result' }>
         >();
-        const unmatchedResults: Array<Extract<TraceMessageContentBlock, { type: 'tool_result' }>> = [];
+        const unmatchedResults: Array<Extract<TraceMessageContentBlock, { type: 'tool_result' }>> =
+          [];
         for (const block of nextMessage.content) {
           if (block.type !== 'tool_result') continue;
           if (block.tool_use_id) resultByUseId.set(block.tool_use_id, block);

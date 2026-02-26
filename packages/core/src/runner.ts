@@ -96,9 +96,15 @@ export async function runAll(
   });
 
   const mcp = new McpClientManager();
-  await emitProgress({ type: 'mcp_connect_started', serverCount: Object.keys(config.servers).length });
+  await emitProgress({
+    type: 'mcp_connect_started',
+    serverCount: Object.keys(config.servers).length
+  });
   await mcp.connectAll(config.servers, options.signal);
-  await emitProgress({ type: 'mcp_connect_finished', serverCount: Object.keys(config.servers).length });
+  await emitProgress({
+    type: 'mcp_connect_finished',
+    serverCount: Object.keys(config.servers).length
+  });
 
   const scenarioRuns: Array<{
     scenario_id: string;
