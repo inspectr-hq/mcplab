@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fromCoreResultsJson } from './adapters';
-import type { CoreResultsJson, TraceUiEvent } from './types';
+import type { CoreResultsJson, ScenarioRunTraceRecord } from './types';
 
 function baseResults(): CoreResultsJson {
   return {
@@ -52,90 +52,112 @@ function baseResults(): CoreResultsJson {
   };
 }
 
-describe('fromCoreResultsJson conversation mapping', () => {
-  it('maps mixed trace events and partitions conversations by run', () => {
-    const traceEvents: TraceUiEvent[] = [
-      { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
-      {
-        type: 'llm_request',
-        messages_summary: 'user: first question',
-        ts: '2026-02-08T10:00:01.000Z'
-      },
-      {
-        type: 'llm_response',
-        raw_or_summary: 'tool_calls:search_tags',
-        ts: '2026-02-08T10:00:02.000Z'
-      },
-      {
-        type: 'tool_call',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        args: { q: 'TM5-BP2' },
-        ts_start: '2026-02-08T10:00:03.000Z'
-      },
-      {
-        type: 'tool_result',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        ok: true,
-        result_summary: '{"count":9}',
-        duration_ms: 120,
-        ts_end: '2026-02-08T10:00:03.120Z'
-      },
-      {
-        type: 'final_answer',
-        scenario_id: 'scn-1',
-        text: 'Final answer one',
-        ts: '2026-02-08T10:00:04.000Z'
-      },
-      {
-        type: 'scenario_finished',
-        scenario_id: 'scn-1',
-        pass: true,
-        ts: '2026-02-08T10:00:05.000Z'
-      },
-      { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:01:00.000Z' },
-      {
-        type: 'llm_request',
-        messages_summary: 'user: second question',
-        ts: '2026-02-08T10:01:01.000Z'
-      },
-      {
-        type: 'llm_response',
-        raw_or_summary: 'tool_calls:search_tags',
-        ts: '2026-02-08T10:01:02.000Z'
-      },
-      {
-        type: 'tool_call',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        args: { q: 'TM5-BP3' },
-        ts_start: '2026-02-08T10:01:03.000Z'
-      },
-      {
-        type: 'tool_result',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        ok: false,
-        result_summary: '{"error":"timeout"}',
-        duration_ms: 80,
-        ts_end: '2026-02-08T10:01:03.080Z'
-      },
-      {
-        type: 'final_answer',
-        scenario_id: 'scn-1',
-        text: 'Final answer two',
-        ts: '2026-02-08T10:01:04.000Z'
-      },
-      {
-        type: 'scenario_finished',
-        scenario_id: 'scn-1',
-        pass: false,
-        ts: '2026-02-08T10:01:05.000Z'
-      }
-    ];
+function makeRecord(
+  runIndex: number,
+  messages: ScenarioRunTraceRecord['messages']
+): ScenarioRunTraceRecord {
+  return {
+    type: 'scenario_run',
+    trace_version: 3,
+    run_index: runIndex,
+    scenario_id: 'scn-1',
+    agent: 'gpt-4o',
+    provider: 'openai',
+    model: 'gpt-4o',
+    ts_start: '2026-02-08T10:00:00.000Z',
+    ts_end: '2026-02-08T10:00:05.000Z',
+    pass: runIndex === 0,
+    messages
+  };
+}
 
-    const mapped = fromCoreResultsJson(baseResults(), traceEvents);
+describe('fromCoreResultsJson conversation mapping', () => {
+  it('maps trace records and partitions conversations by run', () => {
+    const run0Record = makeRecord(0, [
+      {
+        role: 'user',
+        ts: '2026-02-08T10:00:00.000Z',
+        content: [{ type: 'text', text: 'first question' }]
+      },
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        content: [
+          { type: 'text', text: 'Let me search' },
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: { q: 'TM5-BP2' },
+            server: 'my-server'
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        ts: '2026-02-08T10:00:03.120Z',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu-1',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{"count":9}' }],
+            is_error: false,
+            duration_ms: 120,
+            ts_end: '2026-02-08T10:00:03.120Z'
+          }
+        ]
+      },
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:04.000Z',
+        content: [{ type: 'text', text: 'Final answer one' }]
+      }
+    ]);
+
+    const run1Record = makeRecord(1, [
+      {
+        role: 'user',
+        ts: '2026-02-08T10:01:00.000Z',
+        content: [{ type: 'text', text: 'second question' }]
+      },
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:01:01.000Z',
+        content: [
+          { type: 'text', text: 'Let me search again' },
+          {
+            type: 'tool_use',
+            id: 'tu-2',
+            name: 'search_tags',
+            input: { q: 'TM5-BP3' },
+            server: 'my-server'
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        ts: '2026-02-08T10:01:03.080Z',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu-2',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{"error":"timeout"}' }],
+            is_error: false,
+            duration_ms: 80,
+            ts_end: '2026-02-08T10:01:03.080Z'
+          }
+        ]
+      },
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:01:04.000Z',
+        content: [{ type: 'text', text: 'Final answer two' }]
+      }
+    ]);
+
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record, run1Record]);
     const runs = mapped.scenarios[0].runs;
 
     expect(runs[0].toolCalls[0].arguments).toEqual({ q: 'TM5-BP2' });
@@ -150,39 +172,44 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(runs[1].conversation[0].text).toContain('second question');
   });
 
-  it('handles missing llm_response/final_answer without crashing', () => {
-    const traceEvents: TraceUiEvent[] = [
-      { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
+  it('handles missing record for a run without crashing', () => {
+    const run0Record = makeRecord(0, [
       {
-        type: 'llm_request',
-        messages_summary: 'user: only prompt',
-        ts: '2026-02-08T10:00:01.000Z'
+        role: 'user',
+        ts: '2026-02-08T10:00:00.000Z',
+        content: [{ type: 'text', text: 'only prompt' }]
       },
       {
-        type: 'tool_call',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        args: {},
-        ts_start: '2026-02-08T10:00:02.000Z'
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: {},
+            server: 'my-server'
+          }
+        ]
       },
       {
-        type: 'tool_result',
-        scenario_id: 'scn-1',
-        tool: 'search_tags',
-        ok: true,
-        result_summary: '{}',
-        duration_ms: 10,
-        ts_end: '2026-02-08T10:00:02.010Z'
-      },
-      {
-        type: 'scenario_finished',
-        scenario_id: 'scn-1',
-        pass: true,
-        ts: '2026-02-08T10:00:03.000Z'
+        role: 'tool',
+        ts: '2026-02-08T10:00:02.010Z',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu-1',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{}' }],
+            is_error: false,
+            duration_ms: 10,
+            ts_end: '2026-02-08T10:00:02.010Z'
+          }
+        ]
       }
-    ];
+    ]);
 
-    const mapped = fromCoreResultsJson(baseResults(), traceEvents);
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
     const firstRun = mapped.scenarios[0].runs[0];
 
     expect(firstRun.conversation.map((item) => item.kind)).toEqual([
@@ -193,35 +220,26 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(mapped.scenarios[0].runs[1].conversation).toEqual([]);
   });
 
-  it('drops assistant response when it is a prefix of final answer', () => {
-    const traceEvents: TraceUiEvent[] = [
-      { type: 'scenario_started', scenario_id: 'scn-1', ts: '2026-02-08T10:00:00.000Z' },
+  it('last assistant text item becomes assistant_final', () => {
+    const run0Record = makeRecord(0, [
       {
-        type: 'llm_request',
-        messages_summary: 'user: investigate',
-        ts: '2026-02-08T10:00:01.000Z'
+        role: 'user',
+        ts: '2026-02-08T10:00:00.000Z',
+        content: [{ type: 'text', text: 'investigate' }]
       },
       {
-        type: 'llm_response',
-        raw_or_summary:
-          'It seems there are no ALPHA or BETA product batches in the given time range...',
-        ts: '2026-02-08T10:00:02.000Z'
-      },
-      {
-        type: 'final_answer',
-        scenario_id: 'scn-1',
-        text: 'It seems there are no ALPHA or BETA product batches in the given time range. The data availability looks good, but the value_based_search did not find any matching events.',
-        ts: '2026-02-08T10:00:03.000Z'
-      },
-      {
-        type: 'scenario_finished',
-        scenario_id: 'scn-1',
-        pass: true,
-        ts: '2026-02-08T10:00:04.000Z'
+        role: 'assistant',
+        ts: '2026-02-08T10:00:02.000Z',
+        content: [
+          {
+            type: 'text',
+            text: 'It seems there are no ALPHA or BETA product batches in the given time range. The data availability looks good, but the value_based_search did not find any matching events.'
+          }
+        ]
       }
-    ];
+    ]);
 
-    const mapped = fromCoreResultsJson(baseResults(), traceEvents);
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
     const kinds = mapped.scenarios[0].runs[0].conversation.map((item) => item.kind);
 
     expect(kinds).toEqual(['user_prompt', 'assistant_final']);

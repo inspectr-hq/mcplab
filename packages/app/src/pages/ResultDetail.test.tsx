@@ -8,15 +8,42 @@ const { getResultMock, sourceMock } = vi.hoisted(() => {
   const getResult = vi.fn();
   const listSnapshots = vi.fn().mockResolvedValue([]);
   const compareSnapshot = vi.fn();
+  const listMarkdownReports = vi.fn().mockResolvedValue([]);
   return {
     getResultMock: getResult,
-    sourceMock: { getResult, listSnapshots, compareSnapshot }
+    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports }
   };
 });
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
     source: sourceMock
+  })
+}));
+
+vi.mock('@/contexts/ConfigContext', () => ({
+  useConfigs: () => ({
+    configs: [],
+    loading: false,
+    getConfig: () => undefined,
+    addConfig: vi.fn(),
+    updateConfig: vi.fn(),
+    deleteConfig: vi.fn(),
+    cloneConfig: vi.fn(),
+    reload: vi.fn()
+  })
+}));
+
+vi.mock('@/contexts/LibraryContext', () => ({
+  useLibraries: () => ({
+    servers: [],
+    agents: [],
+    scenarios: [],
+    loading: false,
+    setServers: vi.fn(),
+    setAgents: vi.fn(),
+    setScenarios: vi.fn(),
+    reload: vi.fn()
   })
 }));
 
@@ -87,11 +114,11 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText('Here are the requested tags.')).toBeInTheDocument();
     expect(screen.queryByText('User prompt')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show conversation' }));
+    fireEvent.click(screen.getByText('Conversation trace'));
 
     await waitFor(() => {
       expect(screen.getByText('User prompt')).toBeInTheDocument();
-      expect(screen.getByText('Assistant final')).toBeInTheDocument();
+      expect(screen.getByText('Agent final')).toBeInTheDocument();
     });
     expect(screen.getAllByText('Here are the requested tags.').length).toBeGreaterThan(0);
   });
