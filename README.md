@@ -31,7 +31,7 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 
 ### Developer Experience
 - 👀 **Watch Mode** - Auto-rerun tests when configs change
-- 📝 **YAML Configuration** - Declarative, version-controllable test specs
+- 📝 **YAML Configuration** - Declarative, version-controllable eval specs
 - 🎨 **Interactive Reports** - Self-contained HTML with filtering and drill-down
 - 🔄 **Multi-Agent Testing** - Compare LLMs with a single CLI flag
 - 🧪 **Scenario Isolation** - Run specific tests or full suites
@@ -41,6 +41,13 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 - 🆚 **LLM Comparison** - Built-in tools to compare agent behavior
 - 📄 **Multiple Outputs** - HTML report, JSON results, Markdown summary, JSONL trace
 - 🎯 **Custom Metrics** - Extract values and track domain-specific KPIs
+- 📋 **Markdown Reports** - Store and browse custom analysis notes alongside runs
+
+### AI-Powered Tools (App Mode)
+- 🤖 **Scenario Assistant** - AI chat to help design and refine eval scenarios
+- 🔎 **Result Assistant** - AI chat to analyze and explain completed run results
+- 🛠️ **MCP Tool Analysis** - Automated review of MCP tool quality and safety
+- 🔐 **OAuth Debugger** - Step-by-step trace of OAuth flows for MCP servers
 
 ---
 
@@ -49,7 +56,7 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 ### 1. Install
 
 ```bash
-git clone https://github.com/yourusername/mcp-lab.git
+git clone https://github.com/inspectr-hq/mcp-lab.git
 cd mcp-lab
 npm install
 npm run build
@@ -68,13 +75,13 @@ cp .env.example .env
 
 ```bash
 # Run the app (frontend + local API bridge)
-mcplab app --evals-dir evals --runs-dir runs --open
+mcplab app --open
 
-# Run an evaluation from config files
+# Run an evaluation from a config file
 mcplab run -c mcplab/evals/eval.yaml
 
 # View the results
-open mcplab/runs/$(ls -t mcplab/runs | head -1)/report.html
+open mcplab/results/evaluation-runs/$(ls -t mcplab/results/evaluation-runs | head -1)/report.html
 ```
 
 ### 4. Create your own test
@@ -90,7 +97,7 @@ servers:
 agents:
   claude:
     provider: "anthropic"
-    model: "claude-3-haiku-20240307"
+    model: "claude-haiku-4-5-20251001"
     temperature: 0
     max_tokens: 2048
 
@@ -173,7 +180,7 @@ Configure LLM agents with provider-specific settings:
 agents:
   claude-sonnet:
     provider: "anthropic"
-    model: "claude-3-haiku-20240307"
+    model: "claude-sonnet-4-6"
     temperature: 0
     max_tokens: 2048
     system: "You are a helpful assistant."
@@ -284,7 +291,13 @@ mcplab run -c mcplab/evals/eval.yaml -n 5
 Serve the web app and local API in one process:
 
 ```bash
-mcplab app --evals-dir evals --runs-dir runs --port 8787 --open
+mcplab app --open
+```
+
+Optional custom paths:
+
+```bash
+mcplab app --evals-dir mcplab/evals --runs-dir mcplab/results/evaluation-runs --port 8787 --open
 ```
 
 Optional development mode (proxy frontend to Vite, keep API local):
@@ -306,7 +319,7 @@ mcplab run -c examples/eval.yaml \
 # 3 scenarios × 3 agents = 9 tests
 
 # Compare results
-node scripts/compare-llm-results.mjs mcplab/runs/LATEST/results.json
+node scripts/compare-llm-results.mjs mcplab/results/evaluation-runs/LATEST/results.json
 ```
 
 Output:
@@ -375,8 +388,74 @@ mcplab run -c mcplab/evals/eval.yaml --snapshot-eval
 
 ```bash
 # Regenerate HTML report from previous run
-mcplab report --input mcplab/runs/20260206-212239
+mcplab report --input mcplab/results/evaluation-runs/20260206-212239
 ```
+
+---
+
+## 🤖 AI-Powered Features (App Mode)
+
+These features are available through the web app (`mcplab app`).
+
+### Scenario Assistant
+
+An interactive AI chat that helps you design and refine evaluation scenarios. Given a scenario, it can suggest improvements to the prompt, evaluation rules, and extraction patterns — and can call your MCP server's tools directly to demonstrate expected behavior.
+
+Open the app, navigate to an eval, and open the **Scenario Assistant** panel on any scenario.
+
+### Result Assistant
+
+An AI chat that analyzes completed evaluation runs. Ask it to explain failures, identify patterns across scenarios, or summarize what went wrong in a specific run. It has read-only access to run artifacts, traces, and results.
+
+Open a run in the app and click **Result Assistant**.
+
+### MCP Tool Analysis
+
+Automated quality review of your MCP server's tools. Connects to your server, discovers all tools, and produces a report covering:
+
+- Name and description quality
+- Schema completeness
+- Safety classification (read-like vs. potentially destructive)
+- Sample call behavior (optional — runs real calls against your server)
+
+Reports are saved to `mcplab/results/tool-analysis/` and viewable in the app.
+
+Navigate to **Tool Analysis** in the app sidebar to start an analysis job.
+
+### OAuth Debugger
+
+A step-by-step trace tool for OAuth flows used by MCP servers. Walks through authorization, token exchange, and callback handling — capturing all network requests and validations along the way. Useful for diagnosing OAuth integration issues.
+
+Navigate to **OAuth Debugger** in the app sidebar.
+
+### Markdown Reports
+
+Store and browse custom analysis notes, comparison docs, or generated reports alongside your eval runs. Place `.md` files in `mcplab/reports/` and they become accessible in the app under **Reports**.
+
+---
+
+## 📚 Reusable Libraries
+
+Define servers, agents, and scenarios once and reuse them across multiple eval files.
+
+```
+mcplab/
+├── servers.yaml       # Shared MCP server definitions
+├── agents.yaml        # Shared LLM agent definitions
+└── scenarios/
+    ├── scenario-a.yaml
+    └── scenario-b.yaml
+```
+
+Reference library items in eval configs:
+
+```yaml
+server_refs: ["my-server"]      # from servers.yaml
+agent_refs: ["claude-sonnet"]   # from agents.yaml
+scenario_refs: ["scenario-a"]   # from scenarios/scenario-a.yaml
+```
+
+Libraries can be managed through the app's **Libraries** page.
 
 ---
 
@@ -385,25 +464,26 @@ mcplab report --input mcplab/runs/20260206-212239
 Each evaluation run creates a timestamped directory:
 
 ```
-mcplab/runs/20260206-212239/
+mcplab/results/evaluation-runs/20260206-212239/
 ├── trace.jsonl        # Detailed execution log (every tool call, LLM response)
 ├── results.json       # Structured results (pass/fail, metrics, aggregates)
 ├── summary.md         # Human-readable summary table
 └── report.html        # Interactive HTML report (self-contained)
 ```
 
-Reusable libraries are stored in a bundled folder:
+Other output directories:
 
 ```
 mcplab/
-├── configs/
-├── runs/
-├── snapshots/
-├── servers.yaml
-├── agents.yaml
-└── scenarios/
-    ├── scenario-a.yaml
-    └── scenario-b.yaml
+├── evals/                          # Eval definition YAML files
+├── results/
+│   ├── evaluation-runs/            # Run artifacts
+│   └── tool-analysis/              # Saved tool analysis reports
+├── snapshots/                      # Snapshot baselines
+├── reports/                        # Custom markdown reports
+├── servers.yaml                    # Library: shared server definitions
+├── agents.yaml                     # Library: shared agent definitions
+└── scenarios/                      # Library: shared scenario files
 ```
 
 ### Trace Format (JSONL)
@@ -509,8 +589,8 @@ jobs:
   evaluate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
@@ -524,10 +604,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       - name: Upload results
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: evaluation-results
-          path: mcplab/runs/
+          path: mcplab/results/evaluation-runs/
 ```
 
 ---
@@ -542,7 +622,7 @@ Analyze results with custom logic:
 // my-analysis.mjs
 import { readFileSync } from 'fs';
 
-const results = JSON.parse(readFileSync('mcplab/runs/LATEST/results.json'));
+const results = JSON.parse(readFileSync('mcplab/results/evaluation-runs/LATEST/results.json'));
 
 // Calculate custom metrics
 for (const scenario of results.scenarios) {
@@ -565,7 +645,7 @@ node scripts/generate-multi-llm-config.mjs examples/eval-trendminer.yaml
 Built-in comparison script:
 
 ```bash
-node scripts/compare-llm-results.mjs mcplab/runs/20260206-212239/results.json
+node scripts/compare-llm-results.mjs mcplab/results/evaluation-runs/20260206-212239/results.json
 ```
 
 Shows:
@@ -576,22 +656,15 @@ Shows:
 
 ---
 
-## 📚 Documentation
-
-- **[Multi-LLM Testing Guide](MULTI-LLM-TESTING.md)** - Comprehensive guide for comparing LLMs
-- **[Examples Directory](examples/)** - Sample configurations for various use cases
-- **[Scripts Directory](scripts/)** - Utility scripts for analysis and config generation
-
----
-
 ## 🔧 Development
 
 ### Project Structure
 
 ```
-mcp-lab/
+mcp-evaluation/
 ├── packages/
-│   ├── cli/           # CLI tool (run, watch, report commands)
+│   ├── cli/           # CLI tool (run, watch, report, app commands)
+│   ├── app/           # Web frontend (React)
 │   ├── core/          # Evaluation engine, agent adapters, MCP client
 │   └── reporting/     # HTML report generation
 ├── examples/          # Example evaluation configs
@@ -603,11 +676,14 @@ mcp-lab/
 ### Run in Development Mode
 
 ```bash
-# Build and watch for changes
+# Build all packages
 npm run build
 
-# Or use tsx for development
-npm run dev
+# Run CLI directly with tsx (no build needed)
+npm run dev -- app --dev
+
+# Or run just the frontend in watch mode
+npm run app:dev:ui
 ```
 
 ### Run Tests
@@ -647,9 +723,8 @@ Built with:
 
 ## 📞 Support
 
-- 📖 [Documentation](https://github.com/yourusername/mcp-evaluation)
-- 💬 [Discussions](https://github.com/yourusername/mcp-evaluation/discussions)
-- 🐛 [Issue Tracker](https://github.com/yourusername/mcp-evaluation/issues)
+- 🐛 [Issue Tracker](https://github.com/inspectr-hq/mcp-lab/issues)
+- 💬 [Discussions](https://github.com/inspectr-hq/mcp-lab/discussions)
 - 🌐 [MCP Protocol](https://modelcontextprotocol.io)
 
 ---
