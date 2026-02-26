@@ -13,6 +13,7 @@ import {
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type {
   AgentConfig,
@@ -161,7 +162,7 @@ export async function startAppServer(options: AppServerOptions) {
   mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
   applySettingsOverrides(settings);
 
-  const appDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
+  const appDist = resolveAppDist(workspaceRoot);
   const viteDevTarget = 'http://127.0.0.1:8685';
   const devMcp = await maybeStartDevMcpServer(workspaceRoot, options.dev);
   const jobs = new Map<string, RunJob>();
@@ -503,4 +504,13 @@ export async function startAppServer(options: AppServerOptions) {
   if (options.open) {
     startBrowser(url);
   }
+}
+
+function resolveAppDist(workspaceRoot: string): string {
+  const repoAppDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
+  if (existsSync(repoAppDist)) return repoAppDist;
+
+  // When installed from npm, serve the packaged frontend bundled into CLI dist/app.
+  const thisFileDir = dirname(fileURLToPath(import.meta.url));
+  return resolve(thisFileDir, '..', 'app');
 }

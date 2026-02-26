@@ -16,6 +16,7 @@
     "app": "node dist/cli.js app",
     "app:dev": "tsx packages/cli/src/cli.ts app --dev",
     "app:dev:ui": "npm run dev -w @inspectr/mcplab-app",
+    "release:prepare:cli": "node scripts/prepare-cli-package.mjs",
     "clean": "rm -rf dist packages/*/dist",
     "format": "npx prettier --write \"packages/**/*.{ts,jsx,css}\" --config ./.prettierrc",
     "test": "npm run test --workspaces --if-present"
