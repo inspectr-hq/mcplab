@@ -8,6 +8,7 @@ runs/
 
 .agents
 .claude
+.worktrees
 .idea
 
 mcplab/
