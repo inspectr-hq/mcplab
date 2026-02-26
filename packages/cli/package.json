@@ -8,7 +8,11 @@
     "mcplab": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@inspectr/mcplab-core": "0.1.0",
