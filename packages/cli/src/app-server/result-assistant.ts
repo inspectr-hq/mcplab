@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { basename, relative, resolve, sep } from 'node:path';
+import { readdirSync, statSync } from 'node:fs';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import type { ResultAssistantSession } from './result-assistant-domain.js';
@@ -23,6 +25,8 @@ export type ResultAssistantRouteDeps = Pick<
 >;
 
 const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
+  'mcplab_list_markdown_reports',
+  'mcplab_read_markdown_report',
   'mcplab_list_runs',
   'mcplab_read_run_artifact',
   'mcplab_trace_stats',
@@ -56,6 +60,8 @@ export async function handleResultAssistantRoutes(params: {
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const listReferenceReportsForRun = (runId: string) =>
+    listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
 
   const executePendingToolCall = async (
     session: ResultAssistantSession,
@@ -76,6 +82,10 @@ export async function handleResultAssistantRoutes(params: {
     try {
       const toolResult = await executeResultAssistantToolCall(session, pending);
       pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
+      if (pending.tool === 'mcplab_write_markdown_report') {
+        session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
+        session.systemPromptCache = undefined;
+      }
       session.llmMessages.push({
         role: 'tool',
         content: pending.resultPreview,
@@ -151,6 +161,7 @@ export async function handleResultAssistantRoutes(params: {
       selectedAssistantAgentName: assistantAgentName,
       agentConfig,
       resultSummary: results,
+      referenceReportsForRun: listReferenceReportsForRun(runId),
       mcp: new McpClientManager(),
       tools: [],
       toolPublicMap: new Map(),
@@ -322,4 +333,64 @@ function localMcplabMcpUrl(): string {
   const port = process.env.MCP_PORT || '3011';
   const path = process.env.MCP_PATH || '/mcp';
   return `http://${host}:${port}${path}`;
+}
+
+function listMarkdownReportsLinkedToRun(
+  workspaceRoot: string,
+  runId: string
+): Array<{
+  path: string;
+  relativePath: string;
+  name: string;
+  sizeBytes: number;
+  mtime: string;
+}> {
+  const root = resolve(workspaceRoot, 'mcplab/reports');
+  const out: Array<{
+    path: string;
+    relativePath: string;
+    name: string;
+    sizeBytes: number;
+    mtime: string;
+  }> = [];
+  const isMarkdown = (path: string) => path.endsWith('.md') || path.endsWith('.markdown');
+  const walk = (dir: string) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !isMarkdown(fullPath)) continue;
+      try {
+        const st = statSync(fullPath);
+        if (!st.isFile()) continue;
+        const relPath = relative(root, fullPath).split(sep).join('/');
+        const wsPath = relative(workspaceRoot, fullPath).split(sep).join('/');
+        const name = basename(fullPath);
+        if (!relPath.includes(runId) && !name.includes(runId)) continue;
+        out.push({
+          path: wsPath,
+          relativePath: relPath,
+          name,
+          sizeBytes: st.size,
+          mtime: st.mtime.toISOString()
+        });
+      } catch {
+        // Ignore unreadable files.
+      }
+    }
+  };
+  walk(root);
+  out.sort((a, b) => {
+    if (a.mtime === b.mtime) return a.path.localeCompare(b.path);
+    return b.mtime.localeCompare(a.mtime);
+  });
+  return out.slice(0, 50);
 }

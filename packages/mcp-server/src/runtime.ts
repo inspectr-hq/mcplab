@@ -9,7 +9,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { dirname, extname, resolve, join, sep } from 'node:path';
+import { basename, dirname, extname, resolve, join, sep, relative } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
@@ -36,9 +36,18 @@ type ToolResult = {
   isError?: boolean;
 };
 
+type MarkdownReportListItem = {
+  path: string;
+  relativePath: string;
+  name: string;
+  sizeBytes: number;
+  mtime: string;
+};
+
 const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_HOST = '127.0.0.1';
+const MAX_MARKDOWN_REPORT_READ_BYTES = 2 * 1024 * 1024;
 
 export type SessionRuntime = {
   transport: StreamableHTTPServerTransport;
@@ -181,6 +190,97 @@ export function registerTools(server: McpServer): void {
           chars: normalized.length,
           overwritten: fileExists,
           workspace_root: process.cwd()
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_list_markdown_reports',
+    {
+      description:
+        'List saved markdown reports under mcplab/reports. Supports filtering by run id substring to find reports linked to a result.',
+      inputSchema: {
+        reports_dir: z
+          .string()
+          .optional()
+          .describe('Markdown reports root (default mcplab/reports).'),
+        run_id: z
+          .string()
+          .optional()
+          .describe('Optional run id substring filter (matches path/name).'),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe('Max reports to return (default 20).')
+      }
+    },
+    async ({ reports_dir, run_id, limit }) => {
+      return withToolHandling(async () => {
+        const root = resolveMarkdownReportsDir(reports_dir);
+        const all = listMarkdownReportsFromDisk(root);
+        const runFilter = String(run_id ?? '').trim();
+        const filtered = runFilter
+          ? all.filter((item) => item.relativePath.includes(runFilter) || item.name.includes(runFilter))
+          : all;
+        const capped = filtered.slice(0, limit ?? 20);
+        return ok(`Found ${capped.length}/${filtered.length} markdown report(s) in ${root}`, {
+          reports_dir: root,
+          run_id_filter: runFilter || undefined,
+          total_matching: filtered.length,
+          items: capped
+        });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_read_markdown_report',
+    {
+      description:
+        'Read a saved markdown report by relative path (under mcplab/reports by default) or by workspace-relative path, with optional truncation.',
+      inputSchema: {
+        path: z
+          .string()
+          .describe('Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'),
+        reports_dir: z
+          .string()
+          .optional()
+          .describe('Markdown reports root (default mcplab/reports).'),
+        max_chars: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Optional truncation for markdown content preview (default 20000).')
+      }
+    },
+    async ({ path, reports_dir, max_chars }) => {
+      return withToolHandling(async () => {
+        const root = resolveMarkdownReportsDir(reports_dir);
+        const targetPath = resolveMarkdownReportPath(root, path);
+        if (!isMarkdownReportExt(targetPath)) {
+          throw new Error('path must point to a .md or .markdown file');
+        }
+        const st = statSync(targetPath);
+        if (!st.isFile()) throw new Error(`Report not found: ${targetPath}`);
+        if (st.size > MAX_MARKDOWN_REPORT_READ_BYTES) {
+          throw new Error(`Report exceeds ${MAX_MARKDOWN_REPORT_READ_BYTES} bytes`);
+        }
+        const raw = readFileSync(targetPath, 'utf8');
+        const preview = truncate(raw, max_chars ?? 20_000);
+        return ok(`Read markdown report ${relative(process.cwd(), targetPath).split(sep).join('/')}`, {
+          reports_dir: root,
+          path: relative(process.cwd(), targetPath).split(sep).join('/'),
+          relativePath: relative(root, targetPath).split(sep).join('/'),
+          name: basename(targetPath),
+          sizeBytes: st.size,
+          mtime: st.mtime.toISOString(),
+          truncated: preview.length < raw.length,
+          content: preview
         });
       });
     }
@@ -1574,6 +1674,71 @@ function detectLikelyBundleRoot(configPath: string): string | null {
 
 function resolveToolAnalysisResultsDir(input?: string): string {
   return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/results/tool-analysis');
+}
+
+function resolveMarkdownReportsDir(input?: string): string {
+  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/reports');
+}
+
+function isMarkdownReportExt(path: string): boolean {
+  const ext = extname(path).toLowerCase();
+  return ext === '.md' || ext === '.markdown';
+}
+
+function listMarkdownReportsFromDisk(root: string): MarkdownReportListItem[] {
+  if (!existsSync(root)) return [];
+  const items: MarkdownReportListItem[] = [];
+  const walk = (dir: string) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !isMarkdownReportExt(fullPath)) continue;
+      try {
+        const st = statSync(fullPath);
+        if (!st.isFile()) continue;
+        items.push({
+          path: relative(process.cwd(), fullPath).split(sep).join('/'),
+          relativePath: relative(root, fullPath).split(sep).join('/'),
+          name: basename(fullPath),
+          sizeBytes: st.size,
+          mtime: st.mtime.toISOString()
+        });
+      } catch {
+        // Skip unreadable entries.
+      }
+    }
+  };
+  walk(root);
+  items.sort((a, b) => {
+    const aMtime = String(a.mtime ?? '');
+    const bMtime = String(b.mtime ?? '');
+    if (aMtime === bMtime) return String(a.path ?? '').localeCompare(String(b.path ?? ''));
+    return bMtime.localeCompare(aMtime);
+  });
+  return items;
+}
+
+function resolveMarkdownReportPath(root: string, pathInput: string): string {
+  const trimmed = pathInput.trim();
+  if (!trimmed) throw new Error('path is required');
+  const workspaceRelativePrefix = `mcplab${sep}reports${sep}`;
+  const normalized = trimmed.replaceAll('/', sep);
+  const candidate =
+    normalized === `mcplab${sep}reports` || normalized.startsWith(workspaceRelativePrefix)
+      ? resolvePathInsideWorkspace(normalized)
+      : resolve(root, normalized);
+  const withinRoot = candidate === root || candidate.startsWith(`${root}${sep}`);
+  if (!withinRoot) throw new Error('path escapes markdown reports root');
+  return candidate;
 }
 
 function legacyToolAnalysisResultsDir(): string {

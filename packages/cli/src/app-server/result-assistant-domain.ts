@@ -50,6 +50,13 @@ export interface ResultAssistantSession {
   selectedAssistantAgentName: string;
   agentConfig: AgentConfig;
   resultSummary: ResultsJson;
+  referenceReportsForRun: Array<{
+    path: string;
+    relativePath: string;
+    name: string;
+    sizeBytes: number;
+    mtime: string;
+  }>;
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
@@ -65,6 +72,8 @@ const RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS = 3;
 const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
 const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_write_markdown_report',
+  'mcplab_list_markdown_reports',
+  'mcplab_read_markdown_report',
   'mcplab_list_runs',
   'mcplab_read_run_artifact',
   'mcplab_grep_run_artifact',
@@ -267,8 +276,10 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
       scenario_count_total: totalScenarioCount,
       scenario_count_included: scenarioSummaries.length,
       scenario_count_omitted: omittedScenarioCount,
-      scenarios: scenarioSummaries
+      scenarios: scenarioSummaries,
+      linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
     })}`,
+    'For custom markdown reports linked to this run, prefer mcplab_list_markdown_reports with run_id set to the current run id, then mcplab_read_markdown_report for selected files.',
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'
