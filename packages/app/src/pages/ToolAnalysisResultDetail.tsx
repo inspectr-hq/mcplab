@@ -38,9 +38,9 @@ export default function ToolAnalysisResultDetailPage() {
         if (!active) return;
         setRecord(next);
       })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (!active) return;
-        const msg = String(error?.message ?? error);
+        const msg = (error instanceof Error ? error.message : String(error));
         if (msg.includes("(404)")) {
           setNotFound(true);
           setRecord(null);
@@ -62,8 +62,8 @@ export default function ToolAnalysisResultDetailPage() {
       await source.deleteToolAnalysisSavedResult(id);
       toast({ title: "Tool analysis report deleted" });
       navigate("/tool-analysis-results");
-    } catch (error: any) {
-      toast({ title: "Could not delete report", description: String(error?.message ?? error), variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Could not delete report", description: (error instanceof Error ? error.message : String(error)), variant: "destructive" });
     } finally {
       setDeleting(false);
       setDeleteOpen(false);

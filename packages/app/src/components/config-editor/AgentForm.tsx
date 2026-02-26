@@ -69,10 +69,10 @@ export function AgentForm({ agents, onChange, readOnly }: AgentFormProps) {
         title: response.kind === "deployments" ? "Deployments loaded" : "Models loaded",
         description: `${response.items.length} ${response.kind} from ${response.source}`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not load provider models",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     } finally {

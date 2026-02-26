@@ -212,10 +212,10 @@ const ResultDetail = () => {
         if (!active) return;
         setSelectedReferenceReport(report);
       })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (!active) return;
         setSelectedReferenceReport(null);
-        setSelectedReferenceReportError(String(error?.message ?? error));
+        setSelectedReferenceReportError((error instanceof Error ? error.message : String(error)));
       })
       .finally(() => {
         if (active) setSelectedReferenceReportLoading(false);
@@ -324,7 +324,8 @@ const ResultDetail = () => {
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
       const next = new Set(prev);
-      next.has(rowId) ? next.delete(rowId) : next.add(rowId);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
       return next;
     });
   };
@@ -339,7 +340,8 @@ const ResultDetail = () => {
   const toggleRunSection = (key: string) => {
     setCollapsedRunSections((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -370,10 +372,10 @@ const ResultDetail = () => {
     try {
       const comparison = await source.compareSnapshot(baselineId, result.id);
       setSnapshotComparison(comparison);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not review drift",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -409,10 +411,10 @@ const ResultDetail = () => {
       if (result.snapshotEval?.applied) {
         void reviewDrift(response.snapshot.id);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not accept new baseline",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -454,11 +456,11 @@ const ResultDetail = () => {
       }
       const response = await source.sendResultAssistantMessage(sessionId, question);
       syncResultAssistantSession(response.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
         title: "MCP Labs Assistant error",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -488,10 +490,10 @@ const ResultDetail = () => {
     try {
       const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
       syncResultAssistantSession(response.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not approve assistant action",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -505,10 +507,10 @@ const ResultDetail = () => {
     try {
       const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
       syncResultAssistantSession(response.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not deny assistant action",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -582,10 +584,10 @@ const ResultDetail = () => {
         })
       );
       navigate(`/libraries/scenarios/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not create handoff",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     }
@@ -636,10 +638,10 @@ const ResultDetail = () => {
             : response.outputPath
       });
       setApplyReportOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not write markdown report",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -651,10 +653,10 @@ const ResultDetail = () => {
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: "Copied" });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not copy",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     }

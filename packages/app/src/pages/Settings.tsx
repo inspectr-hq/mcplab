@@ -25,11 +25,11 @@ const SettingsPage = () => {
     try {
       const settings = await source.getWorkspaceSettings();
       setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? "");
-    } catch (error: any) {
+    } catch (error: unknown) {
       setScenarioAssistantAgentName("");
       toast({
         title: "Could not load settings",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -54,10 +54,10 @@ const SettingsPage = () => {
           ? `Scenario Assistant Agent set to ${nextAgentName}.`
           : "Scenario Assistant Agent cleared (will use first available agent by default)."
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not save settings",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {

@@ -164,10 +164,10 @@ const ToolAnalysisPage = () => {
             setReport(result.report);
             setSavedReportId(result.savedReportId ?? null);
           })
-          .catch((error: any) =>
+          .catch((error: unknown) =>
             toast({
               title: "Could not load analysis report",
-              description: String(error?.message ?? error),
+              description: (error instanceof Error ? error.message : String(error)),
               variant: "destructive"
             })
           )
@@ -229,10 +229,10 @@ const ToolAnalysisPage = () => {
         }
         return next;
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not discover MCP tools",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -300,13 +300,13 @@ const ToolAnalysisPage = () => {
       setActiveJobId(jobId);
       setActiveToolAnalysisJob(jobId);
       attachToJob(jobId);
-    } catch (error: any) {
+    } catch (error: unknown) {
       setSubmitting(false);
       setRunState("error");
       setViewStep("run");
       toast({
         title: "Could not start tool analysis",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     }
@@ -355,10 +355,10 @@ const ToolAnalysisPage = () => {
         return;
       }
       toast({ title: "Stopping analysis..." });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not stop analysis",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     }

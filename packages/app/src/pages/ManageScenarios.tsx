@@ -78,8 +78,8 @@ const ManageScenarios = () => {
       if (seq === saveSeqRef.current) {
         setSaveStatus("saved");
       }
-    } catch (error: any) {
-      const message = String(error?.message ?? error);
+    } catch (error: unknown) {
+      const message = (error instanceof Error ? error.message : String(error));
       if (seq === saveSeqRef.current) {
         setSaveStatus("error");
         setSaveError(message);
@@ -119,14 +119,14 @@ const ManageScenarios = () => {
       nextId = `${baseId}-${suffix}`;
       suffix += 1;
     }
-    const nextScenario = {
+    const nextScenario: Scenario = {
       id: nextId,
       name: "",
       serverIds: [],
       prompt: "",
       evalRules: [],
       extractRules: []
-    } as const;
+    };
     await setScenarios([...scenarios, nextScenario]);
     navigate(`/libraries/scenarios/${encodeURIComponent(nextId)}`);
     toast({ title: "Scenario created", description: `Opened ${nextId} for editing.` });

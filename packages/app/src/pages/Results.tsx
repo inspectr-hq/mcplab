@@ -42,10 +42,10 @@ const Results = () => {
     setRefreshing(true);
     try {
       setResults(await source.listResults());
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not load results",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -61,11 +61,11 @@ const Results = () => {
       .then((next) => {
         if (active) setResults(next);
       })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (!active) return;
         toast({
           title: "Could not load results",
-          description: String(error?.message ?? error),
+          description: (error instanceof Error ? error.message : String(error)),
           variant: "destructive"
         });
       })
@@ -125,10 +125,10 @@ const Results = () => {
       setResults((prev) => prev.filter((r) => r.id !== runId));
       toast({ title: "Run deleted", description: runId });
       setPendingDeleteRunId(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not delete run",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {

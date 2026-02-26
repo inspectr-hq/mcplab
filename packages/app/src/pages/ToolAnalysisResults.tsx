@@ -33,8 +33,8 @@ export default function ToolAnalysisResultsPage() {
     setLoading(true);
     try {
       setItems(await source.listToolAnalysisResults());
-    } catch (error: any) {
-      toast({ title: "Could not load tool analysis results", description: String(error?.message ?? error), variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Could not load tool analysis results", description: (error instanceof Error ? error.message : String(error)), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -55,8 +55,8 @@ export default function ToolAnalysisResultsPage() {
       setItems((prev) => prev.filter((i) => i.reportId !== deleteId));
       toast({ title: "Tool analysis report deleted" });
       setDeleteId(null);
-    } catch (error: any) {
-      toast({ title: "Could not delete report", description: String(error?.message ?? error), variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Could not delete report", description: (error instanceof Error ? error.message : String(error)), variant: "destructive" });
     } finally {
       setDeleting(false);
     }
@@ -70,8 +70,8 @@ export default function ToolAnalysisResultsPage() {
       } else {
         downloadTextFile(`${id}.md`, toolAnalysisReportToMarkdown(record.report), "text/markdown");
       }
-    } catch (error: any) {
-      toast({ title: "Could not export saved report", description: String(error?.message ?? error), variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Could not export saved report", description: (error instanceof Error ? error.message : String(error)), variant: "destructive" });
     }
   };
 

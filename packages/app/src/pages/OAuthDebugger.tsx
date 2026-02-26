@@ -259,10 +259,10 @@ export default function OAuthDebuggerPage() {
       if (started.session.status === 'waiting_for_user' || started.session.status === 'waiting_for_browser_callback') {
         setRunning(false);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Could not start OAuth Debugger session',
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: 'destructive'
       });
     } finally {
@@ -287,10 +287,10 @@ export default function OAuthDebuggerPage() {
       setSession(response.session);
       setManualCallbackUrl('');
       setRunning(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Could not submit callback',
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: 'destructive'
       });
     } finally {
@@ -313,10 +313,10 @@ export default function OAuthDebuggerPage() {
           setViewStep('run');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Could not stop session',
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: 'destructive'
       });
     } finally {
@@ -346,7 +346,7 @@ export default function OAuthDebuggerPage() {
     try {
       const payload = await source.exportOAuthDebuggerSession(sessionId, format);
       let content = '';
-      let fileExt = format === 'json' ? 'json' : format === 'raw' ? 'txt' : 'md';
+      const fileExt = format === 'json' ? 'json' : format === 'raw' ? 'txt' : 'md';
       if (typeof payload === 'string') {
         content = payload;
       } else {
@@ -374,7 +374,7 @@ export default function OAuthDebuggerPage() {
       }
       toast({
         title: 'Export failed',
-        description: String((error as any)?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: 'destructive'
       });
     }
@@ -622,7 +622,7 @@ export default function OAuthDebuggerPage() {
                     This debugger is configured to show full tokens/secrets in network logs and exports.
                   </p>
                   <div className="flex items-center gap-2">
-                    <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(!Boolean(v))} />
+                    <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(v === false)} />
                     <Label>Hide sensitive values in inspector</Label>
                   </div>
                 </AlertDescription>

@@ -47,9 +47,9 @@ export default function MarkdownReportDetailPage() {
         if (!active) return;
         setReport(next);
       })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (!active) return;
-        const msg = String(error?.message ?? error);
+        const msg = (error instanceof Error ? error.message : String(error));
         if (msg.includes("(404)")) {
           setNotFound(true);
           return;

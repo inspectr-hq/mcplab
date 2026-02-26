@@ -24,10 +24,10 @@ export default function MarkdownReportsPage() {
     setLoading(true);
     try {
       setItems(await source.listMarkdownReports());
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not load markdown reports",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     } finally {

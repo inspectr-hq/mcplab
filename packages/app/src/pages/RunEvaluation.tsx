@@ -183,8 +183,8 @@ const RunEvaluation = () => {
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
       attachRunJob(jobId);
-    } catch (error: any) {
-      const message = String(error?.message ?? error);
+    } catch (error: unknown) {
+      const message = (error instanceof Error ? error.message : String(error));
       const extraHint = message.includes("Anthropic model not found")
         ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
         : "";
@@ -226,10 +226,10 @@ const RunEvaluation = () => {
       if (!snapshotName.trim()) {
         setSnapshotName(record.name);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not save snapshot",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     } finally {

@@ -225,10 +225,10 @@ const ConfigEditor = () => {
       const updated = await source.updateSnapshotPolicy(config.id, nextPolicy);
       setConfig(updated);
       toast({ title: "Snapshot policy updated" });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not update snapshot policy",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -252,10 +252,10 @@ const ConfigEditor = () => {
         title: "Snapshot baseline generated",
         description: `${response.snapshot.name} (${response.snapshot.id})`
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not generate baseline",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {

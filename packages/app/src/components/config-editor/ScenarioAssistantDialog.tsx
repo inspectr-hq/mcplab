@@ -142,11 +142,11 @@ export function ScenarioAssistantDialog({
         setSessionId(resp.sessionId);
         setSession(resp.session);
       })
-      .catch((error: any) => {
+      .catch((error: unknown) => {
         if (cancelled) return;
         toast({
           title: "Could not start Scenario Assistant",
-          description: String(error?.message ?? error),
+          description: (error instanceof Error ? error.message : String(error)),
           variant: "destructive"
         });
       })
@@ -252,7 +252,7 @@ export function ScenarioAssistantDialog({
     try {
       const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed);
       setSession(resp.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       setSession((prev) =>
         prev
           ? {
@@ -264,7 +264,7 @@ export function ScenarioAssistantDialog({
       setInput((prev) => (prev.trim() ? prev : trimmed));
       toast({
         title: "Scenario Assistant error",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -293,10 +293,10 @@ export function ScenarioAssistantDialog({
     try {
       const resp = await source.approveScenarioAssistantToolCall(sessionId, callId);
       setSession(resp.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Tool call failed",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -310,10 +310,10 @@ export function ScenarioAssistantDialog({
     try {
       const resp = await source.denyScenarioAssistantToolCall(sessionId, callId);
       setSession(resp.session);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not deny tool call",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     } finally {
@@ -796,10 +796,10 @@ function AssistantChatMessageRow({
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: "Copied" });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Could not copy",
-        description: String(error?.message ?? error),
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
     }
