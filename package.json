@@ -22,7 +22,7 @@
     "publish:mcp-server": "npm publish -w packages/mcp-server",
     "publish:cli": "npm publish -w packages/cli",
     "publish:all": "npm publish -w packages/core -w packages/reporting -w packages/mcp-server -w packages/cli",
-    "clean": "rm -rf dist packages/*/dist",
+    "clean": "rm -rf dist packages/*/dist packages/*/*.tsbuildinfo",
     "format": "npx prettier --write \"packages/**/*.{ts,jsx,css}\" --config ./.prettierrc",
     "test": "npm run test --workspaces --if-present"
   },
