@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useRef } from "react";
-import { Bot, ChevronDown, CheckCircle2, Loader2, Minimize2, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
+import { Bot, ChevronDown, CheckCircle2, Copy, Loader2, Minimize2, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -743,6 +743,19 @@ function AssistantChatMessageRow({
 }: {
   message: ScenarioAssistantSessionView["messages"][number];
 }) {
+  const copyMessageText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copied" });
+    } catch (error: any) {
+      toast({
+        title: "Could not copy",
+        description: String(error?.message ?? error),
+        variant: "destructive"
+      });
+    }
+  };
+
   const role = message.role;
   if (role === "tool") {
     const trimmed = String(message.text ?? "").trim();
@@ -786,12 +799,23 @@ function AssistantChatMessageRow({
         </div>
       )}
       <div
-        className={`max-w-[92%] rounded-md border px-3 py-2 text-sm ${
+        className={`relative max-w-[92%] rounded-md border px-3 py-2 text-sm ${
           isUser
             ? "border-primary/20 bg-primary/10"
             : "border-border/80 bg-background shadow-sm"
-        }`}
+        } pr-9`}
       >
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2 h-6 w-6 text-muted-foreground"
+          onClick={() => void copyMessageText(message.text)}
+          aria-label="Copy message"
+          title="Copy message"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
         {!isUser && <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Assistant</p>}
         {isUser ? (
           <p className="whitespace-pre-wrap">{message.text}</p>

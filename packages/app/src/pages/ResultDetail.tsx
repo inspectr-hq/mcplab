@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +78,7 @@ const ResultDetail = () => {
   const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
   const [applyReportOverwrite, setApplyReportOverwrite] = useState(false);
   const [applyReportPending, setApplyReportPending] = useState(false);
+  const [applyReportIsManual, setApplyReportIsManual] = useState(false);
   const [referenceReports, setReferenceReports] = useState<MarkdownReportSummary[]>([]);
   const [referenceReportsLoading, setReferenceReportsLoading] = useState(false);
   const [selectedReferenceReportPath, setSelectedReferenceReportPath] = useState("");
@@ -560,7 +561,17 @@ const ResultDetail = () => {
 
   const openApplyReportDialog = (assistantReply: string) => {
     if (!result) return;
+    setApplyReportIsManual(false);
     setApplyReportMarkdown(assistantReply);
+    setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
+    setApplyReportOverwrite(false);
+    setApplyReportOpen(true);
+  };
+
+  const openManualReportDialog = () => {
+    if (!result) return;
+    setApplyReportIsManual(true);
+    setApplyReportMarkdown("");
     setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
     setApplyReportOverwrite(false);
     setApplyReportOpen(true);
@@ -1438,7 +1449,7 @@ const ResultDetail = () => {
                           {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                         </div>
                       )}
-                      <div className={`max-w-[92%] rounded-md border p-3 text-sm ${
+                      <div className={`relative max-w-[92%] rounded-md border p-3 text-sm ${
                         isUser
                           ? "border-primary/20 bg-primary/10"
                           : isSystem
@@ -1446,28 +1457,26 @@ const ResultDetail = () => {
                             : isTool
                               ? "border-blue-300/30 bg-blue-50/50"
                               : "border-border/80 bg-background shadow-sm"
-                      }`}>
+                      } ${(isUser || (isAssistant && !isTool && !isSystem)) ? "pr-9" : ""}`}>
+                        {(isUser || (isAssistant && !isTool && !isSystem)) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-2 top-2 h-6 w-6 text-muted-foreground"
+                            onClick={() => void copyAssistantChatText(message.text)}
+                            aria-label="Copy message"
+                            title="Copy message"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {!(isUser || isSystem) && (
                           <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
                             {isTool ? "Tool" : "Assistant"}
                           </p>
                         )}
                         <MarkdownContent text={message.text} className="text-sm" />
-                        {(isUser || (isAssistant && !isTool && !isSystem)) && (
-                          <div className="mt-2 flex justify-end">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground"
-                              onClick={() => void copyAssistantChatText(message.text)}
-                              aria-label="Copy message"
-                              title="Copy message"
-                            >
-                              <Copy className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        )}
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button
@@ -1656,8 +1665,12 @@ const ResultDetail = () => {
               {referenceReportsLoading ? (
                 <p className="text-xs text-muted-foreground">Loading reference reports...</p>
               ) : referenceReports.length === 0 ? (
-                <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-muted-foreground">No reference reports for this run yet.</p>
+                  <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => openManualReportDialog()}>
+                    <Plus className="h-3.5 w-3.5" />
+                    New Report
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1719,21 +1732,27 @@ const ResultDetail = () => {
       <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Approve MCP action: write markdown report</AlertDialogTitle>
+            <AlertDialogTitle>
+              {applyReportIsManual ? "Create markdown report" : "Approve MCP action: write markdown report"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will call <code>mcplab_write_markdown_report</code> via the local MCPLab MCP server.
+              {applyReportIsManual
+                ? "Write a custom markdown report and save it to the workspace."
+                : <>This will call <code>mcplab_write_markdown_report</code> via the local MCPLab MCP server.</>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Output path</p>
-              <Input
-                value={applyReportOutputPath}
-                onChange={(e) => setApplyReportOutputPath(e.target.value)}
-                placeholder="mcplab/reports/result-assistant/my-report.md"
-                disabled={applyReportPending}
-              />
-            </div>
+            {!applyReportIsManual && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Output path</p>
+                <Input
+                  value={applyReportOutputPath}
+                  onChange={(e) => setApplyReportOutputPath(e.target.value)}
+                  placeholder="mcplab/reports/result-assistant/my-report.md"
+                  disabled={applyReportPending}
+                />
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={applyReportOverwrite}
@@ -1743,7 +1762,9 @@ const ResultDetail = () => {
               <span>Overwrite if file exists</span>
             </label>
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Markdown preview (to be written)</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                {applyReportIsManual ? "Markdown content" : "Markdown preview (to be written)"}
+              </p>
               <Textarea
                 value={applyReportMarkdown}
                 onChange={(e) => setApplyReportMarkdown(e.target.value)}
@@ -1762,7 +1783,7 @@ const ResultDetail = () => {
               }}
               disabled={applyReportPending}
             >
-              {applyReportPending ? "Writing..." : "Approve & Write"}
+              {applyReportPending ? "Writing..." : applyReportIsManual ? "Save Report" : "Approve & Write"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
