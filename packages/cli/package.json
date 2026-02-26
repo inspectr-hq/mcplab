@@ -4,6 +4,10 @@
   "type": "module",
   "main": "dist/cli.js",
   "types": "dist/cli.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "bin": {
     "mcplab": "dist/cli.js"
   },

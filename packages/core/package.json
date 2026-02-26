@@ -4,6 +4,9 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": "./dist/index.js"
   },
@@ -16,7 +19,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@anthropic-ai/sdk": "latest",
+    "@anthropic-ai/sdk": "^0.78.0",
     "jsonpath-plus": "^10.3.0",
     "openai": "^4.104.0",
     "yaml": "^2.8.2",
