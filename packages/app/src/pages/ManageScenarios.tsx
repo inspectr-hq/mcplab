@@ -301,7 +301,7 @@ const ManageScenarios = () => {
     }
     saveInFlightRef.current = false;
     saveQueuedRef.current = false;
-  }, [selectedScenario?.id, selectedScenario?.updatedAt]);
+  }, [selectedScenario]);
 
   useEffect(() => {
     return () => {
