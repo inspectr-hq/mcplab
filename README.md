@@ -6,7 +6,7 @@ Test how well LLM agents use your MCP tools, compare different models, and track
 
 ---
 
-## 🎯 What is MCPLab?
+## What is MCPLab?
 
 MCPLab is a testing and evaluation framework for [MCP servers](https://modelcontextprotocol.io). It helps you:
 
@@ -23,31 +23,30 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 ## ✨ Features
 
 ### Core Capabilities
-- 🔌 **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
-- 🤖 **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
-- 📊 **Rich Assertions** - Validate tool usage, sequences, and response content
-- 📈 **Variance Testing** - Run multiple iterations to measure stability
-- 🔍 **Detailed Traces** - JSONL logs of every tool call and LLM response
-
-### Developer Experience
-- 👀 **Watch Mode** - Auto-rerun tests when configs change
-- 📝 **YAML Configuration** - Declarative, version-controllable eval specs
-- 🎨 **Interactive Reports** - Self-contained HTML with filtering and drill-down
-- 🔄 **Multi-Agent Testing** - Compare LLMs with a single CLI flag
-- 🧪 **Scenario Isolation** - Run specific tests or full suites
+- **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
+- **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
+- **Rich Assertions** - Validate tool usage, sequences, and response content
+- **Variance Testing** - Run multiple iterations to measure stability
+- **Detailed Traces** - JSONL logs of every tool call and LLM response
 
 ### Analysis & Reporting
-- 📉 **Trend Analysis** - Track pass rates and performance over time
-- 🆚 **LLM Comparison** - Built-in tools to compare agent behavior
-- 📄 **Multiple Outputs** - HTML report, JSON results, Markdown summary, JSONL trace
-- 🎯 **Custom Metrics** - Extract values and track domain-specific KPIs
-- 📋 **Markdown Reports** - Store and browse custom analysis notes alongside runs
+- **Trend Analysis** - Track pass rates and performance over time
+- **LLM Comparison** - Built-in tools to compare agent behavior
+- **Multiple Outputs** - HTML report, JSON results, Markdown summary, JSONL trace
+- **Custom Metrics** - Extract values and track domain-specific KPIs
+- **Markdown Reports** - Store and browse custom analysis notes alongside runs
 
 ### AI-Powered Tools (App Mode)
-- 🤖 **Scenario Assistant** - AI chat to help design and refine eval scenarios
-- 🔎 **Result Assistant** - AI chat to analyze and explain completed run results
-- 🛠️ **MCP Tool Analysis** - Automated review of MCP tool quality and safety
-- 🔐 **OAuth Debugger** - Step-by-step trace of OAuth flows for MCP servers
+- **Scenario Assistant** - AI chat to help design and refine eval scenarios
+- **Result Assistant** - AI chat to analyze and explain completed run results
+- **MCP Tool Analysis** - Automated review of MCP tool quality and safety
+
+### Developer Experience
+- **Watch Mode** - Auto-rerun tests when configs change
+- **YAML Configuration** - Declarative, version-controllable eval specs
+- **Interactive Reports** - Self-contained HTML with filtering and drill-down
+- **Multi-Agent Testing** - Compare LLMs with a single CLI flag
+- **Scenario Isolation** - Run specific tests or full suites
 
 ---
 
@@ -186,7 +185,7 @@ agents:
     system: "You are a helpful assistant."
 ```
 
-**OpenAI:**
+**OpenAI (ChatGPT):**
 ```yaml
 agents:
   gpt-4:
@@ -393,7 +392,7 @@ mcplab report --input mcplab/results/evaluation-runs/20260206-212239
 
 ---
 
-## 🤖 AI-Powered Features (App Mode)
+## 🤖 AI-Powered Features
 
 These features are available through the web app (`mcplab app`).
 
@@ -422,19 +421,13 @@ Reports are saved to `mcplab/results/tool-analysis/` and viewable in the app.
 
 Navigate to **Tool Analysis** in the app sidebar to start an analysis job.
 
-### OAuth Debugger
-
-A step-by-step trace tool for OAuth flows used by MCP servers. Walks through authorization, token exchange, and callback handling — capturing all network requests and validations along the way. Useful for diagnosing OAuth integration issues.
-
-Navigate to **OAuth Debugger** in the app sidebar.
-
 ### Markdown Reports
 
 Store and browse custom analysis notes, comparison docs, or generated reports alongside your eval runs. Place `.md` files in `mcplab/reports/` and they become accessible in the app under **Reports**.
 
 ---
 
-## 📚 Reusable Libraries
+## 📚 Reusable configurations
 
 Define servers, agents, and scenarios once and reuse them across multiple eval files.
 
@@ -706,13 +699,13 @@ Contributions welcome! Please:
 
 ---
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 Built with:
 - [Model Context Protocol SDK](https://github.com/modelcontextprotocol/sdk)
@@ -721,11 +714,11 @@ Built with:
 
 ---
 
-## 📞 Support
+## Support
 
-- 🐛 [Issue Tracker](https://github.com/inspectr-hq/mcp-lab/issues)
-- 💬 [Discussions](https://github.com/inspectr-hq/mcp-lab/discussions)
-- 🌐 [MCP Protocol](https://modelcontextprotocol.io)
+- [Issue Tracker](https://github.com/inspectr-hq/mcp-lab/issues)
+- [Discussions](https://github.com/inspectr-hq/mcp-lab/discussions)
+- [MCP Protocol](https://modelcontextprotocol.io)
 
 ---
 
@@ -733,6 +726,6 @@ Built with:
 
 **⭐ Star this repo if you find it useful!**
 
-Made with ❤️ for the MCP community
+Made with ❤️ by Inspectr for the MCP community
 
 </div>
