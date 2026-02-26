@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import type { EvalConfig } from './types.js';
+import type { EvalConfig, ExecutableEvalConfig } from './types.js';
 
 export function loadConfig(
   path: string,
@@ -281,4 +281,26 @@ function sortDeep<T>(value: T): T {
     return out as T;
   }
   return value;
+}
+
+export function expandConfigForAgents(
+  config: EvalConfig,
+  requestedAgents?: string[]
+): ExecutableEvalConfig {
+  const selectedAgents =
+    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
+  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
+    );
+  }
+  const scenarios = config.scenarios.flatMap((scenario) =>
+    selectedAgents.map((agent) => ({
+      ...scenario,
+      agent,
+      scenario_exec_id: `${scenario.id}-${agent}`
+    }))
+  );
+  return { ...config, scenarios };
 }

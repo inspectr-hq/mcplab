@@ -22,7 +22,7 @@ import type {
   ResultsJson,
   ToolDef
 } from '@inspectr/mcplab-core';
-import { chatWithAgent, loadConfig, McpClientManager, runAll } from '@inspectr/mcplab-core';
+import { chatWithAgent, expandConfigForAgents, loadConfig, McpClientManager, runAll } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import pkg from '../../package.json' with { type: 'json' };
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
@@ -102,34 +102,6 @@ interface RunJob {
   events: JobEvent[];
   clients: Set<ServerResponse>;
   abortController: AbortController;
-}
-
-function expandConfigForAgents(
-  config: EvalConfig,
-  requestedAgents?: string[]
-): ExecutableEvalConfig {
-  const selectedAgents =
-    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
-  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
-    );
-  }
-  const expandedScenarios = [];
-  for (const scenario of config.scenarios) {
-    for (const agent of selectedAgents) {
-      expandedScenarios.push({
-        ...scenario,
-        agent,
-        scenario_exec_id: `${scenario.id}-${agent}`
-      });
-    }
-  }
-  return {
-    ...config,
-    scenarios: expandedScenarios
-  };
 }
 
 function resolveRunSelectedAgents(

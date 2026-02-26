@@ -8,6 +8,7 @@ import {
   loadConfig,
   selectScenarios,
   runAll,
+  expandConfigForAgents,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson
@@ -556,30 +557,6 @@ program
   });
 
 program.parse();
-
-function expandConfigForAgents(
-  config: EvalConfig,
-  requestedAgents?: string[]
-): ExecutableEvalConfig {
-  const selectedAgents =
-    requestedAgents && requestedAgents.length > 0 ? requestedAgents : Object.keys(config.agents);
-  const missing = selectedAgents.filter((agent) => !config.agents[agent]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
-    );
-  }
-
-  const scenarios = config.scenarios.flatMap((scenario) =>
-    selectedAgents.map((agent) => ({
-      ...scenario,
-      agent,
-      scenario_exec_id: `${scenario.id}-${agent}`
-    }))
-  );
-
-  return { ...config, scenarios };
-}
 
 function getGitCommit(): string | undefined {
   try {
