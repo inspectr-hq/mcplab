@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, ChevronDown, Loader2, RefreshCw, Wifi } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, RefreshCw, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -211,7 +211,7 @@ const AgentDetail = () => {
         {!isNew && (
           <Button type="button" onClick={() => void handleConnect()}>
             <Wifi className="mr-2 h-4 w-4" />
-            Connect
+            Test Connection
           </Button>
         )}
       </div>
@@ -219,8 +219,15 @@ const AgentDetail = () => {
       {/* Connect Panel */}
       {showConnectPanel && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">Connection Test</CardTitle>
+            <button
+              type="button"
+              onClick={() => setShowConnectPanel(false)}
+              className="rounded-sm opacity-70 hover:opacity-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
@@ -422,25 +429,16 @@ const AgentDetail = () => {
                 )}
               </div>
               {showManualField && (
-                <div className="space-y-1">
-                  <Input
-                    value={form.model}
-                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                    placeholder={
-                      form.provider === "azure"
-                        ? "Type deployment name manually"
-                        : "Type model name manually"
-                    }
-                    className="font-mono text-xs"
-                  />
-                  <button
-                    type="button"
-                    className="text-[11px] text-primary hover:underline"
-                    onClick={() => setShowManualInput(false)}
-                  >
-                    Hide manual input
-                  </button>
-                </div>
+                <Input
+                  value={form.model}
+                  onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                  placeholder={
+                    form.provider === "azure"
+                      ? "Type deployment name manually"
+                      : "Type model name manually"
+                  }
+                  className="font-mono text-xs"
+                />
               )}
               {providerModels.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">
