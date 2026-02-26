@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,6 +120,40 @@ const ResultDetail = () => {
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const refreshReferenceReports = useCallback(
+    async (runId: string, preferredPath?: string) => {
+      setReferenceReportsLoading(true);
+      try {
+        const items = await source.listMarkdownReports();
+        const filtered = items.filter((item) => {
+          const path = String(item.relativePath ?? "");
+          const name = String(item.name ?? "");
+          return path.includes(runId) || name.includes(runId);
+        });
+        setReferenceReports(filtered);
+        if (preferredPath && filtered.length > 0) {
+          const matched = filtered.find(
+            (report) =>
+              report.relativePath === preferredPath ||
+              report.path === preferredPath ||
+              report.relativePath.endsWith(preferredPath) ||
+              report.path.endsWith(preferredPath)
+          );
+          if (matched) {
+            setSelectedReferenceReportPath(matched.relativePath);
+          }
+        }
+        return filtered;
+      } catch {
+        setReferenceReports([]);
+        return [];
+      } finally {
+        setReferenceReportsLoading(false);
+      }
+    },
+    [source]
+  );
+
   useEffect(() => {
     if (!id) return;
     let active = true;
@@ -164,30 +198,16 @@ const ResultDetail = () => {
       return;
     }
     let active = true;
-    setReferenceReportsLoading(true);
-    source
-      .listMarkdownReports()
-      .then((items) => {
-        if (!active) return;
-        const runId = result.id;
-        setReferenceReports(
-          items.filter((item) => {
-            const path = String(item.relativePath ?? "");
-            const name = String(item.name ?? "");
-            return path.includes(runId) || name.includes(runId);
-          })
-        );
-      })
-      .catch(() => {
-        if (active) setReferenceReports([]);
-      })
-      .finally(() => {
-        if (active) setReferenceReportsLoading(false);
-      });
+    void (async () => {
+      const items = await refreshReferenceReports(result.id);
+      if (!active) return;
+      // Prevent state updates from a stale effect after run id changes quickly.
+      if (!items) return;
+    })();
     return () => {
       active = false;
     };
-  }, [result?.id, source]);
+  }, [result?.id, refreshReferenceReports]);
 
   useEffect(() => {
     if (referenceReports.length === 0) {
@@ -642,6 +662,13 @@ const ResultDetail = () => {
             ? response.path
             : response.outputPath
       });
+      await refreshReferenceReports(
+        result.id,
+        (typeof response.path === "string" && response.path) || response.outputPath || undefined
+      );
+      if (assistantOpen) {
+        setContextPanelTab("reports");
+      }
       setApplyReportOpen(false);
     } catch (error: unknown) {
       toast({
@@ -946,7 +973,7 @@ const ResultDetail = () => {
                 <TableHead>Agent</TableHead>
                 <TableHead>Runs</TableHead>
                 <TableHead>Pass Rate</TableHead>
-                <TableHead>Avg Tool Calls</TableHead>
+                <TableHead>Tool Calls</TableHead>
                 <TableHead>Snapshot</TableHead>
               </TableRow>
             </TableHeader>

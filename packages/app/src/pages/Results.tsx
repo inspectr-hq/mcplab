@@ -208,7 +208,7 @@ const Results = () => {
                 </TableHead>
                 <TableHead>
                   <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("avgToolCalls")}>
-                    Avg Tool Calls
+                    Tool Calls
                     {sortIcon("avgToolCalls")}
                   </button>
                 </TableHead>
@@ -244,7 +244,7 @@ const Results = () => {
                   </TableCell>
                   <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                   <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
-                  <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(1)}</TableCell>
+                  <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

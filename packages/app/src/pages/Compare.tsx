@@ -251,7 +251,7 @@ const Compare = () => {
                     {selectedRuns.map((r) => <TableCell key={r.id} className="font-mono">{r.totalRuns}</TableCell>)}
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">Avg Tool Calls</TableCell>
+                    <TableCell className="font-medium">Tool Calls</TableCell>
                     {selectedRuns.map((r) => <TableCell key={r.id} className="font-mono">{r.avgToolCalls.toFixed(1)}</TableCell>)}
                   </TableRow>
                   <TableRow>
