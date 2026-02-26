@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import type { EvalConfig } from '@inspectr/mcplab-core';
 import { loadConfig } from '@inspectr/mcplab-core';
-import { encodeConfigId, ensureInsideRoot } from './store-utils.js';
+import { encodeEvalId, ensureInsideRoot } from './store-utils.js';
 
 export interface ConfigRecord {
   id: string;
@@ -18,7 +18,7 @@ export interface ConfigRecord {
 
 export function readConfigRecord(
   absPath: string,
-  configsDir: string,
+  evalsDir: string,
   bundleRoot?: string
 ): ConfigRecord {
   const {
@@ -30,7 +30,7 @@ export function readConfigRecord(
   const stat = statSync(absPath);
   const name = basename(absPath, extname(absPath));
   return {
-    id: encodeConfigId(absPath, configsDir),
+    id: encodeEvalId(absPath, evalsDir),
     name,
     path: absPath,
     mtime: stat.mtime.toISOString(),
@@ -90,16 +90,16 @@ function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
 
 export function readConfigRecordOrInvalid(
   absPath: string,
-  configsDir: string,
+  evalsDir: string,
   bundleRoot?: string
 ): ConfigRecord {
   try {
-    return readConfigRecord(absPath, configsDir, bundleRoot);
+    return readConfigRecord(absPath, evalsDir, bundleRoot);
   } catch (error) {
     const stat = statSync(absPath);
     const name = basename(absPath, extname(absPath));
     return {
-      id: encodeConfigId(absPath, configsDir),
+      id: encodeEvalId(absPath, evalsDir),
       name,
       path: absPath,
       mtime: stat.mtime.toISOString(),
@@ -110,11 +110,11 @@ export function readConfigRecordOrInvalid(
   }
 }
 
-export function listConfigs(configsDir: string, bundleRoot?: string): ConfigRecord[] {
-  if (!existsSync(configsDir)) return [];
-  const files = readdirSync(configsDir)
+export function listConfigs(evalsDir: string, bundleRoot?: string): ConfigRecord[] {
+  if (!existsSync(evalsDir)) return [];
+  const files = readdirSync(evalsDir)
     .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-    .map((name) => ensureInsideRoot(configsDir, join(configsDir, name)));
-  const records = files.map((path) => readConfigRecordOrInvalid(path, configsDir, bundleRoot));
+    .map((name) => ensureInsideRoot(evalsDir, join(evalsDir, name)));
+  const records = files.map((path) => readConfigRecordOrInvalid(path, evalsDir, bundleRoot));
   return records.sort((a, b) => a.name.localeCompare(b.name));
 }

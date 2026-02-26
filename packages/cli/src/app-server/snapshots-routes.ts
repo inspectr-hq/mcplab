@@ -14,7 +14,7 @@ export type SnapshotsRouteDeps = Pick<
   | 'loadSnapshot'
   | 'compareRunToSnapshot'
   | 'getRunResults'
-  | 'decodeConfigId'
+  | 'decodeEvalId'
   | 'readConfigRecord'
 >;
 
@@ -36,7 +36,7 @@ export async function handleSnapshotsRoutes(params: {
     loadSnapshot,
     compareRunToSnapshot,
     getRunResults,
-    decodeConfigId,
+    decodeEvalId,
     readConfigRecord
   } = deps;
 
@@ -77,7 +77,7 @@ export async function handleSnapshotsRoutes(params: {
     const snapshot = buildSnapshotFromRun(results, name);
     saveSnapshot(snapshot, settings.snapshotsDir);
 
-    const configPath = decodeConfigId(configId, settings.configsDir);
+    const configPath = decodeEvalId(configId, settings.evalsDir);
     const { sourceConfig } = loadConfig(configPath, { bundleRoot: settings.librariesDir });
     const nextConfig: EvalConfig = {
       ...sourceConfig,
@@ -92,7 +92,7 @@ export async function handleSnapshotsRoutes(params: {
     writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
     asJson(res, 201, {
       snapshot,
-      config: readConfigRecord(configPath, settings.configsDir, settings.librariesDir)
+      config: readConfigRecord(configPath, settings.evalsDir, settings.librariesDir)
     });
     return true;
   }

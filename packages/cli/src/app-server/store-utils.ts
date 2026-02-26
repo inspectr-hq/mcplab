@@ -9,12 +9,12 @@ export function ensureInsideRoot(rootDir: string, candidatePath: string): string
   return candidate;
 }
 
-export function encodeConfigId(absPath: string, rootDir: string): string {
+export function encodeEvalId(absPath: string, rootDir: string): string {
   const rel = absPath.slice(resolve(rootDir).length + 1);
   return Buffer.from(rel, 'utf8').toString('base64url');
 }
 
-export function decodeConfigId(id: string, rootDir: string): string {
+export function decodeEvalId(id: string, rootDir: string): string {
   const rel = Buffer.from(id, 'base64url').toString('utf8');
   return ensureInsideRoot(rootDir, join(rootDir, rel));
 }

@@ -137,7 +137,7 @@ export interface ProviderModelsResponse {
 
 export interface WorkspaceSettings {
   workspaceRoot: string;
-  configsDir: string;
+  evalsDir: string;
   runsDir: string;
   snapshotsDir: string;
   librariesDir: string;

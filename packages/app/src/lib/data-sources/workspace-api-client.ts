@@ -69,7 +69,7 @@ export const workspaceApiClient = {
   getSettings: () =>
     request<{
       workspaceRoot: string;
-      configsDir: string;
+      evalsDir: string;
       runsDir: string;
       snapshotsDir: string;
       librariesDir: string;
@@ -78,7 +78,7 @@ export const workspaceApiClient = {
   updateSettings: (patch: { scenarioAssistantAgentName?: string }) =>
     request<{
       workspaceRoot: string;
-      configsDir: string;
+      evalsDir: string;
       runsDir: string;
       snapshotsDir: string;
       librariesDir: string;
@@ -87,19 +87,19 @@ export const workspaceApiClient = {
       method: 'PUT',
       body: JSON.stringify(patch)
     }),
-  listConfigs: () => request<WorkspaceConfigRecord[]>('/api/configs'),
+  listConfigs: () => request<WorkspaceConfigRecord[]>('/api/evals'),
   createConfig: (fileName: string, config: CoreEvalConfig) =>
-    request<WorkspaceConfigRecord>('/api/configs', {
+    request<WorkspaceConfigRecord>('/api/evals', {
       method: 'POST',
       body: JSON.stringify({ fileName, config })
     }),
   updateConfig: (id: string, config: CoreEvalConfig, fileName?: string) =>
-    request<WorkspaceConfigRecord>(`/api/configs/${id}`, {
+    request<WorkspaceConfigRecord>(`/api/evals/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ config, fileName })
     }),
   deleteConfig: (id: string) =>
-    request<{ ok: boolean }>(`/api/configs/${id}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
   listRuns: () => request<WorkspaceRunSummary[]>('/api/runs'),
   listMarkdownReports: () =>
     request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),
@@ -212,7 +212,7 @@ export const workspaceApiClient = {
       baselineSourceRunId?: string;
     }
   ) =>
-    request<WorkspaceConfigRecord>(`/api/configs/${configId}/snapshot-policy`, {
+    request<WorkspaceConfigRecord>(`/api/evals/${configId}/snapshot-policy`, {
       method: 'POST',
       body: JSON.stringify(policy)
     }),

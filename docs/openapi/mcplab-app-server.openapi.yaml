@@ -19,7 +19,7 @@ tags:
   - name: Settings
   - name: Libraries
   - name: Providers
-  - name: Configs
+  - name: Evals
   - name: Runs
   - name: Snapshots
   - name: Result Assistant
@@ -114,7 +114,7 @@ paths:
             schema:
               type: object
               properties:
-                configsDir: { type: string }
+                evalsDir: { type: string }
                 runsDir: { type: string }
                 snapshotsDir: { type: string }
                 librariesDir: { type: string }
@@ -160,11 +160,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
-  /api/configs:
+  /api/evals:
     get:
-      tags: [Configs]
+      tags: [Evals]
       summary: List workspace evaluation configs
-      operationId: listConfigs
+      operationId: listEvals
       responses:
         "200":
           description: Config records
@@ -175,9 +175,9 @@ paths:
                 items:
                   $ref: "#/components/schemas/WorkspaceConfigRecord"
     post:
-      tags: [Configs]
+      tags: [Evals]
       summary: Create a new config YAML file
-      operationId: createConfig
+      operationId: createEval
       requestBody:
         required: true
         content:
@@ -201,13 +201,13 @@ paths:
         "400":
           $ref: "#/components/responses/Error400"
 
-  /api/configs/{configId}:
+  /api/evals/{configId}:
     parameters:
       - $ref: "#/components/parameters/ConfigId"
     get:
-      tags: [Configs]
+      tags: [Evals]
       summary: Read a config record by encoded id
-      operationId: getConfig
+      operationId: getEval
       responses:
         "200":
           description: Config record (or invalid record representation)
@@ -216,9 +216,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkspaceConfigRecord"
     put:
-      tags: [Configs]
+      tags: [Evals]
       summary: Update an existing config (and optionally rename file)
-      operationId: updateConfig
+      operationId: updateEval
       requestBody:
         required: true
         content:
@@ -244,9 +244,9 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
     delete:
-      tags: [Configs]
+      tags: [Evals]
       summary: Delete a config file
-      operationId: deleteConfig
+      operationId: deleteEval
       responses:
         "200":
           description: Delete acknowledgement
@@ -257,13 +257,13 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
-  /api/configs/{configId}/snapshot-policy:
+  /api/evals/{configId}/snapshot-policy:
     parameters:
       - $ref: "#/components/parameters/ConfigId"
     post:
-      tags: [Configs]
+      tags: [Evals]
       summary: Update snapshot-eval policy embedded in a config file
-      operationId: updateConfigSnapshotPolicy
+      operationId: updateEvalSnapshotPolicy
       requestBody:
         required: true
         content:
@@ -438,7 +438,7 @@ paths:
               properties:
                 configPath:
                   type: string
-                  description: Absolute path or path relative to configsDir.
+                  description: Absolute path or path relative to evalsDir.
                 runsPerScenario:
                   type: integer
                   minimum: 1
@@ -1515,10 +1515,10 @@ components:
           type: string
     WorkspaceSettings:
       type: object
-      required: [workspaceRoot, configsDir, runsDir, snapshotsDir, librariesDir]
+      required: [workspaceRoot, evalsDir, runsDir, snapshotsDir, librariesDir]
       properties:
         workspaceRoot: { type: string }
-        configsDir: { type: string }
+        evalsDir: { type: string }
         runsDir: { type: string }
         snapshotsDir: { type: string }
         librariesDir: { type: string }
@@ -1744,7 +1744,7 @@ components:
       properties:
         configPath:
           type: string
-          description: Optional config path (absolute or relative to configsDir)
+          description: Optional config path (absolute or relative to evalsDir)
         scenarioId:
           type: string
         selectedAssistantAgentName:

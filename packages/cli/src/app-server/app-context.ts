@@ -47,7 +47,7 @@ import type {
   getScenarioRunTraceRecords,
   selectScenarioIds
 } from './runs-store.js';
-import type { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
+import type { decodeEvalId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import type { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
 import type { RunSummary } from './runs-store.js';
 import type { ConfigRecord } from './config-store.js';
@@ -124,7 +124,7 @@ export interface SnapshotDeps {
   loadSnapshot: typeof loadSnapshot;
   compareRunToSnapshot: typeof compareRunToSnapshot;
   getRunResults: typeof getRunResults;
-  decodeConfigId: typeof decodeConfigId;
+  decodeEvalId: typeof decodeEvalId;
   readConfigRecord: typeof readConfigRecord;
 }
 
@@ -132,7 +132,7 @@ export interface ConfigDeps {
   listConfigs: typeof listConfigs;
   safeFileName: typeof safeFileName;
   ensureInsideRoot: typeof ensureInsideRoot;
-  decodeConfigId: typeof decodeConfigId;
+  decodeEvalId: typeof decodeEvalId;
   readConfigRecord: typeof readConfigRecord;
   readConfigRecordOrInvalid: typeof readConfigRecordOrInvalid;
 }

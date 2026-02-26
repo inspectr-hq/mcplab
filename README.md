@@ -68,10 +68,10 @@ cp .env.example .env
 
 ```bash
 # Run the app (frontend + local API bridge)
-mcplab app --configs-dir configs --runs-dir runs --open
+mcplab app --evals-dir evals --runs-dir runs --open
 
 # Run an evaluation from config files
-mcplab run -c mcplab/configs/eval.yaml
+mcplab run -c mcplab/evals/eval.yaml
 
 # View the results
 open mcplab/runs/$(ls -t mcplab/runs | head -1)/report.html
@@ -270,13 +270,13 @@ scenarios:
 
 ```bash
 # Run all scenarios
-mcplab run -c mcplab/configs/eval.yaml
+mcplab run -c mcplab/evals/eval.yaml
 
 # Run specific scenario
-mcplab run -c mcplab/configs/eval.yaml -s basic-test
+mcplab run -c mcplab/evals/eval.yaml -s basic-test
 
 # Run with variance testing (5 iterations)
-mcplab run -c mcplab/configs/eval.yaml -n 5
+mcplab run -c mcplab/evals/eval.yaml -n 5
 ```
 
 ### App Mode
@@ -284,7 +284,7 @@ mcplab run -c mcplab/configs/eval.yaml -n 5
 Serve the web app and local API in one process:
 
 ```bash
-mcplab app --configs-dir configs --runs-dir runs --port 8787 --open
+mcplab app --evals-dir evals --runs-dir runs --port 8787 --open
 ```
 
 Optional development mode (proxy frontend to Vite, keep API local):
@@ -355,20 +355,20 @@ mcplab snapshot compare --id <snapshotId> --run 20260208-150045
 Optional: compare immediately after a run:
 
 ```bash
-mcplab run -c mcplab/configs/eval.yaml --compare-snapshot <snapshotId>
+mcplab run -c mcplab/evals/eval.yaml --compare-snapshot <snapshotId>
 ```
 
 Config-first snapshot eval workflow:
 
 ```bash
 # Initialize snapshot eval policy in a config from a fully passing run
-mcplab snapshot eval-init --config mcplab/configs/eval.yaml --run 20260208-140213 --name "baseline-v1"
+mcplab snapshot eval-init --config mcplab/evals/eval.yaml --run 20260208-140213 --name "baseline-v1"
 
 # Update snapshot eval policy mode
-mcplab snapshot eval-policy --config mcplab/configs/eval.yaml --enabled true --mode fail_on_drift
+mcplab snapshot eval-policy --config mcplab/evals/eval.yaml --enabled true --mode fail_on_drift
 
 # Apply config snapshot policy during run (warn or fail_on_drift)
-mcplab run -c mcplab/configs/eval.yaml --snapshot-eval
+mcplab run -c mcplab/evals/eval.yaml --snapshot-eval
 ```
 
 ### Generate Reports

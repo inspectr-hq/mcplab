@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ensureInsideRoot, encodeConfigId, decodeConfigId, safeFileName } from './store-utils.js';
+import { ensureInsideRoot, encodeEvalId, decodeEvalId, safeFileName } from './store-utils.js';
 import { resolve } from 'node:path';
 
 const ROOT = '/tmp/testroot';
@@ -30,22 +30,22 @@ describe('ensureInsideRoot', () => {
   });
 });
 
-describe('encodeConfigId / decodeConfigId', () => {
+describe('encodeEvalId / decodeEvalId', () => {
   it('roundtrips a config path back to the original resolved path', () => {
-    const absPath = `${ROOT}/configs/my-config.yaml`;
-    const id = encodeConfigId(absPath, ROOT);
-    const decoded = decodeConfigId(id, ROOT);
+    const absPath = `${ROOT}/evals/my-config.yaml`;
+    const id = encodeEvalId(absPath, ROOT);
+    const decoded = decodeEvalId(id, ROOT);
     expect(decoded).toBe(resolve(absPath));
   });
 
   it('produces a base64url-safe id (no +, /, or = characters)', () => {
-    const id = encodeConfigId(`${ROOT}/configs/my config.yaml`, ROOT);
+    const id = encodeEvalId(`${ROOT}/evals/my config.yaml`, ROOT);
     expect(id).not.toMatch(/[+/=]/);
   });
 
   it('throws when the decoded path would escape the root', () => {
     const maliciousId = Buffer.from('../../../etc/passwd', 'utf8').toString('base64url');
-    expect(() => decodeConfigId(maliciousId, ROOT)).toThrow('Path outside allowed root');
+    expect(() => decodeEvalId(maliciousId, ROOT)).toThrow('Path outside allowed root');
   });
 });
 

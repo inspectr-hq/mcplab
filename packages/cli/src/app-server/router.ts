@@ -40,14 +40,14 @@ import {
   selectScenarioIds,
   getScenarioRunTraceRecords
 } from './runs-store.js';
-import { decodeConfigId, ensureInsideRoot, safeFileName } from './store-utils.js';
+import { decodeEvalId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleSnapshotsRoutes } from './snapshots-routes.js';
-import { handleConfigsRoutes } from './configs-routes.js';
+import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
@@ -141,13 +141,13 @@ export async function startAppServer(options: AppServerOptions) {
   const workspaceRoot = process.cwd();
   const settings: AppSettings = {
     workspaceRoot,
-    configsDir: resolve(options.configsDir),
+    evalsDir: resolve(options.evalsDir),
     runsDir: resolve(options.runsDir),
     snapshotsDir: resolve(options.snapshotsDir),
     toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
     librariesDir: resolve(options.librariesDir)
   };
-  mkdirSync(settings.configsDir, { recursive: true });
+  mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
@@ -199,7 +199,7 @@ export async function startAppServer(options: AppServerOptions) {
     loadSnapshot,
     compareRunToSnapshot,
     getRunResults,
-    decodeConfigId,
+    decodeEvalId,
     readConfigRecord,
     listConfigs,
     safeFileName,
@@ -280,9 +280,9 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
-        if (body.configsDir) {
-          settings.configsDir = resolve(String(body.configsDir));
-          mkdirSync(settings.configsDir, { recursive: true });
+        if (body.evalsDir) {
+          settings.evalsDir = resolve(String(body.evalsDir));
+          mkdirSync(settings.evalsDir, { recursive: true });
         }
         if (body.runsDir) {
           settings.runsDir = resolve(String(body.runsDir));
@@ -406,7 +406,7 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (
-        await handleConfigsRoutes({
+        await handleEvalsRoutes({
           req,
           res,
           pathname,
@@ -474,7 +474,7 @@ export async function startAppServer(options: AppServerOptions) {
   // eslint-disable-next-line no-console
   console.log(`mcplab app running at ${url}`);
   // eslint-disable-next-line no-console
-  console.log(`  configs: ${settings.configsDir}`);
+  console.log(`  evals:   ${settings.evalsDir}`);
   // eslint-disable-next-line no-console
   console.log(`  runs:    ${settings.runsDir}`);
   // eslint-disable-next-line no-console

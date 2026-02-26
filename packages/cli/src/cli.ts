@@ -425,7 +425,7 @@ program
 program
   .command('app')
   .description('Serve MCPLab app frontend and local API bridge')
-  .option('--configs-dir <path>', 'Directory for YAML configs', 'mcplab/configs')
+  .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
   .option(
@@ -447,7 +447,7 @@ program
       await startAppServer({
         host: options.host,
         port,
-        configsDir: resolve(options.configsDir),
+        evalsDir: resolve(options.evalsDir),
         runsDir: resolve(options.runsDir),
         snapshotsDir: resolve(options.snapshotsDir),
         toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),

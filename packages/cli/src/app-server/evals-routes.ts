@@ -5,25 +5,25 @@ import { stringify as stringifyYaml } from 'yaml';
 import { loadConfig, type EvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
-export type ConfigsRouteDeps = Pick<
+export type EvalsRouteDeps = Pick<
   AppRouteDeps,
   | 'parseBody'
   | 'asJson'
   | 'listConfigs'
   | 'safeFileName'
   | 'ensureInsideRoot'
-  | 'decodeConfigId'
+  | 'decodeEvalId'
   | 'readConfigRecord'
   | 'readConfigRecordOrInvalid'
 >;
 
-export async function handleConfigsRoutes(params: {
+export async function handleEvalsRoutes(params: {
   req: IncomingMessage;
   res: ServerResponse;
   pathname: string;
   method: string;
   settings: AppRouteRequestContext['settings'];
-  deps: ConfigsRouteDeps;
+  deps: EvalsRouteDeps;
 }): Promise<boolean> {
   const { req, res, pathname, method, settings, deps } = params;
   const {
@@ -32,17 +32,17 @@ export async function handleConfigsRoutes(params: {
     listConfigs,
     safeFileName,
     ensureInsideRoot,
-    decodeConfigId,
+    decodeEvalId,
     readConfigRecord,
     readConfigRecordOrInvalid
   } = deps;
 
-  if (pathname === '/api/configs' && method === 'GET') {
-    asJson(res, 200, listConfigs(settings.configsDir, settings.librariesDir));
+  if (pathname === '/api/evals' && method === 'GET') {
+    asJson(res, 200, listConfigs(settings.evalsDir, settings.librariesDir));
     return true;
   }
 
-  if (pathname === '/api/configs' && method === 'POST') {
+  if (pathname === '/api/evals' && method === 'POST') {
     const body = await parseBody(req);
     const config = body.config as EvalConfig | undefined;
     if (!config || typeof config !== 'object') {
@@ -51,40 +51,40 @@ export async function handleConfigsRoutes(params: {
     }
     const baseName = safeFileName(body.fileName ?? `config-${Date.now()}`);
     let filePath = ensureInsideRoot(
-      settings.configsDir,
-      join(settings.configsDir, `${baseName}.yaml`)
+      settings.evalsDir,
+      join(settings.evalsDir, `${baseName}.yaml`)
     );
     let suffix = 1;
     while (existsSync(filePath)) {
       filePath = ensureInsideRoot(
-        settings.configsDir,
-        join(settings.configsDir, `${baseName}-${suffix}.yaml`)
+        settings.evalsDir,
+        join(settings.evalsDir, `${baseName}-${suffix}.yaml`)
       );
       suffix += 1;
     }
     writeFileSync(filePath, `${stringifyYaml(config)}\n`, 'utf8');
-    asJson(res, 201, readConfigRecord(filePath, settings.configsDir, settings.librariesDir));
+    asJson(res, 201, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
 
-  if (pathname.startsWith('/api/configs/') && method === 'GET') {
-    const id = pathname.replace('/api/configs/', '');
-    const filePath = decodeConfigId(id, settings.configsDir);
+  if (pathname.startsWith('/api/evals/') && method === 'GET') {
+    const id = pathname.replace('/api/evals/', '');
+    const filePath = decodeEvalId(id, settings.evalsDir);
     asJson(
       res,
       200,
-      readConfigRecordOrInvalid(filePath, settings.configsDir, settings.librariesDir)
+      readConfigRecordOrInvalid(filePath, settings.evalsDir, settings.librariesDir)
     );
     return true;
   }
 
   if (
-    pathname.startsWith('/api/configs/') &&
+    pathname.startsWith('/api/evals/') &&
     pathname.endsWith('/snapshot-policy') &&
     method === 'POST'
   ) {
-    const id = pathname.replace('/api/configs/', '').replace('/snapshot-policy', '');
-    const filePath = decodeConfigId(id, settings.configsDir);
+    const id = pathname.replace('/api/evals/', '').replace('/snapshot-policy', '');
+    const filePath = decodeEvalId(id, settings.evalsDir);
     if (!existsSync(filePath)) {
       asJson(res, 404, { error: 'Config not found' });
       return true;
@@ -114,13 +114,13 @@ export async function handleConfigsRoutes(params: {
     if (!nextSnapshotEval.baseline_source_run_id) delete nextSnapshotEval.baseline_source_run_id;
     const nextConfig: EvalConfig = { ...sourceConfig, snapshot_eval: nextSnapshotEval };
     writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-    asJson(res, 200, readConfigRecord(filePath, settings.configsDir, settings.librariesDir));
+    asJson(res, 200, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
 
-  if (pathname.startsWith('/api/configs/') && method === 'PUT') {
-    const id = pathname.replace('/api/configs/', '');
-    const currentPath = decodeConfigId(id, settings.configsDir);
+  if (pathname.startsWith('/api/evals/') && method === 'PUT') {
+    const id = pathname.replace('/api/evals/', '');
+    const currentPath = decodeEvalId(id, settings.evalsDir);
     if (!existsSync(currentPath)) {
       asJson(res, 404, { error: 'Config not found' });
       return true;
@@ -136,16 +136,16 @@ export async function handleConfigsRoutes(params: {
     if (nextFileName) {
       const baseName = safeFileName(nextFileName);
       const desiredPath = ensureInsideRoot(
-        settings.configsDir,
-        join(settings.configsDir, `${baseName}.yaml`)
+        settings.evalsDir,
+        join(settings.evalsDir, `${baseName}.yaml`)
       );
       if (desiredPath !== currentPath) {
         let uniquePath = desiredPath;
         let suffix = 1;
         while (existsSync(uniquePath)) {
           uniquePath = ensureInsideRoot(
-            settings.configsDir,
-            join(settings.configsDir, `${baseName}-${suffix}.yaml`)
+            settings.evalsDir,
+            join(settings.evalsDir, `${baseName}-${suffix}.yaml`)
           );
           suffix += 1;
         }
@@ -154,13 +154,13 @@ export async function handleConfigsRoutes(params: {
       }
     }
     writeFileSync(targetPath, `${stringifyYaml(config)}\n`, 'utf8');
-    asJson(res, 200, readConfigRecord(targetPath, settings.configsDir, settings.librariesDir));
+    asJson(res, 200, readConfigRecord(targetPath, settings.evalsDir, settings.librariesDir));
     return true;
   }
 
-  if (pathname.startsWith('/api/configs/') && method === 'DELETE') {
-    const id = pathname.replace('/api/configs/', '');
-    const filePath = decodeConfigId(id, settings.configsDir);
+  if (pathname.startsWith('/api/evals/') && method === 'DELETE') {
+    const id = pathname.replace('/api/evals/', '');
+    const filePath = decodeEvalId(id, settings.evalsDir);
     if (!existsSync(filePath)) {
       asJson(res, 404, { error: 'Config not found' });
       return true;

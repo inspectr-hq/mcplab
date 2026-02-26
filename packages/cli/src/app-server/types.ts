@@ -1,7 +1,7 @@
 export interface AppServerOptions {
   host: string;
   port: number;
-  configsDir: string;
+  evalsDir: string;
   runsDir: string;
   snapshotsDir: string;
   toolAnalysisResultsDir: string;
@@ -12,7 +12,7 @@ export interface AppServerOptions {
 
 export interface AppSettings {
   workspaceRoot: string;
-  configsDir: string;
+  evalsDir: string;
   runsDir: string;
   snapshotsDir: string;
   toolAnalysisResultsDir: string;

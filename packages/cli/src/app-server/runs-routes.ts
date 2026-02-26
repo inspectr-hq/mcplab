@@ -170,8 +170,8 @@ export async function handleRunsRoutes(params: {
     }
 
     const configPath = isAbsolute(configPathRaw)
-      ? ensureInsideRoot(settings.configsDir, configPathRaw)
-      : ensureInsideRoot(settings.configsDir, join(settings.configsDir, configPathRaw));
+      ? ensureInsideRoot(settings.evalsDir, configPathRaw)
+      : ensureInsideRoot(settings.evalsDir, join(settings.evalsDir, configPathRaw));
     if (!existsSync(configPath)) {
       asJson(res, 404, { error: `Config not found: ${configPath}` });
       return true;
