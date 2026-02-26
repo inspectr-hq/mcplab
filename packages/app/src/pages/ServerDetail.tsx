@@ -122,6 +122,9 @@ const ServerDetail = () => {
         const next = servers.map((s) => (s.name === decodedName ? form : s));
         await setServers(next);
         toast({ title: "Server saved" });
+        if (form.name !== decodedName) {
+          navigate(`/libraries/servers/${encodeURIComponent(form.name)}`, { replace: true });
+        }
       }
     } finally {
       setSaving(false);

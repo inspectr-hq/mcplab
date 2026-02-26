@@ -168,6 +168,9 @@ const AgentDetail = () => {
         const next = agents.map((a) => (a.name === decodedName ? form : a));
         await setAgents(next);
         toast({ title: "Agent saved" });
+        if (form.name !== decodedName) {
+          navigate(`/libraries/agents/${encodeURIComponent(form.name)}`, { replace: true });
+        }
       }
     } finally {
       setSaving(false);

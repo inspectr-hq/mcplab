@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { MarkdownContent } from "@/components/MarkdownContent";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -25,6 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
+  MarkdownReportContent,
   MarkdownReportSummary,
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView,
@@ -65,6 +66,7 @@ const ResultDetail = () => {
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [contextPanelTab, setContextPanelTab] = useState<"assistant" | "reports">("assistant");
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
   const [assistantMeta, setAssistantMeta] = useState<{
     assistantAgentName: string;
@@ -78,6 +80,10 @@ const ResultDetail = () => {
   const [applyReportPending, setApplyReportPending] = useState(false);
   const [referenceReports, setReferenceReports] = useState<MarkdownReportSummary[]>([]);
   const [referenceReportsLoading, setReferenceReportsLoading] = useState(false);
+  const [selectedReferenceReportPath, setSelectedReferenceReportPath] = useState("");
+  const [selectedReferenceReport, setSelectedReferenceReport] = useState<MarkdownReportContent | null>(null);
+  const [selectedReferenceReportLoading, setSelectedReferenceReportLoading] = useState(false);
+  const [selectedReferenceReportError, setSelectedReferenceReportError] = useState<string | null>(null);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -149,6 +155,47 @@ const ResultDetail = () => {
       active = false;
     };
   }, [result?.id, source]);
+
+  useEffect(() => {
+    if (referenceReports.length === 0) {
+      setSelectedReferenceReportPath("");
+      setSelectedReferenceReport(null);
+      setSelectedReferenceReportError(null);
+      return;
+    }
+    if (!selectedReferenceReportPath || !referenceReports.some((r) => r.relativePath === selectedReferenceReportPath)) {
+      setSelectedReferenceReportPath(referenceReports[0].relativePath);
+    }
+  }, [referenceReports, selectedReferenceReportPath]);
+
+  useEffect(() => {
+    if (!assistantOpen || contextPanelTab !== "reports") return;
+    if (!selectedReferenceReportPath) {
+      setSelectedReferenceReport(null);
+      setSelectedReferenceReportError(null);
+      return;
+    }
+    let active = true;
+    setSelectedReferenceReportLoading(true);
+    setSelectedReferenceReportError(null);
+    source
+      .getMarkdownReport(selectedReferenceReportPath)
+      .then((report) => {
+        if (!active) return;
+        setSelectedReferenceReport(report);
+      })
+      .catch((error: any) => {
+        if (!active) return;
+        setSelectedReferenceReport(null);
+        setSelectedReferenceReportError(String(error?.message ?? error));
+      })
+      .finally(() => {
+        if (active) setSelectedReferenceReportLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [assistantOpen, contextPanelTab, selectedReferenceReportPath, source]);
 
   const requestedConfigId = searchParams.get("configId") ?? "";
   const activeConfig = useMemo(() => {
@@ -437,6 +484,7 @@ const ResultDetail = () => {
   };
 
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
+    setContextPanelTab("assistant");
     setAssistantOpen(true);
     setAssistantContextScenarioId(options?.scenarioId ?? null);
     if (assistantMessages.length === 0) {
@@ -452,6 +500,12 @@ const ResultDetail = () => {
     if (prompt) {
       setAssistantInput(prompt);
     }
+  };
+
+  const openReportsPanel = (relativePath?: string) => {
+    if (relativePath) setSelectedReferenceReportPath(relativePath);
+    setContextPanelTab("reports");
+    setAssistantOpen(true);
   };
 
   const sendToScenarioAssistant = (assistantReply: string) => {
@@ -619,40 +673,19 @@ const ResultDetail = () => {
             }}>
               <Download className="h-3.5 w-3.5" />Download Report
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 gap-1.5"
-                  disabled={referenceReportsLoading}
-                >
-                  <RectangleEllipsis className="h-3.5 w-3.5" />
-                  {referenceReportsLoading
-                    ? "Reference Reports..."
-                    : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                {referenceReports.length === 0 ? (
-                  <DropdownMenuItem disabled>
-                    No markdown reports found for this run
-                  </DropdownMenuItem>
-                ) : (
-                  referenceReports.slice(0, 10).map((report) => (
-                    <DropdownMenuItem asChild key={report.path}>
-                      <Link to={`/markdown-reports/view?path=${encodeURIComponent(report.relativePath)}`}>
-                        {report.name}
-                      </Link>
-                    </DropdownMenuItem>
-                  ))
-                )}
-                <DropdownMenuItem asChild>
-                  <Link to="/markdown-reports">Browse all markdown reports</Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openReportsPanel()}
+              disabled={referenceReportsLoading}
+            >
+              <NotepadText className="h-3.5 w-3.5" />
+              {referenceReportsLoading
+                ? "Reference Reports..."
+                : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -1239,43 +1272,67 @@ const ResultDetail = () => {
       </div>
 
       {assistantOpen && (
-        <Card className="min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+        <div className="min-w-0 space-y-0 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <Tabs
+            value={contextPanelTab}
+            onValueChange={(v) => setContextPanelTab(v as "assistant" | "reports")}
+            className="min-w-0 -mb-px px-3 pt-1"
+          >
+            <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
+              <TabsTrigger
+                value="assistant"
+                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+              >
+                Assistant
+              </TabsTrigger>
+              <TabsTrigger
+                value="reports"
+                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+              >
+                Reports
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {contextPanelTab === "assistant" ? (
+        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
           <CardHeader className="border-b px-4 py-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-amber-500" />
                   MCP Labs Assistant
                 </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setAssistantExpanded((prev) => !prev)}
+                  >
+                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    {assistantExpanded ? "Compact" : "Expand"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <p className="text-xs text-muted-foreground">
                   Ask questions about this run result, failures, tool usage, and snapshot drift.
                 </p>
                 {assistantMeta && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Using {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
+                  <p className="shrink-0 text-[11px] text-muted-foreground">
+                    {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
                   </p>
                 )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs"
-                  onClick={() => setAssistantExpanded((prev) => !prev)}
-                >
-                  {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                  {assistantExpanded ? "Compact" : "Expand"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setAssistantOpen(false)}
-                >
-                  Hide
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -1557,6 +1614,107 @@ const ResultDetail = () => {
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <CardHeader className="border-b px-4 py-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <NotepadText className="h-4 w-4 text-muted-foreground" />
+                  Reference Reports
+                </CardTitle>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setAssistantExpanded((prev) => !prev)}
+                  >
+                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    {assistantExpanded ? "Compact" : "Expand"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Review markdown reports for this run while keeping the result visible.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
+            {(referenceReportsLoading || referenceReports.length === 0 || referenceReports.length > 1) && (
+            <div className="border-b px-4 py-3">
+              {referenceReportsLoading ? (
+                <p className="text-xs text-muted-foreground">Loading reference reports...</p>
+              ) : referenceReports.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">No reference reports for this run yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {referenceReports.length > 1 ? (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Selected report</p>
+                      <Select value={selectedReferenceReportPath} onValueChange={setSelectedReferenceReportPath}>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Select a report" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {referenceReports.map((report) => (
+                            <SelectItem key={report.path} value={report.relativePath}>
+                              {report.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            )}
+            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+              {referenceReports.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No report selected.</div>
+              ) : selectedReferenceReportLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading report...
+                </div>
+              ) : selectedReferenceReportError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  Could not load report: {selectedReferenceReportError}
+                </div>
+              ) : selectedReferenceReport ? (
+                <div className="space-y-3">
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="font-mono text-xs font-semibold">{selectedReferenceReport.name}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{selectedReferenceReport.relativePath}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {new Date(selectedReferenceReport.mtime).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <MarkdownContent text={selectedReferenceReport.content} className="text-sm" />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Select a report to preview.</div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+        </div>
       )}
       <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
         <AlertDialogContent className="max-w-2xl">

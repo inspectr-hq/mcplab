@@ -39,31 +39,25 @@ const ServerListReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
   <div className="space-y-2">
     {servers.map((server) => (
       <div key={server.id} className="rounded-md border p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-medium text-sm">{server.name || server.id}</div>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <Badge variant="secondary" className="text-xs capitalize">
-                {server.transport}
-              </Badge>
-              {server.authType && server.authType !== "none" && (
-                <Badge variant="outline" className="text-xs">
-                  Auth: {server.authType}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div className="text-xs font-mono text-muted-foreground">{server.id}</div>
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-sm">{server.name || server.id}</div>
+          <Badge variant="secondary" className="font-mono text-xs">
+            {server.transport}
+          </Badge>
+          {server.authType && server.authType !== "none" && (
+            <Badge variant="outline" className="text-xs">
+              {server.authType}
+            </Badge>
+          )}
         </div>
         {server.url && (
-          <div className="mt-2 text-xs text-muted-foreground break-all">
+          <div className="mt-1 text-xs font-mono text-muted-foreground break-all">
             {server.url}
           </div>
         )}
         {server.command && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            <span className="font-medium">Command:</span>{" "}
-            <span className="font-mono">{[server.command, ...(server.args ?? [])].join(" ")}</span>
+          <div className="mt-1 text-xs font-mono text-muted-foreground">
+            {[server.command, ...(server.args ?? [])].join(" ")}
           </div>
         )}
       </div>
@@ -90,25 +84,19 @@ const AgentListReadOnly = ({
   <div className="space-y-2">
     {agents.map((agent) => (
       <div key={agent.id} className="rounded-md border p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-medium text-sm">{agent.name || agent.id}</div>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {defaultAgentNames.includes(agent.name || agent.id) && (
-                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-                  Default run agent
-                </Badge>
-              )}
-              <ProviderBadge provider={agent.provider} />
-              <Badge variant="outline" className="text-xs font-mono">
-                {agent.model}
-              </Badge>
-            </div>
-          </div>
-          <div className="text-xs font-mono text-muted-foreground">{agent.id}</div>
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-sm">{agent.name || agent.id}</div>
+          {defaultAgentNames.includes(agent.name || agent.id) && (
+            <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+              Default
+            </Badge>
+          )}
         </div>
-        <div className="mt-2 text-xs text-muted-foreground">
-          Temp {agent.temperature} · Max tokens {agent.maxTokens}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <ProviderBadge provider={agent.provider} />
+          <Badge variant="outline" className="text-xs font-mono">
+            {agent.model}
+          </Badge>
         </div>
       </div>
     ))}
@@ -868,9 +856,11 @@ const ConfigEditor = () => {
                       <SelectValue placeholder="Select server from library" />
                     </SelectTrigger>
                     <SelectContent>
-                      {libServers.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                      ))}
+                      {libServers
+                        .filter((item) => !(config.serverRefs ?? []).includes(item.name || item.id))
+                        .map((item) => (
+                          <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
@@ -950,9 +940,11 @@ const ConfigEditor = () => {
                     <SelectValue placeholder="Select agent from library" />
                   </SelectTrigger>
                   <SelectContent>
-                    {libAgents.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                    ))}
+                    {libAgents
+                      .filter((item) => !(config.agentRefs ?? []).includes(item.name || item.id))
+                      .map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
                 <div className="flex gap-2">
