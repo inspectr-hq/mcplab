@@ -5,9 +5,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/inspectr-hq/mcp-lab.git"
+    "url": "git+https://github.com/inspectr-hq/mcp-lab.git"
   },
-  "keywords": ["mcp", "model-context-protocol", "llm", "evaluation", "reporting"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "evaluation",
+    "reporting"
+  ],
   "engines": {
     "node": ">=20.19.0"
   },

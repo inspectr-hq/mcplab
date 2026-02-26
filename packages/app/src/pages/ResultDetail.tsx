@@ -67,6 +67,11 @@ function defaultResultAssistantReportPath(runId: string): string {
   return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
 }
 
+function formatCompactOneDecimal(value: number): string {
+  const fixed = value.toFixed(1);
+  return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+}
+
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -843,7 +848,7 @@ const ResultDetail = () => {
         <StatCard title="Scenarios" value={result.totalScenarios} icon={Layers} />
         <StatCard title="Total Runs" value={result.totalRuns} icon={Activity} />
         <StatCard title="Pass Rate" value={`${Math.round(result.overallPassRate * 100)}%`} icon={BarChart3} />
-        <StatCard title="Avg Tool Calls" value={result.avgToolCalls.toFixed(1)} icon={CheckCircle2} />
+        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(result.avgToolCalls)} icon={CheckCircle2} />
         <StatCard title="Avg Latency" value={`${result.avgLatency}ms`} icon={Timer} />
       </div>
 
@@ -959,7 +964,7 @@ const ResultDetail = () => {
                         <TableCell className="text-sm">{sc.agentName}</TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                         <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
-                        <TableCell className="font-mono text-sm">{sc.avgToolCalls.toFixed(1)}</TableCell>
+                        <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
                         <TableCell>
                           {(() => {
                             const row = comparisonByScenario.get(sc.scenarioId);

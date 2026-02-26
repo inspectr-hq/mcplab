@@ -17,6 +17,11 @@
     "app:dev": "tsx packages/cli/src/cli.ts app --dev",
     "app:dev:ui": "npm run dev -w @inspectr/mcplab-app",
     "release:prepare:cli": "node scripts/prepare-cli-package.mjs",
+    "publish:core": "npm publish -w packages/core",
+    "publish:reporting": "npm publish -w packages/reporting",
+    "publish:mcp-server": "npm publish -w packages/mcp-server",
+    "publish:cli": "npm publish -w packages/cli",
+    "publish:all": "npm publish -w packages/core -w packages/reporting -w packages/mcp-server -w packages/cli",
     "clean": "rm -rf dist packages/*/dist",
     "format": "npx prettier --write \"packages/**/*.{ts,jsx,css}\" --config ./.prettierrc",
     "test": "npm run test --workspaces --if-present"
