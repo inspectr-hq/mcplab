@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ProviderBadge } from "@/components/ProviderBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -98,9 +99,7 @@ const AgentListReadOnly = ({
                   Default run agent
                 </Badge>
               )}
-              <Badge variant="secondary" className="text-xs capitalize">
-                {agent.provider}
-              </Badge>
+              <ProviderBadge provider={agent.provider} />
               <Badge variant="outline" className="text-xs font-mono">
                 {agent.model}
               </Badge>

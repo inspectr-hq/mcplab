@@ -76,8 +76,32 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Run Evaluation" });
     return crumbs;
   }
+  if (matchPath("/libraries/servers/:serverName", pathname)) {
+    const match = matchPath("/libraries/servers/:serverName", pathname);
+    const serverName = match?.params.serverName
+      ? decodeURIComponent(match.params.serverName)
+      : "Server";
+    crumbs.push(
+      { label: "Libraries", to: "/libraries/servers" },
+      { label: "Servers", to: "/libraries/servers" },
+      { label: serverName === "new" ? "New Server" : serverName }
+    );
+    return crumbs;
+  }
   if (matchPath("/libraries/servers", pathname)) {
     crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "Servers" });
+    return crumbs;
+  }
+  if (matchPath("/libraries/agents/:agentName", pathname)) {
+    const match = matchPath("/libraries/agents/:agentName", pathname);
+    const agentName = match?.params.agentName
+      ? decodeURIComponent(match.params.agentName)
+      : "Agent";
+    crumbs.push(
+      { label: "Libraries", to: "/libraries/agents" },
+      { label: "Agents", to: "/libraries/agents" },
+      { label: agentName === "new" ? "New Agent" : agentName }
+    );
     return crumbs;
   }
   if (matchPath("/libraries/agents", pathname)) {

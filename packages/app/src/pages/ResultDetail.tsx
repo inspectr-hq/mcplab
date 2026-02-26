@@ -15,6 +15,7 @@ import { MarkdownContent } from "@/components/MarkdownContent";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -24,6 +25,7 @@ import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
+  MarkdownReportSummary,
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView,
   SnapshotComparison,
@@ -74,6 +76,8 @@ const ResultDetail = () => {
   const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
   const [applyReportOverwrite, setApplyReportOverwrite] = useState(false);
   const [applyReportPending, setApplyReportPending] = useState(false);
+  const [referenceReports, setReferenceReports] = useState<MarkdownReportSummary[]>([]);
+  const [referenceReportsLoading, setReferenceReportsLoading] = useState(false);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -114,6 +118,37 @@ const ResultDetail = () => {
       active = false;
     };
   }, [source]);
+
+  useEffect(() => {
+    if (!result?.id) {
+      setReferenceReports([]);
+      return;
+    }
+    let active = true;
+    setReferenceReportsLoading(true);
+    source
+      .listMarkdownReports()
+      .then((items) => {
+        if (!active) return;
+        const runId = result.id;
+        setReferenceReports(
+          items.filter((item) => {
+            const path = String(item.relativePath ?? "");
+            const name = String(item.name ?? "");
+            return path.includes(runId) || name.includes(runId);
+          })
+        );
+      })
+      .catch(() => {
+        if (active) setReferenceReports([]);
+      })
+      .finally(() => {
+        if (active) setReferenceReportsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [result?.id, source]);
 
   const requestedConfigId = searchParams.get("configId") ?? "";
   const activeConfig = useMemo(() => {
@@ -584,6 +619,40 @@ const ResultDetail = () => {
             }}>
               <Download className="h-3.5 w-3.5" />Download Report
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  disabled={referenceReportsLoading}
+                >
+                  <RectangleEllipsis className="h-3.5 w-3.5" />
+                  {referenceReportsLoading
+                    ? "Reference Reports..."
+                    : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                {referenceReports.length === 0 ? (
+                  <DropdownMenuItem disabled>
+                    No markdown reports found for this run
+                  </DropdownMenuItem>
+                ) : (
+                  referenceReports.slice(0, 10).map((report) => (
+                    <DropdownMenuItem asChild key={report.path}>
+                      <Link to={`/markdown-reports/view?path=${encodeURIComponent(report.relativePath)}`}>
+                        {report.name}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to="/markdown-reports">Browse all markdown reports</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               type="button"
               variant="outline"
@@ -704,14 +773,12 @@ const ResultDetail = () => {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Pass / Fail</CardTitle></CardHeader>
           <CardContent className="flex items-center justify-center">
-            <ResponsiveContainer width={180} height={180}>
-              <PieChart>
-                <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
-                  {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <PieChart width={180} height={180}>
+              <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
+                {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
             <div className="ml-4 space-y-2">
               <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
               <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
