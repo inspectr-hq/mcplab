@@ -459,11 +459,15 @@ const ManageScenarios = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <Button type="button" size="sm" variant={isSelected ? "default" : "outline"} asChild>
-                            <Link to={href}>
-                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                              Edit
-                            </Link>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setScenarioPendingDelete(scenario)}
+                          >
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            Delete
                           </Button>
                           <Button
                             type="button"
@@ -474,15 +478,11 @@ const ManageScenarios = () => {
                             <Copy className="mr-1.5 h-3.5 w-3.5" />
                             Duplicate
                           </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setScenarioPendingDelete(scenario)}
-                          >
-                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                            Delete
+                          <Button type="button" size="sm" variant={isSelected ? "default" : "outline"} asChild>
+                            <Link to={href}>
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                              Edit
+                            </Link>
                           </Button>
                         </div>
                       </div>

@@ -16,6 +16,7 @@ import { PassRateBadge } from "@/components/PassRateBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -34,6 +35,32 @@ import type {
 } from "@/lib/data-sources/types";
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+const RESULT_ASSISTANT_SNIPPETS = [
+  {
+    label: "Summarize Run Results",
+    description: "Highlight failures first, then notable tool usage and extracted values.",
+    prompt:
+      "Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values."
+  },
+  {
+    label: "Compare Agent Answer Quality",
+    description: "Rank agents by completeness, depth, and recommendation quality.",
+    prompt:
+      "Compare the answer quality across all agents for this run. Rank them by completeness, analytical depth, and usefulness of recommendations. Highlight concrete differences in tool usage."
+  },
+  {
+    label: "Explain Key Failures",
+    description: "Use traces and tool outputs to identify likely root causes.",
+    prompt:
+      "Identify the most important failures in this run and explain likely root causes using the trace and tool outputs."
+  },
+  {
+    label: "Compare With Previous Run",
+    description: "Summarize changes in outcomes, tool usage, and extracted values.",
+    prompt:
+      "Compare this run with the previous run and summarize changes in outcomes, tool usage, and extracted values."
+  }
+] as const;
 
 function defaultResultAssistantReportPath(runId: string): string {
   const stamp = new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
@@ -437,6 +464,11 @@ const ResultDetail = () => {
     } finally {
       setAssistantLoading(false);
     }
+  };
+
+  const applyResultAssistantSnippet = (snippet: string) => {
+    setAssistantInput(snippet);
+    requestAnimationFrame(() => assistantInputRef.current?.focus());
   };
 
   const syncResultAssistantSession = (session: ResultAssistantSessionView) => {
@@ -1442,6 +1474,7 @@ const ResultDetail = () => {
                       </div>
                     );
                   }
+                  const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
                   return (
                     <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
                       {!isUser && (
@@ -1449,71 +1482,73 @@ const ResultDetail = () => {
                           {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                         </div>
                       )}
-                      <div className={`relative max-w-[92%] rounded-md border p-3 text-sm ${
-                        isUser
-                          ? "border-primary/20 bg-primary/10"
-                          : isSystem
-                            ? "border-amber-400/30 bg-amber-50/70"
-                            : isTool
-                              ? "border-blue-300/30 bg-blue-50/50"
-                              : "border-border/80 bg-background shadow-sm"
-                      } ${(isUser || (isAssistant && !isTool && !isSystem)) ? "pr-9" : ""}`}>
-                        {(isUser || (isAssistant && !isTool && !isSystem)) && (
+                      <div className="relative max-w-[92%]">
+                        <div className={`max-w-full rounded-md border p-3 text-sm ${
+                          isUser
+                            ? "border-primary/20 bg-primary/10"
+                            : isSystem
+                              ? "border-amber-400/30 bg-amber-50/70"
+                              : isTool
+                                ? "border-blue-300/30 bg-blue-50/50"
+                                : "border-border/80 bg-background shadow-sm"
+                        }`}>
+                          {!(isUser || isSystem) && (
+                            <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
+                              {isTool ? "Tool" : "Assistant"}
+                            </p>
+                          )}
+                          <MarkdownContent text={message.text} className="text-sm" />
+                          {canShowHandoff && (
+                            <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => sendToScenarioAssistant(message.text)}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Send to Scenario Assistant
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
+                              </Button>
+                            </div>
+                          )}
+                          {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
+                            <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        {showCopyButton && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="absolute right-2 top-2 h-6 w-6 text-muted-foreground"
+                            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
                             onClick={() => void copyAssistantChatText(message.text)}
                             aria-label="Copy message"
                             title="Copy message"
                           >
                             <Copy className="h-3.5 w-3.5" />
                           </Button>
-                        )}
-                        {!(isUser || isSystem) && (
-                          <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                            {isTool ? "Tool" : "Assistant"}
-                          </p>
-                        )}
-                        <MarkdownContent text={message.text} className="text-sm" />
-                        {canShowHandoff && (
-                          <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => sendToScenarioAssistant(message.text)}
-                            >
-                              <Sparkles className="h-3.5 w-3.5" />
-                              Send to Scenario Assistant
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => openApplyReportDialog(message.text)}
-                            >
-                              <Wrench className="h-3.5 w-3.5" />
-                              Apply: Write Markdown Report
-                            </Button>
-                          </div>
-                        )}
-                        {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
-                          <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => openApplyReportDialog(message.text)}
-                            >
-                              <Wrench className="h-3.5 w-3.5" />
-                              Apply: Write Markdown Report
-                            </Button>
-                          </div>
                         )}
                       </div>
                       {isUser && (
@@ -1587,14 +1622,14 @@ const ResultDetail = () => {
               </div>
             </ScrollArea>
             <div className="border-t bg-background px-4 py-3">
-              <div className="flex items-end gap-2">
+              <div className="rounded-xl border bg-background p-2 shadow-sm">
                 <Textarea
                   ref={assistantInputRef}
                   value={assistantInput}
                   onChange={(e) => setAssistantInput(e.target.value)}
                   placeholder="Ask about this result..."
                   rows={1}
-                  className="min-h-10 max-h-40 resize-none text-sm"
+                  className="min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-1 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -1602,23 +1637,59 @@ const ResultDetail = () => {
                     }
                   }}
                 />
-                <Button
-                  type="button"
-                  className="shrink-0"
-                  onClick={() => void askResultAssistant()}
-                  disabled={assistantLoading || !assistantInput.trim()}
-                  aria-label="Send assistant message"
-                  title="Send assistant message"
-                >
-                  {assistantLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      <span className="sr-only">Ask</span>
-                    </>
-                  )}
-                </Button>
+                <div className="mt-1 flex items-center justify-between gap-2 px-1 pt-1">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground/80 hover:text-muted-foreground"
+                        disabled={assistantLoading}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Snippets
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[360px]">
+                      <DropdownMenuLabel>Result Assistant Snippets</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {RESULT_ASSISTANT_SNIPPETS.map((snippet) => (
+                        <DropdownMenuItem
+                          key={snippet.label}
+                          className="items-start whitespace-normal px-2 py-2"
+                          onSelect={() => applyResultAssistantSnippet(snippet.prompt)}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium leading-tight">{snippet.label}</div>
+                            <div className="text-[11px] leading-snug text-muted-foreground">
+                              {snippet.description}
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 rounded-full"
+                    onClick={() => void askResultAssistant()}
+                    disabled={assistantLoading || !assistantInput.trim()}
+                    aria-label="Send assistant message"
+                    title="Send assistant message"
+                  >
+                    {assistantLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        <span className="sr-only">Ask</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
