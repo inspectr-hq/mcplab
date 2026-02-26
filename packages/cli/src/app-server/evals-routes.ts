@@ -50,10 +50,7 @@ export async function handleEvalsRoutes(params: {
       return true;
     }
     const baseName = safeFileName(body.fileName ?? `config-${Date.now()}`);
-    let filePath = ensureInsideRoot(
-      settings.evalsDir,
-      join(settings.evalsDir, `${baseName}.yaml`)
-    );
+    let filePath = ensureInsideRoot(settings.evalsDir, join(settings.evalsDir, `${baseName}.yaml`));
     let suffix = 1;
     while (existsSync(filePath)) {
       filePath = ensureInsideRoot(
@@ -70,11 +67,7 @@ export async function handleEvalsRoutes(params: {
   if (pathname.startsWith('/api/evals/') && method === 'GET') {
     const id = pathname.replace('/api/evals/', '');
     const filePath = decodeEvalId(id, settings.evalsDir);
-    asJson(
-      res,
-      200,
-      readConfigRecordOrInvalid(filePath, settings.evalsDir, settings.librariesDir)
-    );
+    asJson(res, 200, readConfigRecordOrInvalid(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
 

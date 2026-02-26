@@ -98,8 +98,7 @@ export const workspaceApiClient = {
       method: 'PUT',
       body: JSON.stringify({ config, fileName })
     }),
-  deleteConfig: (id: string) =>
-    request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
+  deleteConfig: (id: string) => request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
   listRuns: () => request<WorkspaceRunSummary[]>('/api/runs'),
   listMarkdownReports: () =>
     request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),

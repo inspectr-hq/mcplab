@@ -18,7 +18,7 @@
     "app:dev:ui": "npm run dev -w @inspectr/mcplab-app",
     "clean": "rm -rf dist packages/*/dist",
     "format": "npx prettier --write \"packages/**/*.{ts,jsx,css}\" --config ./.prettierrc",
-    "test": "echo 'test completed'"
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
