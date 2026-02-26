@@ -8,8 +8,10 @@ runs/
 
 .agents
 .claude
+.codex
 .worktrees
 .idea
+.tmp
 
 mcplab/
 packages/app/tsconfig.app.tsbuildinfo

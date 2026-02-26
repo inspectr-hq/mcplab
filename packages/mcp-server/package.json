@@ -1,6 +1,16 @@
 {
   "name": "@inspectr/mcplab-mcp-server",
   "version": "0.1.0",
+  "description": "MCP server that exposes MCPLab evaluation tools — query runs, results, and traces via the Model Context Protocol",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inspectr-hq/mcp-lab.git"
+  },
+  "keywords": ["mcp", "model-context-protocol", "llm", "evaluation", "testing", "ai", "server"],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +37,7 @@
   "dependencies": {
     "@inspectr/mcplab-core": "0.1.0",
     "@inspectr/mcplab-reporting": "0.1.0",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "yaml": "^2.5.1",
     "zod": "^3.25.0"
   }

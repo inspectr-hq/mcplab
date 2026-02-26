@@ -1,11 +1,22 @@
 {
   "name": "@inspectr/mcplab-reporting",
   "version": "0.1.0",
+  "description": "HTML report generation for MCPLab evaluation runs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inspectr-hq/mcp-lab.git"
+  },
+  "keywords": ["mcp", "model-context-protocol", "llm", "evaluation", "reporting"],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "exports": {
     ".": "./dist/index.js"

@@ -1,6 +1,16 @@
 {
   "name": "@inspectr/mcplab",
   "version": "0.1.0",
+  "description": "CLI for testing and evaluating MCP servers with LLMs — run evals, compare agents, and launch the MCPLab web app",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/inspectr-hq/mcp-lab.git"
+  },
+  "keywords": ["mcp", "model-context-protocol", "llm", "evaluation", "testing", "ai", "agents", "cli"],
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "type": "module",
   "main": "dist/cli.js",
   "types": "dist/cli.d.ts",
