@@ -1,0 +1,2113 @@
+openapi: 3.1.0
+info:
+  title: MCPLab App Server API
+  version: 1.0.0
+  summary: Local API used by the MCPLab web app and CLI app-server bridge.
+  description: |
+    OpenAPI description for the MCPLab app-server endpoints exposed by `@inspectr/mcplab` (`mcplab app`).
+
+    Notes:
+    - This API is primarily intended for local use by the MCPLab frontend.
+    - Some response payloads (especially assistant, tool-analysis, and OAuth debugger internals) are intentionally modeled with
+      extensible object schemas (`additionalProperties`) because they evolve quickly.
+    - SSE endpoints use `text/event-stream`.
+servers:
+  - url: http://localhost:8685
+    description: Typical local dev server (example)
+tags:
+  - name: System
+  - name: Settings
+  - name: Libraries
+  - name: Providers
+  - name: Configs
+  - name: Runs
+  - name: Snapshots
+  - name: Result Assistant
+  - name: Scenario Assistant
+  - name: Markdown Reports
+  - name: Tool Analysis
+  - name: OAuth Debugger
+paths:
+  /api/health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Server health information
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, version, mcp]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  version:
+                    type: string
+                  mcp:
+                    oneOf:
+                      - type: object
+                        required: [enabled]
+                        properties:
+                          enabled:
+                            type: boolean
+                            const: false
+                      - type: object
+                        required: [enabled, transport, endpoint, upstream]
+                        properties:
+                          enabled:
+                            type: boolean
+                            const: true
+                          transport:
+                            type: string
+                            example: streamable-http
+                          endpoint:
+                            type: string
+                          upstream:
+                            type: string
+
+  /api/providers/models:
+    get:
+      tags: [Providers]
+      summary: List provider models/deployments
+      operationId: listProviderModels
+      parameters:
+        - in: query
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [anthropic, openai, azure]
+      responses:
+        "200":
+          description: Provider model list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderModelsResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Get workspace settings
+      operationId: getSettings
+      responses:
+        "200":
+          description: Current app-server settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSettings"
+    put:
+      tags: [Settings]
+      summary: Update workspace settings
+      operationId: updateSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                configsDir: { type: string }
+                runsDir: { type: string }
+                snapshotsDir: { type: string }
+                librariesDir: { type: string }
+                scenarioAssistantAgentName:
+                  oneOf:
+                    - type: string
+                    - type: "null"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSettings"
+
+  /api/libraries:
+    get:
+      tags: [Libraries]
+      summary: Read shared libraries (servers, agents, scenarios)
+      operationId: getLibraries
+      responses:
+        "200":
+          description: Libraries payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibrariesPayload"
+    put:
+      tags: [Libraries]
+      summary: Persist shared libraries (replace full payload)
+      operationId: saveLibraries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibrariesPayload"
+      responses:
+        "200":
+          description: Save acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /api/configs:
+    get:
+      tags: [Configs]
+      summary: List workspace evaluation configs
+      operationId: listConfigs
+      responses:
+        "200":
+          description: Config records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceConfigRecord"
+    post:
+      tags: [Configs]
+      summary: Create a new config YAML file
+      operationId: createConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [config]
+              properties:
+                fileName:
+                  type: string
+                  description: Base file name without extension; sanitized by server.
+                config:
+                  $ref: "#/components/schemas/CoreEvalConfig"
+      responses:
+        "201":
+          description: Created config record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfigRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/configs/{configId}:
+    parameters:
+      - $ref: "#/components/parameters/ConfigId"
+    get:
+      tags: [Configs]
+      summary: Read a config record by encoded id
+      operationId: getConfig
+      responses:
+        "200":
+          description: Config record (or invalid record representation)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfigRecord"
+    put:
+      tags: [Configs]
+      summary: Update an existing config (and optionally rename file)
+      operationId: updateConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [config]
+              properties:
+                fileName:
+                  type: string
+                  description: Optional new base file name (without extension)
+                config:
+                  $ref: "#/components/schemas/CoreEvalConfig"
+      responses:
+        "200":
+          description: Updated config record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfigRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Configs]
+      summary: Delete a config file
+      operationId: deleteConfig
+      responses:
+        "200":
+          description: Delete acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/configs/{configId}/snapshot-policy:
+    parameters:
+      - $ref: "#/components/parameters/ConfigId"
+    post:
+      tags: [Configs]
+      summary: Update snapshot-eval policy embedded in a config file
+      operationId: updateConfigSnapshotPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, mode]
+              properties:
+                enabled:
+                  type: boolean
+                mode:
+                  type: string
+                  enum: [warn, fail_on_drift]
+                baselineSnapshotId:
+                  type: string
+                baselineSourceRunId:
+                  type: string
+      responses:
+        "200":
+          description: Updated config record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConfigRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/snapshots:
+    get:
+      tags: [Snapshots]
+      summary: List saved snapshots
+      operationId: listSnapshots
+      responses:
+        "200":
+          description: Snapshot records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SnapshotRecord"
+    post:
+      tags: [Snapshots]
+      summary: Create a snapshot from a run
+      operationId: createSnapshotFromRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [runId]
+              properties:
+                runId: { type: string }
+                name: { type: string }
+      responses:
+        "201":
+          description: Created snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/snapshots/generate-eval:
+    post:
+      tags: [Snapshots]
+      summary: Create snapshot from run and update a config snapshot policy baseline
+      operationId: generateSnapshotEvalBaseline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [runId, configId]
+              properties:
+                runId: { type: string }
+                configId: { type: string }
+                name: { type: string }
+      responses:
+        "201":
+          description: Snapshot + updated config
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snapshot, config]
+                properties:
+                  snapshot:
+                    $ref: "#/components/schemas/SnapshotRecord"
+                  config:
+                    $ref: "#/components/schemas/WorkspaceConfigRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/snapshots/{snapshotId}:
+    parameters:
+      - $ref: "#/components/parameters/SnapshotId"
+    get:
+      tags: [Snapshots]
+      summary: Read snapshot by id
+      operationId: getSnapshot
+      responses:
+        "200":
+          description: Snapshot record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotRecord"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/snapshots/{snapshotId}/compare:
+    parameters:
+      - $ref: "#/components/parameters/SnapshotId"
+    post:
+      tags: [Snapshots]
+      summary: Compare a run to a snapshot baseline
+      operationId: compareRunToSnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [runId]
+              properties:
+                runId: { type: string }
+      responses:
+        "200":
+          description: Snapshot comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotComparison"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs:
+    get:
+      tags: [Runs]
+      summary: List saved evaluation runs
+      operationId: listRuns
+      responses:
+        "200":
+          description: Run summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceRunSummary"
+    post:
+      tags: [Runs]
+      summary: Start an evaluation run job
+      operationId: startRunJob
+      description: |
+        Starts an async run job. Progress is streamed via `/api/runs/jobs/{jobId}/events` (SSE).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [configPath]
+              properties:
+                configPath:
+                  type: string
+                  description: Absolute path or path relative to configsDir.
+                runsPerScenario:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                scenarioId:
+                  type: string
+                  description: Legacy single-scenario selector (use scenarioIds for multiple).
+                scenarioIds:
+                  type: array
+                  items: { type: string }
+                agents:
+                  type: array
+                  items: { type: string }
+                applySnapshotEval:
+                  type: boolean
+                  default: true
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId]
+                properties:
+                  jobId: { type: string }
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          description: Another run job is already active
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - type: object
+                    properties:
+                      jobId: { type: string }
+
+  /api/runs/jobs/{jobId}/events:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Runs]
+      summary: Subscribe to run job events (SSE)
+      operationId: streamRunJobEvents
+      responses:
+        "200":
+          description: "`text/event-stream` containing run job events (`started`, `log`, `completed`, `error`)"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: message
+                  data: {"type":"log","ts":"2026-02-26T19:40:11.000Z","payload":{"message":"Running evaluation (1 run(s) per scenario) ..."}}
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs/jobs/{jobId}/stop:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      tags: [Runs]
+      summary: Stop an active run job
+      operationId: stopRunJob
+      responses:
+        "200":
+          description: Stop acknowledgement / current status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status]
+                properties:
+                  ok: { type: boolean }
+                  status:
+                    type: string
+                    enum: [running, stopped, completed, error]
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Runs]
+      summary: Get run results JSON wrapper
+      operationId: getRun
+      responses:
+        "200":
+          description: Run payload
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runId, results]
+                properties:
+                  runId: { type: string }
+                  results:
+                    $ref: "#/components/schemas/ResultsJson"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Runs]
+      summary: Delete a saved run directory
+      operationId: deleteRun
+      responses:
+        "200":
+          description: Delete acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs/{runId}/trace:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Runs]
+      summary: Get persisted scenario run trace records for a run
+      operationId: getRunTrace
+      responses:
+        "200":
+          description: Run trace records (v3 scenario_run records)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runId, records]
+                properties:
+                  runId: { type: string }
+                  records:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScenarioRunTraceRecord"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs/{runId}/assistant:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      summary: Legacy stateless result assistant chat for a run
+      operationId: askRunAssistantLegacy
+      description: |
+        Legacy endpoint that sends a single chat request with provided messages and returns one assistant reply.
+        Prefer the `/api/result-assistant/sessions/*` endpoints for the interactive assistant experience.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [role, text]
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant]
+                      text:
+                        type: string
+      responses:
+        "200":
+          description: Assistant reply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reply, assistantAgentName, provider, model]
+                properties:
+                  reply: { type: string }
+                  assistantAgentName: { type: string }
+                  provider: { type: string }
+                  model: { type: string }
+        "400":
+          $ref: "#/components/responses/Error400"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  /api/runs/{runId}/assistant/apply-report:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Runs]
+      summary: Write a markdown report via MCPLab MCP tool
+      operationId: applyRunAssistantReport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [markdown]
+              properties:
+                markdown:
+                  type: string
+                outputPath:
+                  type: string
+                  description: Optional report path under workspace; defaults to `mcplab/reports/result-assistant/...`
+                overwrite:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Tool execution result wrapper
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, runId, outputPath, tool, result]
+                properties:
+                  ok: { type: boolean, const: true }
+                  runId: { type: string }
+                  outputPath: { type: string }
+                  tool: { type: string }
+                  result:
+                    description: Raw tool result from `mcplab_write_markdown_report`
+                    type: object
+                    additionalProperties: true
+                  path:
+                    type: string
+                    description: Resolved output path if available in tool structured content
+        "400":
+          $ref: "#/components/responses/Error400"
+        "500":
+          $ref: "#/components/responses/Error500"
+
+  /api/result-assistant/sessions:
+    post:
+      tags: [Result Assistant]
+      summary: Create a result assistant session for a run
+      operationId: createResultAssistantSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [runId]
+              properties:
+                runId: { type: string }
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultAssistantSessionEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/result-assistant/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [Result Assistant]
+      summary: Get result assistant session state
+      operationId: getResultAssistantSession
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/ResultAssistantSessionView"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Result Assistant]
+      summary: Close/delete result assistant session
+      operationId: deleteResultAssistantSession
+      responses:
+        "200":
+          description: Deletion acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /api/result-assistant/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [Result Assistant]
+      summary: Send a user message to the result assistant
+      operationId: sendResultAssistantMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        "200":
+          description: Updated session + assistant turn response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultAssistantTurnEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/result-assistant/sessions/{sessionId}/tool-calls/{callId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [Result Assistant]
+      summary: Approve a pending result assistant tool call
+      operationId: approveResultAssistantToolCall
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                argumentsOverride:
+                  description: Optional replacement arguments before execution
+      responses:
+        "200":
+          description: Updated session + next assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultAssistantTurnEnvelope"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+
+  /api/result-assistant/sessions/{sessionId}/tool-calls/{callId}/deny:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [Result Assistant]
+      summary: Deny a pending result assistant tool call
+      operationId: denyResultAssistantToolCall
+      responses:
+        "200":
+          description: Updated session + next assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultAssistantTurnEnvelope"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+
+  /api/scenario-assistant/sessions:
+    post:
+      tags: [Scenario Assistant]
+      summary: Create a scenario assistant session
+      operationId: createScenarioAssistantSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScenarioAssistantCreateRequest"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioAssistantSessionEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/scenario-assistant/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [Scenario Assistant]
+      summary: Get scenario assistant session state
+      operationId: getScenarioAssistantSession
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/ScenarioAssistantSessionView"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Scenario Assistant]
+      summary: Close/delete scenario assistant session
+      operationId: deleteScenarioAssistantSession
+      responses:
+        "200":
+          description: Deletion acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /api/scenario-assistant/sessions/{sessionId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [Scenario Assistant]
+      summary: Send a user message to the scenario assistant
+      operationId: sendScenarioAssistantMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        "200":
+          description: Updated session + assistant turn response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioAssistantTurnEnvelope"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/scenario-assistant/sessions/{sessionId}/tool-calls/{callId}/approve:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [Scenario Assistant]
+      summary: Approve a pending scenario assistant tool call
+      operationId: approveScenarioAssistantToolCall
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                argumentsOverride: {}
+      responses:
+        "200":
+          description: Updated session + next assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioAssistantTurnEnvelope"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+
+  /api/scenario-assistant/sessions/{sessionId}/tool-calls/{callId}/deny:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/CallId"
+    post:
+      tags: [Scenario Assistant]
+      summary: Deny a pending scenario assistant tool call
+      operationId: denyScenarioAssistantToolCall
+      responses:
+        "200":
+          description: Updated session + next assistant response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScenarioAssistantTurnEnvelope"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+
+  /api/markdown-reports:
+    get:
+      tags: [Markdown Reports]
+      summary: List markdown reports under `mcplab/reports`
+      operationId: listMarkdownReports
+      responses:
+        "200":
+          description: Markdown report listing
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [root, exists, items]
+                properties:
+                  root: { type: string }
+                  exists: { type: boolean }
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MarkdownReportSummary"
+
+  /api/markdown-reports/content:
+    get:
+      tags: [Markdown Reports]
+      summary: Read markdown report content by path
+      operationId: getMarkdownReportContent
+      parameters:
+        - in: query
+          name: path
+          required: true
+          schema:
+            type: string
+          description: Relative path under `mcplab/reports` (or workspace-relative path accepted by the route)
+      responses:
+        "200":
+          description: Markdown report content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkdownReportContent"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "413":
+          description: Report too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/tool-analysis/discover-tools:
+    post:
+      tags: [Tool Analysis]
+      summary: Discover MCP tools for a single server (preflight)
+      operationId: discoverToolsForAnalysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverNames]
+              properties:
+                serverNames:
+                  type: array
+                  items: { type: string }
+                  minItems: 1
+      responses:
+        "200":
+          description: Tool discovery result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolAnalysisDiscoverResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/tool-analysis/jobs:
+    post:
+      tags: [Tool Analysis]
+      summary: Start a tool analysis async job
+      operationId: startToolAnalysisJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverNames, modes]
+              properties:
+                assistantAgentName:
+                  type: string
+                serverNames:
+                  type: array
+                  items: { type: string }
+                selectedToolsByServer:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items: { type: string }
+                modes:
+                  type: object
+                  required: [metadataReview, deeperAnalysis]
+                  properties:
+                    metadataReview: { type: boolean }
+                    deeperAnalysis: { type: boolean }
+                deeperAnalysisOptions:
+                  type: object
+                  properties:
+                    sampleCallsPerTool:
+                      type: integer
+                      minimum: 1
+                      maximum: 5
+                    toolCallTimeoutMs:
+                      type: integer
+                      minimum: 1000
+                      maximum: 60000
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId]
+                properties:
+                  jobId: { type: string }
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/tool-analysis/jobs/{jobId}/events:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Tool Analysis]
+      summary: Subscribe to tool analysis job events (SSE)
+      operationId: streamToolAnalysisJobEvents
+      responses:
+        "200":
+          description: "`text/event-stream` job events"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/tool-analysis/jobs/{jobId}/result:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Tool Analysis]
+      summary: Get tool analysis job result after completion
+      operationId: getToolAnalysisJobResult
+      responses:
+        "200":
+          description: Tool analysis report
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, report]
+                properties:
+                  jobId: { type: string }
+                  savedReportId: { type: string }
+                  report:
+                    $ref: "#/components/schemas/ToolAnalysisReport"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+
+  /api/tool-analysis/jobs/{jobId}/stop:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      tags: [Tool Analysis]
+      summary: Stop an active tool analysis job
+      operationId: stopToolAnalysisJob
+      responses:
+        "200":
+          description: Stop acknowledgement / current status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status]
+                properties:
+                  ok: { type: boolean }
+                  status:
+                    type: string
+                    enum: [running, stopped, completed, error]
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/tool-analysis-results:
+    get:
+      tags: [Tool Analysis]
+      summary: List saved tool analysis reports
+      operationId: listToolAnalysisResults
+      responses:
+        "200":
+          description: Saved report summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ToolAnalysisResultSummary"
+
+  /api/tool-analysis-results/{reportId}:
+    parameters:
+      - $ref: "#/components/parameters/ReportId"
+    get:
+      tags: [Tool Analysis]
+      summary: Get saved tool analysis report
+      operationId: getToolAnalysisSavedResult
+      responses:
+        "200":
+          description: Saved report record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedToolAnalysisReportRecord"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+    delete:
+      tags: [Tool Analysis]
+      summary: Delete saved tool analysis report
+      operationId: deleteToolAnalysisSavedResult
+      responses:
+        "200":
+          description: Delete acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions:
+    post:
+      tags: [OAuth Debugger]
+      summary: Create an OAuth debugger session
+      operationId: createOAuthDebuggerSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthDebuggerSessionConfigInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessionId, session]
+                properties:
+                  sessionId: { type: string }
+                  session:
+                    $ref: "#/components/schemas/OAuthDebuggerSessionView"
+        "400":
+          $ref: "#/components/responses/Error400"
+
+  /api/oauth-debugger/sessions/{sessionId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [OAuth Debugger]
+      summary: Get OAuth debugger session state
+      operationId: getOAuthDebuggerSession
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/OAuthDebuggerSessionView"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions/{sessionId}/events:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [OAuth Debugger]
+      summary: Subscribe to OAuth debugger session events (SSE)
+      operationId: streamOAuthDebuggerEvents
+      responses:
+        "200":
+          description: "`text/event-stream` session events"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions/{sessionId}/authorize:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [OAuth Debugger]
+      summary: Redirect browser to authorization URL (if available)
+      operationId: oauthDebuggerAuthorizeRedirect
+      responses:
+        "302":
+          description: Redirect to authorization URL
+          headers:
+            location:
+              schema:
+                type: string
+        "404":
+          description: Session not found (plain text)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "409":
+          description: Authorization URL not available yet (plain text)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/oauth-debugger/sessions/{sessionId}/callback:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      tags: [OAuth Debugger]
+      summary: Browser callback endpoint for local OAuth redirect mode
+      operationId: oauthDebuggerBrowserCallback
+      responses:
+        "200":
+          description: Callback captured acknowledgement (plain text)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: Session not found (plain text)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/oauth-debugger/sessions/{sessionId}/start:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [OAuth Debugger]
+      summary: Start or resume OAuth debugger flow
+      operationId: startOAuthDebuggerSession
+      responses:
+        "200":
+          description: Updated session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/OAuthDebuggerSessionView"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions/{sessionId}/manual-callback:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [OAuth Debugger]
+      summary: Submit manual callback data (code/state/redirect URL)
+      operationId: submitOAuthDebuggerManualCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                redirectUrl: { type: string }
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200":
+          description: Updated session state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/OAuthDebuggerSessionView"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions/{sessionId}/stop:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    post:
+      tags: [OAuth Debugger]
+      summary: Stop an OAuth debugger session
+      operationId: stopOAuthDebuggerSession
+      responses:
+        "200":
+          description: Stop acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status]
+                properties:
+                  ok: { type: boolean }
+                  status:
+                    type: string
+                    enum: [configuring, running, waiting_for_user, waiting_for_browser_callback, completed, error, stopped]
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/oauth-debugger/sessions/{sessionId}/export:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - in: query
+        name: format
+        required: false
+        schema:
+          type: string
+          enum: [json, markdown, raw]
+          default: json
+    get:
+      tags: [OAuth Debugger]
+      summary: Export OAuth debugger session (json, markdown, or raw trace)
+      operationId: exportOAuthDebuggerSession
+      responses:
+        "200":
+          description: Exported session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, raw]
+                properties:
+                  session:
+                    $ref: "#/components/schemas/OAuthDebuggerSessionView"
+                  raw:
+                    type: object
+                    additionalProperties: true
+            text/plain:
+              schema:
+                type: string
+            text/markdown:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+components:
+  parameters:
+    ConfigId:
+      name: configId
+      in: path
+      required: true
+      schema: { type: string }
+      description: Encoded config id/path token used by the app-server.
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { type: string }
+    SnapshotId:
+      name: snapshotId
+      in: path
+      required: true
+      schema: { type: string }
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema: { type: string }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string }
+    CallId:
+      name: callId
+      in: path
+      required: true
+      schema: { type: string }
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Error400:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error404:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error409:
+      description: Conflict / invalid state transition
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Error500:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      additionalProperties: true
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    ProviderModelsResponse:
+      type: object
+      required: [provider, items, kind, source]
+      properties:
+        provider:
+          type: string
+          enum: [anthropic, openai, azure]
+        items:
+          type: array
+          items: { type: string }
+        kind:
+          type: string
+          enum: [models, deployments]
+        source:
+          type: string
+    WorkspaceSettings:
+      type: object
+      required: [workspaceRoot, configsDir, runsDir, snapshotsDir, librariesDir]
+      properties:
+        workspaceRoot: { type: string }
+        configsDir: { type: string }
+        runsDir: { type: string }
+        snapshotsDir: { type: string }
+        librariesDir: { type: string }
+        toolAnalysisResultsDir: { type: string }
+        scenarioAssistantAgentName: { type: string }
+      additionalProperties: true
+    LibrariesPayload:
+      type: object
+      required: [servers, agents, scenarios]
+      properties:
+        servers:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+        agents:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+        scenarios:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    CoreEvalConfig:
+      type: object
+      description: Raw MCPLab core EvalConfig object persisted as YAML.
+      additionalProperties: true
+    WorkspaceConfigRecord:
+      type: object
+      required: [id, name, path, mtime, hash]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        path: { type: string }
+        mtime: { type: string, format: date-time }
+        hash: { type: string }
+        config:
+          $ref: "#/components/schemas/CoreEvalConfig"
+        error: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+      additionalProperties: true
+    WorkspaceRunSummary:
+      type: object
+      required: [runId, path, timestamp, configHash, totalScenarios, totalRuns, passRate, avgToolCalls, avgLatencyMs]
+      properties:
+        runId: { type: string }
+        path: { type: string }
+        timestamp: { type: string, format: date-time }
+        configHash: { type: string }
+        totalScenarios: { type: integer }
+        totalRuns: { type: integer }
+        passRate: { type: number }
+        avgToolCalls: { type: number }
+        avgLatencyMs: { type: number }
+    ResultsJson:
+      type: object
+      description: Core `results.json` payload from `@inspectr/mcplab-core`.
+      properties:
+        metadata:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+        scenarios:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    SnapshotRecord:
+      type: object
+      description: Snapshot baseline record (schema_version 2)
+      required: [schema_version, id, name, created_at, source_run_id, config_hash, source_summary, items]
+      properties:
+        schema_version: { type: integer }
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        source_run_id: { type: string }
+        config_hash: { type: string }
+        source_summary:
+          type: object
+          additionalProperties: true
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    SnapshotComparison:
+      type: object
+      required: [snapshot_id, run_id, overall_score, scenario_results]
+      properties:
+        snapshot_id: { type: string }
+        run_id: { type: string }
+        overall_score: { type: number }
+        scenario_results:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    ScenarioRunTraceRecord:
+      type: object
+      description: Persisted run-level trace record (`type=scenario_run`, trace_version=3)
+      required: [type, trace_version, run_index, scenario_id, agent, provider, model, ts_start, ts_end, pass, messages]
+      properties:
+        type:
+          type: string
+          const: scenario_run
+        trace_version:
+          type: integer
+          const: 3
+        run_index:
+          type: integer
+        scenario_id:
+          type: string
+        agent:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        ts_start:
+          type: string
+          format: date-time
+        ts_end:
+          type: string
+          format: date-time
+        pass:
+          type: boolean
+        messages:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        metrics:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+    ResultAssistantSessionEnvelope:
+      type: object
+      required: [sessionId, session]
+      properties:
+        sessionId: { type: string }
+        session:
+          $ref: "#/components/schemas/ResultAssistantSessionView"
+    ResultAssistantSessionView:
+      type: object
+      required: [id, runId, createdAt, updatedAt, selectedAssistantAgentName, model, provider, messages, pendingToolCalls]
+      properties:
+        id: { type: string }
+        runId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        selectedAssistantAgentName: { type: string }
+        model: { type: string }
+        provider: { type: string }
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultAssistantSessionMessage"
+        pendingToolCalls:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssistantPendingToolCall"
+    ResultAssistantSessionMessage:
+      type: object
+      required: [id, role, text, createdAt]
+      properties:
+        id: { type: string }
+        role:
+          type: string
+          enum: [user, assistant, tool, system]
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+        pendingToolCallId: { type: string }
+        toolRequestServer: { type: string }
+        toolRequestName: { type: string }
+        toolRequestPublicName: { type: string }
+    AssistantPendingToolCall:
+      type: object
+      required: [id, server, tool, publicToolName, status, createdAt]
+      properties:
+        id: { type: string }
+        server: { type: string }
+        tool: { type: string }
+        publicToolName: { type: string }
+        arguments:
+          description: Tool arguments payload
+        status:
+          type: string
+          enum: [pending, approved, denied, error]
+        createdAt: { type: string, format: date-time }
+        resultPreview: { type: string }
+        error: { type: string }
+      additionalProperties: true
+    ResultAssistantTurnResponse:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [assistant_message, tool_call_request]
+        text: { type: string }
+        pendingToolCall:
+          $ref: "#/components/schemas/AssistantPendingToolCall"
+    ResultAssistantTurnEnvelope:
+      type: object
+      required: [session, response]
+      properties:
+        session:
+          $ref: "#/components/schemas/ResultAssistantSessionView"
+        response:
+          $ref: "#/components/schemas/ResultAssistantTurnResponse"
+    ScenarioAssistantCreateRequest:
+      type: object
+      required: [scenarioId, context]
+      properties:
+        configPath:
+          type: string
+          description: Optional config path (absolute or relative to configsDir)
+        scenarioId:
+          type: string
+        selectedAssistantAgentName:
+          type: string
+        context:
+          type: object
+          required: [scenario]
+          properties:
+            configSnapshotPolicy:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                mode:
+                  type: string
+                  enum: [warn, fail_on_drift]
+                baselineSnapshotId: { type: string }
+            scenario:
+              type: object
+              required: [id, name, prompt, serverNames, evalRules, extractRules]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                prompt: { type: string }
+                serverNames:
+                  type: array
+                  items: { type: string }
+                evalRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type: { type: string }
+                      value: { type: string }
+                    additionalProperties: true
+                extractRules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      pattern: { type: string }
+                    additionalProperties: true
+                snapshotEval:
+                  type: object
+                  additionalProperties: true
+            availableServers:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  url: { type: string }
+                additionalProperties: true
+            availableAgents:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  provider: { type: string }
+                  model: { type: string }
+                additionalProperties: true
+          additionalProperties: true
+    ScenarioAssistantSessionEnvelope:
+      type: object
+      required: [sessionId, session]
+      properties:
+        sessionId: { type: string }
+        session:
+          $ref: "#/components/schemas/ScenarioAssistantSessionView"
+    ScenarioAssistantSessionView:
+      type: object
+      required: [id, createdAt, updatedAt, selectedAssistantAgentName, model, provider, warnings, toolsLoaded, toolServers, messages, pendingToolCalls]
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        selectedAssistantAgentName: { type: string }
+        model: { type: string }
+        provider: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+        toolsLoaded:
+          type: integer
+        toolServers:
+          type: array
+          items: { type: string }
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScenarioAssistantSessionMessage"
+        pendingToolCalls:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssistantPendingToolCall"
+    ScenarioAssistantSessionMessage:
+      type: object
+      required: [id, role, text, createdAt]
+      properties:
+        id: { type: string }
+        role:
+          type: string
+          enum: [user, assistant, tool, system]
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+        pendingToolCallId: { type: string }
+        toolRequestServer: { type: string }
+        toolRequestName: { type: string }
+        toolRequestPublicName: { type: string }
+        suggestions:
+          type: object
+          additionalProperties: true
+    ScenarioAssistantTurnResponse:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [assistant_message, tool_call_request]
+        text: { type: string }
+        suggestions:
+          type: object
+          additionalProperties: true
+        pendingToolCall:
+          $ref: "#/components/schemas/AssistantPendingToolCall"
+    ScenarioAssistantTurnEnvelope:
+      type: object
+      required: [session, response]
+      properties:
+        session:
+          $ref: "#/components/schemas/ScenarioAssistantSessionView"
+        response:
+          $ref: "#/components/schemas/ScenarioAssistantTurnResponse"
+    MarkdownReportSummary:
+      type: object
+      required: [path, relativePath, name, sizeBytes, mtime]
+      properties:
+        path: { type: string }
+        relativePath: { type: string }
+        name: { type: string }
+        sizeBytes: { type: integer }
+        mtime: { type: string, format: date-time }
+    MarkdownReportContent:
+      type: object
+      required: [root, path, relativePath, name, sizeBytes, mtime, content]
+      properties:
+        root: { type: string }
+        path: { type: string }
+        relativePath: { type: string }
+        name: { type: string }
+        sizeBytes: { type: integer }
+        mtime: { type: string, format: date-time }
+        content: { type: string }
+    ToolAnalysisDiscoverResponse:
+      type: object
+      required: [servers]
+      properties:
+        servers:
+          type: array
+          items:
+            type: object
+            required: [serverName, warnings, tools]
+            properties:
+              serverName: { type: string }
+              warnings:
+                type: array
+                items: { type: string }
+              tools:
+                type: array
+                items:
+                  type: object
+                  required: [name, safetyClassification, classificationReason]
+                  properties:
+                    name: { type: string }
+                    description: { type: string }
+                    inputSchema:
+                      type: object
+                      additionalProperties: true
+                    safetyClassification:
+                      type: string
+                      enum: [read_like, unsafe_or_unknown]
+                    classificationReason:
+                      type: string
+                  additionalProperties: true
+    ToolAnalysisReport:
+      type: object
+      description: Full tool analysis report payload (shape may evolve)
+      properties:
+        schemaVersion: { type: integer }
+        createdAt: { type: string, format: date-time }
+        assistantAgentName: { type: string }
+        assistantAgentModel: { type: string }
+        modes:
+          type: object
+          additionalProperties: true
+        settings:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+        servers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        findings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+    SavedToolAnalysisReportRecord:
+      type: object
+      required: [recordVersion, reportId, createdAt, sourceJobId, serverNames, report]
+      properties:
+        recordVersion: { type: integer }
+        reportId: { type: string }
+        createdAt: { type: string, format: date-time }
+        sourceJobId: { type: string }
+        serverNames:
+          type: array
+          items: { type: string }
+        report:
+          $ref: "#/components/schemas/ToolAnalysisReport"
+      additionalProperties: true
+    ToolAnalysisResultSummary:
+      type: object
+      required: [reportId, createdAt, assistantAgentName, assistantAgentModel, serverNames, modes, summary]
+      properties:
+        reportId: { type: string }
+        createdAt: { type: string, format: date-time }
+        assistantAgentName: { type: string }
+        assistantAgentModel: { type: string }
+        serverNames:
+          type: array
+          items: { type: string }
+        modes:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+    OAuthDebuggerSessionConfigInput:
+      type: object
+      required: [profile, target, registrationMethod, clientConfig, runtime]
+      properties:
+        profile:
+          type: string
+          const: latest
+        target:
+          type: object
+          required: [serverName]
+          properties:
+            serverName: { type: string }
+            overrides:
+              type: object
+              properties:
+                authorizationServerMetadataUrl: { type: string }
+                authorizationEndpoint: { type: string }
+                tokenEndpoint: { type: string }
+                registrationEndpoint: { type: string }
+                cimdUrl: { type: string }
+                resourceBaseUrl: { type: string }
+              additionalProperties: false
+        registrationMethod:
+          type: string
+          enum: [pre_registered, dcr, cimd]
+        clientConfig:
+          type: object
+          properties:
+            preRegistered:
+              type: object
+              properties:
+                clientId: { type: string }
+                clientSecret: { type: string }
+                tokenEndpointAuthMethod: { type: string }
+            dcr:
+              type: object
+              properties:
+                metadata:
+                  type: object
+                  additionalProperties: true
+                tokenEndpointAuthMethod: { type: string }
+            cimd:
+              type: object
+              properties:
+                cimdUrl: { type: string }
+                expectedClientId: { type: string }
+          additionalProperties: false
+        runtime:
+          type: object
+          required: [redirectMode]
+          properties:
+            redirectMode:
+              type: string
+              enum: [local_callback, manual]
+            scopes:
+              type: array
+              items: { type: string }
+            resource: { type: string }
+            usePkce: { type: boolean }
+            codeChallengeMethod:
+              type: string
+              enum: [S256]
+            state: { type: string }
+            nonce: { type: string }
+            extraAuthParams:
+              type: object
+              additionalProperties:
+                type: string
+        display:
+          type: object
+          properties:
+            showSensitiveValues: { type: boolean }
+      additionalProperties: false
+    OAuthDebuggerSessionView:
+      type: object
+      description: UI-friendly OAuth debugger session view (shape may evolve)
+      required: [id, status, createdAt, updatedAt, profile, registrationMethod, stepStates, validations, network, networkSummary, sequence, uiHints]
+      properties:
+        id: { type: string }
+        status:
+          type: string
+          enum: [configuring, running, waiting_for_user, waiting_for_browser_callback, completed, error, stopped]
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        profile: { type: string, const: latest }
+        registrationMethod:
+          type: string
+          enum: [pre_registered, dcr, cimd]
+        stepStates:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        validations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        network:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        networkSummary:
+          type: object
+          required: [requestCount, errorCount]
+          properties:
+            requestCount: { type: integer }
+            errorCount: { type: integer }
+        sequence:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        uiHints:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
