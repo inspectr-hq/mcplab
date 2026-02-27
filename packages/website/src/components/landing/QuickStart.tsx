@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check, FlaskConical, BarChart3, Microscope } from "lucide-react";
+import { Copy, Check, FlaskConical, BarChart3, Microscope, Sparkles } from "lucide-react";
 
 const CopyButton = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
@@ -95,8 +95,9 @@ const QuickStart = () => {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="font-display text-3xl font-bold mb-2">
-              <span className="text-secondary">AI-Powered</span> Tools
+            <h2 className="font-display text-3xl font-bold mb-2 flex items-center gap-2">
+              <Sparkles className="w-7 h-7 text-secondary" />
+              <span><span className="text-secondary">AI-Powered</span> Tools</span>
             </h2>
             <p className="text-muted-foreground mb-8">Built-in AI assistants to supercharge your workflow.</p>
 
