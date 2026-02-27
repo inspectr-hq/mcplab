@@ -55,10 +55,13 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 ### 1. Install
 
 ```bash
-git clone https://github.com/inspectr-hq/mcplab.git
-cd mcp-lab
-npm install
-npm run build
+npx @inspectr/mcplab --help
+```
+
+Or install globally:
+
+```bash
+npm install -g @inspectr/mcplab
 ```
 
 ### 2. Set up environment
@@ -74,10 +77,10 @@ cp .env.example .env
 
 ```bash
 # Run the app (frontend + local API bridge)
-mcplab app --open
+npx @inspectr/mcplab app --open
 
 # Run an evaluation from a config file
-mcplab run -c mcplab/evals/eval.yaml
+npx @inspectr/mcplab run -c mcplab/evals/eval.yaml
 
 # View the results
 open mcplab/results/evaluation-runs/$(ls -t mcplab/results/evaluation-runs | head -1)/report.html
