@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, FlaskConical, BarChart3, Microscope } from "lucide-react";
 
 const CopyButton = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
@@ -104,26 +104,28 @@ const QuickStart = () => {
               {[
                 {
                   title: "Scenario Assistant",
-                  emoji: "🧪",
+                  Icon: FlaskConical,
                   description: "AI chat to help design and refine evaluation scenarios. Describe what you want to test and get ready-to-use YAML configurations.",
                 },
                 {
                   title: "Result Assistant",
-                  emoji: "📊",
+                  Icon: BarChart3,
                   description: "AI chat to analyze and explain completed run results. Understand failures, spot patterns, and get actionable improvement suggestions.",
                 },
                 {
                   title: "MCP Tool Analysis",
-                  emoji: "🔍",
+                  Icon: Microscope,
                   description: "Automated review of your MCP tool definitions for quality, safety, and LLM-friendliness. Get recommendations before testing.",
                 },
-              ].map((tool, i) => (
+              ].map((tool) => (
                 <div
                   key={tool.title}
                   className="rounded-xl border border-border bg-card p-5 hover:border-secondary/30 transition-colors"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">{tool.emoji}</span>
+                    <div className="w-9 h-9 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                      <tool.Icon className="w-5 h-5 text-secondary" />
+                    </div>
                     <div>
                       <h3 className="font-display font-semibold mb-1">{tool.title}</h3>
                       <p className="text-sm text-muted-foreground leading-relaxed">{tool.description}</p>
