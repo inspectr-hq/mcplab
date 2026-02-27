@@ -355,7 +355,7 @@ Create a smart baseline from a fully passing run, then compare later runs agains
 
 ```bash
 # Create a snapshot (source run must be fully passing)
-mcplab snapshot create --run 20260208-140213 --name "trendminer-baseline-v1"
+mcplab snapshot create --run 20260208-140213 --name "weather-api-baseline-v1"
 
 # List snapshots
 mcplab snapshot list
@@ -628,8 +628,8 @@ for (const scenario of results.scenarios) {
 Auto-generate multi-agent configs:
 
 ```bash
-# Creates eval-trendminer-multi-llm.yaml
-node scripts/generate-multi-llm-config.mjs examples/eval-trendminer.yaml
+# Creates eval-weather-multi-llm.yaml
+node scripts/generate-multi-llm-config.mjs examples/eval-weather.yaml
 ```
 
 ### Compare LLM Performance
@@ -725,6 +725,6 @@ Built with:
 
 **⭐ Star this repo if you find it useful!**
 
-Made with ❤️ by Inspectr for the MCP community
+Made with ❤️ by [Inspectr](https://inspectr.dev) for the MCP community
 
 </div>
