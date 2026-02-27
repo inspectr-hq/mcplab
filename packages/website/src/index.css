@@ -53,13 +53,8 @@
   }
 
   body {
-    @apply text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', 'Space Grotesk', sans-serif;
-    background-color: hsl(var(--background));
-    background-image:
-      radial-gradient(ellipse 130% 60% at 50% -5%, hsl(25 95% 53% / 0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 90% 55% at 5% 50%, hsl(195 80% 40% / 0.14) 0%, transparent 50%),
-      radial-gradient(ellipse 80% 50% at 95% 80%, hsl(25 95% 53% / 0.12) 0%, transparent 45%);
   }
 
   h1, h2, h3, h4, h5, h6 {
