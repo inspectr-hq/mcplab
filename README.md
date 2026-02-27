@@ -517,31 +517,30 @@ mcplab/
 
 ## 🎓 Real-World Examples
 
-### Example 1: TrendMiner MCP Server
+### Example 1: Weather MCP Server
 
-Test an industrial data analytics MCP server:
+Test a weather data MCP server:
 
 ```bash
 # Run comprehensive test suite (9 scenarios)
-mcplab run -c examples/eval-trendminer-comprehensive.yaml
+mcplab run -c examples/eval-weather-comprehensive.yaml
 
-# Test specific batch quality investigation
-mcplab run -c examples/eval-trendminer-comprehensive.yaml \
-  -s batch-quality-investigation
+# Test a specific scenario
+mcplab run -c examples/eval-weather-comprehensive.yaml \
+  -s forecast-accuracy
 
 # Compare Claude vs GPT-4 on all scenarios
-mcplab run -c examples/eval-trendminer-simple.yaml \
+mcplab run -c examples/eval-weather-simple.yaml \
   --agents claude-haiku,gpt-4o-mini
 ```
 
 **Included scenarios:**
-- Tag search and discovery
-- Asset hierarchy navigation
-- Data availability checking
-- Time-series data retrieval
-- Value-based event search
-- Batch quality investigation (real-world use case)
-- TrendHub session creation
+- Current conditions lookup
+- Multi-day forecast retrieval
+- Location search and resolution
+- Severe weather alerts
+- Historical data queries
+- Unit conversion (metric/imperial)
 
 ### Example 2: Multi-Agent Comparison
 
