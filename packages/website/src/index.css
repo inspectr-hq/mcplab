@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --background: 220 40% 5%;
+    --background: 195 100% 7%;
     --foreground: 210 40% 92%;
 
     --card: 220 35% 8%;
@@ -15,7 +15,7 @@
     --popover: 220 35% 8%;
     --popover-foreground: 210 40% 92%;
 
-    --primary: 163 100% 42%;
+    --primary: 25 95% 53%;
     --primary-foreground: 220 40% 5%;
 
     --secondary: 39 90% 53%;
@@ -32,18 +32,18 @@
 
     --border: 220 25% 16%;
     --input: 220 25% 16%;
-    --ring: 163 100% 42%;
+    --ring: 25 95% 53%;
 
     --radius: 0.75rem;
 
     --sidebar-background: 220 35% 8%;
     --sidebar-foreground: 210 40% 92%;
-    --sidebar-primary: 163 100% 42%;
+    --sidebar-primary: 25 95% 53%;
     --sidebar-primary-foreground: 220 40% 5%;
     --sidebar-accent: 220 30% 14%;
     --sidebar-accent-foreground: 210 40% 92%;
     --sidebar-border: 220 25% 16%;
-    --sidebar-ring: 163 100% 42%;
+    --sidebar-ring: 25 95% 53%;
   }
 }
 
@@ -80,8 +80,8 @@
 
 /* Glow effects */
 .glow-primary {
-  box-shadow: 0 0 30px -5px hsl(163 100% 42% / 0.3);
+  box-shadow: 0 0 30px -5px hsl(25 95% 53% / 0.3);
 }
 .glow-text {
-  text-shadow: 0 0 40px hsl(163 100% 42% / 0.5);
+  text-shadow: 0 0 40px hsl(25 95% 53% / 0.5);
 }
