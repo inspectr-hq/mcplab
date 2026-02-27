@@ -19,3 +19,5 @@ packages/app/tsconfig.node.tsbuildinfo
 packages/reporting/tsconfig.node.tsbuildinfo
 tsconfig.tsbuildinfo
 .npm-cache
+packages/app/.vite
+docs/plans
