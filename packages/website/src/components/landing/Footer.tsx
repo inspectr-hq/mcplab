@@ -21,7 +21,7 @@ const Footer = () => {
           </div>
           <div className="flex items-center gap-6">
             <a
-              href="https://github.com/inspectr-dev/mcplab"
+              href="https://github.com/inspectr-hq/mcp-lab"
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
