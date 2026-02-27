@@ -55,7 +55,7 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 ### 1. Install
 
 ```bash
-git clone https://github.com/inspectr-hq/mcp-lab.git
+git clone https://github.com/inspectr-hq/mcplab.git
 cd mcp-lab
 npm install
 npm run build
@@ -716,8 +716,8 @@ Built with:
 
 ## Support
 
-- [Issue Tracker](https://github.com/inspectr-hq/mcp-lab/issues)
-- [Discussions](https://github.com/inspectr-hq/mcp-lab/discussions)
+- [Issue Tracker](https://github.com/inspectr-hq/mcplab/issues)
+- [Discussions](https://github.com/inspectr-hq/mcplab/discussions)
 - [MCP Protocol](https://modelcontextprotocol.io)
 
 ---

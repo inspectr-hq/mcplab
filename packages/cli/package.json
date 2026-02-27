@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/inspectr-hq/mcp-lab.git"
+    "url": "git+https://github.com/inspectr-hq/mcplab.git"
   },
   "keywords": [
     "mcp",
@@ -19,6 +19,9 @@
   ],
   "engines": {
     "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "dist/cli.js",
