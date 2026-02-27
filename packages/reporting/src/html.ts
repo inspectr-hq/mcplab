@@ -26,8 +26,8 @@ export function renderHtml(results: ResultsJson): string {
       return `
         <tr data-status="${status}">
           <td><a href="#scenario-${escapeHtml(scenario.scenario_id)}">${escapeHtml(
-            scenario.scenario_id
-          )}</a></td>
+        scenario.scenario_id
+      )}</a></td>
           <td>${escapeHtml(scenario.agent)}</td>
           <td>${scenario.runs.length}</td>
           <td>${passRate}</td>
@@ -92,9 +92,9 @@ export function renderHtml(results: ResultsJson): string {
       return `
         <section id="scenario-${escapeHtml(scenario.scenario_id)}" class="scenario">
           <h3>${escapeHtml(scenario.scenario_id)}</h3>
-          <p><strong>Agent:</strong> ${escapeHtml(scenario.agent)} | <strong>Runs:</strong> ${scenario.runs.length} | <strong>Pass rate:</strong> ${formatPercent(
-            scenario.pass_rate
-          )}</p>
+          <p><strong>Agent:</strong> ${escapeHtml(scenario.agent)} | <strong>Runs:</strong> ${
+        scenario.runs.length
+      } | <strong>Pass rate:</strong> ${formatPercent(scenario.pass_rate)}</p>
 
           <h4>Distinct tool sequences</h4>
           <table>
@@ -259,15 +259,23 @@ export function renderHtml(results: ResultsJson): string {
       Timestamp: ${escapeHtml(results.metadata.timestamp)}<br />
       Config hash: ${escapeHtml(results.metadata.config_hash)}<br />
       CLI version: ${escapeHtml(results.metadata.cli_version)}
-      ${results.metadata.git_commit ? `<br />Git commit: ${escapeHtml(results.metadata.git_commit)}` : ''}
+      ${
+        results.metadata.git_commit
+          ? `<br />Git commit: ${escapeHtml(results.metadata.git_commit)}`
+          : ''
+      }
     </div>
   </header>
 
   <main>
     <section class="tiles">
-      <div class="tile"><strong>Total scenarios</strong><div>${results.summary.total_scenarios}</div></div>
+      <div class="tile"><strong>Total scenarios</strong><div>${
+        results.summary.total_scenarios
+      }</div></div>
       <div class="tile"><strong>Total runs</strong><div>${results.summary.total_runs}</div></div>
-      <div class="tile"><strong>Pass rate</strong><div>${formatPercent(results.summary.pass_rate)}</div></div>
+      <div class="tile"><strong>Pass rate</strong><div>${formatPercent(
+        results.summary.pass_rate
+      )}</div></div>
       <div class="tile"><strong>Avg tool calls/run</strong><div>${results.summary.avg_tool_calls_per_run.toFixed(
         2
       )}</div></div>

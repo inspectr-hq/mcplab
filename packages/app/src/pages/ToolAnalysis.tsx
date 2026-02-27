@@ -76,6 +76,7 @@ const ToolAnalysisPage = () => {
   const [toolQuery, setToolQuery] = useState("");
   const [metadataReview, setMetadataReview] = useState(true);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
+  const [maxParallelTools, setMaxParallelTools] = useState(2);
   const [sampleCallsPerTool, setSampleCallsPerTool] = useState(1);
   const [toolCallTimeoutMs, setToolCallTimeoutMs] = useState(10000);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -290,6 +291,7 @@ const ToolAnalysisPage = () => {
       const { jobId } = await source.startToolAnalysis({
         serverNames: selectedServerNames,
         selectedToolsByServer,
+        maxParallelTools,
         modes: { metadataReview, deeperAnalysis },
         deeperAnalysisOptions: {
           autoRunPolicy: "read_only_allowlist",
@@ -629,8 +631,20 @@ const ToolAnalysisPage = () => {
                 <ModeInfo text="Runs sample MCP tool calls automatically for read-like tools only (based on the safety allowlist)." />
               </span>
             </label>
-            {deeperAnalysis && (
-              <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
+            <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Max parallel tools</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={maxParallelTools}
+                  onChange={(e) => setMaxParallelTools(Math.max(1, Math.min(8, Number(e.target.value) || 2)))}
+                  className="h-8"
+                />
+              </div>
+              {deeperAnalysis ? (
+              <>
                 <div className="space-y-1">
                   <Label className="text-xs">Safety profile</Label>
                   <div className="text-sm">Read-only allowlist only</div>
@@ -661,8 +675,13 @@ const ToolAnalysisPage = () => {
                 <div className="md:col-span-3 text-xs text-amber-700">
                   Deeper analysis may execute read-only MCP tools automatically.
                 </div>
-              </div>
-            )}
+              </>
+              ) : (
+                <div className="md:col-span-2 text-xs text-muted-foreground">
+                  Deeper analysis is disabled. Only metadata/schema review will run.
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

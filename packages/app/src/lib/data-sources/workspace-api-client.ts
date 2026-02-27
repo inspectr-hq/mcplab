@@ -301,6 +301,7 @@ export const workspaceApiClient = {
     assistantAgentName?: string;
     serverNames: string[];
     selectedToolsByServer?: Record<string, string[]>;
+    maxParallelTools?: number;
     modes: { metadataReview: boolean; deeperAnalysis: boolean };
     deeperAnalysisOptions?: {
       autoRunPolicy: 'read_only_allowlist';

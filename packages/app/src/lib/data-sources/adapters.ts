@@ -32,10 +32,10 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       server.auth?.type === 'bearer'
         ? 'bearer'
         : server.auth?.type === 'oauth_client_credentials'
-          ? 'api-key'
-          : server.auth?.type === 'oauth_authorization_code'
-            ? 'oauth2'
-            : 'none';
+        ? 'api-key'
+        : server.auth?.type === 'oauth_authorization_code'
+        ? 'oauth2'
+        : 'none';
     return {
       id,
       name,
@@ -83,7 +83,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       } else {
         evalRules.push({
           type: 'response_contains',
-          value: `${assertion.path}${assertion.equals !== undefined ? ` == ${assertion.equals}` : ''}`
+          value: `${assertion.path}${
+            assertion.equals !== undefined ? ` == ${assertion.equals}` : ''
+          }`
         });
       }
     }
@@ -185,14 +187,14 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
         server.authType === 'bearer'
           ? { type: 'bearer', env: server.authValue || 'MCP_TOKEN' }
           : server.authType === 'oauth2'
-            ? {
-                type: 'oauth_authorization_code',
-                client_id: server.oauthClientId || '',
-                client_secret: server.oauthClientSecret || undefined,
-                redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
-                scope: server.oauthScope || undefined
-              }
-            : undefined
+          ? {
+              type: 'oauth_authorization_code',
+              client_id: server.oauthClientId || '',
+              client_secret: server.oauthClientSecret || undefined,
+              redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+              scope: server.oauthScope || undefined
+            }
+          : undefined
     };
   }
 
@@ -205,8 +207,8 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
         agent.provider === 'azure'
           ? 'azure_openai'
           : agent.provider === 'anthropic'
-            ? 'anthropic'
-            : 'openai',
+          ? 'anthropic'
+          : 'openai',
       model: agent.model,
       temperature: agent.temperature,
       max_tokens: agent.maxTokens,

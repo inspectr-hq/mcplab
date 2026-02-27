@@ -14,7 +14,6 @@ import {
   type ResultsJson
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
-import pkg from '../package.json' with { type: 'json' };
 import { execSync } from 'node:child_process';
 import chokidar from 'chokidar';
 import { stringify as stringifyYaml } from 'yaml';
@@ -29,11 +28,14 @@ import {
   saveSnapshot
 } from './snapshot.js';
 
+const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  ?.version as string;
+
 const program = new Command();
 program
   .name('mcplab')
   .description('Laboratory for testing Model Context Protocol servers')
-  .version(pkg.version);
+  .version(pkgVersion);
 
 program
   .command('run')
@@ -84,7 +86,7 @@ program
         scenarioId: options.scenario,
         configHash: hash,
         gitCommit: getGitCommit(),
-        cliVersion: pkg.version,
+        cliVersion: pkgVersion,
         runsDir: String(options.runsDir)
       });
       let shouldFailOnDrift = false;
@@ -505,7 +507,7 @@ program
           scenarioId: options.scenario,
           configHash: hash,
           gitCommit: getGitCommit(),
-          cliVersion: pkg.version,
+          cliVersion: pkgVersion,
           runsDir: String(options.runsDir)
         });
         const reportPath = join(runDir, 'report.html');

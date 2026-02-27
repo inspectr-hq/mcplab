@@ -224,7 +224,9 @@ export function registerTools(server: McpServer): void {
         const all = listMarkdownReportsFromDisk(root);
         const runFilter = String(run_id ?? '').trim();
         const filtered = runFilter
-          ? all.filter((item) => item.relativePath.includes(runFilter) || item.name.includes(runFilter))
+          ? all.filter(
+              (item) => item.relativePath.includes(runFilter) || item.name.includes(runFilter)
+            )
           : all;
         const capped = filtered.slice(0, limit ?? 20);
         return ok(`Found ${capped.length}/${filtered.length} markdown report(s) in ${root}`, {
@@ -245,7 +247,9 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         path: z
           .string()
-          .describe('Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'),
+          .describe(
+            'Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'
+          ),
         reports_dir: z
           .string()
           .optional()
@@ -272,16 +276,19 @@ export function registerTools(server: McpServer): void {
         }
         const raw = readFileSync(targetPath, 'utf8');
         const preview = truncate(raw, max_chars ?? 20_000);
-        return ok(`Read markdown report ${relative(process.cwd(), targetPath).split(sep).join('/')}`, {
-          reports_dir: root,
-          path: relative(process.cwd(), targetPath).split(sep).join('/'),
-          relativePath: relative(root, targetPath).split(sep).join('/'),
-          name: basename(targetPath),
-          sizeBytes: st.size,
-          mtime: st.mtime.toISOString(),
-          truncated: preview.length < raw.length,
-          content: preview
-        });
+        return ok(
+          `Read markdown report ${relative(process.cwd(), targetPath).split(sep).join('/')}`,
+          {
+            reports_dir: root,
+            path: relative(process.cwd(), targetPath).split(sep).join('/'),
+            relativePath: relative(root, targetPath).split(sep).join('/'),
+            name: basename(targetPath),
+            sizeBytes: st.size,
+            mtime: st.mtime.toISOString(),
+            truncated: preview.length < raw.length,
+            content: preview
+          }
+        );
       });
     }
   );
@@ -1303,10 +1310,10 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
   const scenariosDir = join(bundleRoot, 'scenarios');
 
   const servers = existsSync(serversPath)
-    ? ((parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {})
+    ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
     : {};
   const agents = existsSync(agentsPath)
-    ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
+    ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
     : {};
 
   const scenarioEntries: Array<Record<string, unknown>> = [];
@@ -2075,8 +2082,8 @@ function buildConversationTimeline(
             message.role === 'assistant'
               ? 'agent_message'
               : message.role === 'user'
-                ? 'user_message'
-                : 'tool_text',
+              ? 'user_message'
+              : 'tool_text',
           role: message.role,
           ts: message.ts,
           message_index: messageIndex,

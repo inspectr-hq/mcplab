@@ -31,7 +31,6 @@ import {
   runAll
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
-import pkg from '../../package.json' with { type: 'json' };
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps } from './app-context.js';
 import { asJson, asText, parseBody } from './http.js';
@@ -96,6 +95,9 @@ import {
   loadSnapshot,
   saveSnapshot
 } from '../snapshot.js';
+
+const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
+  ?.version as string;
 
 interface JobEvent {
   type: 'started' | 'log' | 'completed' | 'error';
@@ -218,7 +220,7 @@ export async function startAppServer(options: AppServerOptions) {
     resolveRunSelectedAgents,
     applySnapshotPolicyToRunResult,
     chatWithAgent,
-    pkgVersion: pkg.version
+    pkgVersion
   };
 
   const server = createServer(async (req, res) => {
@@ -251,7 +253,7 @@ export async function startAppServer(options: AppServerOptions) {
       if (pathname === '/api/health' && method === 'GET') {
         asJson(res, 200, {
           ok: true,
-          version: pkg.version,
+          version: pkgVersion,
           mcp: devMcp
             ? {
                 enabled: true,
@@ -478,27 +480,18 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   const url = `http://${options.host}:${options.port}`;
+  const logPath = (label: string, value: string) => {
+    // Keep startup paths visually aligned in terminal output.
+    console.log(`  ${label.padEnd(8)}\t${value}`);
+  };
   // eslint-disable-next-line no-console
   console.log(`mcplab app running at ${url}`);
-  // eslint-disable-next-line no-console
-  console.log(`  evals:   ${settings.evalsDir}`);
-  // eslint-disable-next-line no-console
-  console.log(`  runs:    ${settings.runsDir}`);
-  // eslint-disable-next-line no-console
-  console.log(`  tool analysis results: ${settings.toolAnalysisResultsDir}`);
-  // eslint-disable-next-line no-console
-  console.log(`  libs:    ${settings.librariesDir}`);
-  const legacyToolAnalysis = defaultLegacyToolAnalysisResultsDir(settings.workspaceRoot);
-  if (
-    settings.toolAnalysisResultsDir === defaultNewToolAnalysisResultsDir(settings.workspaceRoot) &&
-    existsSync(legacyToolAnalysis)
-  ) {
-    // eslint-disable-next-line no-console
-    console.log(`  legacy tool analysis fallback: ${legacyToolAnalysis}`);
-  }
+  logPath('evals:', settings.evalsDir);
+  logPath('runs:', settings.runsDir);
+  logPath('analysis:', settings.toolAnalysisResultsDir);
+  logPath('libs:', settings.librariesDir);
   if (devMcp) {
-    // eslint-disable-next-line no-console
-    console.log(`  mcp:     ${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);
+    logPath('mcp:', `${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);
   }
 
   if (options.open) {

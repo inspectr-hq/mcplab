@@ -139,8 +139,9 @@ export async function preloadResultAssistantTools(
     session.tools.push({
       ...tool,
       name: publicName,
-      description:
-        `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${tool.name}]`.trim()
+      description: `${tool.description ?? ''}\n[server=${RESULT_ASSISTANT_MCP_SERVER_NAME} tool=${
+        tool.name
+      }]`.trim()
     });
   }
 }
@@ -163,7 +164,9 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     const mapping = session.toolPublicMap.get(requested.name);
     if (!mapping) {
       throw new Error(
-        `Result Assistant requested unknown tool '${requested.name}'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
+        `Result Assistant requested unknown tool '${
+          requested.name
+        }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
       );
     }
     const pending: ResultAssistantPendingToolCall = {
@@ -255,7 +258,9 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
-    return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${mapping?.tool ?? tool.name}) schema=${schemaText}`;
+    return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${
+      mapping?.tool ?? tool.name
+    }) schema=${schemaText}`;
   });
   const prompt = [
     'You are the MCP Labs Result Assistant.',

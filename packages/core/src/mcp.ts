@@ -69,8 +69,8 @@ export class McpClientManager {
       const tools = Array.isArray(result?.tools)
         ? result.tools
         : Array.isArray(result)
-          ? result
-          : [];
+        ? result
+        : [];
       return tools.map((tool: any) => ({
         name: tool.name,
         description: tool.description,

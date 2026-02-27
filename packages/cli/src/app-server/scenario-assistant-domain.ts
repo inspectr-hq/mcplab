@@ -146,7 +146,9 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
-    return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${mapping?.tool ?? tool.name}) schema=${schemaText}`;
+    return `- ${tool.name} (server=${mapping?.server ?? 'unknown'}, tool=${
+      mapping?.tool ?? tool.name
+    }) schema=${schemaText}`;
   });
   const prompt = [
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
@@ -194,7 +196,9 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
   if (/<html/i.test(raw) || /<!doctype html/i.test(raw)) {
     const code = htmlErrorMatch?.[1];
     const provider = cloudflare ? ' (Cloudflare)' : '';
-    return `Scenario Assistant MCP preload failed for server '${serverName}': Upstream MCP endpoint returned an HTML error page${code ? ` (${code})` : ''}${provider}. Check that the MCP server is reachable and healthy.`;
+    return `Scenario Assistant MCP preload failed for server '${serverName}': Upstream MCP endpoint returned an HTML error page${
+      code ? ` (${code})` : ''
+    }${provider}. Check that the MCP server is reachable and healthy.`;
   }
   return `Scenario Assistant MCP preload failed for server '${serverName}': ${raw}`;
 }
@@ -304,7 +308,9 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
     const mapping = session.toolPublicMap.get(requested.name);
     if (!mapping) {
       throw new Error(
-        `Scenario Assistant requested unknown tool '${requested.name}'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
+        `Scenario Assistant requested unknown tool '${
+          requested.name
+        }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
       );
     }
     const pending: AssistantPendingToolCall = {

@@ -111,6 +111,10 @@ export async function handleToolAnalysisRoutes(params: {
         ? (body.selectedToolsByServer as Record<string, string[]>)
         : undefined;
     const deeperOptions = body.deeperAnalysisOptions ?? {};
+    const maxParallelTools = Math.max(
+      1,
+      Math.min(8, Number(body.maxParallelTools ?? deeperOptions.maxParallelTools ?? 2) || 2)
+    );
     const jobId = `ta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const job: ToolAnalysisJob = {
       id: jobId,
@@ -126,7 +130,8 @@ export async function handleToolAnalysisRoutes(params: {
       payload: {
         serverNames,
         modes,
-        assistantAgentName: body.assistantAgentName ? String(body.assistantAgentName) : null
+        assistantAgentName: body.assistantAgentName ? String(body.assistantAgentName) : null,
+        maxParallelTools
       }
     });
     void (async () => {
@@ -150,7 +155,8 @@ export async function handleToolAnalysisRoutes(params: {
               1000,
               Math.min(60_000, Number(deeperOptions.toolCallTimeoutMs ?? 10_000) || 10_000)
             )
-          }
+          },
+          maxParallelTools
         });
         if (job.result) {
           try {

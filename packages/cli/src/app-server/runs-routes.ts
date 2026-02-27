@@ -212,7 +212,9 @@ export async function handleRunsRoutes(params: {
           type: 'log',
           ts: new Date().toISOString(),
           payload: {
-            message: `Loaded config (${loaded.config.scenarios.length} scenario(s), ${Object.keys(loaded.config.agents ?? {}).length} agent(s), ${Object.keys(loaded.config.servers ?? {}).length} server(s))`
+            message: `Loaded config (${loaded.config.scenarios.length} scenario(s), ${
+              Object.keys(loaded.config.agents ?? {}).length
+            } agent(s), ${Object.keys(loaded.config.servers ?? {}).length} server(s))`
           }
         });
         for (const warning of loaded.warnings ?? []) {
@@ -230,8 +232,8 @@ export async function handleRunsRoutes(params: {
               scenarioIds && scenarioIds.length > 0
                 ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
                 : scenarioId
-                  ? `Selecting requested scenario: ${scenarioId}`
-                  : 'Using all scenarios from config'
+                ? `Selecting requested scenario: ${scenarioId}`
+                : 'Using all scenarios from config'
           }
         });
         const selectedBaseScenarios = selectScenarioIds(
@@ -239,8 +241,8 @@ export async function handleRunsRoutes(params: {
           scenarioIds && scenarioIds.length > 0
             ? scenarioIds
             : scenarioId
-              ? [scenarioId]
-              : undefined
+            ? [scenarioId]
+            : undefined
         );
         addJobEvent(job, {
           type: 'log',
@@ -334,7 +336,9 @@ export async function handleRunsRoutes(params: {
                 type: 'log',
                 ts: new Date().toISOString(),
                 payload: {
-                  message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(', ')}`
+                  message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(
+                    ', '
+                  )}`
                 }
               });
             }
@@ -412,7 +416,9 @@ export async function handleRunsRoutes(params: {
             type: 'log',
             ts: new Date().toISOString(),
             payload: {
-              message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(results.summary.pass_rate * 100)}%`
+              message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
+                results.summary.pass_rate * 100
+              )}%`
             }
           });
           addJobEvent(job, {
@@ -438,8 +444,8 @@ export async function handleRunsRoutes(params: {
             message: aborted
               ? 'Run aborted by user'
               : error instanceof Error
-                ? error.message
-                : String(error)
+              ? error.message
+              : String(error)
           }
         });
         job.status = aborted ? 'stopped' : 'error';
@@ -640,22 +646,36 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
     case 'mcp_connect_finished':
       return `Connected to ${event.serverCount} MCP server(s)`;
     case 'scenario_run_started':
-      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${event.scenarioId} [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
+        event.scenarioId
+      } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
     case 'scenario_run_finished':
-      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${event.toolCallCount} tool call(s))`;
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
+        event.scenarioId
+      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+        event.toolCallCount
+      } tool call(s))`;
     case 'agent_progress': {
       const p = event.event;
       switch (p.type) {
         case 'llm_request_started':
-          return `LLM turn ${p.turn + 1} started for ${p.scenarioId} [${p.agentName}] (${p.provider}/${p.model})`;
+          return `LLM turn ${p.turn + 1} started for ${p.scenarioId} [${p.agentName}] (${
+            p.provider
+          }/${p.model})`;
         case 'llm_response_received':
-          return `LLM turn ${p.turn + 1} response for ${p.scenarioId} [${p.agentName}] (text=${p.hasText ? 'yes' : 'no'}, tool_calls=${p.toolCallCount})`;
+          return `LLM turn ${p.turn + 1} response for ${p.scenarioId} [${p.agentName}] (text=${
+            p.hasText ? 'yes' : 'no'
+          }, tool_calls=${p.toolCallCount})`;
         case 'tool_call_started':
           return `Tool call started: ${p.server}.${p.tool} (turn ${p.turn + 1})`;
         case 'tool_call_finished':
-          return `Tool call ${p.ok ? 'finished' : 'failed'}: ${p.server}.${p.tool} in ${p.durationMs}ms`;
+          return `Tool call ${p.ok ? 'finished' : 'failed'}: ${p.server}.${p.tool} in ${
+            p.durationMs
+          }ms`;
         case 'final_answer':
-          return `Final answer produced for ${p.scenarioId} [${p.agentName}] (text=${p.hasText ? 'yes' : 'no'})`;
+          return `Final answer produced for ${p.scenarioId} [${p.agentName}] (text=${
+            p.hasText ? 'yes' : 'no'
+          })`;
         default:
           return null;
       }

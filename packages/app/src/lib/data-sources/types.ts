@@ -347,6 +347,7 @@ export interface ToolAnalysisReport {
     autoRunPolicy?: 'read_only_allowlist';
     sampleCallsPerTool?: number;
     toolCallTimeoutMs?: number;
+    maxParallelTools?: number;
   };
   summary: {
     serversAnalyzed: number;
@@ -684,6 +685,7 @@ export interface EvalDataSource {
     assistantAgentName?: string;
     serverNames: string[];
     selectedToolsByServer?: Record<string, string[]>;
+    maxParallelTools?: number;
     modes: {
       metadataReview: boolean;
       deeperAnalysis: boolean;

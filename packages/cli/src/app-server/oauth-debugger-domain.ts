@@ -445,8 +445,8 @@ async function fetchWithTrace(params: {
     to: label.toLowerCase().includes('token')
       ? 'Token Endpoint'
       : label.toLowerCase().includes('probe')
-        ? 'MCP/Resource'
-        : 'Auth Server',
+      ? 'MCP/Resource'
+      : 'Auth Server',
     label,
     stepId
   });
@@ -637,8 +637,8 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
           String(session.context.resourceMetadata.authorization_servers[0])
         )
       : session.context.resourceMetadata?.authorization_server
-        ? inferAuthServerMetadataUrl(String(session.context.resourceMetadata.authorization_server))
-        : undefined);
+      ? inferAuthServerMetadataUrl(String(session.context.resourceMetadata.authorization_server))
+      : undefined);
 
   if (authMetadataUrl) {
     const { response, responseJson, responseText } = await fetchWithTrace({
@@ -1128,8 +1128,8 @@ export function createOAuthDebuggerSession(params: {
           runtime.scopes && runtime.scopes.length > 0
             ? runtime.scopes
             : serverOauth?.scope
-              ? serverOauth.scope.split(/\s+/).filter(Boolean)
-              : []
+            ? serverOauth.scope.split(/\s+/).filter(Boolean)
+            : []
       },
       display: {
         showSensitiveValues: params.config.display?.showSensitiveValues !== false
@@ -1176,10 +1176,10 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
         session.status === 'configuring'
           ? 'start'
           : session.status === 'waiting_for_user'
-            ? 'paste_callback_url'
-            : session.status === 'waiting_for_browser_callback'
-              ? 'open_authorize_url'
-              : 'none',
+          ? 'paste_callback_url'
+          : session.status === 'waiting_for_browser_callback'
+          ? 'open_authorize_url'
+          : 'none',
       authorizationUrl: session.context.authorizationRequestUrl,
       callbackMode: session.config.runtime.redirectMode,
       callbackUrl: session.context.callbackUrl

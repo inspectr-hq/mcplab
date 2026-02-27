@@ -27,7 +27,9 @@ export function generateHtmlReport(result: EvalResult): string {
         <span class="scenario-name">${esc(sc.scenarioName)}</span>
         <span class="scenario-agent">${esc(sc.agentName)}</span>
         <span class="mono">${sc.runs.length} runs</span>
-        <span class="badge ${sc.passRate >= 0.8 ? 'badge-pass' : sc.passRate >= 0.5 ? 'badge-warn' : 'badge-fail'}">${Math.round(sc.passRate * 100)}%</span>
+        <span class="badge ${
+          sc.passRate >= 0.8 ? 'badge-pass' : sc.passRate >= 0.5 ? 'badge-warn' : 'badge-fail'
+        }">${Math.round(sc.passRate * 100)}%</span>
         <span class="mono">${sc.avgToolCalls.toFixed(1)} avg tools</span>
       </div>
       <div class="scenario-detail">
@@ -35,13 +37,26 @@ export function generateHtmlReport(result: EvalResult): string {
           .map(
             (run) => `
           <div class="run-row">
-            <span class="run-status ${run.passed ? 'pass' : 'fail'}">${run.passed ? '✓' : '✗'}</span>
+            <span class="run-status ${run.passed ? 'pass' : 'fail'}">${
+              run.passed ? '✓' : '✗'
+            }</span>
             <span class="mono run-label">Run #${run.runIndex + 1}</span>
             <span class="mono run-duration">${run.duration}ms</span>
             <div class="tool-pills">
-              ${run.toolCalls.map((tc) => `<span class="pill">${esc(tc.name)} <small>${tc.duration}ms</small></span>`).join('')}
+              ${run.toolCalls
+                .map(
+                  (tc) =>
+                    `<span class="pill">${esc(tc.name)} <small>${tc.duration}ms</small></span>`
+                )
+                .join('')}
             </div>
-            ${run.failureReasons.length ? `<div class="failure-reasons">${run.failureReasons.map((r) => esc(r)).join(', ')}</div>` : ''}
+            ${
+              run.failureReasons.length
+                ? `<div class="failure-reasons">${run.failureReasons
+                    .map((r) => esc(r))
+                    .join(', ')}</div>`
+                : ''
+            }
           </div>`
           )
           .join('')}
@@ -101,16 +116,34 @@ canvas{max-height:220px}
 <body>
 <div class="header">
   <h1 class="mono">${esc(result.id)}</h1>
-  <span class="badge ${result.overallPassRate >= 0.8 ? 'badge-pass' : result.overallPassRate >= 0.5 ? 'badge-warn' : 'badge-fail'}">${Math.round(result.overallPassRate * 100)}% pass</span>
+  <span class="badge ${
+    result.overallPassRate >= 0.8
+      ? 'badge-pass'
+      : result.overallPassRate >= 0.5
+      ? 'badge-warn'
+      : 'badge-fail'
+  }">${Math.round(result.overallPassRate * 100)}% pass</span>
 </div>
-<p class="sub">${new Date(result.timestamp).toLocaleString()} · Config hash: <span class="mono">${esc(result.configHash)}</span></p>
+<p class="sub">${new Date(
+    result.timestamp
+  ).toLocaleString()} · Config hash: <span class="mono">${esc(result.configHash)}</span></p>
 
 <div class="stats">
-  <div class="stat"><div class="stat-label">Scenarios</div><div class="stat-value">${result.totalScenarios}</div></div>
-  <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value">${result.totalRuns}</div></div>
-  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${Math.round(result.overallPassRate * 100)}%</div></div>
-  <div class="stat"><div class="stat-label">Avg Tool Calls</div><div class="stat-value">${result.avgToolCalls.toFixed(1)}</div></div>
-  <div class="stat"><div class="stat-label">Avg Latency</div><div class="stat-value">${result.avgLatency}ms</div></div>
+  <div class="stat"><div class="stat-label">Scenarios</div><div class="stat-value">${
+    result.totalScenarios
+  }</div></div>
+  <div class="stat"><div class="stat-label">Total Runs</div><div class="stat-value">${
+    result.totalRuns
+  }</div></div>
+  <div class="stat"><div class="stat-label">Pass Rate</div><div class="stat-value">${Math.round(
+    result.overallPassRate * 100
+  )}%</div></div>
+  <div class="stat"><div class="stat-label">Avg Tool Calls</div><div class="stat-value">${result.avgToolCalls.toFixed(
+    1
+  )}</div></div>
+  <div class="stat"><div class="stat-label">Avg Latency</div><div class="stat-value">${
+    result.avgLatency
+  }ms</div></div>
 </div>
 
 <div class="charts">
@@ -125,7 +158,11 @@ ${scenarioRows}
 
 <script>
 new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels:['Pass','Fail'],datasets:[{data:[${passCount},${failCount}],backgroundColor:['#059669','#dc2626'],borderWidth:0}]},options:{cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
-new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:${JSON.stringify(toolLabels)},datasets:[{data:${JSON.stringify(toolCounts)},backgroundColor:'#f59e0b',borderRadius:4}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{display:false},ticks:{font:{family:'monospace',size:11}}}}}});
+new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:${JSON.stringify(
+    toolLabels
+  )},datasets:[{data:${JSON.stringify(
+    toolCounts
+  )},backgroundColor:'#f59e0b',borderRadius:4}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{display:false},ticks:{font:{family:'monospace',size:11}}}}}});
 </script>
 </body>
 </html>`;

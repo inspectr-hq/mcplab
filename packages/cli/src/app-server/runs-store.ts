@@ -63,7 +63,9 @@ export function selectScenarioIds(config: EvalConfig, requestedScenarioIds?: str
   const missing = requested.filter((id) => !foundSet.has(id));
   if (missing.length > 0) {
     throw new Error(
-      `Unknown scenarios: ${missing.join(', ')}. Available: ${config.scenarios.map((s) => s.id).join(', ')}`
+      `Unknown scenarios: ${missing.join(', ')}. Available: ${config.scenarios
+        .map((s) => s.id)
+        .join(', ')}`
     );
   }
   return { ...config, scenarios };

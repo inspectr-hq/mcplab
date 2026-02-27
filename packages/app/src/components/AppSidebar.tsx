@@ -30,7 +30,7 @@ const navSections = [
     items: [
       { title: "MCP Evaluations", url: "/mcp-evaluations", icon: FlaskConical },
       { title: "Analyze MCP", url: "/tool-analysis", icon: Microscope },
-      { title: "OAuth Debugger", url: "/oauth-debugger", icon: ShieldCheck }
+      // { title: "OAuth Debugger", url: "/oauth-debugger", icon: ShieldCheck }
     ]
   },
   {

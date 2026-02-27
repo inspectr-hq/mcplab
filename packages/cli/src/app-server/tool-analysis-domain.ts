@@ -98,6 +98,7 @@ export interface ToolAnalysisReport {
     autoRunPolicy?: 'read_only_allowlist';
     sampleCallsPerTool?: number;
     toolCallTimeoutMs?: number;
+    maxParallelTools?: number;
   };
   summary: {
     serversAnalyzed: number;
@@ -427,8 +428,10 @@ export async function runToolAnalysisJob(params: {
     sampleCallsPerTool: number;
     toolCallTimeoutMs: number;
   };
+  maxParallelTools: number;
 }): Promise<void> {
-  const { job, settings, serverNames, selectedToolsByServer, modes, deeper } = params;
+  const { job, settings, serverNames, selectedToolsByServer, modes, deeper, maxParallelTools } =
+    params;
   const libraries = readLibraries(settings.librariesDir);
   const selectedAssistantAgentName = pickDefaultAssistantAgentName({
     requested: params.requestedAssistantAgentName,
@@ -477,8 +480,11 @@ export async function runToolAnalysisJob(params: {
         ? requestedToolNames!.filter((name) => !discovered.tools.some((t) => t.tool.name === name))
         : [];
 
-      const toolReports: ToolAnalysisToolReport[] = [];
-      for (const toolCtx of selectedTools) {
+      const toolReports: ToolAnalysisToolReport[] = new Array(selectedTools.length);
+      const perToolFindings: ToolAnalysisFinding[][] = new Array(selectedTools.length);
+      const perToolSkipped: boolean[] = new Array(selectedTools.length).fill(false);
+      const analyzeToolAtIndex = async (toolIndex: number) => {
+        const toolCtx = selectedTools[toolIndex];
         if (job.abortController.signal.aborted) throw new Error('Tool analysis aborted by user');
         addJobEvent(job, {
           type: 'log',
@@ -600,7 +606,7 @@ export async function runToolAnalysisJob(params: {
               sampleCalls: [],
               overallObservations: []
             };
-            toolsSkipped += 1;
+            perToolSkipped[toolIndex] = true;
           } else {
             addJobEvent(job, {
               type: 'log',
@@ -654,7 +660,9 @@ export async function runToolAnalysisJob(params: {
                   } catch (error: unknown) {
                     execReview = {
                       observations: [
-                        `Execution review failed: ${error instanceof Error ? error.message : String(error)}`
+                        `Execution review failed: ${
+                          error instanceof Error ? error.message : String(error)
+                        }`
                       ],
                       issues: [],
                       recommendations: []
@@ -754,11 +762,8 @@ export async function runToolAnalysisJob(params: {
           ...(baseReport.metadataReview?.issues ?? []),
           ...(baseReport.deeperAnalysis?.sampleCalls.flatMap((c) => c.issues) ?? [])
         ];
-        for (const finding of toolFindings) {
-          allFindings.push(finding);
-          issueCounts[finding.severity] += 1;
-        }
-        toolReports.push(baseReport);
+        toolReports[toolIndex] = baseReport;
+        perToolFindings[toolIndex] = toolFindings;
         addJobEvent(job, {
           type: 'log',
           ts: new Date().toISOString(),
@@ -772,7 +777,28 @@ export async function runToolAnalysisJob(params: {
             message: `Finished ${discovered.serverName}::${toolCtx.tool.name}`
           }
         });
+      };
+      const concurrency = Math.max(1, Math.min(maxParallelTools, selectedTools.length || 1));
+      let nextToolIndex = 0;
+      await Promise.all(
+        Array.from({ length: concurrency }, async () => {
+          while (true) {
+            if (job.abortController.signal.aborted)
+              throw new Error('Tool analysis aborted by user');
+            const current = nextToolIndex;
+            nextToolIndex += 1;
+            if (current >= selectedTools.length) return;
+            await analyzeToolAtIndex(current);
+          }
+        })
+      );
+      for (const findings of perToolFindings) {
+        for (const finding of findings ?? []) {
+          allFindings.push(finding);
+          issueCounts[finding.severity] += 1;
+        }
       }
+      toolsSkipped += perToolSkipped.filter(Boolean).length;
 
       serverReports.push({
         serverName: discovered.serverName,
@@ -798,7 +824,8 @@ export async function runToolAnalysisJob(params: {
       settings: {
         autoRunPolicy: modes.deeperAnalysis ? deeper.autoRunPolicy : undefined,
         sampleCallsPerTool: modes.deeperAnalysis ? deeper.sampleCallsPerTool : undefined,
-        toolCallTimeoutMs: modes.deeperAnalysis ? deeper.toolCallTimeoutMs : undefined
+        toolCallTimeoutMs: modes.deeperAnalysis ? deeper.toolCallTimeoutMs : undefined,
+        maxParallelTools
       },
       summary: {
         serversAnalyzed: serverReports.length,

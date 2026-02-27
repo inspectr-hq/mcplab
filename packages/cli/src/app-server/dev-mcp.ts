@@ -41,7 +41,9 @@ export async function maybeStartDevMcpServer(
     });
     child.on('exit', (code, signal) => {
       console.log(
-        `[mcplab app] MCP server child exited (${signal ? `signal ${signal}` : `code ${code ?? 0}`})`
+        `[mcplab app] MCP server child exited (${
+          signal ? `signal ${signal}` : `code ${code ?? 0}`
+        })`
       );
     });
 

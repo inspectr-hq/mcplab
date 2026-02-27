@@ -173,7 +173,9 @@ export function compareRunToSnapshot(
     const baselineAgents = [...(item.baseline_agents ?? [])].sort();
     if (JSON.stringify(observedAgents) !== JSON.stringify(baselineAgents)) {
       reasons.push(
-        `Agent coverage mismatch: baseline=[${baselineAgents.join(', ')}], observed=[${observedAgents.join(', ')}]`
+        `Agent coverage mismatch: baseline=[${baselineAgents.join(
+          ', '
+        )}], observed=[${observedAgents.join(', ')}]`
       );
       if (status === 'Match') status = 'Warn';
       score = Math.min(score, 0.79);
@@ -238,7 +240,9 @@ export function applySnapshotPolicyToRunResult(params: {
       )) {
         for (const run of scenario.runs) {
           run.pass = false;
-          const reason = `Snapshot drift (${row.status}, score=${row.score}): ${row.reasons[0] ?? 'baseline mismatch'}`;
+          const reason = `Snapshot drift (${row.status}, score=${row.score}): ${
+            row.reasons[0] ?? 'baseline mismatch'
+          }`;
           if (!run.failures.includes(reason)) {
             run.failures.push(reason);
           }
@@ -265,8 +269,8 @@ export function applySnapshotPolicyToRunResult(params: {
       baselineIds.length === 1
         ? baselineIds[0]
         : baselineIds.length > 1
-          ? 'mixed'
-          : (policy.baseline_snapshot_id ?? 'mixed'),
+        ? 'mixed'
+        : policy.baseline_snapshot_id ?? 'mixed',
     baseline_source_run_id: policy.baseline_source_run_id,
     overall_score: overallScore,
     status: overallStatus,
@@ -504,7 +508,10 @@ export function formatSnapshotComparisonTable(comparison: SnapshotComparison): s
   for (const row of comparison.scenario_results) {
     const reasons = row.reasons.slice(0, 2).join('; ') || '—';
     lines.push(
-      `${pad(row.scenario_id, 29)}| ${pad(row.score.toFixed(2), 5)} | ${pad(row.status, 6)} | ${reasons}`
+      `${pad(row.scenario_id, 29)}| ${pad(row.score.toFixed(2), 5)} | ${pad(
+        row.status,
+        6
+      )} | ${reasons}`
     );
   }
   return lines.join('\n');
@@ -515,7 +522,7 @@ function aggregateScenariosById(scenarios: ScenarioAggregate[]): ScenarioAggrega
   for (const scenario of scenarios) {
     const existing = byId.get(scenario.scenario_id);
     if (!existing) {
-      const clonedRuns = scenario.runs.map((run) => ({ ...run, __agent: scenario.agent }) as any);
+      const clonedRuns = scenario.runs.map((run) => ({ ...run, __agent: scenario.agent } as any));
       byId.set(scenario.scenario_id, {
         ...scenario,
         runs: clonedRuns,
@@ -527,7 +534,7 @@ function aggregateScenariosById(scenarios: ScenarioAggregate[]): ScenarioAggrega
       });
       continue;
     }
-    existing.runs.push(...scenario.runs.map((run) => ({ ...run, __agent: scenario.agent }) as any));
+    existing.runs.push(...scenario.runs.map((run) => ({ ...run, __agent: scenario.agent } as any)));
     existing.pass_rate = 0;
     existing.last_final_answer = scenario.last_final_answer || existing.last_final_answer;
     for (const [tool, count] of Object.entries(scenario.tool_usage_frequency)) {
