@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 @layer base {
   :root {
@@ -55,6 +55,10 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', 'Space Grotesk', sans-serif;
+    background-image:
+      radial-gradient(ellipse 120% 55% at 50% -5%, hsl(25 95% 53% / 0.07) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 50% at 5% 45%, hsl(195 80% 30% / 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse 70% 45% at 95% 80%, hsl(25 95% 53% / 0.04) 0%, transparent 45%);
   }
 
   h1, h2, h3, h4, h5, h6 {
