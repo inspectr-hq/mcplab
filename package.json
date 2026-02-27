@@ -27,7 +27,10 @@
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "npm run build && changeset publish"
+    "release": "npm run build && changeset publish",
+    "site:dev": "npm run dev -w @inspectr/mcplab-site",
+    "site:build": "npm run build -w @inspectr/mcplab-site",
+    "site:preview": "npm run preview -w @inspectr/mcplab-site"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

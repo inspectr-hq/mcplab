@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 40% 5%;
+    --foreground: 210 40% 92%;
+
+    --card: 220 35% 8%;
+    --card-foreground: 210 40% 92%;
+
+    --popover: 220 35% 8%;
+    --popover-foreground: 210 40% 92%;
+
+    --primary: 163 100% 42%;
+    --primary-foreground: 220 40% 5%;
+
+    --secondary: 39 90% 53%;
+    --secondary-foreground: 220 40% 5%;
+
+    --muted: 220 30% 12%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 220 30% 14%;
+    --accent-foreground: 210 40% 92%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 25% 16%;
+    --input: 220 25% 16%;
+    --ring: 163 100% 42%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 35% 8%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-primary: 163 100% 42%;
+    --sidebar-primary-foreground: 220 40% 5%;
+    --sidebar-accent: 220 30% 14%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 220 25% 16%;
+    --sidebar-ring: 163 100% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Space Grotesk', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(220, 35%, 8%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220, 25%, 20%);
+  border-radius: 3px;
+}
+
+/* Glow effects */
+.glow-primary {
+  box-shadow: 0 0 30px -5px hsl(163 100% 42% / 0.3);
+}
+.glow-text {
+  text-shadow: 0 0 40px hsl(163 100% 42% / 0.5);
+}
