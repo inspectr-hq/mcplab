@@ -1,0 +1,2137 @@
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatCard } from "@/components/StatCard";
+import { MarkdownContent } from "@/components/MarkdownContent";
+import { PassRateBadge } from "@/components/PassRateBadge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { generateHtmlReport } from "@/lib/generate-html-report";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import { useConfigs } from "@/contexts/ConfigContext";
+import { useLibraries } from "@/contexts/LibraryContext";
+import { toast } from "@/hooks/use-toast";
+import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
+import type {
+  MarkdownReportContent,
+  MarkdownReportSummary,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionView,
+  SnapshotComparison,
+  SnapshotRecord
+} from "@/lib/data-sources/types";
+
+const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+const RESULT_ASSISTANT_SNIPPETS = [
+  {
+    label: "Summarize Run Results",
+    description: "Highlight failures first, then notable tool usage and extracted values.",
+    prompt:
+      "Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values."
+  },
+  {
+    label: "Compare Agent Answer Quality",
+    description: "Rank agents by completeness, depth, and recommendation quality.",
+    prompt:
+      "Compare the answer quality across all agents for this run. Rank them by completeness, analytical depth, and usefulness of recommendations. Highlight concrete differences in tool usage."
+  },
+  {
+    label: "Explain Key Failures",
+    description: "Use traces and tool outputs to identify likely root causes.",
+    prompt:
+      "Identify the most important failures in this run and explain likely root causes using the trace and tool outputs."
+  },
+  {
+    label: "Compare With Previous Run",
+    description: "Summarize changes in outcomes, tool usage, and extracted values.",
+    prompt:
+      "Compare this run with the previous run and summarize changes in outcomes, tool usage, and extracted values."
+  }
+] as const;
+
+function defaultResultAssistantReportPath(runId: string): string {
+  const stamp = new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
+  return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
+}
+
+function formatCompactOneDecimal(value: number): string {
+  const fixed = value.toFixed(1);
+  return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+}
+
+const ResultDetail = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { source } = useDataSource();
+  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
+  const { configs } = useConfigs();
+  const { scenarios: libraryScenarios } = useLibraries();
+  const [result, setResult] = useState<EvalResult | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+  const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
+  const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [targetConfigId, setTargetConfigId] = useState("");
+  const [acceptSnapshotName, setAcceptSnapshotName] = useState("");
+  const [acceptingBaseline, setAcceptingBaseline] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantSessionId, setAssistantSessionId] = useState<string | null>(null);
+  const [assistantMessages, setAssistantMessages] = useState<ResultAssistantSessionView["messages"]>([]);
+  const [assistantPendingToolCalls, setAssistantPendingToolCalls] = useState<ResultAssistantPendingToolCall[]>([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [contextPanelTab, setContextPanelTab] = useState<"assistant" | "reports">("assistant");
+  const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
+  const [assistantMeta, setAssistantMeta] = useState<{
+    assistantAgentName: string;
+    provider: string;
+    model: string;
+  } | null>(null);
+  const [applyReportOpen, setApplyReportOpen] = useState(false);
+  const [applyReportMarkdown, setApplyReportMarkdown] = useState("");
+  const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
+  const [applyReportOverwrite, setApplyReportOverwrite] = useState(false);
+  const [applyReportPending, setApplyReportPending] = useState(false);
+  const [applyReportIsManual, setApplyReportIsManual] = useState(false);
+  const [referenceReports, setReferenceReports] = useState<MarkdownReportSummary[]>([]);
+  const [referenceReportsLoading, setReferenceReportsLoading] = useState(false);
+  const [selectedReferenceReportPath, setSelectedReferenceReportPath] = useState("");
+  const [selectedReferenceReport, setSelectedReferenceReport] = useState<MarkdownReportContent | null>(null);
+  const [selectedReferenceReportLoading, setSelectedReferenceReportLoading] = useState(false);
+  const [selectedReferenceReportError, setSelectedReferenceReportError] = useState<string | null>(null);
+  const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
+  const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const refreshReferenceReports = useCallback(
+    async (runId: string, preferredPath?: string) => {
+      setReferenceReportsLoading(true);
+      try {
+        const items = await source.listMarkdownReports();
+        const filtered = items.filter((item) => {
+          const path = String(item.relativePath ?? "");
+          const name = String(item.name ?? "");
+          return path.includes(runId) || name.includes(runId);
+        });
+        setReferenceReports(filtered);
+        if (preferredPath && filtered.length > 0) {
+          const matched = filtered.find(
+            (report) =>
+              report.relativePath === preferredPath ||
+              report.path === preferredPath ||
+              report.relativePath.endsWith(preferredPath) ||
+              report.path.endsWith(preferredPath)
+          );
+          if (matched) {
+            setSelectedReferenceReportPath(matched.relativePath);
+          }
+        }
+        return filtered;
+      } catch {
+        setReferenceReports([]);
+        return [];
+      } finally {
+        setReferenceReportsLoading(false);
+      }
+    },
+    [source]
+  );
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    const previousSessionId = assistantSessionId;
+    if (previousSessionId) {
+      void source.closeResultAssistantSession(previousSessionId).catch(() => undefined);
+      setAssistantSessionId(null);
+      setAssistantMessages([]);
+      setAssistantPendingToolCalls([]);
+      setAssistantMeta(null);
+    }
+    setLoading(true);
+    source.getResult(id).then((next) => {
+      if (active) {
+        setResult(next);
+        setLoading(false);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [id, source]);
+
+  useEffect(() => {
+    let active = true;
+    source
+      .listSnapshots()
+      .then((records) => {
+        if (active) setSnapshots(records);
+      })
+      .catch(() => {
+        if (active) setSnapshots([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [source]);
+
+  useEffect(() => {
+    if (!result?.id) {
+      setReferenceReports([]);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const items = await refreshReferenceReports(result.id);
+      if (!active) return;
+      // Prevent state updates from a stale effect after run id changes quickly.
+      if (!items) return;
+    })();
+    return () => {
+      active = false;
+    };
+  }, [result?.id, refreshReferenceReports]);
+
+  useEffect(() => {
+    if (referenceReports.length === 0) {
+      setSelectedReferenceReportPath("");
+      setSelectedReferenceReport(null);
+      setSelectedReferenceReportError(null);
+      return;
+    }
+    if (!selectedReferenceReportPath || !referenceReports.some((r) => r.relativePath === selectedReferenceReportPath)) {
+      setSelectedReferenceReportPath(referenceReports[0].relativePath);
+    }
+  }, [referenceReports, selectedReferenceReportPath]);
+
+  useEffect(() => {
+    if (!assistantOpen || contextPanelTab !== "reports") return;
+    if (!selectedReferenceReportPath) {
+      setSelectedReferenceReport(null);
+      setSelectedReferenceReportError(null);
+      return;
+    }
+    let active = true;
+    setSelectedReferenceReportLoading(true);
+    setSelectedReferenceReportError(null);
+    source
+      .getMarkdownReport(selectedReferenceReportPath)
+      .then((report) => {
+        if (!active) return;
+        setSelectedReferenceReport(report);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setSelectedReferenceReport(null);
+        setSelectedReferenceReportError((error instanceof Error ? error.message : String(error)));
+      })
+      .finally(() => {
+        if (active) setSelectedReferenceReportLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [assistantOpen, contextPanelTab, selectedReferenceReportPath, source]);
+
+  const requestedConfigId = searchParams.get("configId") ?? "";
+  const activeConfig = useMemo(() => {
+    const byRequested = requestedConfigId ? configs.find((c) => c.id === requestedConfigId) : undefined;
+    if (byRequested) return byRequested;
+    return result ? configs.find((c) => c.id === result.configId) : undefined;
+  }, [configs, requestedConfigId, result]);
+  const scenarioDefinitionByResultId = useMemo(() => {
+    const map = new Map<string, UiEvalConfig["scenarios"][number]>();
+    if (activeConfig) {
+      for (const scenario of activeConfig.scenarios) {
+        map.set(scenario.id, scenario);
+        if (scenario.name && !map.has(scenario.name)) map.set(scenario.name, scenario);
+      }
+      if ((activeConfig.scenarioRefs?.length ?? 0) > 0) {
+        for (const ref of activeConfig.scenarioRefs ?? []) {
+          const libScenario =
+            libraryScenarios.find((s) => s.name === ref) ??
+            libraryScenarios.find((s) => s.id === ref);
+          if (libScenario) {
+            map.set(libScenario.id, libScenario);
+            if (libScenario.name) map.set(libScenario.name, libScenario);
+            if (!map.has(ref)) map.set(ref, libScenario);
+          }
+        }
+      }
+    }
+    // Broader fallback for refs-only configs where we only know result scenario ids.
+    for (const libScenario of libraryScenarios) {
+      if (!map.has(libScenario.id)) map.set(libScenario.id, libScenario);
+      if (libScenario.name && !map.has(libScenario.name)) map.set(libScenario.name, libScenario);
+    }
+    return map;
+  }, [activeConfig, libraryScenarios]);
+  const inferredConfigId = useMemo(() => {
+    if (!result?.snapshotEval?.baselineSnapshotId) return "";
+    const matches = configs.filter(
+      (config) => config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
+    );
+    return matches.length === 1 ? matches[0].id : "";
+  }, [configs, result?.snapshotEval?.baselineSnapshotId]);
+
+  useEffect(() => {
+    if (!result?.snapshotEval?.baselineSnapshotId) return;
+    setSelectedSnapshotId((prev) => prev || result.snapshotEval!.baselineSnapshotId);
+  }, [result?.snapshotEval?.baselineSnapshotId]);
+
+  useEffect(() => {
+    if (requestedConfigId && configs.some((config) => config.id === requestedConfigId)) {
+      setTargetConfigId(requestedConfigId);
+      return;
+    }
+    if (inferredConfigId) {
+      setTargetConfigId((prev) => prev || inferredConfigId);
+    }
+  }, [requestedConfigId, configs, inferredConfigId]);
+
+  useEffect(() => {
+    if (!assistantOpen) return;
+    const t = window.setTimeout(() => {
+      assistantChatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [assistantOpen, assistantMessages.length, assistantLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (!assistantSessionId) return;
+      void source.closeResultAssistantSession(assistantSessionId).catch(() => undefined);
+    };
+  }, [assistantSessionId, source]);
+
+  useEffect(() => {
+    const el = assistantInputRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${Math.max(40, next)}px`;
+  }, [assistantInput, assistantOpen]);
+
+  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
+  if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
+
+  const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
+  const failCount = result.totalRuns - passCount;
+  const pieData = [
+    { name: "Pass", value: passCount, color: "hsl(152, 69%, 40%)" },
+    { name: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
+  ];
+
+  // Tool frequency
+  const toolFreq: Record<string, number> = {};
+  result.scenarios.forEach((sc) => sc.runs.forEach((r) => r.toolCalls.forEach((tc) => {
+    toolFreq[tc.name] = (toolFreq[tc.name] || 0) + 1;
+  })));
+  const toolData = Object.entries(toolFreq).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+
+  const toggle = (rowId: string) => {
+    setOpenScenarios((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
+
+  const runSectionKey = (
+    scenarioId: string,
+    agentName: string,
+    runIndex: number,
+    section: "checks" | "extracts" | "tools" | "final" | "conversation"
+  ) => `${scenarioId}:${agentName}:${runIndex}:${section}`;
+  const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
+  const toggleRunSection = (key: string) => {
+    setCollapsedRunSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const isRunSectionOpen = (key: string) => {
+    const defaultOpen = !key.endsWith(":conversation");
+    return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
+  };
+  const comparisonByScenario = new Map(
+    (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
+  );
+
+  const compareWithSnapshot = async () => {
+    if (!result || !selectedSnapshotId) return;
+    setComparing(true);
+    try {
+      const comparison = await source.compareSnapshot(selectedSnapshotId, result.id);
+      setSnapshotComparison(comparison);
+    } finally {
+      setComparing(false);
+    }
+  };
+
+  const reviewDrift = async (baselineIdOverride?: string) => {
+    const baselineId = baselineIdOverride || result.snapshotEval?.baselineSnapshotId;
+    if (!baselineId) return;
+    setSelectedSnapshotId(baselineId);
+    setComparing(true);
+    try {
+      const comparison = await source.compareSnapshot(baselineId, result.id);
+      setSnapshotComparison(comparison);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not review drift",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setComparing(false);
+    }
+  };
+
+  const acceptAsNewBaseline = async () => {
+    if (!targetConfigId) {
+      toast({
+        title: "Select a configuration",
+        description: "Choose which config should receive the new baseline.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setAcceptingBaseline(true);
+    try {
+      const response = await source.generateSnapshotEvalBaseline(
+        result.id,
+        targetConfigId,
+        acceptSnapshotName.trim() || undefined
+      );
+      setSnapshots((prev) => [response.snapshot, ...prev.filter((item) => item.id !== response.snapshot.id)]);
+      setSelectedSnapshotId(response.snapshot.id);
+      toast({
+        title: "Baseline updated",
+        description: `${response.snapshot.name} is now linked to the selected config.`
+      });
+      if (!acceptSnapshotName.trim()) {
+        setAcceptSnapshotName(response.snapshot.name);
+      }
+      if (result.snapshotEval?.applied) {
+        void reviewDrift(response.snapshot.id);
+      }
+    } catch (error: unknown) {
+      toast({
+        title: "Could not accept new baseline",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setAcceptingBaseline(false);
+    }
+  };
+
+  const askResultAssistant = async () => {
+    const question = assistantInput.trim();
+    if (!question || !result) return;
+    const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage = {
+      id: optimisticMessageId,
+      role: "user" as const,
+      text: question,
+      createdAt: new Date().toISOString()
+    };
+    setAssistantInput("");
+    setAssistantMessages((prev) => [...prev, optimisticMessage]);
+    setAssistantLoading(true);
+    try {
+      let sessionId = assistantSessionId;
+      if (!sessionId) {
+        const created = await source.createResultAssistantSession(result.id);
+        sessionId = created.sessionId;
+        setAssistantSessionId(created.session.id);
+        setAssistantPendingToolCalls(created.session.pendingToolCalls);
+        setAssistantMeta({
+          assistantAgentName: created.session.selectedAssistantAgentName,
+          provider: created.session.provider,
+          model: created.session.model
+        });
+        setAssistantMessages((prev) => {
+          const optimisticStillPresent = prev.some((m) => m.id === optimisticMessageId);
+          const serverMessages = created.session.messages;
+          if (!optimisticStillPresent) return serverMessages;
+          return [...serverMessages, optimisticMessage];
+        });
+      }
+      const response = await source.sendResultAssistantMessage(sessionId, question);
+      syncResultAssistantSession(response.session);
+    } catch (error: unknown) {
+      setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
+      toast({
+        title: "MCP Labs Assistant error",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const applyResultAssistantSnippet = (snippet: string) => {
+    setAssistantInput(snippet);
+    requestAnimationFrame(() => assistantInputRef.current?.focus());
+  };
+
+  const syncResultAssistantSession = (session: ResultAssistantSessionView) => {
+    setAssistantSessionId(session.id);
+    setAssistantMessages(session.messages);
+    setAssistantPendingToolCalls(session.pendingToolCalls);
+    setAssistantMeta({
+      assistantAgentName: session.selectedAssistantAgentName,
+      provider: session.provider,
+      model: session.model
+    });
+  };
+
+  const approveResultAssistantToolCall = async (callId: string) => {
+    if (!assistantSessionId) return;
+    setAssistantLoading(true);
+    try {
+      const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
+      syncResultAssistantSession(response.session);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not approve assistant action",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const denyResultAssistantToolCall = async (callId: string) => {
+    if (!assistantSessionId) return;
+    setAssistantLoading(true);
+    try {
+      const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
+      syncResultAssistantSession(response.session);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not deny assistant action",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
+    setContextPanelTab("assistant");
+    setAssistantOpen(true);
+    setAssistantContextScenarioId(options?.scenarioId ?? null);
+    if (assistantMessages.length === 0) {
+      setAssistantMessages([
+        {
+          id: `msg-${Date.now()}`,
+          role: "assistant",
+          text: "Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result.",
+          createdAt: new Date().toISOString()
+        }
+      ]);
+    }
+    if (prompt) {
+      setAssistantInput(prompt);
+    }
+  };
+
+  const openReportsPanel = (relativePath?: string) => {
+    if (relativePath) setSelectedReferenceReportPath(relativePath);
+    setContextPanelTab("reports");
+    setAssistantOpen(true);
+  };
+
+  const sendToScenarioAssistant = (assistantReply: string) => {
+    if (!result) return;
+    if (!assistantContextScenarioId) {
+      toast({
+        title: "No scenario context",
+        description: "Ask about a specific scenario or run first, then send the suggestion.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const libScenario =
+      libraryScenarios.find((s) => s.id === assistantContextScenarioId) ??
+      libraryScenarios.find((s) => s.name === assistantContextScenarioId);
+    if (!libScenario) {
+      toast({
+        title: "Scenario not found in library",
+        description: `Could not find library scenario '${assistantContextScenarioId}' to open in Scenario Assistant.`,
+        variant: "destructive"
+      });
+      return;
+    }
+    const prompt = [
+      `I am sending a suggestion from the Result Assistant for scenario '${assistantContextScenarioId}' based on run '${result.id}'.`,
+      "Please review the suggestion, check it against the current scenario configuration, and propose concrete updates to the Checks and/or Value Capture Rules if appropriate.",
+      "",
+      "Result Assistant suggestion:",
+      assistantReply
+    ].join("\n");
+    try {
+      window.sessionStorage.setItem(
+        RESULT_ASSISTANT_HANDOFF_STORAGE_KEY,
+        JSON.stringify({
+          type: "result-assistant-handoff-v1",
+          runId: result.id,
+          configId: requestedConfigId || result.configId || "",
+          scenarioId: libScenario.id,
+          prompt,
+          sourceReply: assistantReply
+        })
+      );
+      navigate(`/libraries/scenarios/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not create handoff",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    }
+  };
+
+  const openApplyReportDialog = (assistantReply: string) => {
+    if (!result) return;
+    setApplyReportIsManual(false);
+    setApplyReportMarkdown(assistantReply);
+    setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
+    setApplyReportOverwrite(false);
+    setApplyReportOpen(true);
+  };
+
+  const openManualReportDialog = () => {
+    if (!result) return;
+    setApplyReportIsManual(true);
+    setApplyReportMarkdown("");
+    setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
+    setApplyReportOverwrite(false);
+    setApplyReportOpen(true);
+  };
+
+  const applyAssistantReport = async () => {
+    if (!result) return;
+    const markdown = applyReportMarkdown.trim();
+    if (!markdown) {
+      toast({
+        title: "No markdown to write",
+        description: "The selected assistant response is empty.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setApplyReportPending(true);
+    try {
+      const response = await source.applyResultAssistantReport({
+        runId: result.id,
+        markdown: applyReportMarkdown,
+        outputPath: applyReportOutputPath.trim() || undefined,
+        overwrite: applyReportOverwrite
+      });
+      toast({
+        title: "Markdown report written",
+        description:
+          typeof response.path === "string" && response.path
+            ? response.path
+            : response.outputPath
+      });
+      await refreshReferenceReports(
+        result.id,
+        (typeof response.path === "string" && response.path) || response.outputPath || undefined
+      );
+      if (assistantOpen) {
+        setContextPanelTab("reports");
+      }
+      setApplyReportOpen(false);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not write markdown report",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setApplyReportPending(false);
+    }
+  };
+
+  const copyAssistantChatText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copied" });
+    } catch (error: unknown) {
+      toast({
+        title: "Could not copy",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    }
+  };
+
+  return (
+    <div
+      className={`${
+        assistantOpen ? "xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden" : ""
+      }`}
+    >
+      <div className={`${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <Button variant="ghost" size="icon" asChild><Link to="/results"><ArrowLeft className="h-4 w-4" /></Link></Button>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
+                <PassRateBadge rate={result.overallPassRate} />
+                {snapshotsUiEnabled && result.snapshotEval?.applied && (
+                  <Badge variant="outline" className="text-xs">
+                    Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
+              </p>
+              {snapshotsUiEnabled && result.snapshotEval?.applied && (
+                <p className="text-xs text-muted-foreground">
+                  Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {snapshotsUiEnabled && result.snapshotEval?.applied && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => void reviewDrift()}
+                disabled={comparing}
+              >
+                <GitCompare className="h-3.5 w-3.5" />
+                {comparing ? "Reviewing drift..." : "Review Drift"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
+              const html = generateHtmlReport(result);
+              const blob = new Blob([html], { type: "text/html" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `mcplab-report-${result.id}.html`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="h-3.5 w-3.5" />Download Report
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openReportsPanel()}
+              disabled={referenceReportsLoading}
+            >
+              <NotepadText className="h-3.5 w-3.5" />
+              {referenceReportsLoading
+                ? "Reference Reports..."
+                : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openAssistantWithPrompt()}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              MCP Labs Assistant
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`grid gap-6 items-start ${
+          assistantOpen
+            ? assistantExpanded
+              ? "xl:grid-cols-[minmax(0,1fr)_52rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
+              : "xl:grid-cols-[minmax(0,1fr)_28rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
+            : "grid-cols-1"
+        }`}
+      >
+      <div className={`min-w-0 space-y-6 ${assistantOpen ? "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2" : ""}`}>
+
+      {snapshotsUiEnabled && result.snapshotEval?.applied && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="outline">Mode: {result.snapshotEval.mode}</Badge>
+              <Badge variant="outline">Status: {result.snapshotEval.status}</Badge>
+              <Badge variant="outline">Overall score: {result.snapshotEval.overallScore}</Badge>
+              <Badge variant="outline" className="font-mono">
+                Baseline: {result.snapshotEval.baselineSnapshotId}
+              </Badge>
+            </div>
+            {result.snapshotEval.impactedScenarios.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Impacted scenarios: {result.snapshotEval.impactedScenarios.join(", ")}
+              </p>
+            )}
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] items-end">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Target config for baseline update</p>
+                <Select value={targetConfigId} onValueChange={setTargetConfigId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Select config to update" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {configs.map((config) => (
+                      <SelectItem key={config.id} value={config.id}>
+                        {config.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!targetConfigId && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Tip: open results from the Run page to prefill the config automatically.
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">New snapshot name (optional)</p>
+                <div className="relative">
+                  <input
+                    value={acceptSnapshotName}
+                    onChange={(e) => setAcceptSnapshotName(e.target.value)}
+                    placeholder={`Snapshot ${result.id}`}
+                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => void reviewDrift()}
+                  disabled={comparing}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${comparing ? "animate-spin" : ""}`} />
+                  Review Drift
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => void acceptAsNewBaseline()}
+                  disabled={acceptingBaseline || result.overallPassRate !== 1}
+                >
+                  {acceptingBaseline ? "Accepting..." : "Accept as New Baseline"}
+                </Button>
+              </div>
+            </div>
+            {result.overallPassRate !== 1 && (
+              <p className="text-xs text-muted-foreground">
+                Baseline updates require a fully passing run (same rule as snapshot creation).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard title="Scenarios" value={result.totalScenarios} icon={Layers} />
+        <StatCard title="Total Runs" value={result.totalRuns} icon={Activity} />
+        <StatCard title="Pass Rate" value={`${Math.round(result.overallPassRate * 100)}%`} icon={BarChart3} />
+        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(result.avgToolCalls)} icon={CheckCircle2} />
+        <StatCard title="Avg Latency" value={`${result.avgLatency}ms`} icon={Timer} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Pass / Fail</CardTitle></CardHeader>
+          <CardContent className="flex items-center justify-center">
+            <PieChart width={180} height={180}>
+              <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
+                {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+            <div className="ml-4 space-y-2">
+              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
+              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Tool Usage</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={toolData} layout="vertical">
+                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
+                <Tooltip />
+                <Bar dataKey="count" fill="hsl(38, 92%, 50%)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Scenarios</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-2 text-xs"
+              onClick={() =>
+                openAssistantWithPrompt(
+                  `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
+                )
+              }
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Ask Assistant
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {snapshotsUiEnabled && (
+            <div className="flex flex-wrap items-end gap-2 border-b p-3">
+              <div className="min-w-60 space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
+                <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Select snapshot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {snapshots.map((snapshot) => (
+                      <SelectItem key={snapshot.id} value={snapshot.id}>
+                        {snapshot.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedSnapshotId || comparing}
+                onClick={() => void compareWithSnapshot()}
+              >
+                {comparing ? "Comparing..." : "Compare Snapshot"}
+              </Button>
+              {snapshotComparison && (
+                <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
+                  Overall snapshot score: {snapshotComparison.overall_score}
+                </Badge>
+              )}
+            </div>
+          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8" />
+                <TableHead>Scenario</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Runs</TableHead>
+                <TableHead>Pass Rate</TableHead>
+                <TableHead>Tool Calls</TableHead>
+                <TableHead>Snapshot</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {result.scenarios.map((sc) => {
+                const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
+                const scenarioLabel = sc.scenarioName || sc.scenarioId;
+                return (
+                <Collapsible key={rowKey} open={openScenarios.has(rowKey)} onOpenChange={() => toggle(rowKey)} asChild>
+                  <>
+                    <CollapsibleTrigger asChild>
+                      <TableRow className="cursor-pointer hover:bg-muted/50">
+                        <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(rowKey) ? "rotate-180" : ""}`} /></TableCell>
+                        <TableCell className="font-medium text-sm">{sc.scenarioName}</TableCell>
+                        <TableCell className="text-sm">{sc.agentName}</TableCell>
+                        <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
+                        <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
+                        <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const row = comparisonByScenario.get(sc.scenarioId);
+                            if (!row) return <span className="text-xs text-muted-foreground">—</span>;
+                            const className =
+                              row.status === "Match"
+                                ? "bg-success/15 text-success"
+                                : row.status === "Warn"
+                                  ? "bg-amber-500/15 text-amber-600"
+                                  : "bg-destructive/15 text-destructive";
+                            return (
+                              <Badge variant="outline" className={`text-xs ${className}`}>
+                                {row.status} · {row.score}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
+                      </TableRow>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent asChild>
+                      <tr>
+                        <td colSpan={7} className="p-0">
+                          <div className="bg-muted/30 p-4 space-y-2">
+                            <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold">Scenario details</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {scenarioLabel} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs shrink-0"
+                                onClick={() =>
+                                  openAssistantWithPrompt(
+                                    `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
+                                  , { scenarioId: sc.scenarioId })
+                                }
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Ask Assistant
+                              </Button>
+                            </div>
+                            {(() => {
+                              const row = comparisonByScenario.get(sc.scenarioId);
+                              if (!row || row.reasons.length === 0) return null;
+                              return (
+                                <div className="rounded-md border bg-card p-2">
+                                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Snapshot reasons</p>
+                                  <p className="mb-1 text-[11px] text-muted-foreground">
+                                    Baseline agents: {row.baseline_agents.join(", ") || "—"} · observed agents: {row.observed_agents.join(", ") || "—"}
+                                  </p>
+                                  <ul className="space-y-1 text-xs text-muted-foreground">
+                                    {row.reasons.map((reason, index) => (
+                                      <li key={index}>• {reason}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            })()}
+                            {sc.runs.map((run) => (
+                              <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
+                                <div className="mt-0.5">
+                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                  {(() => {
+                                    const scenarioDef = scenarioDefinitionByResultId.get(sc.scenarioId);
+                                    const checks = scenarioDef ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons) : [];
+                                    const failedChecks = checks.filter((c) => c.status === "failed");
+                                    const passedChecks = checks.filter((c) => c.status === "passed");
+                                    return (
+                                      <>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs text-muted-foreground">Run #{run.runIndex + 1}</span>
+                                    <span className="text-xs text-muted-foreground">·</span>
+                                    <span className="text-xs text-muted-foreground">{run.duration}ms</span>
+                                    {!run.passed && (
+                                      <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
+                                        Failed
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {run.failureReasons.length > 0 && (
+                                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                                      <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                                        <XCircle className="h-3.5 w-3.5" />
+                                        Failure reasons
+                                      </p>
+                                      <ul className="space-y-1 text-xs text-destructive">
+                                        {run.failureReasons.map((reason, index) => (
+                                          <li key={index}>• {formatFailureReason(reason)}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {checks.length > 0 && (
+                                    <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
+                                    >
+                                      <div className="rounded-md border bg-muted/20 p-2">
+                                        <CollapsibleTrigger asChild>
+                                          <button type="button" className="mb-2 flex w-full flex-wrap items-center gap-2 text-left">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks")) ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              Checks
+                                            </p>
+                                            <Badge
+                                              variant="outline"
+                                              className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
+                                            >
+                                              {passedChecks.length} passed
+                                            </Badge>
+                                            <Badge
+                                              variant="outline"
+                                              className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
+                                            >
+                                              {failedChecks.length} failed
+                                            </Badge>
+                                          </button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                          <div className="space-y-1">
+                                            {checks.map((check, idx) => (
+                                              <div
+                                                key={`${check.rule.type}-${check.rule.value}-${idx}`}
+                                                className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                                  check.status === "failed"
+                                                    ? "border-destructive/20 bg-destructive/5"
+                                                    : "border-success/20 bg-success/5"
+                                                }`}
+                                              >
+                                                <div className="min-w-0">
+                                                  <div className="flex items-center gap-2">
+                                                    {check.status === "failed" ? (
+                                                      <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                    ) : (
+                                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                                                    )}
+                                                    <span className="font-medium">{formatEvalRuleLabel(check.rule)}</span>
+                                                  </div>
+                                                  {check.failureReason && (
+                                                    <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                      {formatFailureReason(check.failureReason)}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                <Badge
+                                                  variant="outline"
+                                                  className={`shrink-0 text-[10px] ${
+                                                    check.status === "failed"
+                                                      ? "border-destructive/30 text-destructive"
+                                                      : "border-success/30 text-success"
+                                                  }`}
+                                                >
+                                                  {check.status}
+                                                </Badge>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </CollapsibleContent>
+                                      </div>
+                                    </Collapsible>
+                                  )}
+                                      </>
+                                    );
+                                  })()}
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
+                                  >
+                                    <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts")) ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              <Layers className="h-3.5 w-3.5 text-violet-600" />
+                                              Extracted values
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline" className="h-5 text-[10px]">
+                                            {Object.keys(run.extractedValues ?? {}).length} total
+                                          </Badge>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        {Object.keys(run.extractedValues ?? {}).length === 0 ? (
+                                          <p className="text-xs text-muted-foreground">No extracted values captured for this run.</p>
+                                        ) : (
+                                          <div className="grid gap-1.5 sm:grid-cols-2">
+                                            {Object.entries(run.extractedValues ?? {}).map(([key, value]) => (
+                                              <div key={key} className="rounded-md border bg-background px-2 py-1.5 text-xs">
+                                                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  {key}
+                                                </div>
+                                                <div className="font-mono break-all text-foreground">
+                                                  {value === null ? "null" : String(value)}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
+                                  >
+                                    <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools")) ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              <Wrench className="h-3.5 w-3.5 text-sky-600" />
+                                              Tool call sequence
+                                            </p>
+                                          </div>
+                                          <Badge variant="outline" className="h-5 text-[10px]">
+                                            {run.toolCalls.length} total
+                                          </Badge>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        <div className="flex flex-wrap gap-1">
+                                          {run.toolCalls.map((tc, i) => (
+                                            <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
+                                              <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                              {tc.name}
+                                              <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
+                                  >
+                                    <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <button type="button" className="mb-2 flex w-full items-center gap-2 text-left">
+                                          <ChevronDown
+                                            className={`h-3.5 w-3.5 transition-transform ${
+                                              isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final")) ? "rotate-180" : ""
+                                            }`}
+                                          />
+                                          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                            <Bot className="h-3.5 w-3.5" />
+                                            Final answer
+                                          </p>
+                                        </button>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        <ExpandableText
+                                          text={run.finalAnswer || "No final answer captured."}
+                                          maxLength={1200}
+                                          className="text-xs text-foreground"
+                                        />
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                  <Collapsible
+                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
+                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
+                                  >
+                                    <div className="rounded-md border bg-muted/10 p-2">
+                                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                        <CollapsibleTrigger asChild>
+                                          <button type="button" className="flex min-w-0 items-center gap-2 text-left">
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))
+                                                  ? "rotate-180"
+                                                  : ""
+                                              }`}
+                                            />
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                              Conversation trace
+                                            </p>
+                                          </button>
+                                        </CollapsibleTrigger>
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 gap-1.5 px-2 text-xs"
+                                            onClick={() =>
+                                              openAssistantWithPrompt(
+                                                `Explain Run #${run.runIndex + 1} for scenario '${scenarioLabel}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                              , { scenarioId: sc.scenarioId })
+                                            }
+                                          >
+                                            <Sparkles className="h-3.5 w-3.5" />
+                                            Ask Assistant
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      <CollapsibleContent>
+                                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                          {run.conversation.length === 0 ? (
+                                            <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
+                                          ) : (
+                                            run.conversation.map((item) => (
+                                              <ConversationRow
+                                                key={item.id}
+                                                item={item}
+                                                fallbackUserPrompt={scenarioDefinitionByResultId.get(sc.scenarioId)?.prompt}
+                                              />
+                                            ))
+                                          )}
+                                        </div>
+                                      </CollapsibleContent>
+                                      {!isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation")) && (
+                                        <p className="text-xs text-muted-foreground">
+                                          Expand to inspect user/assistant/tool messages for this run.
+                                        </p>
+                                      )}
+                                    </div>
+                                  </Collapsible>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    </CollapsibleContent>
+                  </>
+                </Collapsible>
+              )})}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      </div>
+
+      {assistantOpen && (
+        <div className="min-w-0 space-y-0 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <Tabs
+            value={contextPanelTab}
+            onValueChange={(v) => setContextPanelTab(v as "assistant" | "reports")}
+            className="min-w-0 -mb-px px-3 pt-1"
+          >
+            <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
+              <TabsTrigger
+                value="assistant"
+                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+              >
+                Assistant
+              </TabsTrigger>
+              <TabsTrigger
+                value="reports"
+                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+              >
+                Reports
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {contextPanelTab === "assistant" ? (
+        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <CardHeader className="border-b px-4 py-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  MCP Labs Assistant
+                </CardTitle>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setAssistantExpanded((prev) => !prev)}
+                  >
+                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    {assistantExpanded ? "Compact" : "Expand"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <p className="text-xs text-muted-foreground">
+                  Ask questions about this run result, failures, tool usage, and snapshot drift.
+                </p>
+                {assistantMeta && (
+                  <p className="shrink-0 text-[11px] text-muted-foreground">
+                    {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
+            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+              <div className="space-y-3 pr-2">
+                {assistantMessages.map((message, index) => {
+                  const isUser = message.role === "user";
+                  const isAssistant = message.role === "assistant";
+                  const isSystem = message.role === "system";
+                  const isTool = message.role === "tool";
+                  const linkedPendingToolCall = message.pendingToolCallId
+                    ? assistantPendingToolCalls.find((call) => call.id === message.pendingToolCallId)
+                    : undefined;
+                  const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
+                  if (isTool && /^(Approved|Denied) tool call\b/i.test(String(message.text ?? "").trim())) {
+                    return null;
+                  }
+                  const toolStepServer = linkedPendingToolCall?.server ?? message.toolRequestServer;
+                  const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
+                  const toolStepPublicName =
+                    linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
+                  const canShowHandoff =
+                    isAssistant &&
+                    !isAssistantToolRequest &&
+                    isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
+                  if (isAssistantToolRequest) {
+                    const displayToolName = toolStepName ?? toolStepPublicName ?? "unknown_tool";
+                    const compactTitle = toolStepName
+                      ? toolStepName.replace(/^mcplab_/, "").replace(/_/g, " ")
+                      : toolStepPublicName ?? "tool call";
+                    return (
+                      <div
+                        key={`${message.id ?? `${message.role}-${index}`}:${linkedPendingToolCall ? "pending" : "completed"}`}
+                        className="flex items-start gap-2"
+                      >
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          <Bot className="h-3 w-3" />
+                        </div>
+                        <details
+                          open={Boolean(linkedPendingToolCall)}
+                          className="group min-w-0 w-full max-w-[92%] rounded-md border border-border/60 bg-background"
+                        >
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="truncate text-sm font-medium">
+                                  {`Tool call ${displayToolName}`}
+                                </span>
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    linkedPendingToolCall
+                                      ? "bg-amber-100 text-amber-900"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {linkedPendingToolCall ? "Needs approval" : "Completed"}
+                                </span>
+                              </div>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
+                            <MarkdownContent text={message.text} className="text-sm" />
+                            {linkedPendingToolCall && (
+                              <>
+                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                                  <code className="break-words">{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
+                                </pre>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() => void denyResultAssistantToolCall(linkedPendingToolCall.id)}
+                                  >
+                                    Deny
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() => void approveResultAssistantToolCall(linkedPendingToolCall.id)}
+                                  >
+                                    Approve
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  }
+                  const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
+                  return (
+                    <div key={message.id ?? `${message.role}-${index}`} className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}>
+                      {!isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                        </div>
+                      )}
+                      <div className="relative max-w-[92%]">
+                        <div className={`max-w-full rounded-md border p-3 text-sm ${
+                          isUser
+                            ? "border-primary/20 bg-primary/10"
+                            : isSystem
+                              ? "border-amber-400/30 bg-amber-50/70"
+                              : isTool
+                                ? "border-blue-300/30 bg-blue-50/50"
+                                : "border-border/80 bg-background shadow-sm"
+                        }`}>
+                          {!(isUser || isSystem) && (
+                            <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
+                              {isTool ? "Tool" : "Assistant"}
+                            </p>
+                          )}
+                          <MarkdownContent text={message.text} className="text-sm" />
+                          {canShowHandoff && (
+                            <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => sendToScenarioAssistant(message.text)}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Send to Scenario Assistant
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
+                              </Button>
+                            </div>
+                          )}
+                          {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
+                            <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        {showCopyButton && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
+                            onClick={() => void copyAssistantChatText(message.text)}
+                            aria-label="Copy message"
+                            title="Copy message"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                      {isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+                          <User className="h-3 w-3" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {assistantPendingToolCalls.filter((call) => !assistantMessages.some((m) => m.pendingToolCallId === call.id)).length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Pending actions (approve/deny)
+                    </div>
+                    {assistantPendingToolCalls
+                      .filter((call) => !assistantMessages.some((m) => m.pendingToolCallId === call.id))
+                      .map((call) => (
+                        <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>
+                              <p className="break-all text-xs text-muted-foreground">
+                                {call.server}::{call.tool}
+                              </p>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="border-t px-3 pb-3 pt-2">
+                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                              <code className="break-words">{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                            </pre>
+                            <div className="mt-2 flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void denyResultAssistantToolCall(call.id)}
+                              >
+                                Deny
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void approveResultAssistantToolCall(call.id)}
+                              >
+                                Approve
+                              </Button>
+                            </div>
+                          </div>
+                        </details>
+                      ))}
+                  </div>
+                )}
+                {assistantLoading && (
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                      <Bot className="h-3 w-3" />
+                    </div>
+                    <div className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Thinking...
+                    </div>
+                  </div>
+                )}
+                <div ref={assistantChatEndRef} />
+              </div>
+            </ScrollArea>
+            <div className="border-t bg-background px-4 py-3">
+              <div className="rounded-xl border bg-background p-2 shadow-sm">
+                <Textarea
+                  ref={assistantInputRef}
+                  value={assistantInput}
+                  onChange={(e) => setAssistantInput(e.target.value)}
+                  placeholder="Ask about this result..."
+                  rows={1}
+                  className="min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-1 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!assistantLoading) void askResultAssistant();
+                    }
+                  }}
+                />
+                <div className="mt-1 flex items-center justify-between gap-2 px-1 pt-1">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground/80 hover:text-muted-foreground"
+                        disabled={assistantLoading}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Snippets
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[360px]">
+                      <DropdownMenuLabel>Result Assistant Snippets</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {RESULT_ASSISTANT_SNIPPETS.map((snippet) => (
+                        <DropdownMenuItem
+                          key={snippet.label}
+                          className="items-start whitespace-normal px-2 py-2"
+                          onSelect={() => applyResultAssistantSnippet(snippet.prompt)}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium leading-tight">{snippet.label}</div>
+                            <div className="text-[11px] leading-snug text-muted-foreground">
+                              {snippet.description}
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    type="button"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 rounded-full"
+                    onClick={() => void askResultAssistant()}
+                    disabled={assistantLoading || !assistantInput.trim()}
+                    aria-label="Send assistant message"
+                    title="Send assistant message"
+                  >
+                    {assistantLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        <span className="sr-only">Ask</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <CardHeader className="border-b px-4 py-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <NotepadText className="h-4 w-4 text-muted-foreground" />
+                  Reference Reports
+                </CardTitle>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setAssistantExpanded((prev) => !prev)}
+                  >
+                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    {assistantExpanded ? "Compact" : "Expand"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Review markdown reports for this run while keeping the result visible.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
+            {(referenceReportsLoading || referenceReports.length === 0 || referenceReports.length > 1) && (
+            <div className="border-b px-4 py-3">
+              {referenceReportsLoading ? (
+                <p className="text-xs text-muted-foreground">Loading reference reports...</p>
+              ) : referenceReports.length === 0 ? (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-muted-foreground">No reference reports for this run yet.</p>
+                  <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => openManualReportDialog()}>
+                    <Plus className="h-3.5 w-3.5" />
+                    New Report
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {referenceReports.length > 1 ? (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Selected report</p>
+                      <Select value={selectedReferenceReportPath} onValueChange={setSelectedReferenceReportPath}>
+                        <SelectTrigger className="h-8">
+                          <SelectValue placeholder="Select a report" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {referenceReports.map((report) => (
+                            <SelectItem key={report.path} value={report.relativePath}>
+                              {report.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            )}
+            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+              {referenceReports.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No report selected.</div>
+              ) : selectedReferenceReportLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading report...
+                </div>
+              ) : selectedReferenceReportError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  Could not load report: {selectedReferenceReportError}
+                </div>
+              ) : selectedReferenceReport ? (
+                <div className="space-y-3">
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="font-mono text-xs font-semibold">{selectedReferenceReport.name}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{selectedReferenceReport.relativePath}</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {new Date(selectedReferenceReport.mtime).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <MarkdownContent text={selectedReferenceReport.content} className="text-sm" />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Select a report to preview.</div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+        </div>
+      )}
+      <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {applyReportIsManual ? "Create markdown report" : "Approve MCP action: write markdown report"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {applyReportIsManual
+                ? "Write a custom markdown report and save it to the workspace."
+                : <>This will call <code>mcplab_write_markdown_report</code> via the local MCPLab MCP server.</>}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            {!applyReportIsManual && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Output path</p>
+                <Input
+                  value={applyReportOutputPath}
+                  onChange={(e) => setApplyReportOutputPath(e.target.value)}
+                  placeholder="mcplab/reports/result-assistant/my-report.md"
+                  disabled={applyReportPending}
+                />
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={applyReportOverwrite}
+                onCheckedChange={(v) => setApplyReportOverwrite(v === true)}
+                disabled={applyReportPending}
+              />
+              <span>Overwrite if file exists</span>
+            </label>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                {applyReportIsManual ? "Markdown content" : "Markdown preview (to be written)"}
+              </p>
+              <Textarea
+                value={applyReportMarkdown}
+                onChange={(e) => setApplyReportMarkdown(e.target.value)}
+                rows={10}
+                className="font-mono text-xs"
+                disabled={applyReportPending}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={applyReportPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void applyAssistantReport();
+              }}
+              disabled={applyReportPending}
+            >
+              {applyReportPending ? "Writing..." : applyReportIsManual ? "Save Report" : "Approve & Write"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      </div>
+    </div>
+  );
+};
+
+function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem; fallbackUserPrompt?: string }) {
+  if (item.kind === "tool_call") {
+    return (
+      <ToolEventRow
+        variant="call"
+        title={`Tool call · ${item.toolName || "unknown"}`}
+        text={item.text}
+      />
+    );
+  }
+  if (item.kind === "tool_result") {
+    const statusIcon = item.ok ? (
+      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
+    ) : (
+      <XCircle className="h-3.5 w-3.5 text-rose-700 dark:text-rose-300" />
+    );
+    return (
+      <ToolEventRow
+        variant={item.ok ? "result_ok" : "result_error"}
+        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}`}
+        text={item.text}
+        icon={statusIcon}
+      />
+    );
+  }
+
+  const isUser = item.kind === "user_prompt";
+  const normalizedItemText = normalizeConversationText(item.text, item.kind);
+  const normalizedFallbackUserPrompt = fallbackUserPrompt
+    ? normalizeConversationText(fallbackUserPrompt, "user_prompt")
+    : "";
+  const displayText =
+    isUser && normalizedFallbackUserPrompt.length > normalizedItemText.length
+      ? normalizedFallbackUserPrompt
+      : normalizedItemText;
+  const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Agent final" : "Agent";
+  const Icon = isUser ? User : Bot;
+  return (
+    <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
+      {!isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+      <div className={`max-w-[90%] rounded-md p-2 ${isUser ? "bg-primary/10" : "bg-muted/50"}`}>
+        <p className={`mb-1 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>{label}</p>
+        {isUser ? (
+          <ExpandableText text={displayText} maxLength={280} className="text-xs" />
+        ) : (
+          <ExpandableText text={displayText} maxLength={500} className="text-xs" />
+        )}
+      </div>
+      {isUser && (
+        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {
+  const raw = String(text ?? "");
+  const trimmedStart = raw.replace(/^\s+/, "");
+  if (kind === "user_prompt") {
+    return trimmedStart.replace(/^user:\s*/i, "");
+  }
+  if (kind === "assistant_final" || kind === "assistant_thought") {
+    return trimmedStart.replace(/^assistant:\s*/i, "");
+  }
+  return trimmedStart;
+}
+
+function isScenarioAssistantHandoffRelevant(reply: string, hasScenarioContext: boolean): boolean {
+  if (!hasScenarioContext) return false;
+  const text = String(reply ?? "").toLowerCase();
+  if (!text.trim()) return false;
+
+  const editSignals = [
+    "check",
+    "checks",
+    "rule",
+    "rules",
+    "regex",
+    "pattern",
+    "value capture",
+    "extract rule",
+    "update",
+    "change",
+    "replace",
+    "modify",
+    "adjust",
+    "use ",
+    "set ",
+  ];
+  const concreteSuggestionSignals = [
+    "change ",
+    "replace ",
+    "update ",
+    "use ",
+    "set the",
+    "suggested",
+    "you should",
+    "try ",
+    "text match failed",
+    "text must match pattern",
+  ];
+  const explanationOnlySignals = [
+    "i can only read",
+    "i don't have write access",
+    "i cannot directly edit",
+    "what happened",
+    "summary",
+  ];
+
+  if (explanationOnlySignals.some((s) => text.includes(s)) && !concreteSuggestionSignals.some((s) => text.includes(s))) {
+    return false;
+  }
+
+  const hasEditSignal = editSignals.some((s) => text.includes(s));
+  const hasConcreteSuggestion = concreteSuggestionSignals.some((s) => text.includes(s));
+  const hasListStructure = /(^|\n)\s*[-*]\s+/.test(reply) || /(^|\n)\s*\d+\.\s+/.test(reply);
+  const hasQuotedPattern = /["'`][^"'`\n]{2,}["'`]/.test(reply);
+
+  return hasEditSignal && (hasConcreteSuggestion || hasListStructure || hasQuotedPattern);
+}
+
+function ToolEventRow({
+  variant,
+  title,
+  text,
+  icon
+}: {
+  variant: "call" | "result_ok" | "result_error";
+  title: string;
+  text: string;
+  icon?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const styleByVariant = {
+    call: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
+    result_ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    result_error: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+  } as const;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className={`rounded-md border p-2 text-xs ${styleByVariant[variant]}`}>
+        <CollapsibleTrigger asChild>
+          <button type="button" className="flex w-full items-center justify-between gap-2 text-left">
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              {icon ?? <Wrench className="h-3.5 w-3.5" />}
+              <span>{title}</span>
+            </div>
+            <span className="text-[11px] font-semibold">{open ? "Hide content" : "Show content"}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <p className="mt-2 font-mono whitespace-pre-wrap text-foreground">{text}</p>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
+function ExpandableText({ text, maxLength, className }: { text: string; maxLength: number; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > maxLength;
+  const display = expanded || !isLong ? text : `${text.slice(0, maxLength)}...`;
+
+  return (
+    <div>
+      <MarkdownContent text={display} className={className} />
+      {isLong && (
+        <button
+          type="button"
+          className="mt-1 text-[11px] font-medium text-primary hover:underline"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? "Show less" : "Show all"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+  return evalRules.map((rule) => {
+    const failureReason = matchFailureReasonForRule(rule, failureReasons);
+    return {
+      rule,
+      status: failureReason ? ("failed" as const) : ("passed" as const),
+      failureReason
+    };
+  });
+}
+
+function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
+  const expectedPrefix =
+    rule.type === "required_tool"
+      ? `Required tool not used: ${rule.value}`
+      : rule.type === "forbidden_tool"
+        ? `Forbidden tool used: ${rule.value}`
+        : `Regex assertion failed: ${rule.value}`;
+
+  const exact = failureReasons.find((reason) => reason === expectedPrefix);
+  if (exact) return exact;
+
+  if (rule.type === "response_contains" || rule.type === "response_not_contains") {
+    return failureReasons.find(
+      (reason) =>
+        reason.startsWith("Regex assertion failed:") &&
+        reason.includes(rule.value)
+    );
+  }
+
+  return undefined;
+}
+
+function formatEvalRuleLabel(rule: EvalRule): string {
+  if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
+  if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
+  if (rule.type === "response_contains") return `Text must match pattern · ${rule.value}`;
+  if (rule.type === "response_not_contains") return `Text must not match pattern · ${rule.value}`;
+  return `${rule.type} · ${rule.value}`;
+}
+
+function formatFailureReason(reason: string): string {
+  const trimmed = String(reason ?? "").trim();
+  const regexMatch = trimmed.match(/^Regex assertion failed:\s*(.+)$/i);
+  if (regexMatch) {
+    return `Text match failed: ${regexMatch[1]}`;
+  }
+  return trimmed;
+}
+
+export default ResultDetail;

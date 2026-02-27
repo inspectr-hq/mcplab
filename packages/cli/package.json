@@ -1,0 +1,55 @@
+{
+  "name": "@inspectr/mcplab",
+  "version": "0.1.0",
+  "description": "MCPLab - Test and evaluate MCP servers with LLMs — run evals, compare agents and launch the MCPLab web app",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inspectr-hq/mcplab.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "evaluation",
+    "testing",
+    "ai",
+    "agents",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "mcplab": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:with-app": "node ../../scripts/prepare-cli-package.mjs",
+    "prepack": "node ../../scripts/prepare-cli-package.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@inspectr/mcplab-core": "0.1.0",
+    "@inspectr/mcplab-mcp-server": "0.1.0",
+    "@inspectr/mcplab-reporting": "0.1.0",
+    "chokidar": "^5.0.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "kleur": "^4.1.5",
+    "yaml": "^2.5.1"
+  }
+}

@@ -8,4 +8,14 @@ runs/
 
 .agents
 .claude
+.codex
+.worktrees
 .idea
+.tmp
+
+mcplab/
+packages/app/tsconfig.app.tsbuildinfo
+packages/app/tsconfig.node.tsbuildinfo
+packages/reporting/tsconfig.node.tsbuildinfo
+tsconfig.tsbuildinfo
+.npm-cache
