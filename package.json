@@ -30,7 +30,10 @@
     "release": "npm run build && changeset publish",
     "site:dev": "npm run dev -w @inspectr/mcplab-site",
     "site:build": "npm run build -w @inspectr/mcplab-site",
-    "site:preview": "npm run preview -w @inspectr/mcplab-site"
+    "site:preview": "npm run preview -w @inspectr/mcplab-site",
+    "website:dev": "npm run dev -w @inspectr/mcplab-website",
+    "website:build": "npm run build -w @inspectr/mcplab-website",
+    "website:preview": "npm run preview -w @inspectr/mcplab-website"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
