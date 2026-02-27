@@ -10,6 +10,7 @@
     "dev": "tsx packages/cli/src/cli.ts",
     "mcp:build": "npm run build -w @inspectr/mcplab-mcp-server",
     "mcp:dev": "tsx packages/mcp-server/src/index.ts",
+    "mcp:weather": "tsx dev/weather-mcp-server.ts",
     "mcp:test:public": "tsx dev/mcp-test-servers/manual-test-public.ts",
     "mcp:test:bearer": "tsx dev/mcp-test-servers/manual-test-bearer.ts",
     "mcp:test:oauth-mock": "tsx dev/mcp-test-servers/manual-test-oauth-mock.ts",
