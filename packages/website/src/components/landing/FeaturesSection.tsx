@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Layers, ShieldCheck, Repeat, FileSearch, TrendingUp, FileCode } from "lucide-react";
+import { Layers, ShieldCheck, Repeat, FileSearch, TrendingUp, Sparkles } from "lucide-react";
 
 const features = [
   {
@@ -28,9 +28,9 @@ const features = [
     description: "Track pass rates, latency, and performance metrics over time.",
   },
   {
-    icon: FileCode,
-    title: "YAML Configuration",
-    description: "Declarative, version-controllable eval specs. Easy to read, write, and share.",
+    icon: Sparkles,
+    title: "AI Assisted Analysis",
+    description: "Built-in AI assistants explain results, spot patterns, and suggest improvements to your eval scenarios.",
   },
 ];
 
