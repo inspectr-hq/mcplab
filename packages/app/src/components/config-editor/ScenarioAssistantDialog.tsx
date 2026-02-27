@@ -868,7 +868,7 @@ function AssistantChatMessageRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
+            className={`absolute bottom-1 h-6 w-6 text-muted-foreground ${isUser ? "-left-8" : "-right-8"}`}
             onClick={() => void copyMessageText(message.text)}
             aria-label="Copy message"
             title="Copy message"
