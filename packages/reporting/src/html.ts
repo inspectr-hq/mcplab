@@ -151,7 +151,7 @@ export function renderHtml(results: ResultsJson): string {
       --card: #ffffff;
       --text: #1b1f29;
       --muted: #5d6472;
-      --accent: #2f5fdd;
+      --accent: #f97316;
       --pass: #1f7a3a;
       --fail: #bb1f1f;
       --mixed: #c77d19;

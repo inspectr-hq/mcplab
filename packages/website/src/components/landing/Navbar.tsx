@@ -9,7 +9,7 @@ const Navbar = () => {
   const links = [
     { label: "Features", href: "#features" },
     { label: "Quick Start", href: "#quickstart" },
-    { label: "GitHub", href: "https://github.com/inspectr-hq/mcp-lab", external: true },
+    { label: "GitHub", href: "https://github.com/inspectr-hq/mcplab", external: true },
   ];
 
   return (

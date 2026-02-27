@@ -31,7 +31,7 @@ const Hero = () => {
               </a>
             </Button>
             <Button size="lg" variant="outline" className="font-semibold text-base gap-2" asChild>
-              <a href="https://github.com/inspectr-dev/mcplab" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/inspectr-hq/mcplab" target="_blank" rel="noopener noreferrer">
                 <Github size={18} /> View on GitHub
               </a>
             </Button>
