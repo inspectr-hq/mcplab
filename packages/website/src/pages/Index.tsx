@@ -3,6 +3,7 @@ import Hero from "@/components/landing/Hero";
 import ProblemSection from "@/components/landing/ProblemSection";
 import FeaturesSection from "@/components/landing/FeaturesSection";
 import ProductPreview from "@/components/landing/ProductPreview";
+import PackagesSection from "@/components/landing/PackagesSection";
 import QuickStart from "@/components/landing/QuickStart";
 import Footer from "@/components/landing/Footer";
 
@@ -14,6 +15,7 @@ const Index = () => {
       <ProblemSection />
       <FeaturesSection />
       <ProductPreview />
+      <PackagesSection />
       <QuickStart />
       <Footer />
     </div>
