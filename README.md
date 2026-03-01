@@ -68,40 +68,12 @@ npm install -g @inspectr/mcplab
 
 ```bash
 cp .env.example .env
+# Edit .env and add your API keys:
+# ANTHROPIC_API_KEY=sk-ant-...
+# OPENAI_API_KEY=sk-...
 ```
 
-Edit `.env` and add your API keys. Below are examples for each supported provider:
-
-**Anthropic (Claude models):**
-```env
-# -----------------------------------------------------------------------------
-# Anthropic Configuration
-# -----------------------------------------------------------------------------
-# Required for testing Claude models (claude-haiku-4, claude-sonnet-4)
-
-ANTHROPIC_API_KEY=sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
-
-**Azure OpenAI (GPT models):**
-```env
-# -----------------------------------------------------------------------------
-# Azure OpenAI Configuration
-# -----------------------------------------------------------------------------
-# Required for testing GPT models (gpt-4o-mini, gpt-4o, etc.)
-
-AZURE_OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT="gpt-5.2-chat"
-AZURE_OPENAI_API_VERSION="2025-04-01-preview"
-```
-
-**OpenAI:**
-```env
-# -----------------------------------------------------------------------------
-# OpenAI Configuration
-# -----------------------------------------------------------------------------
-OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
+Add your API keys to `.env`. See [Environment Variables](#-environment-variables) for full examples.
 
 ### 3. Run your first evaluation
 
@@ -300,6 +272,43 @@ scenarios:
 
 - **`extract`** - Extract metrics from responses
   - Capture values using regex named groups: `(?<value>...)`
+
+---
+
+## 🔑 Environment Variables
+
+Add your LLM Agent API keys to `.env` for each provider you want to use:
+
+**Anthropic (Claude models):**
+```env
+# -----------------------------------------------------------------------------
+# Anthropic Configuration
+# -----------------------------------------------------------------------------
+# Required for testing Claude models (claude-haiku-4, claude-sonnet-4)
+
+ANTHROPIC_API_KEY=sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+**Azure OpenAI (GPT models):**
+```env
+# -----------------------------------------------------------------------------
+# Azure OpenAI Configuration
+# -----------------------------------------------------------------------------
+# Required for testing GPT models (gpt-4o-mini, gpt-4o, etc.)
+
+AZURE_OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT="gpt-5.2-chat"
+AZURE_OPENAI_API_VERSION="2025-04-01-preview"
+```
+
+**OpenAI:**
+```env
+# -----------------------------------------------------------------------------
+# OpenAI Configuration
+# -----------------------------------------------------------------------------
+OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
 
 ---
 
