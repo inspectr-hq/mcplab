@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { AgentConfig } from "@/types/eval";
@@ -17,6 +18,12 @@ import { cn } from "@/lib/utils";
 interface AgentFormProps {
   agents: AgentConfig[];
   onChange: (agents: AgentConfig[]) => void;
+  defaultAgentNames?: string[];
+  onToggleDefaultAgent?: (agentName: string, checked: boolean) => void;
+  importReferenceOptions?: Array<{ value: string; label: string }>;
+  selectedImportReference?: string;
+  onSelectImportReference?: (value: string) => void;
+  onImportSelectedReference?: () => void;
   readOnly?: boolean;
 }
 
@@ -37,20 +44,45 @@ const emptyAgent = (): AgentConfig => ({
   maxTokens: 4096,
 });
 
-export function AgentForm({ agents, onChange, readOnly }: AgentFormProps) {
+export function AgentForm({
+  agents,
+  onChange,
+  defaultAgentNames = [],
+  onToggleDefaultAgent,
+  importReferenceOptions = [],
+  selectedImportReference = "",
+  onSelectImportReference,
+  onImportSelectedReference,
+  readOnly
+}: AgentFormProps) {
   const { source } = useDataSource();
   const [providerModels, setProviderModels] = useState<Record<string, string[]>>({});
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [openModelPickerFor, setOpenModelPickerFor] = useState<string | null>(null);
   const [manualModelInputFor, setManualModelInputFor] = useState<Record<string, boolean>>({});
+  const [openAgents, setOpenAgents] = useState<Record<string, boolean>>({});
 
   const update = (index: number, patch: Partial<AgentConfig>) => {
     const next = agents.map((a, i) => (i === index ? { ...a, ...patch } : a));
     onChange(next);
   };
 
-  const remove = (index: number) => onChange(agents.filter((_, i) => i !== index));
-  const add = () => onChange([...agents, emptyAgent()]);
+  const remove = (index: number) => {
+    const target = agents[index];
+    onChange(agents.filter((_, i) => i !== index));
+    if (target) {
+      setOpenAgents((prev) => {
+        const next = { ...prev };
+        delete next[target.id];
+        return next;
+      });
+    }
+  };
+  const add = () => {
+    const created = emptyAgent();
+    onChange([created, ...agents]);
+    setOpenAgents((prev) => ({ ...prev, [created.id]: true }));
+  };
   const modelOptionsFor = (provider: AgentConfig["provider"]) =>
     Array.from(new Set([...(modelSuggestions[provider] || []), ...(providerModels[provider] || [])]));
   const fetchModels = async (provider: AgentConfig["provider"]) => {
@@ -85,22 +117,72 @@ export function AgentForm({ agents, onChange, readOnly }: AgentFormProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Agents</h3>
         {!readOnly && (
-          <Button type="button" variant="outline" size="sm" onClick={add}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Add Agent
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={selectedImportReference} onValueChange={onSelectImportReference}>
+              <SelectTrigger className="h-8 w-[260px] text-xs">
+                <SelectValue placeholder="Import agent from library..." />
+              </SelectTrigger>
+              <SelectContent>
+                {importReferenceOptions.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onImportSelectedReference}
+              disabled={!selectedImportReference || !onImportSelectedReference}
+            >
+              Import agent
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={add}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />Add Agent
+            </Button>
+          </div>
         )}
       </div>
       {agents.map((agent, i) => (
-        <Card key={agent.id} className="border-dashed">
-          <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-sm font-medium">{agent.name || `Agent ${i + 1}`}</CardTitle>
-            {!readOnly && (
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <Collapsible
+          key={agent.id}
+          open={openAgents[agent.id] ?? false}
+          onOpenChange={(open) => setOpenAgents((prev) => ({ ...prev, [agent.id]: open }))}
+        >
+          <Card className="border-dashed">
+            <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+              <div className="flex min-w-0 items-center gap-1">
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
+                    <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", (openAgents[agent.id] ?? false) ? "rotate-0" : "-rotate-90")} />
+                  </Button>
+                </CollapsibleTrigger>
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-sm font-medium">{agent.name || `Agent ${i + 1}`}</CardTitle>
+                  <div className="truncate font-mono text-[11px] text-muted-foreground">{agent.model}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={defaultAgentNames.includes(agent.name || agent.id)}
+                    onChange={(e) => onToggleDefaultAgent?.(agent.name || agent.id, e.target.checked)}
+                    disabled={readOnly || !onToggleDefaultAgent}
+                  />
+                  <span>Default</span>
+                </label>
+                {!readOnly && (
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
+                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Name</Label>
@@ -262,8 +344,10 @@ export function AgentForm({ agents, onChange, readOnly }: AgentFormProps) {
               <Label className="text-xs">System Prompt</Label>
               <Textarea value={agent.systemPrompt || ""} onChange={(e) => update(i, { systemPrompt: e.target.value })} disabled={readOnly} placeholder="Optional system prompt..." rows={2} className="text-xs" />
             </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       ))}
       {agents.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-6">No agents configured. Add one to get started.</p>

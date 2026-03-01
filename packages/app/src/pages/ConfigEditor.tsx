@@ -143,8 +143,8 @@ const ConfigEditor = () => {
   const [updatingSnapshotPolicy, setUpdatingSnapshotPolicy] = useState(false);
   const [generatingBaseline, setGeneratingBaseline] = useState(false);
   const [selectedLibraryServerId, setSelectedLibraryServerId] = useState("");
-  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
+  const [selectedReferenceAgentToImport, setSelectedReferenceAgentToImport] = useState("");
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
     return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
@@ -320,27 +320,97 @@ const ConfigEditor = () => {
     setSelectedLibraryServerId("");
   };
 
-  const importAgentFromLibrary = () => {
-    const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
-    if (!template) return;
-    const name = template.name || template.id;
-    if (config.agents.some((agent) => (agent.name || agent.id) === name)) {
-      toast({ title: "Agent already exists in config" });
+  const libraryAgentRefOptions = useMemo(
+    () =>
+      libAgents
+        .map((item) => ({
+          id: item.id,
+          ref: item.name || item.id,
+          label: item.name || item.id,
+          model: item.model
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [libAgents]
+  );
+
+  const toggleAgentReference = (refName: string) => {
+    const existing = new Set(config.agentRefs ?? []);
+    if (existing.has(refName)) {
+      patch({
+        agentRefs: (config.agentRefs ?? []).filter((item) => item !== refName),
+        runDefaults: {
+          ...(config.runDefaults ?? {}),
+          selectedAgentNames: defaultRunAgentNames.filter((name) => name !== refName)
+        }
+      });
       return;
     }
-    patch({
-      agents: [...config.agents, { ...structuredClone(template), id: `agt-${Date.now()}` }]
-    });
-    setSelectedLibraryAgentId("");
+    patch({ agentRefs: [...(config.agentRefs ?? []), refName] });
   };
 
-  const addAgentReference = () => {
-    const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
-    if (!template) return;
-    const refName = template.name || template.id;
-    const nextRefs = Array.from(new Set([...(config.agentRefs ?? []), refName]));
-    patch({ agentRefs: nextRefs });
-    setSelectedLibraryAgentId("");
+  const selectAllAgentReferences = () => {
+    patch({ agentRefs: libraryAgentRefOptions.map((option) => option.ref) });
+  };
+
+  const clearAgentReferences = () => {
+    const referencedNames = new Set(libraryAgentRefOptions.map((option) => option.ref));
+    patch({
+      agentRefs: [],
+      runDefaults: {
+        ...(config.runDefaults ?? {}),
+        selectedAgentNames: defaultRunAgentNames.filter((name) => !referencedNames.has(name))
+      }
+    });
+  };
+
+  const toggleDefaultAgent = (agentName: string, checked: boolean, ensureRef = false) => {
+    const nextDefaults = checked
+      ? Array.from(new Set([...defaultRunAgentNames, agentName]))
+      : defaultRunAgentNames.filter((name) => name !== agentName);
+
+    const nextRefs =
+      checked && ensureRef && !(config.agentRefs ?? []).includes(agentName)
+        ? [...(config.agentRefs ?? []), agentName]
+        : config.agentRefs ?? [];
+
+    patch({
+      agentRefs: nextRefs,
+      runDefaults: {
+        ...(config.runDefaults ?? {}),
+        selectedAgentNames: nextDefaults
+      }
+    });
+  };
+
+  const importSelectedReferencedAgentInline = () => {
+    const selectedRef = selectedReferenceAgentToImport.trim();
+    if (!selectedRef) return;
+    const template = libAgents.find((item) => (item.name || item.id) === selectedRef);
+    if (!template) {
+      toast({ title: "Referenced agent not found", variant: "destructive" });
+      return;
+    }
+    const name = template.name || template.id;
+    if (config.agents.some((agent) => (agent.name || agent.id) === name)) {
+      toast({ title: "Agent already exists inline" });
+      return;
+    }
+    const usedNames = new Set([
+      ...config.agents.map((agent) => agent.name || agent.id),
+      ...libAgents.map((agent) => agent.name || agent.id)
+    ]);
+    const customBase = `${name}-custom`;
+    let customName = customBase;
+    let suffix = 2;
+    while (usedNames.has(customName)) {
+      customName = `${customBase}-${suffix}`;
+      suffix += 1;
+    }
+    patch({
+      agents: [{ ...structuredClone(template), id: `agt-${Date.now()}`, name: customName }, ...config.agents]
+    });
+    setSelectedReferenceAgentToImport("");
+    toast({ title: "Imported referenced agent", description: customName });
   };
 
   const importScenarioFromLibrary = () => {
@@ -420,6 +490,13 @@ const ConfigEditor = () => {
   const referencedAgents = (config.agentRefs ?? [])
     .map(findLibraryAgentByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const inlineAgentNameSet = new Set(config.agents.map((agent) => agent.name || agent.id));
+  const importableReferencedAgentOptions = referencedAgents
+    .map((agent) => {
+      const name = agent.name || agent.id;
+      return { value: name, label: `${name} · ${agent.model}` };
+    })
+    .filter((item) => !inlineAgentNameSet.has(item.value));
   const referencedScenarios = (config.scenarioRefs ?? [])
     .map(findLibraryScenarioByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
@@ -427,11 +504,18 @@ const ConfigEditor = () => {
   const missingAgentRefs = (config.agentRefs ?? []).filter((ref) => !findLibraryAgentByRef(ref));
   const missingScenarioRefs = (config.scenarioRefs ?? []).filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
-  const missingAgentRefSet = new Set(missingAgentRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
   const totalServerCount = config.servers.length + referencedServers.length;
   const totalAgentCount = config.agents.length + referencedAgents.length;
   const totalScenarioCount = config.scenarios.length + referencedScenarios.length;
+
+  useEffect(() => {
+    if (!selectedReferenceAgentToImport) return;
+    const stillAvailable = importableReferencedAgentOptions.some(
+      (option) => option.value === selectedReferenceAgentToImport
+    );
+    if (!stillAvailable) setSelectedReferenceAgentToImport("");
+  }, [importableReferencedAgentOptions, selectedReferenceAgentToImport]);
 
   return (
     <div className="space-y-6">
@@ -591,99 +675,6 @@ const ConfigEditor = () => {
           </div>
         </CardContent>
       </Card>
-
-      {!readOnly && (
-      <Card>
-        <CardContent className="pt-6 space-y-3">
-          <div>
-            <p className="text-sm font-semibold">Run Defaults</p>
-            <p className="text-xs text-muted-foreground">
-              Default agent selection for Run UI/CLI. Users can override at run time.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Default agents</Label>
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="text-xs text-primary hover:underline"
-                  onClick={() =>
-                    patch({
-                      runDefaults: {
-                        ...(config.runDefaults ?? {}),
-                        selectedAgentNames: [
-                          ...new Set(
-                            [
-                              ...config.agents.map((a) => a.name || a.id),
-                              ...referencedAgents.map((a) => a.name || a.id)
-                            ]
-                          )
-                        ]
-                      }
-                    })
-                  }
-                >
-                  Select all
-                </button>
-              )}
-            </div>
-            {readOnly ? (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Default run agents are highlighted in the agent cards above.
-                </p>
-                {defaultRunAgentNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {defaultRunAgentNames.map((name) => (
-                      <Badge key={`default-run-agent-${name}`} variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-                        {name}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No default agents selected.</p>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[...config.agents, ...referencedAgents].map((agent) => {
-                  const agentName = agent.name || agent.id;
-                  const checked = defaultRunAgentNames.includes(agentName);
-                  return (
-                    <label key={`run-default-${agent.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={readOnly}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...defaultRunAgentNames, agentName]
-                            : defaultRunAgentNames.filter((name) => name !== agentName);
-                          patch({
-                            runDefaults: {
-                              ...(config.runDefaults ?? {}),
-                              selectedAgentNames: Array.from(new Set(next))
-                            }
-                          });
-                        }}
-                      />
-                      <span>{agent.name || agent.id}</span>
-                      {referencedAgents.some((a) => a.id === agent.id) && (
-                        <span className="text-xs text-muted-foreground">(ref)</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-            {[...config.agents, ...referencedAgents].length === 0 && (
-              <p className="text-xs text-muted-foreground">No agents available yet.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      )}
 
       {snapshotsUiEnabled && (
       <Card>
@@ -934,52 +925,69 @@ const ConfigEditor = () => {
         <TabsContent value="agents">
           {!readOnly && <Card className="mb-4">
             <CardContent className="pt-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <Select value={selectedLibraryAgentId} onValueChange={setSelectedLibraryAgentId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select agent from library" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libAgents
-                      .filter((item) => !(config.agentRefs ?? []).includes(item.name || item.id))
-                      .map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
-                    Add Ref
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibrary}>
-                    Import Inline
-                  </Button>
-                </div>
-              </div>
-              {(config.agentRefs ?? []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(config.agentRefs ?? []).map((ref) => (
-                    <Badge
-                      key={ref}
-                      variant={missingAgentRefSet.has(ref) ? "destructive" : "secondary"}
-                      className="gap-1"
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Library agents</Label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={selectAllAgentReferences}
+                      disabled={(config.agentRefs ?? []).length === libraryAgentRefOptions.length || libraryAgentRefOptions.length === 0}
                     >
-                      {missingAgentRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                      {ref}
-                      <button
-                        type="button"
-                        onClick={() => removeRef("agentRefs", ref)}
-                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                        aria-label={`Remove agent reference ${ref}`}
-                        title={`Remove agent reference ${ref}`}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                        Remove
-                      </button>
-                    </Badge>
-                  ))}
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={clearAgentReferences}
+                      disabled={(config.agentRefs ?? []).length === 0}
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
-              )}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_90px_90px] items-center px-2 text-[11px] text-muted-foreground">
+                    <span>Agent</span>
+                    <span className="text-center">Ref</span>
+                    <span className="text-center">Default</span>
+                  </div>
+                  {libraryAgentRefOptions.map((option) => {
+                    const refChecked = (config.agentRefs ?? []).includes(option.ref);
+                    const defaultChecked = defaultRunAgentNames.includes(option.ref);
+                    const managedInline = inlineAgentNameSet.has(option.ref);
+                    return (
+                      <div key={option.id} className="grid grid-cols-[minmax(0,1fr)_90px_90px] items-center gap-2 rounded-md border p-2 text-sm">
+                        <span className="truncate">{option.label}</span>
+                        <label className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={refChecked}
+                            onChange={() => toggleAgentReference(option.ref)}
+                          />
+                          <span>(ref)</span>
+                        </label>
+                        {managedInline ? (
+                          <span className="mx-auto text-[11px] text-muted-foreground">inline</span>
+                        ) : (
+                          <label className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={defaultChecked}
+                              onChange={(e) => toggleDefaultAgent(option.ref, e.target.checked, true)}
+                            />
+                            <span>Default</span>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {libraryAgentRefOptions.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No library agents available.</p>
+                )}
+              </div>
               {missingAgentRefs.length > 0 && (
                 <p className="mt-2 text-xs text-destructive">
                   Missing agent refs: {missingAgentRefs.join(", ")}
@@ -987,7 +995,7 @@ const ConfigEditor = () => {
               )}
             </CardContent>
           </Card>}
-          {referencedAgents.length > 0 && (
+          {readOnly && referencedAgents.length > 0 && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1010,7 +1018,17 @@ const ConfigEditor = () => {
           ) : readOnly ? (
             <InlineAgentsReadOnly agents={config.agents} defaultAgentNames={defaultRunAgentNames} />
           ) : (
-            <AgentForm agents={config.agents} onChange={(agents) => patch({ agents })} readOnly={readOnly} />
+            <AgentForm
+              agents={config.agents}
+              onChange={(agents) => patch({ agents })}
+              defaultAgentNames={defaultRunAgentNames}
+              onToggleDefaultAgent={(agentName, checked) => toggleDefaultAgent(agentName, checked)}
+              importReferenceOptions={importableReferencedAgentOptions}
+              selectedImportReference={selectedReferenceAgentToImport}
+              onSelectImportReference={setSelectedReferenceAgentToImport}
+              onImportSelectedReference={importSelectedReferencedAgentInline}
+              readOnly={readOnly}
+            />
           )}
         </TabsContent>
 
