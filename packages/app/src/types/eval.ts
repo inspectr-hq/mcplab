@@ -54,6 +54,10 @@ export type ScenarioEntry =
   | { kind: 'inline'; scenario: Scenario }
   | { kind: 'referenced'; ref: string };
 
+export type AgentEntry =
+  | { kind: 'inline'; agent: AgentConfig }
+  | { kind: 'referenced'; ref: string };
+
 export interface SnapshotEvalPolicy {
   enabled: boolean;
   mode: 'warn' | 'fail_on_drift';
@@ -73,6 +77,7 @@ export interface EvalConfig {
   serverRefs?: string[];
   agents: AgentConfig[];
   agentRefs?: string[];
+  agentEntries?: AgentEntry[];
   scenarios: Scenario[];
   scenarioEntries?: ScenarioEntry[];
   scenarioRefs?: string[];

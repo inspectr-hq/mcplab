@@ -189,4 +189,34 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('migrates legacy agent_refs into agents ref entries with warning', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(
+        join(dir, 'agents.yaml'),
+        ['claude-sonnet-46:', '  provider: anthropic', '  model: claude-sonnet-4-6'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'legacy-agents.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'agent_refs:',
+          '  - claude-sonnet-46',
+          'scenarios: []'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig, warnings } = loadConfig(configPath);
+      expect(warnings.some((w) => w.includes('Legacy agent_refs was migrated'))).toBe(true);
+      expect(sourceConfig.agent_refs ?? []).toEqual([]);
+      expect(sourceConfig.agents).toEqual([{ ref: 'claude-sonnet-46' }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

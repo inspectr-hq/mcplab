@@ -44,7 +44,7 @@ function emptySourceConfig(): SourceEvalConfig {
   return {
     servers: {},
     server_refs: [],
-    agents: {},
+    agents: [],
     agent_refs: [],
     scenarios: [],
     scenario_refs: []
@@ -64,9 +64,22 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
           : {},
       server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
       agents:
-        obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)
+        Array.isArray(obj.agents)
           ? (obj.agents as SourceEvalConfig['agents'])
-          : {},
+          : obj.agents && typeof obj.agents === 'object'
+            ? Object.entries(obj.agents as Record<string, Record<string, unknown>>).map(
+                ([name, agent]) => ({
+                  name,
+                  provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
+                  model: String(agent.model ?? ''),
+                  temperature:
+                    typeof agent.temperature === 'number' ? agent.temperature : undefined,
+                  max_tokens:
+                    typeof agent.max_tokens === 'number' ? agent.max_tokens : undefined,
+                  system: typeof agent.system === 'string' ? agent.system : undefined
+                })
+              )
+            : [],
       agent_refs: Array.isArray(obj.agent_refs) ? obj.agent_refs.map((v) => String(v)) : [],
       scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as SourceEvalConfig['scenarios']) : [],
       scenario_refs: Array.isArray(obj.scenario_refs)

@@ -1,5 +1,6 @@
 import type {
   ConversationItem,
+  AgentEntry,
   EvalConfig,
   EvalResult,
   EvalRule,
@@ -23,7 +24,7 @@ function toId(base: string, index: number): string {
 
 export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const serverEntries = Object.entries(record.config.servers);
-  const agentEntries = Object.entries(record.config.agents);
+  const sourceAgentEntries = Array.isArray(record.config.agents) ? record.config.agents : [];
   const serverIdByName = new Map<string, string>();
   const agentIdByName = new Map<string, string>();
 
@@ -55,21 +56,48 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     };
   });
 
-  const agents = agentEntries.map(([name, agent], index) => {
-    const id = toId('agt', index);
-    agentIdByName.set(name, id);
+  const agents: EvalConfig['agents'] = [];
+  const mixedAgentEntries: AgentEntry[] = [];
+  let inlineAgentIndex = 0;
+  for (const entry of sourceAgentEntries) {
+    if ('ref' in entry) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) continue;
+      mixedAgentEntries.push({ kind: 'referenced', ref });
+      continue;
+    }
+    const inlineName = String(entry.name || '').trim();
+    if (!inlineName) continue;
+    const id = toId('agt', inlineAgentIndex);
+    inlineAgentIndex += 1;
+    agentIdByName.set(inlineName, id);
     const provider: 'openai' | 'anthropic' | 'azure' =
-      agent.provider === 'azure_openai' ? 'azure' : agent.provider;
-    return {
+      entry.provider === 'azure_openai' ? 'azure' : entry.provider;
+    const mappedAgent = {
       id,
-      name,
+      name: inlineName,
       provider,
-      model: agent.model,
-      temperature: agent.temperature ?? 0,
-      maxTokens: agent.max_tokens ?? 2048,
-      systemPrompt: agent.system
+      model: entry.model,
+      temperature: entry.temperature ?? 0,
+      maxTokens: entry.max_tokens ?? 2048,
+      systemPrompt: entry.system
     };
-  });
+    agents.push(mappedAgent);
+    mixedAgentEntries.push({ kind: 'inline', agent: mappedAgent });
+  }
+  const normalizedAgentRefs = (record.config.agent_refs ?? [])
+    .map((ref) => String(ref).trim())
+    .filter(Boolean);
+  const agentRefs = Array.from(new Set([
+    ...mixedAgentEntries
+      .filter((entry): entry is Extract<AgentEntry, { kind: 'referenced' }> => entry.kind === 'referenced')
+      .map((entry) => entry.ref),
+    ...normalizedAgentRefs
+  ]));
+  for (const ref of normalizedAgentRefs) {
+    const exists = mixedAgentEntries.some((entry) => entry.kind === 'referenced' && entry.ref === ref);
+    if (!exists) mixedAgentEntries.push({ kind: 'referenced', ref });
+  }
 
   const inlineScenarios: EvalConfig['scenarios'] = [];
   const scenarioRefs: string[] = [];
@@ -137,7 +165,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     servers,
     serverRefs: record.config.server_refs ?? [],
     agents,
-    agentRefs: record.config.agent_refs ?? [],
+    agentRefs,
+    agentEntries: mixedAgentEntries,
     scenarios: inlineScenarios,
     scenarioEntries,
     scenarioRefs: scenarioRefs.length > 0 ? scenarioRefs : record.config.scenario_refs ?? [],
@@ -176,7 +205,14 @@ export function fromCoreLibraries(libraries: {
     hash: '',
     config: {
       servers: libraries.servers,
-      agents: libraries.agents,
+      agents: Object.entries(libraries.agents).map(([name, agent]) => ({
+        name,
+        provider: agent.provider,
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system
+      })),
       scenarios: libraries.scenarios
     }
   };
@@ -190,7 +226,6 @@ export function fromCoreLibraries(libraries: {
 
 export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const serverNameById = new Map<string, string>();
-  const agentNameById = new Map<string, string>();
 
   const servers: CoreEvalConfig['servers'] = {};
   for (const server of config.servers) {
@@ -214,11 +249,10 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     };
   }
 
-  const agents: CoreEvalConfig['agents'] = {};
-  for (const agent of config.agents) {
+  const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
     const name = agent.name || agent.id;
-    agentNameById.set(agent.id, name);
-    agents[name] = {
+    return {
+      name,
       provider:
         agent.provider === 'azure'
           ? 'azure_openai'
@@ -229,8 +263,27 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       temperature: agent.temperature,
       max_tokens: agent.maxTokens,
       system: agent.systemPrompt
-    };
-  }
+    } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
+  };
+
+  const mixedAgentEntries = config.agentEntries && config.agentEntries.length > 0
+    ? config.agentEntries
+    : [
+        ...(config.agentRefs ?? []).map((ref) => ({ kind: 'referenced' as const, ref })),
+        ...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))
+      ];
+  const resolvedAgentRefs: string[] = [];
+  const seenAgentRefs = new Set<string>();
+  const agents = mixedAgentEntries.flatMap((entry) => {
+    if (entry.kind === 'referenced') {
+      const ref = String(entry.ref || '').trim();
+      if (!ref || seenAgentRefs.has(ref)) return [];
+      seenAgentRefs.add(ref);
+      resolvedAgentRefs.push(ref);
+      return [{ ref }];
+    }
+    return [mapInlineAgent(entry.agent)];
+  });
 
   const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
     const required_tools = scenario.evalRules
@@ -285,7 +338,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     servers,
     server_refs: config.serverRefs ?? [],
     agents,
-    agent_refs: config.agentRefs ?? [],
+    agent_refs: undefined,
     scenarios,
     run_defaults:
       config.runDefaults?.selectedAgentNames && config.runDefaults.selectedAgentNames.length > 0

@@ -42,6 +42,16 @@ export interface AgentConfig {
   system?: string;
 }
 
+export interface AgentInlineEntry extends AgentConfig {
+  name: string;
+}
+
+export interface AgentRefEntry {
+  ref: string;
+}
+
+export type AgentListEntry = AgentInlineEntry | AgentRefEntry;
+
 export interface ToolConstraints {
   required_tools?: string[];
   forbidden_tools?: string[];
@@ -119,7 +129,8 @@ export interface EvalConfig {
   snapshot_eval?: SnapshotEvalPolicy;
 }
 
-export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios'> {
+export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents'> {
+  agents: AgentListEntry[];
   scenarios: ScenarioListEntry[];
 }
 

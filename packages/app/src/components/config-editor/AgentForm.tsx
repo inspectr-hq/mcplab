@@ -25,6 +25,8 @@ interface AgentFormProps {
   onSelectImportReference?: (value: string) => void;
   onImportSelectedReference?: () => void;
   readOnly?: boolean;
+  allowAdd?: boolean;
+  allowStructureEdits?: boolean;
 }
 
 const modelSuggestions: Record<string, string[]> = {
@@ -53,7 +55,9 @@ export function AgentForm({
   selectedImportReference = "",
   onSelectImportReference,
   onImportSelectedReference,
-  readOnly
+  readOnly,
+  allowAdd = !readOnly,
+  allowStructureEdits = !readOnly
 }: AgentFormProps) {
   const { source } = useDataSource();
   const [providerModels, setProviderModels] = useState<Record<string, string[]>>({});
@@ -116,7 +120,7 @@ export function AgentForm({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Agents</h3>
-        {!readOnly && (
+        {!readOnly && allowAdd && (
           <div className="flex items-center gap-2">
             <Select value={selectedImportReference} onValueChange={onSelectImportReference}>
               <SelectTrigger className="h-8 w-[260px] text-xs">
@@ -174,7 +178,7 @@ export function AgentForm({
                   />
                   <span>Default</span>
                 </label>
-                {!readOnly && (
+                {!readOnly && allowStructureEdits && (
                   <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>

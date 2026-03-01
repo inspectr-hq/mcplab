@@ -410,15 +410,11 @@ program
 
 program
   .command('migrate-configs')
-  .description('Migrate eval YAML files to mixed scenarios list format (scenarios: [{ref}|inline])')
-  .option('--to-mixed-scenarios', 'Migrate to mixed scenarios list format')
+  .description('Migrate eval YAML files to mixed list formats (agents/scenarios with inline + {ref})')
   .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
   .option('--dry-run', 'Preview migration without writing files')
   .action((options) => {
     try {
-      if (!options.toMixedScenarios) {
-        throw new Error('Specify --to-mixed-scenarios');
-      }
       const evalsDir = resolve(String(options.evalsDir));
       const files = readdirSync(evalsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
       let migrated = 0;
@@ -432,9 +428,23 @@ program
           const hadLegacyScenarioRefsWarning = warnings.some((warning) =>
             warning.includes('Legacy scenario_refs was migrated')
           );
-          const hadLegacyScenarioRefsField = Array.isArray((sourceConfig as { scenario_refs?: unknown }).scenario_refs)
-            && ((sourceConfig as { scenario_refs?: unknown[] }).scenario_refs?.length ?? 0) > 0;
-          if (!hadLegacyScenarioRefsWarning && !hadLegacyScenarioRefsField) {
+          const hadLegacyAgentRefsWarning = warnings.some((warning) =>
+            warning.includes('Legacy agent_refs was migrated')
+          );
+
+          const hadLegacyScenarioRefsField =
+            Array.isArray((sourceConfig as { scenario_refs?: unknown }).scenario_refs) &&
+            ((sourceConfig as { scenario_refs?: unknown[] }).scenario_refs?.length ?? 0) > 0;
+          const hadLegacyAgentRefsField =
+            Array.isArray((sourceConfig as { agent_refs?: unknown }).agent_refs) &&
+            ((sourceConfig as { agent_refs?: unknown[] }).agent_refs?.length ?? 0) > 0;
+
+          if (
+            !hadLegacyScenarioRefsWarning &&
+            !hadLegacyScenarioRefsField &&
+            !hadLegacyAgentRefsWarning &&
+            !hadLegacyAgentRefsField
+          ) {
             skipped += 1;
             continue;
           }
@@ -449,6 +459,7 @@ program
           }
           const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
+            agent_refs: undefined,
             scenario_refs: undefined
           };
           writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');

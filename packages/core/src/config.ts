@@ -3,6 +3,9 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import type {
+  AgentInlineEntry,
+  AgentListEntry,
+  AgentRefEntry,
   EvalConfig,
   ExecutableEvalConfig,
   Scenario,
@@ -73,14 +76,43 @@ function resolveReferences(
     if (!servers[ref]) missingServerRefs.push(ref);
   }
 
-  const agents = { ...(sourceConfig.agents ?? {}) };
   const missingAgentRefs: string[] = [];
-  for (const ref of sourceConfig.agent_refs ?? []) {
-    if (!agents[ref] && libraryAgents[ref]) {
-      agents[ref] = libraryAgents[ref];
+  const resolvedAgents: Record<string, EvalConfig['agents'][string]> = {};
+  const seenAgentNames = new Set<string>();
+  for (const entry of sourceConfig.agents ?? []) {
+    if (isAgentRefEntry(entry)) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) {
+        missingAgentRefs.push('(empty-ref)');
+        continue;
+      }
+      const agent = libraryAgents[ref];
+      if (!agent) {
+        missingAgentRefs.push(ref);
+        continue;
+      }
+      if (seenAgentNames.has(ref)) {
+        throw new Error(`Duplicate agent name detected while resolving refs: ${ref}`);
+      }
+      seenAgentNames.add(ref);
+      resolvedAgents[ref] = agent;
       continue;
     }
-    if (!agents[ref]) missingAgentRefs.push(ref);
+    const inlineName = String((entry as { name?: unknown }).name ?? '').trim();
+    if (!inlineName) {
+      throw new Error('Invalid config: inline agent is missing required name');
+    }
+    if (seenAgentNames.has(inlineName)) {
+      throw new Error(`Duplicate agent name detected: ${inlineName}`);
+    }
+    seenAgentNames.add(inlineName);
+    resolvedAgents[inlineName] = {
+      provider: entry.provider,
+      model: entry.model,
+      temperature: entry.temperature,
+      max_tokens: entry.max_tokens,
+      system: entry.system
+    };
   }
 
   const scenarios: Scenario[] = [];
@@ -130,7 +162,7 @@ function resolveReferences(
     missingMessages.push(`scenario_refs: ${missingScenarioRefs.join(', ')}`);
   }
   const defaultAgents = sourceConfig.run_defaults?.selected_agents ?? [];
-  const missingDefaultAgents = defaultAgents.filter((agent) => !agents[agent]);
+  const missingDefaultAgents = defaultAgents.filter((agent) => !resolvedAgents[agent]);
   if (missingDefaultAgents.length > 0) {
     missingMessages.push(`run_defaults.selected_agents: ${missingDefaultAgents.join(', ')}`);
   }
@@ -147,7 +179,7 @@ function resolveReferences(
   return {
     ...sourceConfig,
     servers,
-    agents,
+    agents: resolvedAgents,
     scenarios
   };
 }
@@ -158,6 +190,45 @@ function normalizeConfig(
   const warnings: string[] = [];
   const legacyPinnedAgents = new Set<string>();
   const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
+  const rawAgents = (sourceConfig as { agents?: unknown }).agents;
+  const agentsInput = Array.isArray(rawAgents) ? rawAgents : [];
+  const normalizedAgents: AgentListEntry[] = [];
+  if (Array.isArray(rawAgents)) {
+    for (const rawAgent of agentsInput) {
+      const agent = rawAgent as AgentListEntry;
+      if (isAgentRefEntry(agent)) {
+        const ref = String(agent.ref ?? '').trim();
+        if (!ref) throw new Error('Invalid config: agent ref must be a non-empty name');
+        normalizedAgents.push({ ref });
+        continue;
+      }
+      const inlineName = String((agent as AgentInlineEntry).name ?? '').trim();
+      if (!inlineName) throw new Error('Invalid config: inline agent is missing required name');
+      normalizedAgents.push({
+        name: inlineName,
+        provider: (agent as AgentInlineEntry).provider,
+        model: (agent as AgentInlineEntry).model,
+        temperature: (agent as AgentInlineEntry).temperature,
+        max_tokens: (agent as AgentInlineEntry).max_tokens,
+        system: (agent as AgentInlineEntry).system
+      });
+    }
+  } else {
+    const legacyInlineAgents =
+      rawAgents && typeof rawAgents === 'object' && !Array.isArray(rawAgents)
+        ? (rawAgents as Record<string, EvalConfig['agents'][string]>)
+        : {};
+    for (const [name, agent] of Object.entries(legacyInlineAgents)) {
+      normalizedAgents.push({
+        name,
+        provider: agent.provider,
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system
+      });
+    }
+  }
   const normalizedScenarios: ScenarioListEntry[] = [];
   for (const scenario of scenariosInput) {
     if (isScenarioRefEntry(scenario)) {
@@ -193,6 +264,20 @@ function normalizeConfig(
     normalizedScenarios.push(nextScenario);
   }
 
+  const legacyAgentRefs = Array.isArray(sourceConfig.agent_refs)
+    ? sourceConfig.agent_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (legacyAgentRefs.length > 0) {
+    const existingRefs = new Set(
+      normalizedAgents.filter(isAgentRefEntry).map((entry) => entry.ref)
+    );
+    for (const ref of legacyAgentRefs) {
+      if (existingRefs.has(ref)) continue;
+      normalizedAgents.push({ ref });
+    }
+    warnings.push('Legacy agent_refs was migrated into agents[{ref}] and will be removed on next save.');
+  }
+
   const legacyScenarioRefs = Array.isArray(sourceConfig.scenario_refs)
     ? sourceConfig.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
     : [];
@@ -213,8 +298,8 @@ function normalizeConfig(
     ...sourceConfig,
     servers: sourceConfig.servers ?? {},
     server_refs: sourceConfig.server_refs ?? [],
-    agents: sourceConfig.agents ?? {},
-    agent_refs: sourceConfig.agent_refs ?? [],
+    agents: normalizedAgents,
+    agent_refs: [],
     scenarios: normalizedScenarios,
     scenario_refs: []
   };
@@ -222,8 +307,8 @@ function normalizeConfig(
   if (typeof normalized.servers !== 'object' || Array.isArray(normalized.servers)) {
     throw new Error('Invalid config: servers must be an object');
   }
-  if (typeof normalized.agents !== 'object' || Array.isArray(normalized.agents)) {
-    throw new Error('Invalid config: agents must be an object');
+  if (!Array.isArray(normalized.agents)) {
+    throw new Error('Invalid config: agents must be an array');
   }
   if (!Array.isArray(normalized.scenarios)) {
     throw new Error('Invalid config: scenarios must be an array');
@@ -368,5 +453,9 @@ export function expandConfigForAgents(
 }
 
 function isScenarioRefEntry(entry: ScenarioListEntry): entry is ScenarioRefEntry {
+  return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
+}
+
+function isAgentRefEntry(entry: AgentListEntry): entry is AgentRefEntry {
   return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
 }

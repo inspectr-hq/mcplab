@@ -6,6 +6,33 @@ import { loadConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConfig {
+  const rawAgents = (config as { agents?: unknown }).agents;
+  const agents = Array.isArray(rawAgents)
+    ? [...rawAgents]
+    : rawAgents && typeof rawAgents === 'object'
+      ? Object.entries(rawAgents as Record<string, Record<string, unknown>>).map(([name, agent]) => ({
+          name,
+          provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
+          model: String(agent.model ?? ''),
+          temperature: typeof agent.temperature === 'number' ? agent.temperature : undefined,
+          max_tokens: typeof agent.max_tokens === 'number' ? agent.max_tokens : undefined,
+          system: typeof agent.system === 'string' ? agent.system : undefined
+        }))
+      : [];
+  const legacyAgentRefs = Array.isArray(config.agent_refs)
+    ? config.agent_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  const existingAgentRefs = new Set(
+    agents
+      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
+      .map((entry) => String(entry.ref).trim())
+      .filter(Boolean)
+  );
+  for (const ref of legacyAgentRefs) {
+    if (existingAgentRefs.has(ref)) continue;
+    agents.push({ ref });
+  }
+
   const scenarios = Array.isArray(config.scenarios) ? [...config.scenarios] : [];
   const legacyRefs = Array.isArray(config.scenario_refs)
     ? config.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
@@ -22,6 +49,8 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
   }
   return {
     ...config,
+    agents,
+    agent_refs: undefined,
     scenarios,
     scenario_refs: undefined
   };
