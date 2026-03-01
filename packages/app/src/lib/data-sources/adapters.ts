@@ -236,14 +236,14 @@ export function fromCoreLibraries(libraries: {
     config: {
       servers: Object.entries(libraries.servers).map(([name, server]) => ({
         id: name,
-        name,
+        name: server.name || name,
         transport: server.transport,
         url: server.url,
         auth: server.auth
       })),
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
         id: name,
-        name,
+        name: agent.name || name,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
@@ -418,23 +418,83 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
   agents: CoreEvalConfig['agents'];
   scenarios: CoreEvalConfig['scenarios'];
 } {
-  const core = toCoreConfigYaml({
-    id: 'library',
-    name: 'library',
-    description: '',
-    servers: input.servers,
-    serverRefs: [],
-    agents: input.agents,
-    agentRefs: [],
-    scenarios: input.scenarios,
-    scenarioRefs: [],
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString()
-  });
+  const servers = Object.fromEntries(
+    input.servers.map((server) => [
+      server.id,
+      {
+        ...(server.name && server.name !== server.id ? { name: server.name } : {}),
+        transport: 'http' as const,
+        url: server.url || 'http://localhost:3000/mcp',
+        auth:
+          server.authType === 'bearer'
+            ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+            : server.authType === 'oauth2'
+              ? {
+                  type: 'oauth_authorization_code' as const,
+                  client_id: server.oauthClientId || '',
+                  client_secret: server.oauthClientSecret || undefined,
+                  redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+                  scope: server.oauthScope || undefined
+                }
+              : undefined
+      }
+    ])
+  ) as CoreEvalConfig['servers'];
+
+  const agents = Object.fromEntries(
+    input.agents.map((agent) => [
+      agent.id,
+      {
+        ...(agent.name && agent.name !== agent.id ? { name: agent.name } : {}),
+        provider:
+          agent.provider === 'azure'
+            ? 'azure_openai'
+            : agent.provider === 'anthropic'
+              ? 'anthropic'
+              : 'openai',
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.maxTokens,
+        system: agent.systemPrompt
+      }
+    ])
+  ) as CoreEvalConfig['agents'];
+
   return {
-    servers: core.servers,
-    agents: core.agents,
-    scenarios: core.scenarios
+    servers,
+    agents,
+    scenarios: input.scenarios.map((scenario) => ({
+      id: scenario.id,
+      name: scenario.name || undefined,
+      servers: scenario.serverIds,
+      prompt: scenario.prompt,
+      snapshot_eval: scenario.snapshotEval
+        ? {
+            enabled: scenario.snapshotEval.enabled,
+            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+            last_updated_at: scenario.snapshotEval.lastUpdatedAt
+          }
+        : undefined,
+      eval: {
+        tool_constraints: {
+          required_tools: scenario.evalRules
+            .filter((rule) => rule.type === 'required_tool')
+            .map((rule) => rule.value),
+          forbidden_tools: scenario.evalRules
+            .filter((rule) => rule.type === 'forbidden_tool')
+            .map((rule) => rule.value)
+        },
+        response_assertions: scenario.evalRules
+          .filter((rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains')
+          .map((rule) => ({ type: 'regex' as const, pattern: rule.value }))
+      },
+      extract: scenario.extractRules.map((rule) => ({
+        name: rule.name,
+        from: 'final_text' as const,
+        regex: rule.pattern
+      }))
+    }))
   };
 }
 

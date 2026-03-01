@@ -70,8 +70,10 @@ const AgentDetail = () => {
   const { source } = useDataSource();
 
   const isNew = agentName === "new";
-  const decodedName = agentName ? decodeURIComponent(agentName) : "";
-  const existingAgent = isNew ? null : agents.find((a) => a.name === decodedName);
+  const decodedParam = agentName ? decodeURIComponent(agentName) : "";
+  const existingAgent = isNew
+    ? null
+    : agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam);
 
   const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? emptyAgent());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -163,13 +165,13 @@ const AgentDetail = () => {
       if (isNew) {
         await setAgents([...agents, form]);
         toast({ title: "Agent created" });
-        navigate(`/libraries/agents/${encodeURIComponent(form.name)}`);
+        navigate(`/libraries/agents/${encodeURIComponent(form.id)}`);
       } else {
-        const next = agents.map((a) => (a.name === decodedName ? form : a));
+        const next = agents.map((a) => (a.id === existingAgent?.id ? form : a));
         await setAgents(next);
         toast({ title: "Agent saved" });
-        if (form.name !== decodedName) {
-          navigate(`/libraries/agents/${encodeURIComponent(form.name)}`, { replace: true });
+        if (form.id !== decodedParam) {
+          navigate(`/libraries/agents/${encodeURIComponent(form.id)}`, { replace: true });
         }
       }
     } finally {
@@ -178,7 +180,7 @@ const AgentDetail = () => {
   };
 
   const handleDelete = async () => {
-    const next = agents.filter((a) => a.name !== decodedName);
+    const next = agents.filter((a) => a.id !== existingAgent?.id);
     await setAgents(next);
     toast({ title: "Agent deleted" });
     navigate("/libraries/agents");
@@ -193,7 +195,7 @@ const AgentDetail = () => {
         >
           <ArrowLeft className="h-4 w-4" /> Agents
         </Link>
-        <p className="text-sm text-muted-foreground">Agent "{decodedName}" not found.</p>
+        <p className="text-sm text-muted-foreground">Agent "{decodedParam}" not found.</p>
       </div>
     );
   }

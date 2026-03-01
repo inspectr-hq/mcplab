@@ -29,6 +29,7 @@ export type ServerAuth =
   | ServerAuthOauthAuthorizationCode;
 
 export interface ServerConfig {
+  name?: string;
   transport: TransportType;
   url: string;
   auth?: ServerAuth;
@@ -46,6 +47,7 @@ export interface ServerRefEntry {
 export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 
 export interface AgentConfig {
+  name?: string;
   provider: 'openai' | 'anthropic' | 'azure_openai';
   model: string;
   temperature?: number;

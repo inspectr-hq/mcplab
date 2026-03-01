@@ -37,6 +37,7 @@ function normalizeServers(raw: unknown): EvalConfig['servers'] {
       const id = String(candidate.id ?? candidate.name ?? '').trim();
       if (!id || !candidate.transport || !candidate.url) continue;
       normalized[id] = {
+        name: typeof candidate.name === 'string' ? candidate.name : undefined,
         transport: candidate.transport,
         url: candidate.url,
         auth: candidate.auth
@@ -50,6 +51,7 @@ function normalizeServers(raw: unknown): EvalConfig['servers'] {
       const candidate = value as EvalConfig['servers'][string];
       if (!candidate.transport || !candidate.url) continue;
       normalized[id] = {
+        name: typeof candidate.name === 'string' ? candidate.name : undefined,
         transport: candidate.transport,
         url: candidate.url,
         auth: candidate.auth
@@ -76,6 +78,7 @@ function normalizeAgents(raw: unknown): EvalConfig['agents'] {
       const id = String(candidate.id ?? candidate.name ?? '').trim();
       if (!id || !candidate.provider || !candidate.model) continue;
       normalized[id] = {
+        name: typeof candidate.name === 'string' ? candidate.name : undefined,
         provider: candidate.provider,
         model: candidate.model,
         temperature: candidate.temperature,
@@ -91,6 +94,7 @@ function normalizeAgents(raw: unknown): EvalConfig['agents'] {
       const candidate = value as EvalConfig['agents'][string];
       if (!candidate.provider || !candidate.model) continue;
       normalized[id] = {
+        name: typeof candidate.name === 'string' ? candidate.name : undefined,
         provider: candidate.provider,
         model: candidate.model,
         temperature: candidate.temperature,

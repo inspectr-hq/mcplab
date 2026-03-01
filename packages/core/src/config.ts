@@ -256,6 +256,7 @@ function normalizeConfig(
     for (const [name, server] of Object.entries(legacyInlineServers)) {
       normalizedServers.push({
         id: name,
+        name: typeof (server as { name?: unknown }).name === 'string' ? String((server as { name?: unknown }).name) : undefined,
         transport: server.transport,
         url: server.url,
         auth: server.auth
@@ -303,6 +304,7 @@ function normalizeConfig(
     for (const [name, agent] of Object.entries(legacyInlineAgents)) {
       normalizedAgents.push({
         id: name,
+        name: typeof (agent as { name?: unknown }).name === 'string' ? String((agent as { name?: unknown }).name) : undefined,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
@@ -496,6 +498,7 @@ function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['serve
       const id = String(server.id ?? server.name ?? '').trim();
       if (!id || !server.transport || !server.url) continue;
       out[id] = {
+        name: typeof server.name === 'string' ? server.name : undefined,
         transport: server.transport,
         url: server.url,
         auth: server.auth
@@ -509,6 +512,7 @@ function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['serve
     const server = value as EvalConfig['servers'][string];
     if (!server.transport || !server.url) continue;
     out[id] = {
+      name: typeof server.name === 'string' ? server.name : undefined,
       transport: server.transport,
       url: server.url,
       auth: server.auth
@@ -534,6 +538,7 @@ function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents
       const id = String(agent.id ?? agent.name ?? '').trim();
       if (!id || !agent.provider || !agent.model) continue;
       out[id] = {
+        name: typeof agent.name === 'string' ? agent.name : undefined,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
@@ -549,6 +554,7 @@ function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents
     const agent = value as EvalConfig['agents'][string];
     if (!agent.provider || !agent.model) continue;
     out[id] = {
+      name: typeof agent.name === 'string' ? agent.name : undefined,
       provider: agent.provider,
       model: agent.model,
       temperature: agent.temperature,

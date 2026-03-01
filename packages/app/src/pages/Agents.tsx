@@ -98,7 +98,7 @@ const Agents = () => {
                   <TableRow
                     key={agent.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.name)}`)}
+                    onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
                   >
                     <TableCell className="font-medium">{agent.name}</TableCell>
                     <TableCell>
@@ -134,7 +134,7 @@ const Agents = () => {
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.name)}`)}
+                          onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
                         >
                           <Pencil className="mr-1.5 h-3.5 w-3.5" />
                           Edit
