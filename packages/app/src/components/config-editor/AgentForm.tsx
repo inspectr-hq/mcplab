@@ -172,8 +172,8 @@ export function AgentForm({
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
-                    checked={defaultAgentNames.includes(agent.name || agent.id)}
-                    onChange={(e) => onToggleDefaultAgent?.(agent.name || agent.id, e.target.checked)}
+                    checked={defaultAgentNames.includes(agent.id)}
+                    onChange={(e) => onToggleDefaultAgent?.(agent.id, e.target.checked)}
                     disabled={readOnly || !onToggleDefaultAgent}
                   />
                   <span>Default</span>

@@ -35,7 +35,8 @@ export interface ServerConfig {
 }
 
 export interface ServerInlineEntry extends ServerConfig {
-  name: string;
+  id: string;
+  name?: string;
 }
 
 export interface ServerRefEntry {
@@ -53,7 +54,8 @@ export interface AgentConfig {
 }
 
 export interface AgentInlineEntry extends AgentConfig {
-  name: string;
+  id: string;
+  name?: string;
 }
 
 export interface AgentRefEntry {

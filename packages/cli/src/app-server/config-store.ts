@@ -64,7 +64,7 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
           : obj.servers && typeof obj.servers === 'object'
             ? Object.entries(obj.servers as Record<string, Record<string, unknown>>).map(
                 ([name, server]) => ({
-                  name,
+                  id: name,
                   transport: String(server.transport ?? 'http') as 'http',
                   url: String(server.url ?? ''),
                   auth:
@@ -85,7 +85,7 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
           : obj.agents && typeof obj.agents === 'object'
             ? Object.entries(obj.agents as Record<string, Record<string, unknown>>).map(
                 ([name, agent]) => ({
-                  name,
+                  id: name,
                   provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
                   model: String(agent.model ?? ''),
                   temperature:

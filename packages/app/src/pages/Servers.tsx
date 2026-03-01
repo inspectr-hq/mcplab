@@ -23,12 +23,13 @@ const Servers = () => {
   const { servers, setServers, reload, loading } = useLibraries();
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<ServerConfig | null>(null);
+  const displayName = (server: ServerConfig) => server.name?.trim() || server.id;
 
   const handleDuplicate = async (server: ServerConfig) => {
-    const baseName = `${server.name}-copy`;
+    const baseName = `${displayName(server)}-copy`;
     let newName = baseName;
     let suffix = 1;
-    while (servers.some((s) => s.name === newName)) {
+    while (servers.some((s) => (s.name?.trim() || s.id) === newName)) {
       newName = `${baseName}-${suffix}`;
       suffix += 1;
     }
@@ -43,7 +44,7 @@ const Servers = () => {
 
   const handleDelete = async (server: ServerConfig) => {
     await setServers(servers.filter((s) => s.id !== server.id));
-    toast({ title: "Server deleted", description: `${server.name} was removed.` });
+    toast({ title: "Server deleted", description: `${displayName(server)} was removed.` });
     setPendingDelete(null);
   };
 
@@ -104,9 +105,9 @@ const Servers = () => {
                     <TableRow
                       key={server.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => navigate(`/libraries/servers/${encodeURIComponent(server.name)}`)}
+                      onClick={() => navigate(`/libraries/servers/${encodeURIComponent(server.id)}`)}
                     >
-                      <TableCell className="font-medium">{server.name}</TableCell>
+                      <TableCell className="font-medium">{displayName(server)}</TableCell>
                       <TableCell>
                         <Badge variant="secondary" className="font-mono text-xs">
                           {server.transport}
@@ -151,7 +152,7 @@ const Servers = () => {
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => navigate(`/libraries/servers/${encodeURIComponent(server.name)}`)}
+                            onClick={() => navigate(`/libraries/servers/${encodeURIComponent(server.id)}`)}
                           >
                             <Pencil className="mr-1.5 h-3.5 w-3.5" />
                             Edit
@@ -172,7 +173,7 @@ const Servers = () => {
             <AlertDialogTitle>Delete server?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove{" "}
-              <span className="font-mono">{pendingDelete?.name}</span> from the library. This action cannot be undone.
+              <span className="font-mono">{pendingDelete ? displayName(pendingDelete) : ""}</span> from the library. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

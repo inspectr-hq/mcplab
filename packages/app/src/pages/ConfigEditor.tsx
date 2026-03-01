@@ -252,13 +252,13 @@ const ConfigEditor = () => {
       .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
       .map((entry) => entry.ref)
       .map((ref) => {
-        const matched = libServers.find((item) => (item.name || item.id) === ref || item.id === ref);
-        return matched?.name || matched?.id || ref;
+        const matched = libServers.find((item) => item.id === ref);
+        return matched?.id || ref;
       });
     const normalizedServerEntries = serverEntries.map((entry) => {
       if (entry.kind === "referenced") {
-        const matched = libServers.find((item) => (item.name || item.id) === entry.ref || item.id === entry.ref);
-        return { kind: "referenced" as const, ref: matched?.name || matched?.id || entry.ref };
+        const matched = libServers.find((item) => item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
       }
       return entry;
     });
@@ -266,13 +266,13 @@ const ConfigEditor = () => {
       .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
       .map((entry) => entry.ref)
       .map((ref) => {
-        const matched = libAgents.find((item) => (item.name || item.id) === ref || item.id === ref);
-        return matched?.name || matched?.id || ref;
+        const matched = libAgents.find((item) => item.id === ref);
+        return matched?.id || ref;
       });
     const normalizedAgentEntries = agentEntries.map((entry) => {
       if (entry.kind === "referenced") {
-        const matched = libAgents.find((item) => (item.name || item.id) === entry.ref || item.id === entry.ref);
-        return { kind: "referenced" as const, ref: matched?.name || matched?.id || entry.ref };
+        const matched = libAgents.find((item) => item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
       }
       return entry;
     });
@@ -352,7 +352,7 @@ const ConfigEditor = () => {
   const addServerReference = () => {
     const template = libServers.find((item) => item.id === selectedLibraryServerId);
     if (!template) return;
-    const refName = template.name || template.id;
+    const refName = template.id;
     const existing = new Set(
       serverEntries
         .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
@@ -410,7 +410,7 @@ const ConfigEditor = () => {
       libAgents
         .map((item) => ({
           id: item.id,
-          ref: item.name || item.id,
+          ref: item.id,
           label: item.name || item.id,
           model: item.model
         }))
@@ -464,7 +464,7 @@ const ConfigEditor = () => {
   const addAgentReference = () => {
     const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
     if (!template) return;
-    const refName = template.name || template.id;
+    const refName = template.id;
     const existing = new Set(
       agentEntries
         .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
@@ -662,9 +662,9 @@ const ConfigEditor = () => {
   };
 
   const findLibraryServerByRef = (ref: string) =>
-    libServers.find((item) => (item.name || item.id) === ref);
+    libServers.find((item) => item.id === ref);
   const findLibraryAgentByRef = (ref: string) =>
-    libAgents.find((item) => (item.name || item.id) === ref);
+    libAgents.find((item) => item.id === ref);
   const findLibraryScenarioByRef = (ref: string) =>
     libScenarios.find((item) => item.id === ref || item.name === ref);
   const referencedServerRefs = serverEntries
@@ -1259,7 +1259,7 @@ const ConfigEditor = () => {
                     const rowModel = entry.kind === "inline" ? entry.agent.model : (referenceAgent?.model || "unknown");
                     const rowKey = entry.kind === "inline" ? entry.agent.id : entry.ref;
                     const isMissingRef = entry.kind === "referenced" && !referenceAgent;
-                    const defaultName = entry.kind === "inline" ? (entry.agent.name || entry.agent.id) : entry.ref;
+                    const defaultName = entry.kind === "inline" ? entry.agent.id : entry.ref;
                     const defaultChecked = defaultRunAgentNames.includes(defaultName);
                     return (
                       <div key={`agent-entry-${index}-${rowKey}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
@@ -1359,7 +1359,7 @@ const ConfigEditor = () => {
                 <div className="space-y-2">
                   {agentViewRows.map((row, index) => {
                     const name = row.agent.name || row.agent.id;
-                    const isDefault = defaultRunAgentNames.includes(name);
+                    const isDefault = defaultRunAgentNames.includes(row.origin === "inline" ? row.agent.id : (row.ref || row.agent.id));
                     return (
                       <div key={`agent-view-${index}-${row.ref ?? row.agent.id}`} className="rounded-md border p-3">
                         <div className="flex items-center gap-2">

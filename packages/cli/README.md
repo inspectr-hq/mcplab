@@ -92,12 +92,12 @@ Create `my-eval.yaml`:
 
 ```yaml
 servers:
-  - name: my-server
+  - id: my-server
     transport: "http"
     url: "http://localhost:3000/mcp"
 
 agents:
-  - name: claude
+  - id: claude
     provider: "anthropic"
     model: "claude-haiku-4-5-20251001"
     temperature: 0
@@ -135,13 +135,13 @@ Add this at the top of your eval file for editor validation/autocomplete:
 
 ```yaml
 servers:     # MCP servers to test against
-  - name: local-server
+  - id: local-server
     transport: "http"
     url: "http://localhost:3000/mcp"
   - ref: "shared-server"
 
 agents:      # LLM agents to use for testing
-  - name: local-agent
+  - id: local-agent
     provider: "anthropic"
     model: "claude-sonnet-4-6"
   - ref: "claude-sonnet-46"
@@ -159,7 +159,7 @@ Define MCP servers with connection details and authentication:
 
 ```yaml
 servers:
-  - name: my-server
+  - id: my-server
     transport: "http"
     url: "https://api.example.com/mcp"
     auth:
@@ -194,7 +194,7 @@ Configure LLM agents with provider-specific settings:
 **Anthropic (Claude):**
 ```yaml
 agents:
-  - name: claude-sonnet
+  - id: claude-sonnet
     provider: "anthropic"
     model: "claude-sonnet-4-6"
     temperature: 0
@@ -205,7 +205,7 @@ agents:
 **OpenAI (ChatGPT):**
 ```yaml
 agents:
-  - name: gpt-4
+  - id: gpt-4
     provider: "openai"
     model: "gpt-4o-mini"
     temperature: 0
@@ -216,7 +216,7 @@ agents:
 **Azure OpenAI:**
 ```yaml
 agents:
-  - name: azure-gpt
+  - id: azure-gpt
     provider: "azure_openai"
     model: "gpt-4o"  # Deployment name
     temperature: 0
@@ -571,13 +571,13 @@ Create `multi-agent-eval.yaml` with one agent defined:
 
 ```yaml
 agents:
-  - name: claude-haiku
+  - id: claude-haiku
     provider: anthropic
     model: claude-haiku-4-5-20251001
-  - name: gpt-4o-mini
+  - id: gpt-4o-mini
     provider: openai
     model: gpt-4o-mini
-  - name: gpt-4o
+  - id: gpt-4o
     provider: openai
     model: gpt-4o
 

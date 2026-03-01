@@ -30,19 +30,18 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const agentIdByName = new Map<string, string>();
   const servers: EvalConfig['servers'] = [];
   const mixedServerEntries: ServerEntry[] = [];
-  let inlineServerIndex = 0;
   for (const entry of sourceServerEntries) {
     if ('ref' in entry) {
       const ref = String(entry.ref || '').trim();
       if (!ref) continue;
+      serverIdByName.set(ref, ref);
       mixedServerEntries.push({ kind: 'referenced', ref });
       continue;
     }
-    const inlineName = String(entry.name || '').trim();
-    if (!inlineName) continue;
-    const id = toId('srv', inlineServerIndex);
-    inlineServerIndex += 1;
-    serverIdByName.set(inlineName, id);
+    const inlineId = String(entry.id || entry.name || '').trim();
+    if (!inlineId) continue;
+    const id = inlineId;
+    serverIdByName.set(inlineId, id);
     const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
       entry.auth?.type === 'bearer'
         ? 'bearer'
@@ -53,7 +52,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
             : 'none';
     const mappedServer = {
       id,
-      name: inlineName,
+      name: String(entry.name || inlineId),
       transport: 'streamable-http' as const,
       url: entry.url,
       authType,
@@ -85,7 +84,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
 
   const agents: EvalConfig['agents'] = [];
   const mixedAgentEntries: AgentEntry[] = [];
-  let inlineAgentIndex = 0;
   for (const entry of sourceAgentEntries) {
     if ('ref' in entry) {
       const ref = String(entry.ref || '').trim();
@@ -93,16 +91,15 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       mixedAgentEntries.push({ kind: 'referenced', ref });
       continue;
     }
-    const inlineName = String(entry.name || '').trim();
-    if (!inlineName) continue;
-    const id = toId('agt', inlineAgentIndex);
-    inlineAgentIndex += 1;
-    agentIdByName.set(inlineName, id);
+    const inlineId = String(entry.id || entry.name || '').trim();
+    if (!inlineId) continue;
+    const id = inlineId;
+    agentIdByName.set(inlineId, id);
     const provider: 'openai' | 'anthropic' | 'azure' =
       entry.provider === 'azure_openai' ? 'azure' : entry.provider;
     const mappedAgent = {
       id,
-      name: inlineName,
+      name: String(entry.name || inlineId),
       provider,
       model: entry.model,
       temperature: entry.temperature ?? 0,
@@ -233,12 +230,14 @@ export function fromCoreLibraries(libraries: {
     hash: '',
     config: {
       servers: Object.entries(libraries.servers).map(([name, server]) => ({
+        id: name,
         name,
         transport: server.transport,
         url: server.url,
         auth: server.auth
       })),
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
+        id: name,
         name,
         provider: agent.provider,
         model: agent.model,
@@ -261,9 +260,10 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const serverNameById = new Map<string, string>();
 
   const mapInlineServer = (server: EvalConfig['servers'][number]) => {
-    const name = server.name || server.id;
+    const sourceId = server.id;
     return {
-      name,
+      id: sourceId,
+      ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
       transport: 'http',
       url: server.url || 'http://localhost:3000/mcp',
       auth:
@@ -295,14 +295,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       return [{ ref }];
     }
     const mapped = mapInlineServer(entry.server);
-    serverNameById.set(entry.server.id, mapped.name);
+    serverNameById.set(entry.server.id, mapped.id);
     return [mapped];
   });
 
   const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
-    const name = agent.name || agent.id;
+    const sourceId = agent.id;
     return {
-      name,
+      id: sourceId,
+      ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
       provider:
         agent.provider === 'azure'
           ? 'azure_openai'

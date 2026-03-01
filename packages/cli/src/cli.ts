@@ -416,6 +416,7 @@ program
   .action((options) => {
     try {
       const evalsDir = resolve(String(options.evalsDir));
+      const bundleRoot = resolve(evalsDir, '..');
       const files = readdirSync(evalsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
       let migrated = 0;
       let skipped = 0;
@@ -424,7 +425,7 @@ program
       for (const file of files) {
         const filePath = resolve(evalsDir, file);
         try {
-          const { sourceConfig, warnings } = loadConfig(filePath);
+          const { sourceConfig, warnings } = loadConfig(filePath, { bundleRoot });
           const hadLegacyScenarioRefsWarning = warnings.some((warning) =>
             warning.includes('Legacy scenario_refs was migrated')
           );
@@ -433,6 +434,17 @@ program
           );
           const hadLegacyServerRefsWarning = warnings.some((warning) =>
             warning.includes('Legacy server_refs was migrated')
+          );
+          const hadLegacyServersMapWarning = warnings.some((warning) =>
+            warning.includes('Legacy servers object map was migrated')
+          );
+          const hadLegacyAgentsMapWarning = warnings.some((warning) =>
+            warning.includes('Legacy agents object map was migrated')
+          );
+          const hadLegacyInlineIdsWarning = warnings.some(
+            (warning) =>
+              warning.includes('Legacy inline server.name migrated') ||
+              warning.includes('Legacy inline agent.name migrated')
           );
 
           const hadLegacyScenarioRefsField =
@@ -451,7 +463,10 @@ program
             !hadLegacyAgentRefsWarning &&
             !hadLegacyAgentRefsField &&
             !hadLegacyServerRefsWarning &&
-            !hadLegacyServerRefsField
+            !hadLegacyServerRefsField &&
+            !hadLegacyServersMapWarning &&
+            !hadLegacyAgentsMapWarning &&
+            !hadLegacyInlineIdsWarning
           ) {
             skipped += 1;
             continue;

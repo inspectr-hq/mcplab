@@ -11,7 +11,7 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
     ? [...rawServers]
     : rawServers && typeof rawServers === 'object'
       ? Object.entries(rawServers as Record<string, Record<string, unknown>>).map(([name, server]) => ({
-          name,
+          id: name,
           transport: String(server.transport ?? 'http') as 'http',
           url: String(server.url ?? ''),
           auth:
@@ -43,7 +43,7 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
     ? [...rawAgents]
     : rawAgents && typeof rawAgents === 'object'
       ? Object.entries(rawAgents as Record<string, Record<string, unknown>>).map(([name, agent]) => ({
-          name,
+          id: name,
           provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
           model: String(agent.model ?? ''),
           temperature: typeof agent.temperature === 'number' ? agent.temperature : undefined,

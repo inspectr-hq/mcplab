@@ -91,15 +91,17 @@ function resolveReferences(
       resolvedServers[ref] = server;
       continue;
     }
-    const inlineName = String((entry as { name?: unknown }).name ?? '').trim();
-    if (!inlineName) {
-      throw new Error('Invalid config: inline server is missing required name');
+    const inlineId = String((entry as { id?: unknown; name?: unknown }).id ?? '').trim();
+    const legacyName = String((entry as { name?: unknown }).name ?? '').trim();
+    const resolvedId = inlineId || legacyName;
+    if (!resolvedId) {
+      throw new Error('Invalid config: inline server is missing required id');
     }
-    if (seenServerNames.has(inlineName)) {
-      throw new Error(`Duplicate server name detected: ${inlineName}`);
+    if (seenServerNames.has(resolvedId)) {
+      throw new Error(`Duplicate server id detected: ${resolvedId}`);
     }
-    seenServerNames.add(inlineName);
-    resolvedServers[inlineName] = {
+    seenServerNames.add(resolvedId);
+    resolvedServers[resolvedId] = {
       transport: entry.transport,
       url: entry.url,
       auth: entry.auth
@@ -128,15 +130,17 @@ function resolveReferences(
       resolvedAgents[ref] = agent;
       continue;
     }
-    const inlineName = String((entry as { name?: unknown }).name ?? '').trim();
-    if (!inlineName) {
-      throw new Error('Invalid config: inline agent is missing required name');
+    const inlineId = String((entry as { id?: unknown; name?: unknown }).id ?? '').trim();
+    const legacyName = String((entry as { name?: unknown }).name ?? '').trim();
+    const resolvedId = inlineId || legacyName;
+    if (!resolvedId) {
+      throw new Error('Invalid config: inline agent is missing required id');
     }
-    if (seenAgentNames.has(inlineName)) {
-      throw new Error(`Duplicate agent name detected: ${inlineName}`);
+    if (seenAgentNames.has(resolvedId)) {
+      throw new Error(`Duplicate agent id detected: ${resolvedId}`);
     }
-    seenAgentNames.add(inlineName);
-    resolvedAgents[inlineName] = {
+    seenAgentNames.add(resolvedId);
+    resolvedAgents[resolvedId] = {
       provider: entry.provider,
       model: entry.model,
       temperature: entry.temperature,
@@ -227,14 +231,20 @@ function normalizeConfig(
       const server = rawServer as ServerListEntry;
       if (isServerRefEntry(server)) {
         const ref = String(server.ref ?? '').trim();
-        if (!ref) throw new Error('Invalid config: server ref must be a non-empty name');
+        if (!ref) throw new Error('Invalid config: server ref must be a non-empty id');
         normalizedServers.push({ ref });
         continue;
       }
-      const inlineName = String((server as ServerInlineEntry).name ?? '').trim();
-      if (!inlineName) throw new Error('Invalid config: inline server is missing required name');
+      const inlineId = String((server as ServerInlineEntry).id ?? '').trim();
+      const legacyName = String((server as ServerInlineEntry).name ?? '').trim();
+      const resolvedId = inlineId || legacyName;
+      if (!resolvedId) throw new Error('Invalid config: inline server is missing required id');
+      if (!inlineId && legacyName) {
+        warnings.push(`Legacy inline server.name migrated to server.id: ${legacyName}`);
+      }
       normalizedServers.push({
-        name: inlineName,
+        id: resolvedId,
+        name: legacyName || undefined,
         transport: (server as ServerInlineEntry).transport,
         url: (server as ServerInlineEntry).url,
         auth: (server as ServerInlineEntry).auth
@@ -247,11 +257,14 @@ function normalizeConfig(
         : {};
     for (const [name, server] of Object.entries(legacyInlineServers)) {
       normalizedServers.push({
-        name,
+        id: name,
         transport: server.transport,
         url: server.url,
         auth: server.auth
       });
+    }
+    if (Object.keys(legacyInlineServers).length > 0) {
+      warnings.push('Legacy servers object map was migrated into servers[] entries.');
     }
   }
   const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
@@ -263,14 +276,20 @@ function normalizeConfig(
       const agent = rawAgent as AgentListEntry;
       if (isAgentRefEntry(agent)) {
         const ref = String(agent.ref ?? '').trim();
-        if (!ref) throw new Error('Invalid config: agent ref must be a non-empty name');
+        if (!ref) throw new Error('Invalid config: agent ref must be a non-empty id');
         normalizedAgents.push({ ref });
         continue;
       }
-      const inlineName = String((agent as AgentInlineEntry).name ?? '').trim();
-      if (!inlineName) throw new Error('Invalid config: inline agent is missing required name');
+      const inlineId = String((agent as AgentInlineEntry).id ?? '').trim();
+      const legacyName = String((agent as AgentInlineEntry).name ?? '').trim();
+      const resolvedId = inlineId || legacyName;
+      if (!resolvedId) throw new Error('Invalid config: inline agent is missing required id');
+      if (!inlineId && legacyName) {
+        warnings.push(`Legacy inline agent.name migrated to agent.id: ${legacyName}`);
+      }
       normalizedAgents.push({
-        name: inlineName,
+        id: resolvedId,
+        name: legacyName || undefined,
         provider: (agent as AgentInlineEntry).provider,
         model: (agent as AgentInlineEntry).model,
         temperature: (agent as AgentInlineEntry).temperature,
@@ -285,13 +304,16 @@ function normalizeConfig(
         : {};
     for (const [name, agent] of Object.entries(legacyInlineAgents)) {
       normalizedAgents.push({
-        name,
+        id: name,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
         max_tokens: agent.max_tokens,
         system: agent.system
       });
+    }
+    if (Object.keys(legacyInlineAgents).length > 0) {
+      warnings.push('Legacy agents object map was migrated into agents[] entries.');
     }
   }
   const normalizedScenarios: ScenarioListEntry[] = [];

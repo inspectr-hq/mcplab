@@ -49,7 +49,8 @@ const ServerDetail = () => {
 
   const isNew = serverName === "new";
   const decodedName = serverName ? decodeURIComponent(serverName) : "";
-  const existingServer = isNew ? null : servers.find((s) => s.name === decodedName);
+  const existingServer = isNew ? null : servers.find((s) => s.id === decodedName || s.name === decodedName);
+  const displayName = (server: ServerConfig) => server.name?.trim() || server.id;
 
   const [form, setForm] = useState<ServerConfig>(() => existingServer ?? emptyServer());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -82,7 +83,7 @@ const ServerDetail = () => {
     setShowConnectPanel(true);
     setConnectState({ status: "loading" });
     try {
-      const result = await source.discoverToolsForAnalysis({ serverNames: [form.name] });
+      const result = await source.discoverToolsForAnalysis({ serverNames: [displayName(form)] });
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
@@ -117,13 +118,13 @@ const ServerDetail = () => {
       if (isNew) {
         await setServers([...servers, form]);
         toast({ title: "Server created" });
-        navigate(`/libraries/servers/${encodeURIComponent(form.name)}`);
+        navigate(`/libraries/servers/${encodeURIComponent(form.id)}`);
       } else {
-        const next = servers.map((s) => (s.name === decodedName ? form : s));
+        const next = servers.map((s) => (s.id === existingServer?.id ? form : s));
         await setServers(next);
         toast({ title: "Server saved" });
-        if (form.name !== decodedName) {
-          navigate(`/libraries/servers/${encodeURIComponent(form.name)}`, { replace: true });
+        if (form.id !== decodedName) {
+          navigate(`/libraries/servers/${encodeURIComponent(form.id)}`, { replace: true });
         }
       }
     } finally {
@@ -132,7 +133,7 @@ const ServerDetail = () => {
   };
 
   const handleDelete = async () => {
-    const next = servers.filter((s) => s.name !== decodedName);
+    const next = servers.filter((s) => s.id !== existingServer?.id);
     await setServers(next);
     toast({ title: "Server deleted" });
     navigate("/libraries/servers");
@@ -170,7 +171,7 @@ const ServerDetail = () => {
           >
             <ArrowLeft className="h-4 w-4" /> Servers
           </Link>
-          <h1 className="text-2xl font-bold">{isNew ? "New Server" : form.name}</h1>
+          <h1 className="text-2xl font-bold">{isNew ? "New Server" : displayName(form)}</h1>
         </div>
         {!isNew && (
           <Button type="button" onClick={() => void handleConnect()}>
@@ -196,7 +197,7 @@ const ServerDetail = () => {
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               <span>Server:</span>
-              <span className="font-medium text-foreground">{form.name}</span>
+              <span className="font-medium text-foreground">{displayName(form)}</span>
               <span className="mx-1">·</span>
               <span>Transport:</span>
               <span className="font-medium text-foreground">{form.transport}</span>

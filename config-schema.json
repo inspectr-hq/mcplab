@@ -27,12 +27,16 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "transport", "url"],
+            "required": ["id", "transport", "url"],
             "properties": {
-              "name": {
+              "id": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Inline server name"
+                "description": "Inline server id"
+              },
+              "name": {
+                "type": "string",
+                "description": "Optional display label"
               },
               "transport": {
                 "type": "string",
@@ -112,8 +116,9 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "provider", "model"],
+            "required": ["id", "provider", "model"],
             "properties": {
+              "id": { "type": "string", "minLength": 1 },
               "name": { "type": "string", "minLength": 1 },
               "provider": {
                 "type": "string",
