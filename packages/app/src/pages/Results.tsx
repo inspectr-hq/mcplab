@@ -19,6 +19,7 @@ import { PassRateBadge } from "@/components/PassRateBadge";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Results = () => {
   const { source } = useDataSource();
@@ -28,6 +29,7 @@ const Results = () => {
   const [deletingRun, setDeletingRun] = useState(false);
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [scenarioFilter, setScenarioFilter] = useState("all");
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -77,8 +79,33 @@ const Results = () => {
     };
   }, [source]);
 
+  const scenarioFilterOptions = useMemo(() => {
+    const labels = new Set<string>();
+    results.forEach((run) => {
+      run.scenarios.forEach((scenario) => {
+        const scenarioName = String(scenario.scenarioName ?? "").trim();
+        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const label = scenarioName || scenarioId;
+        if (label) labels.add(label);
+      });
+    });
+    return Array.from(labels).sort((a, b) => a.localeCompare(b));
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    if (scenarioFilter === "all") return results;
+    return results.filter((run) =>
+      run.scenarios.some((scenario) => {
+        const scenarioName = String(scenario.scenarioName ?? "").trim();
+        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const label = scenarioName || scenarioId;
+        return label === scenarioFilter;
+      })
+    );
+  }, [results, scenarioFilter]);
+
   const sorted = useMemo(() => {
-    const next = [...results].sort((a, b) => {
+    const next = [...filteredResults].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "id") cmp = a.id.localeCompare(b.id);
       if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -88,7 +115,7 @@ const Results = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return next;
-  }, [results, sortBy, sortDir]);
+  }, [filteredResults, sortBy, sortDir]);
 
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -172,11 +199,26 @@ const Results = () => {
             <BarChart3 className="h-6 w-6" />
             Results
           </h1>
-          <p className="text-sm text-muted-foreground">Browse and compare evaluation results</p>
+          <p className="text-sm text-muted-foreground">Browse evaluation runs and open detailed results</p>
         </div>
-        <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={scenarioFilter} onValueChange={setScenarioFilter}>
+            <SelectTrigger className="w-[260px]">
+              <SelectValue placeholder="Filter by scenario" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All scenarios</SelectItem>
+              {scenarioFilterOptions.map((label) => (
+                <SelectItem key={label} value={label}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+        </div>
       </div>
 
       <Card>

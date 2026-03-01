@@ -12,6 +12,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { EvalResult } from "@/types/eval";
 import type { SnapshotComparison, SnapshotRecord } from "@/lib/data-sources/types";
+import { toast } from "@/hooks/use-toast";
 
 const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)", "hsl(280, 60%, 50%)", "hsl(0, 72%, 51%)"];
 
@@ -19,20 +20,51 @@ const Compare = () => {
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [scenarioFilter, setScenarioFilter] = useState("all");
   const [mode, setMode] = useState<"runs" | "snapshot">("runs");
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [snapshotId, setSnapshotId] = useState("");
   const [runId, setRunId] = useState("");
   const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
 
+  const loadResults = async () => {
+    setRefreshing(true);
+    try {
+      setResults(await source.listResults());
+    } catch (error: unknown) {
+      toast({
+        title: "Could not load results",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive"
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
-    source.listResults().then((next) => {
-      if (active) setResults(next);
-    });
+    setRefreshing(true);
+    source
+      .listResults()
+      .then((next) => {
+        if (active) setResults(next);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        toast({
+          title: "Could not load results",
+          description: error instanceof Error ? error.message : String(error),
+          variant: "destructive"
+        });
+      })
+      .finally(() => {
+        if (active) setRefreshing(false);
+      });
     return () => {
       active = false;
     };
@@ -71,8 +103,33 @@ const Compare = () => {
     });
   };
 
+  const scenarioFilterOptions = useMemo(() => {
+    const labels = new Set<string>();
+    results.forEach((run) => {
+      run.scenarios.forEach((scenario) => {
+        const scenarioName = String(scenario.scenarioName ?? "").trim();
+        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const label = scenarioName || scenarioId;
+        if (label) labels.add(label);
+      });
+    });
+    return Array.from(labels).sort((a, b) => a.localeCompare(b));
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    if (scenarioFilter === "all") return results;
+    return results.filter((run) =>
+      run.scenarios.some((scenario) => {
+        const scenarioName = String(scenario.scenarioName ?? "").trim();
+        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const label = scenarioName || scenarioId;
+        return label === scenarioFilter;
+      })
+    );
+  }, [results, scenarioFilter]);
+
   const sortedResults = useMemo(() => {
-    const next = [...results].sort((a, b) => {
+    const next = [...filteredResults].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "id") cmp = a.id.localeCompare(b.id);
       if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -81,7 +138,7 @@ const Compare = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return next;
-  }, [results, sortBy, sortDir]);
+  }, [filteredResults, sortBy, sortDir]);
 
   const selectedRuns = sortedResults.filter((r) => selected.has(r.id));
   const sortIcon = (key: typeof sortBy) => {
@@ -106,12 +163,34 @@ const Compare = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
-          <GitCompare className="h-6 w-6" />
-          Compare Runs
-        </h1>
-        <p className="text-sm text-muted-foreground">Select 2–5 runs to compare</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <GitCompare className="h-6 w-6" />
+            Compare Runs
+          </h1>
+          <p className="text-sm text-muted-foreground">Select 2–5 runs to compare</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {mode === "runs" && (
+            <Select value={scenarioFilter} onValueChange={setScenarioFilter}>
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Filter by scenario" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All scenarios</SelectItem>
+                {scenarioFilterOptions.map((label) => (
+                  <SelectItem key={label} value={label}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+        </div>
       </div>
 
       {/*<Card>*/}
