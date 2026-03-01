@@ -245,21 +245,31 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
       <Card className="border-dashed">
         <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
           <div className="flex min-w-0 items-center gap-1">
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-0" : "-rotate-90"}`} />
-              </Button>
-            </CollapsibleTrigger>
+            {!readOnly && (
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-0" : "-rotate-90"}`} />
+                </Button>
+              </CollapsibleTrigger>
+            )}
             <CardTitle className="truncate text-sm font-medium">
               {index + 1}. {scenario.name || `Scenario ${index + 1}`}
             </CardTitle>
-            {readOnly && scenarioOrigin && (
-              <Badge variant="outline" className="ml-2 text-[10px] font-normal text-muted-foreground">
-                {scenarioOrigin === "referenced" ? "Referenced" : "Inline"}
-              </Badge>
-            )}
           </div>
-          {!readOnly && allowStructureEdits && (
+          {readOnly ? (
+            <div className="flex items-center gap-2">
+              {scenarioOrigin && (
+                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                  {scenarioOrigin === "referenced" ? "Referenced" : "Inline"}
+                </Badge>
+              )}
+              <CollapsibleTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  {expanded ? "Collapse" : "Expand"}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          ) : allowStructureEdits && (
             <div className="flex items-center gap-1">
               <Button
                 type="button"

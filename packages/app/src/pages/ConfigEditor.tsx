@@ -69,6 +69,7 @@ const ConfigEditor = () => {
   const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
   const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
   const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
+  const [expandedViewServerIds, setExpandedViewServerIds] = useState<Record<string, boolean>>({});
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
     return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
@@ -1196,25 +1197,50 @@ const ConfigEditor = () => {
             <Card>
               <CardContent className="pt-4">
                 <div className="space-y-2">
-                  {serverViewRows.map((row, index) => (
-                    <div key={`server-view-${index}-${row.ref ?? row.server.id}`} className="rounded-md border p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                        <div className="font-medium text-sm">{row.server.name || row.server.id}</div>
-                        <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
-                          {row.origin === "inline" ? "Inline" : "Referenced"}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs font-mono">
-                          {row.server.transport}
-                        </Badge>
-                      </div>
-                      {row.server.url && (
-                        <div className="mt-1 text-xs font-mono text-muted-foreground break-all">
-                          {row.server.url}
+                  {serverViewRows.map((row, index) => {
+                    const viewServerKey = row.ref ?? row.server.id;
+                    const expanded = Boolean(expandedViewServerIds[viewServerKey]);
+                    return (
+                      <div key={`server-view-${index}-${viewServerKey}`} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <div className="truncate font-medium text-sm">{row.server.name || row.server.id}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                              {row.origin === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setExpandedViewServerIds((prev) => ({
+                                  ...prev,
+                                  [viewServerKey]: !Boolean(prev[viewServerKey])
+                                }))
+                              }
+                            >
+                              {expanded ? "Collapse" : "Expand"}
+                            </Button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {expanded && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                            <Badge variant="outline" className="text-xs font-mono">
+                              {row.server.transport}
+                            </Badge>
+                            {row.server.url && (
+                              <span className="text-xs font-mono text-muted-foreground break-all">
+                                {row.server.url}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   {serverViewRows.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-6">
                       No servers configured.
@@ -1521,28 +1547,30 @@ const ConfigEditor = () => {
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <div className="truncate font-medium text-sm">{name}</div>
-                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
-                              {row.origin === "inline" ? "Inline" : "Referenced"}
-                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
                             {isDefault && (
                               <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
                                 Default
                               </Badge>
                             )}
+                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                              {row.origin === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setExpandedViewAgentIds((prev) => ({
+                                  ...prev,
+                                  [viewAgentKey]: !Boolean(prev[viewAgentKey])
+                                }))
+                              }
+                            >
+                              {expanded ? "Collapse" : "Expand"}
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              setExpandedViewAgentIds((prev) => ({
-                                ...prev,
-                                [viewAgentKey]: !Boolean(prev[viewAgentKey])
-                              }))
-                            }
-                          >
-                            {expanded ? "Collapse" : "Expand"}
-                          </Button>
                         </div>
                         {expanded && (
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
