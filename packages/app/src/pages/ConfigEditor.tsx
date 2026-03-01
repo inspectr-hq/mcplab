@@ -1126,6 +1126,30 @@ const ConfigEditor = () => {
                     return (
                       <div key={`server-entry-${index}-${rowKey}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
                         <div className="flex min-w-0 items-center gap-2">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => moveServerEntry(index, -1)}
+                              disabled={index === 0}
+                              aria-label="Move server up"
+                            >
+                              <ChevronUp className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-6 w-6"
+                              onClick={() => moveServerEntry(index, 1)}
+                              disabled={index === serverEntries.length - 1}
+                              aria-label="Move server down"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                            </Button>
+                          </div>
                           <span className="text-xs text-muted-foreground">{index + 1}.</span>
                           <span className="truncate font-medium">{rowName}</span>
                           <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
@@ -1145,41 +1169,8 @@ const ConfigEditor = () => {
                               >
                                 Convert to inline
                               </Button>
-                              <Button size="sm" variant="outline" asChild>
-                                <Link
-                                  to={
-                                    referenceServer
-                                      ? `/libraries/servers/${encodeURIComponent(referenceServer.id)}`
-                                      : "/libraries/servers"
-                                  }
-                                >
-                                  Edit
-                                </Link>
-                              </Button>
                             </>
                           )}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveServerEntry(index, -1)}
-                            disabled={index === 0}
-                            aria-label="Move server up"
-                          >
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveServerEntry(index, 1)}
-                            disabled={index === serverEntries.length - 1}
-                            aria-label="Move server down"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
                           <Button
                             type="button"
                             size="icon"
@@ -1330,6 +1321,30 @@ const ConfigEditor = () => {
                       <div key={`agent-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveAgentEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move agent up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveAgentEntry(index, 1)}
+                                disabled={index === agentEntries.length - 1}
+                                aria-label="Move agent down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowName}</span>
                             <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
@@ -1378,41 +1393,8 @@ const ConfigEditor = () => {
                                 >
                                   Convert to inline
                                 </Button>
-                                <Button size="sm" variant="outline" asChild>
-                                  <Link
-                                    to={
-                                      referenceAgent
-                                        ? `/libraries/agents/${encodeURIComponent(referenceAgent.id)}`
-                                        : "/libraries/agents"
-                                    }
-                                  >
-                                    Edit
-                                  </Link>
-                                </Button>
                               </>
                             )}
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveAgentEntry(index, -1)}
-                              disabled={index === 0}
-                              aria-label="Move agent up"
-                            >
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveAgentEntry(index, 1)}
-                              disabled={index === agentEntries.length - 1}
-                              aria-label="Move agent down"
-                            >
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
                             <Button
                               type="button"
                               size="icon"
@@ -1667,6 +1649,30 @@ const ConfigEditor = () => {
                       <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="rounded-md border text-sm">
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveScenarioEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move scenario up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveScenarioEntry(index, 1)}
+                                disabled={index === scenarioEntries.length - 1}
+                                aria-label="Move scenario down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowTitle}</span>
                             <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
@@ -1703,41 +1709,8 @@ const ConfigEditor = () => {
                                 >
                                   Convert to inline
                                 </Button>
-                                <Button size="sm" variant="outline" asChild>
-                                  <Link
-                                    to={
-                                      referenceScenario
-                                        ? `/libraries/scenarios/${encodeURIComponent(referenceScenario.id)}`
-                                        : "/libraries/scenarios"
-                                    }
-                                  >
-                                    Edit
-                                  </Link>
-                                </Button>
                               </>
                             )}
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveScenarioEntry(index, -1)}
-                              disabled={index === 0}
-                              aria-label="Move scenario up"
-                            >
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveScenarioEntry(index, 1)}
-                              disabled={index === scenarioEntries.length - 1}
-                              aria-label="Move scenario down"
-                            >
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
                             <Button
                               type="button"
                               size="icon"
