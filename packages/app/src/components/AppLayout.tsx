@@ -138,7 +138,7 @@ export function AppLayout() {
   const location = useLocation();
   const embed = new URLSearchParams(location.search).get("embed") === "1";
   const crumbs = buildCrumbs(location.pathname);
-  const { connection } = useDataSource();
+  const { connection, version } = useDataSource();
 
   if (embed) {
     return (
@@ -151,7 +151,7 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full">
-        <AppSidebar />
+        <AppSidebar version={version} />
         <div className="flex flex-1 flex-col">
           <header className="flex h-12 items-center gap-2 border-b bg-card px-4">
             <SidebarTrigger />
