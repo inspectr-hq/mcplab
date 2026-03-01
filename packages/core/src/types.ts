@@ -91,6 +91,13 @@ export interface Scenario {
   extract?: ExtractRule[];
 }
 
+export interface ScenarioRefEntry {
+  ref: string;
+}
+
+export type ScenarioInlineEntry = Scenario;
+export type ScenarioListEntry = ScenarioInlineEntry | ScenarioRefEntry;
+
 export interface SnapshotEvalPolicy {
   enabled: boolean;
   mode: 'warn' | 'fail_on_drift';
@@ -110,6 +117,10 @@ export interface EvalConfig {
     selected_agents?: string[];
   };
   snapshot_eval?: SnapshotEvalPolicy;
+}
+
+export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios'> {
+  scenarios: ScenarioListEntry[];
 }
 
 export interface ExecutableScenario extends Scenario {

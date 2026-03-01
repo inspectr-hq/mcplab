@@ -18,7 +18,7 @@ import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import type { AgentConfig, EvalConfig, ServerConfig } from "@/types/eval";
+import type { AgentConfig, EvalConfig, Scenario, ScenarioEntry, ServerConfig } from "@/types/eval";
 import type { SnapshotRecord } from "@/lib/data-sources/types";
 
 const emptyConfig = (): EvalConfig => ({
@@ -30,6 +30,7 @@ const emptyConfig = (): EvalConfig => ({
   agents: [],
   agentRefs: [],
   scenarios: [],
+  scenarioEntries: [],
   scenarioRefs: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -197,6 +198,26 @@ const ConfigEditor = () => {
 
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
+  const scenarioEntries = useMemo<ScenarioEntry[]>(() => {
+    if (config.scenarioEntries && config.scenarioEntries.length > 0) return config.scenarioEntries;
+    return [
+      ...(config.scenarioRefs ?? []).map((ref) => ({ kind: "referenced" as const, ref })),
+      ...config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }))
+    ];
+  }, [config.scenarioEntries, config.scenarioRefs, config.scenarios]);
+
+  const setScenarioEntries = (entries: ScenarioEntry[]) => {
+    patch({
+      scenarioEntries: entries,
+      scenarioRefs: entries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref),
+      scenarios: entries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.scenario)
+    });
+  };
+
   const readOnly = !editing;
   const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
 
@@ -268,13 +289,38 @@ const ConfigEditor = () => {
       toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
       return;
     }
-    const normalizedScenarioRefs = (config.scenarioRefs ?? []).map((ref) => {
-      const matched = libScenarios.find((item) => item.id === ref || item.name === ref);
-      return matched?.id || ref;
+    const normalizedScenarioRefs = scenarioEntries
+      .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+      .map((entry) => entry.ref)
+      .map((ref) => {
+        const matched = libScenarios.find((item) => item.id === ref || item.name === ref);
+        return matched?.id || ref;
+      });
+    const normalizedScenarioEntries = scenarioEntries.map((entry) => {
+      if (entry.kind === "referenced") {
+        const matched = libScenarios.find((item) => item.id === entry.ref || item.name === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+      }
+      return entry;
     });
+    const unnamedInline = normalizedScenarioEntries
+      .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+      .some((entry) => !entry.scenario.name?.trim());
+    if (unnamedInline) {
+      toast({
+        title: "Validation Error",
+        description: "Inline scenarios must have a name before saving.",
+        variant: "destructive"
+      });
+      return;
+    }
     const nextConfig = {
       ...config,
+      scenarioEntries: normalizedScenarioEntries,
       scenarioRefs: normalizedScenarioRefs,
+      scenarios: normalizedScenarioEntries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.scenario as Scenario),
       updatedAt: new Date().toISOString()
     };
     if (isNew) {
@@ -442,25 +488,111 @@ const ConfigEditor = () => {
 
     patch({
       agents: nextAgents,
-      servers: nextServers,
-      scenarios: [...config.scenarios, importedScenario]
+      servers: nextServers
     });
+    setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
     setSelectedLibraryScenarioId("");
+  };
+
+  const addInlineScenarioEntry = () => {
+    const createdAt = Date.now();
+    const inlineScenario: Scenario = {
+      id: `scn-${createdAt}`,
+      name: "",
+      serverIds: [],
+      prompt: "",
+      evalRules: [],
+      extractRules: [],
+    };
+    setScenarioEntries([{ kind: "inline", scenario: inlineScenario }, ...scenarioEntries]);
   };
 
   const addScenarioReference = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
     const refId = template.id;
-    const nextRefs = Array.from(new Set([...(config.scenarioRefs ?? []), refId]));
-    patch({ scenarioRefs: nextRefs });
+    const existing = new Set(
+      scenarioEntries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    if (!existing.has(refId)) {
+      setScenarioEntries([...scenarioEntries, { kind: "referenced", ref: refId }]);
+    }
     setSelectedLibraryScenarioId("");
+  };
+
+  const removeScenarioEntryAt = (index: number) => {
+    setScenarioEntries(scenarioEntries.filter((_, entryIndex) => entryIndex !== index));
+  };
+
+  const moveScenarioEntry = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= scenarioEntries.length) return;
+    const nextEntries = [...scenarioEntries];
+    const [moved] = nextEntries.splice(index, 1);
+    nextEntries.splice(nextIndex, 0, moved);
+    setScenarioEntries(nextEntries);
+  };
+
+  const convertReferencedScenarioToInline = (index: number) => {
+    const entry = scenarioEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const template = findLibraryScenarioByRef(entry.ref);
+    if (!template) {
+      toast({ title: "Referenced scenario not found", variant: "destructive" });
+      return;
+    }
+    const usedNames = new Set(
+      scenarioEntries
+        .filter((item): item is Extract<ScenarioEntry, { kind: "inline" }> => item.kind === "inline")
+        .map((item) => item.scenario.name?.trim().toLowerCase())
+        .filter(Boolean) as string[]
+    );
+    const baseName = `${(template.name || template.id).trim()}-custom`;
+    let nextName = baseName;
+    let suffix = 2;
+    while (usedNames.has(nextName.toLowerCase())) {
+      nextName = `${baseName}-${suffix}`;
+      suffix += 1;
+    }
+    const createdAt = Date.now();
+    const nextServers = [...config.servers];
+    const mappedServerIds: string[] = [];
+    for (const templateServerId of template.serverIds) {
+      const templateServer = libServers.find((item) => item.id === templateServerId);
+      if (!templateServer) continue;
+      const templateServerName = templateServer.name || templateServer.id;
+      const existingServer = nextServers.find((item) => (item.name || item.id) === templateServerName);
+      if (existingServer) {
+        mappedServerIds.push(existingServer.id);
+        continue;
+      }
+      const imported = { ...structuredClone(templateServer), id: `srv-${createdAt}-${mappedServerIds.length}` };
+      nextServers.push(imported);
+      mappedServerIds.push(imported.id);
+    }
+    patch({ servers: nextServers });
+    const inlineCopy: Scenario = {
+      ...structuredClone(template),
+      id: `scn-${createdAt}`,
+      name: nextName,
+      serverIds: mappedServerIds,
+    };
+    const nextEntries = [...scenarioEntries];
+    nextEntries[index] = { kind: "inline", scenario: inlineCopy };
+    setScenarioEntries(nextEntries);
+    toast({ title: "Referenced scenario converted to inline", description: nextName });
   };
 
   const removeRef = (
     key: "serverRefs" | "agentRefs" | "scenarioRefs",
     value: string
   ) => {
+    if (key === "scenarioRefs") {
+      setScenarioEntries(scenarioEntries.filter((entry) => !(entry.kind === "referenced" && entry.ref === value)));
+      return;
+    }
     const next = (config[key] ?? []).filter((item) => item !== value);
     patch({ [key]: next } as Partial<EvalConfig>);
   };
@@ -470,6 +602,7 @@ const ConfigEditor = () => {
     index: number,
     direction: -1 | 1
   ) => {
+    if (key === "scenarioRefs") return;
     const current = [...(config[key] ?? [])];
     const nextIndex = index + direction;
     if (nextIndex < 0 || nextIndex >= current.length) return;
@@ -497,17 +630,37 @@ const ConfigEditor = () => {
       return { value: name, label: `${name} · ${agent.model}` };
     })
     .filter((item) => !inlineAgentNameSet.has(item.value));
-  const referencedScenarios = (config.scenarioRefs ?? [])
-    .map(findLibraryScenarioByRef)
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const referencedScenarioIds = scenarioEntries
+    .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .map((entry) => entry.ref);
+  const inlineScenarioEntries = scenarioEntries
+    .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline");
+  const inlineScenarios = inlineScenarioEntries.map((entry) => entry.scenario);
+  const scenarioViewRows = scenarioEntries.flatMap((entry) => {
+    if (entry.kind === "referenced") {
+      const scenario = findLibraryScenarioByRef(entry.ref);
+      return scenario ? [{ scenario, origin: "referenced" as const }] : [];
+    }
+    return [{ scenario: entry.scenario, origin: "inline" as const }];
+  });
+  const scenarioViewAgents = Array.from(
+    new Map(
+      [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.name || agent.id, agent] as const)
+    ).values()
+  );
+  const scenarioViewServers = Array.from(
+    new Map(
+      [...libServers, ...config.servers, ...referencedServers].map((server) => [server.name || server.id, server] as const)
+    ).values()
+  );
   const missingServerRefs = (config.serverRefs ?? []).filter((ref) => !findLibraryServerByRef(ref));
   const missingAgentRefs = (config.agentRefs ?? []).filter((ref) => !findLibraryAgentByRef(ref));
-  const missingScenarioRefs = (config.scenarioRefs ?? []).filter((ref) => !findLibraryScenarioByRef(ref));
+  const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
   const totalServerCount = config.servers.length + referencedServers.length;
   const totalAgentCount = config.agents.length + referencedAgents.length;
-  const totalScenarioCount = config.scenarios.length + referencedScenarios.length;
+  const totalScenarioCount = scenarioEntries.length;
 
   useEffect(() => {
     if (!selectedReferenceAgentToImport) return;
@@ -1033,159 +1186,159 @@ const ConfigEditor = () => {
         </TabsContent>
 
         <TabsContent value="scenarios">
-          {!readOnly && <Card className="mb-4">
-            <CardContent className="pt-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select scenario from library" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libScenarios.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
-                    Add Ref
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
-                    Import Inline
-                  </Button>
-                </div>
-              </div>
-              {(config.scenarioRefs ?? []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(config.scenarioRefs ?? []).map((ref) => (
-                    <Badge
-                      key={ref}
-                      variant={missingScenarioRefSet.has(ref) ? "destructive" : "secondary"}
-                      className="gap-1"
-                    >
-                      {missingScenarioRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                      {ref}
-                      <button
-                        type="button"
-                        onClick={() => removeRef("scenarioRefs", ref)}
-                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                        aria-label={`Remove scenario reference ${ref}`}
-                        title={`Remove scenario reference ${ref}`}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                        Remove
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {missingScenarioRefs.length > 0 && (
-                <p className="mt-2 text-xs text-destructive">
-                  Missing scenario refs: {missingScenarioRefs.join(", ")}
-                </p>
-              )}
-            </CardContent>
-          </Card>}
-          {referencedScenarios.length > 0 && (
+          {!readOnly && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Referenced scenario order</div>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/libraries/scenarios">
-                      Scenarios Overview
-                      <ExternalLink className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select scenario from library" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {libScenarios.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineScenarioEntry}>
+                      Add Inline
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
+                      Add Ref
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
+                      Import Inline
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  {(config.scenarioRefs ?? []).map((ref, index) => (
-                    <div key={`scenario-order-${ref}-${index}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
-                      <span>{index + 1}. {ref}</span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          asChild
-                        >
-                          <Link
-                            to={
-                              findLibraryScenarioByRef(ref)
-                                ? `/libraries/scenarios/${encodeURIComponent(findLibraryScenarioByRef(ref)!.id)}`
-                                : "/libraries/scenarios"
-                            }
+                  {scenarioEntries.map((entry, index) => {
+                    const referenceScenario = entry.kind === "referenced" ? findLibraryScenarioByRef(entry.ref) : null;
+                    const rowTitle =
+                      entry.kind === "inline"
+                        ? entry.scenario.name?.trim() || entry.scenario.id
+                        : referenceScenario?.name || entry.ref;
+                    const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
+                    return (
+                      <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                          <span className="truncate font-medium">{rowTitle}</span>
+                          <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                            {entry.kind === "inline" ? "Inline" : "Referenced"}
+                          </Badge>
+                          {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {entry.kind === "referenced" && (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertReferencedScenarioToInline(index)}
+                                disabled={isMissingRef}
+                              >
+                                Convert to inline
+                              </Button>
+                              <Button size="sm" variant="outline" asChild>
+                                <Link
+                                  to={
+                                    referenceScenario
+                                      ? `/libraries/scenarios/${encodeURIComponent(referenceScenario.id)}`
+                                      : "/libraries/scenarios"
+                                  }
+                                >
+                                  Edit
+                                </Link>
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => moveScenarioEntry(index, -1)}
+                            disabled={index === 0}
+                            aria-label="Move scenario up"
                           >
-                            Edit
-                          </Link>
-                        </Button>
-                        {!readOnly && (
-                          <>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveRef("scenarioRefs", index, -1)}
-                              disabled={index === 0}
-                              aria-label="Move referenced scenario up"
-                            >
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveRef("scenarioRefs", index, 1)}
-                              disabled={index === (config.scenarioRefs ?? []).length - 1}
-                              aria-label="Move referenced scenario down"
-                            >
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                        {!readOnly && (
-                          <Button type="button" size="sm" variant="outline" onClick={() => removeRef("scenarioRefs", ref)}>
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => moveScenarioEntry(index, 1)}
+                            disabled={index === scenarioEntries.length - 1}
+                            aria-label="Move scenario down"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => removeScenarioEntryAt(index)}
+                          >
                             Remove
                           </Button>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  {scenarioEntries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No scenarios configured yet. Add inline scenarios or references.
+                    </p>
+                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Referenced scenarios are shown below in read-only form layout.
-                </div>
-                <ScenarioForm
-                  scenarios={referencedScenarios}
-                  agents={libAgents}
-                  servers={libServers}
-                  configId={config.id}
-                  configPath={config.sourcePath}
-                  defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-                  snapshotEval={config.snapshotEval}
-                  onChange={() => {}}
-                  readOnly
-                />
+                {missingScenarioRefs.length > 0 && (
+                  <p className="text-xs text-destructive">
+                    Missing scenario refs: {missingScenarioRefs.join(", ")}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
-          {readOnly && config.scenarios.length === 0 && referencedScenarios.length > 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No inline scenarios configured. Using {referencedScenarios.length} referenced scenario{referencedScenarios.length !== 1 ? "s" : ""} above.
-            </p>
+          {readOnly ? (
+            <ScenarioForm
+              scenarios={scenarioViewRows.map((row) => row.scenario)}
+              scenarioOrigins={scenarioViewRows.map((row) => row.origin)}
+              agents={scenarioViewAgents}
+              servers={scenarioViewServers}
+              configId={config.id}
+              configPath={config.sourcePath}
+              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+              snapshotEval={config.snapshotEval}
+              onChange={() => {}}
+              readOnly
+            />
           ) : (
             <ScenarioForm
-              scenarios={config.scenarios}
+              scenarios={inlineScenarios}
+              scenarioOrigins={inlineScenarios.map(() => "inline")}
               agents={[...config.agents, ...referencedAgents]}
               servers={[...config.servers, ...referencedServers]}
               configId={config.id}
               configPath={config.sourcePath}
               defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
               snapshotEval={config.snapshotEval}
-              onChange={(scenarios) => patch({ scenarios })}
+              onChange={(scenarios) => {
+                let cursor = 0;
+                const nextEntries = scenarioEntries.map((entry) => {
+                  if (entry.kind === "referenced") return entry;
+                  const nextScenario = scenarios[cursor];
+                  cursor += 1;
+                  return { kind: "inline" as const, scenario: nextScenario ?? entry.scenario };
+                });
+                setScenarioEntries(nextEntries);
+              }}
               readOnly={readOnly}
+              allowAdd={false}
+              allowStructureEdits={false}
             />
           )}
         </TabsContent>

@@ -2,8 +2,30 @@ import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { loadConfig, type EvalConfig } from '@inspectr/mcplab-core';
+import { loadConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
+
+function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConfig {
+  const scenarios = Array.isArray(config.scenarios) ? [...config.scenarios] : [];
+  const legacyRefs = Array.isArray(config.scenario_refs)
+    ? config.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  const existingRefs = new Set(
+    scenarios
+      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
+      .map((entry) => String(entry.ref).trim())
+      .filter(Boolean)
+  );
+  for (const ref of legacyRefs) {
+    if (existingRefs.has(ref)) continue;
+    scenarios.push({ ref });
+  }
+  return {
+    ...config,
+    scenarios,
+    scenario_refs: undefined
+  };
+}
 
 export type EvalsRouteDeps = Pick<
   AppRouteDeps,
@@ -44,7 +66,7 @@ export async function handleEvalsRoutes(params: {
 
   if (pathname === '/api/evals' && method === 'POST') {
     const body = await parseBody(req);
-    const config = body.config as EvalConfig | undefined;
+    const config = body.config as SourceEvalConfig | undefined;
     if (!config || typeof config !== 'object') {
       asJson(res, 400, { error: 'Missing config object' });
       return true;
@@ -59,7 +81,7 @@ export async function handleEvalsRoutes(params: {
       );
       suffix += 1;
     }
-    writeFileSync(filePath, `${stringifyYaml(config)}\n`, 'utf8');
+    writeFileSync(filePath, `${stringifyYaml(normalizeSourceConfigForWrite(config))}\n`, 'utf8');
     asJson(res, 201, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
@@ -90,7 +112,7 @@ export async function handleEvalsRoutes(params: {
       return true;
     }
     const { sourceConfig } = loadConfig(filePath, { bundleRoot: settings.librariesDir });
-    const nextSnapshotEval: NonNullable<EvalConfig['snapshot_eval']> = {
+    const nextSnapshotEval: NonNullable<SourceEvalConfig['snapshot_eval']> = {
       enabled,
       mode,
       baseline_snapshot_id:
@@ -105,7 +127,7 @@ export async function handleEvalsRoutes(params: {
     };
     if (!nextSnapshotEval.baseline_snapshot_id) delete nextSnapshotEval.baseline_snapshot_id;
     if (!nextSnapshotEval.baseline_source_run_id) delete nextSnapshotEval.baseline_source_run_id;
-    const nextConfig: EvalConfig = { ...sourceConfig, snapshot_eval: nextSnapshotEval };
+    const nextConfig: SourceEvalConfig = { ...sourceConfig, snapshot_eval: nextSnapshotEval };
     writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
     asJson(res, 200, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
@@ -119,7 +141,7 @@ export async function handleEvalsRoutes(params: {
       return true;
     }
     const body = await parseBody(req);
-    const config = body.config as EvalConfig | undefined;
+    const config = body.config as SourceEvalConfig | undefined;
     if (!config || typeof config !== 'object') {
       asJson(res, 400, { error: 'Missing config object' });
       return true;
@@ -146,7 +168,7 @@ export async function handleEvalsRoutes(params: {
         targetPath = uniquePath;
       }
     }
-    writeFileSync(targetPath, `${stringifyYaml(config)}\n`, 'utf8');
+    writeFileSync(targetPath, `${stringifyYaml(normalizeSourceConfigForWrite(config))}\n`, 'utf8');
     asJson(res, 200, readConfigRecord(targetPath, settings.evalsDir, settings.librariesDir));
     return true;
   }

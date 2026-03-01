@@ -2,20 +2,27 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import type { EvalConfig, ExecutableEvalConfig } from './types.js';
+import type {
+  EvalConfig,
+  ExecutableEvalConfig,
+  Scenario,
+  ScenarioListEntry,
+  ScenarioRefEntry,
+  SourceEvalConfig
+} from './types.js';
 
 export function loadConfig(
   path: string,
   options?: { bundleRoot?: string }
 ): {
   config: EvalConfig;
-  sourceConfig: EvalConfig;
+  sourceConfig: SourceEvalConfig;
   hash: string;
   raw: string;
   warnings: string[];
 } {
   const raw = readFileSync(path, 'utf8');
-  const sourceConfig = parse(raw) as EvalConfig;
+  const sourceConfig = parse(raw) as SourceEvalConfig;
 
   if (!sourceConfig || typeof sourceConfig !== 'object') {
     throw new Error('Invalid config: expected object');
@@ -39,7 +46,7 @@ export function selectScenarios<T extends { scenarios: Array<{ id: string }> }>(
 }
 
 function resolveReferences(
-  sourceConfig: EvalConfig,
+  sourceConfig: SourceEvalConfig,
   configPath: string,
   bundleRootOverride?: string
 ): EvalConfig {
@@ -76,19 +83,40 @@ function resolveReferences(
     if (!agents[ref]) missingAgentRefs.push(ref);
   }
 
-  const existingScenarioIds = new Set(
-    (sourceConfig.scenarios ?? []).map((scenario) => scenario.id)
-  );
-  const scenarios = [...(sourceConfig.scenarios ?? [])];
+  const scenarios: Scenario[] = [];
+  const seenScenarioIds = new Set<string>();
   const missingScenarioRefs: string[] = [];
-  for (const ref of sourceConfig.scenario_refs ?? []) {
-    if (existingScenarioIds.has(ref)) continue;
-    const scenario = libraryScenarios[ref];
-    if (!scenario) {
-      missingScenarioRefs.push(ref);
+
+  for (const entry of sourceConfig.scenarios ?? []) {
+    if (isScenarioRefEntry(entry)) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) {
+        missingScenarioRefs.push('(empty-ref)');
+        continue;
+      }
+      const scenario = libraryScenarios[ref];
+      if (!scenario) {
+        missingScenarioRefs.push(ref);
+        continue;
+      }
+      if (seenScenarioIds.has(scenario.id)) {
+        throw new Error(`Duplicate scenario id detected while resolving refs: ${scenario.id}`);
+      }
+      seenScenarioIds.add(scenario.id);
+      scenarios.push(scenario);
       continue;
     }
-    scenarios.push(scenario);
+
+    const inline = entry as Scenario;
+    const inlineId = String(inline.id || '').trim();
+    if (!inlineId) {
+      throw new Error('Invalid config: inline scenario is missing required id');
+    }
+    if (seenScenarioIds.has(inlineId)) {
+      throw new Error(`Duplicate scenario id detected: ${inlineId}`);
+    }
+    seenScenarioIds.add(inlineId);
+    scenarios.push(inline);
   }
 
   const missingMessages: string[] = [];
@@ -124,17 +152,27 @@ function resolveReferences(
   };
 }
 
-function normalizeConfig(sourceConfig: EvalConfig): { config: EvalConfig; warnings: string[] } {
+function normalizeConfig(
+  sourceConfig: SourceEvalConfig
+): { config: SourceEvalConfig; warnings: string[] } {
   const warnings: string[] = [];
   const legacyPinnedAgents = new Set<string>();
   const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
-  const normalizedScenarios = scenariosInput.map((scenario) => {
-    const rawScenario = scenario as EvalConfig['scenarios'][number] & {
+  const normalizedScenarios: ScenarioListEntry[] = [];
+  for (const scenario of scenariosInput) {
+    if (isScenarioRefEntry(scenario)) {
+      const ref = String((scenario as ScenarioRefEntry).ref ?? '').trim();
+      if (!ref) throw new Error('Invalid config: scenario ref must be a non-empty id');
+      normalizedScenarios.push({ ref });
+      continue;
+    }
+    const rawScenario = scenario as Scenario & {
       agent?: unknown;
       snapshot_eval_enabled?: unknown;
     };
-    const nextScenario: EvalConfig['scenarios'][number] = {
+    const nextScenario: Scenario = {
       id: rawScenario.id,
+      name: rawScenario.name,
       servers: rawScenario.servers,
       prompt: rawScenario.prompt,
       eval: rawScenario.eval,
@@ -152,17 +190,33 @@ function normalizeConfig(sourceConfig: EvalConfig): { config: EvalConfig; warnin
         ...(legacySnapshotEnabled !== undefined ? { enabled: legacySnapshotEnabled } : {})
       };
     }
-    return nextScenario;
-  });
+    normalizedScenarios.push(nextScenario);
+  }
 
-  const normalized: EvalConfig = {
+  const legacyScenarioRefs = Array.isArray(sourceConfig.scenario_refs)
+    ? sourceConfig.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (legacyScenarioRefs.length > 0) {
+    const existingRefs = new Set(
+      normalizedScenarios.filter(isScenarioRefEntry).map((entry) => entry.ref)
+    );
+    for (const ref of legacyScenarioRefs) {
+      if (existingRefs.has(ref)) continue;
+      normalizedScenarios.push({ ref });
+    }
+    warnings.push(
+      'Legacy scenario_refs was migrated into scenarios[{ref}] and will be removed on next save.'
+    );
+  }
+
+  const normalized: SourceEvalConfig = {
     ...sourceConfig,
     servers: sourceConfig.servers ?? {},
     server_refs: sourceConfig.server_refs ?? [],
     agents: sourceConfig.agents ?? {},
     agent_refs: sourceConfig.agent_refs ?? [],
     scenarios: normalizedScenarios,
-    scenario_refs: sourceConfig.scenario_refs ?? []
+    scenario_refs: []
   };
 
   if (typeof normalized.servers !== 'object' || Array.isArray(normalized.servers)) {
@@ -210,7 +264,9 @@ function normalizeConfig(sourceConfig: EvalConfig): { config: EvalConfig; warnin
     );
   }
   if (
-    normalized.scenarios.some((s) => s.snapshot_eval && 'enabled' in (s.snapshot_eval ?? {})) &&
+    normalized.scenarios.some(
+      (s) => !isScenarioRefEntry(s) && s.snapshot_eval && 'enabled' in (s.snapshot_eval ?? {})
+    ) &&
     scenariosInput.some((s: any) => s?.snapshot_eval_enabled !== undefined)
   ) {
     warnings.push(
@@ -295,7 +351,13 @@ export function expandConfigForAgents(
       `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
     );
   }
-  const scenarios = config.scenarios.flatMap((scenario) =>
+  const inlineScenarios = config.scenarios.filter((scenario): scenario is Scenario =>
+    !isScenarioRefEntry(scenario)
+  );
+  if (inlineScenarios.length !== config.scenarios.length) {
+    throw new Error('Config contains unresolved scenario refs; resolve config before expansion');
+  }
+  const scenarios = inlineScenarios.flatMap((scenario) =>
     selectedAgents.map((agent) => ({
       ...scenario,
       agent,
@@ -303,4 +365,8 @@ export function expandConfigForAgents(
     }))
   );
   return { ...config, scenarios };
+}
+
+function isScenarioRefEntry(entry: ScenarioListEntry): entry is ScenarioRefEntry {
+  return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
 }

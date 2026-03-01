@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
 import { useEffect, useState } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
@@ -15,6 +16,7 @@ import { isUiFeatureEnabled } from "@/lib/feature-flags";
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
+  scenarioOrigins?: Array<"referenced" | "inline">;
   agents: AgentConfig[];
   servers: ServerConfig[];
   configId?: string;
@@ -30,6 +32,7 @@ interface ScenarioFormProps {
   onChange: (scenarios: Scenario[]) => void;
   readOnly?: boolean;
   allowAdd?: boolean;
+  allowStructureEdits?: boolean;
 }
 
 const emptyScenario = (): Scenario => ({
@@ -43,6 +46,7 @@ const emptyScenario = (): Scenario => ({
 
 export function ScenarioForm({
   scenarios,
+  scenarioOrigins,
   agents,
   servers,
   configId,
@@ -53,7 +57,8 @@ export function ScenarioForm({
   snapshotEval,
   onChange,
   readOnly,
-  allowAdd = !readOnly
+  allowAdd = !readOnly,
+  allowStructureEdits = !readOnly
 }: ScenarioFormProps) {
   const update = (index: number, patch: Partial<Scenario>) => {
     const next = scenarios.map((s, i) => (i === index ? { ...s, ...patch } : s));
@@ -75,7 +80,7 @@ export function ScenarioForm({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Scenarios</h3>
-        {!readOnly && allowAdd && (
+        {!readOnly && allowAdd && allowStructureEdits && (
           <Button type="button" variant="outline" size="sm" onClick={add}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />Add Scenario
           </Button>
@@ -85,6 +90,7 @@ export function ScenarioForm({
         <ScenarioCard
           key={sc.id}
           scenario={sc}
+          scenarioOrigin={scenarioOrigins?.[i]}
           index={i}
           total={scenarios.length}
           agents={agents}
@@ -100,6 +106,7 @@ export function ScenarioForm({
           onMoveDown={() => move(i, 1)}
           onRemove={() => remove(i)}
           readOnly={readOnly}
+          allowStructureEdits={allowStructureEdits}
         />
       ))}
       {scenarios.length === 0 && (
@@ -109,15 +116,16 @@ export function ScenarioForm({
   );
 }
 
-function ScenarioCard({ scenario, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, assistantInitialPrompt, assistantAutoOpenNonce, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly }: {
+function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, assistantInitialPrompt, assistantAutoOpenNonce, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly, allowStructureEdits }: {
   scenario: Scenario; index: number; total: number; agents: AgentConfig[]; servers: ServerConfig[];
+  scenarioOrigin?: "referenced" | "inline";
   configId?: string;
   configPath?: string;
   defaultAssistantAgentName?: string;
   assistantInitialPrompt?: string;
   assistantAutoOpenNonce?: number;
   snapshotEval?: { enabled: boolean; mode: "warn" | "fail_on_drift"; baselineSnapshotId?: string };
-  onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean;
+  onUpdate: (patch: Partial<Scenario>) => void; onMoveUp: () => void; onMoveDown: () => void; onRemove: () => void; readOnly?: boolean; allowStructureEdits?: boolean;
 }) {
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
@@ -130,6 +138,7 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
   const [newExtractName, setNewExtractName] = useState("");
   const [newExtractPattern, setNewExtractPattern] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [expanded, setExpanded] = useState(!readOnly);
 
   const addRule = () => {
     if (!newRuleValue.trim()) return;
@@ -198,6 +207,10 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
   }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
 
   useEffect(() => {
+    setExpanded(!readOnly);
+  }, [readOnly]);
+
+  useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
     setToolPickerValue("");
@@ -228,59 +241,73 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
   };
 
   return (
-    <Card className="border-dashed">
-      <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-medium">
-          {index + 1}. {scenario.name || `Scenario ${index + 1}`}
-        </CardTitle>
-        {!readOnly && (
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs"
-              onClick={() => setAssistantOpen(true)}
-              title={
-                agents.length === 0
-                    ? "Add at least one agent in the config"
-                    : scenario.serverIds.length === 0
-                      ? "Select at least one server for this scenario"
-                      : "Open Scenario Assistant"
-              }
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Ask Assistant
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onMoveUp}
-              disabled={index === 0}
-              aria-label="Move scenario up"
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onMoveDown}
-              disabled={index === total - 1}
-              aria-label="Move scenario down"
-            >
-              <ChevronDown className="h-3.5 w-3.5" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
-            </Button>
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
+      <Card className="border-dashed">
+        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+          <div className="flex min-w-0 items-center gap-1">
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-0" : "-rotate-90"}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CardTitle className="truncate text-sm font-medium">
+              {index + 1}. {scenario.name || `Scenario ${index + 1}`}
+            </CardTitle>
+            {readOnly && scenarioOrigin && (
+              <Badge variant="outline" className="ml-2 text-[10px] font-normal text-muted-foreground">
+                {scenarioOrigin === "referenced" ? "Referenced" : "Inline"}
+              </Badge>
+            )}
           </div>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-3">
+          {!readOnly && allowStructureEdits && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs"
+                onClick={() => setAssistantOpen(true)}
+                title={
+                  agents.length === 0
+                      ? "Add at least one agent in the config"
+                      : scenario.serverIds.length === 0
+                        ? "Select at least one server for this scenario"
+                        : "Open Scenario Assistant"
+                }
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Ask Assistant
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onMoveUp}
+                disabled={index === 0}
+                aria-label="Move scenario up"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onMoveDown}
+                disabled={index === total - 1}
+                aria-label="Move scenario down"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onRemove}>
+                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              </Button>
+            </div>
+          )}
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
         <ScenarioAssistantDialog
           open={assistantOpen}
           onOpenChange={setAssistantOpen}
@@ -654,7 +681,9 @@ function ScenarioCard({ scenario, index, total, agents, servers, configId, confi
             </CardContent>
           </Card>
         )}
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }

@@ -3,12 +3,14 @@ import type {
   EvalConfig,
   EvalResult,
   EvalRule,
+  ScenarioEntry,
   ScenarioRun,
   ToolCall
 } from '@/types/eval';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
+  CoreSourceEvalConfig,
   ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
@@ -69,7 +71,18 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     };
   });
 
-  const scenarios = record.config.scenarios.map((scenario, index) => {
+  const inlineScenarios: EvalConfig['scenarios'] = [];
+  const scenarioRefs: string[] = [];
+  const scenarioEntries: ScenarioEntry[] = [];
+
+  record.config.scenarios.forEach((scenario, index) => {
+    if ('ref' in scenario) {
+      const ref = String(scenario.ref || '').trim();
+      if (!ref) return;
+      scenarioRefs.push(ref);
+      scenarioEntries.push({ kind: 'referenced', ref });
+      return;
+    }
     const evalRules: EvalRule[] = [];
     for (const tool of scenario.eval?.tool_constraints?.required_tools ?? []) {
       evalRules.push({ type: 'required_tool', value: tool });
@@ -90,7 +103,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       }
     }
 
-    return {
+    const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
       serverIds: scenario.servers
@@ -111,6 +124,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         pattern: rule.regex
       }))
     };
+    inlineScenarios.push(mappedScenario);
+    scenarioEntries.push({ kind: 'inline', scenario: mappedScenario });
   });
 
   return {
@@ -123,8 +138,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     serverRefs: record.config.server_refs ?? [],
     agents,
     agentRefs: record.config.agent_refs ?? [],
-    scenarios,
-    scenarioRefs: record.config.scenario_refs ?? [],
+    scenarios: inlineScenarios,
+    scenarioEntries,
+    scenarioRefs: scenarioRefs.length > 0 ? scenarioRefs : record.config.scenario_refs ?? [],
     runDefaults:
       record.config.run_defaults?.selected_agents &&
       record.config.run_defaults.selected_agents.length > 0
@@ -172,7 +188,7 @@ export function fromCoreLibraries(libraries: {
   };
 }
 
-export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
+export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const serverNameById = new Map<string, string>();
   const agentNameById = new Map<string, string>();
 
@@ -216,7 +232,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
     };
   }
 
-  const scenarios = config.scenarios.map((scenario) => {
+  const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
     const required_tools = scenario.evalRules
       .filter((rule) => rule.type === 'required_tool')
       .map((rule) => rule.value);
@@ -253,7 +269,17 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
         regex: rule.pattern
       }))
     };
-  });
+  };
+
+  const scenarios = (config.scenarioEntries && config.scenarioEntries.length > 0
+    ? config.scenarioEntries.map((entry) => {
+        if (entry.kind === 'referenced') return { ref: entry.ref };
+        return mapInlineScenario(entry.scenario);
+      })
+    : [
+        ...(config.scenarioRefs ?? []).map((ref) => ({ ref })),
+        ...config.scenarios.map((scenario) => mapInlineScenario(scenario))
+      ]) as CoreSourceEvalConfig['scenarios'];
 
   return {
     servers,
@@ -261,7 +287,6 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
     agents,
     agent_refs: config.agentRefs ?? [],
     scenarios,
-    scenario_refs: config.scenarioRefs ?? [],
     run_defaults:
       config.runDefaults?.selectedAgentNames && config.runDefaults.selectedAgentNames.length > 0
         ? {

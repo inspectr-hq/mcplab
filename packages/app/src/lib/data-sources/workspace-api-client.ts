@@ -1,5 +1,6 @@
 import type {
   CoreEvalConfig,
+  CoreSourceEvalConfig,
   CoreResultsJson,
   ScenarioRunTraceRecord,
   ScenarioAssistantSessionView,
@@ -88,12 +89,12 @@ export const workspaceApiClient = {
       body: JSON.stringify(patch)
     }),
   listConfigs: () => request<WorkspaceConfigRecord[]>('/api/evals'),
-  createConfig: (fileName: string, config: CoreEvalConfig) =>
+  createConfig: (fileName: string, config: CoreSourceEvalConfig) =>
     request<WorkspaceConfigRecord>('/api/evals', {
       method: 'POST',
       body: JSON.stringify({ fileName, config })
     }),
-  updateConfig: (id: string, config: CoreEvalConfig, fileName?: string) =>
+  updateConfig: (id: string, config: CoreSourceEvalConfig, fileName?: string) =>
     request<WorkspaceConfigRecord>(`/api/evals/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ config, fileName })

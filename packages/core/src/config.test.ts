@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { expandConfigForAgents } from './config.js';
+import { expandConfigForAgents, loadConfig } from './config.js';
 import type { EvalConfig } from './types.js';
 
 const BASE_CONFIG: EvalConfig = {
@@ -48,5 +51,142 @@ describe('expandConfigForAgents', () => {
 
   it('throws listing all available agents when agent is unknown', () => {
     expect(() => expandConfigForAgents(BASE_CONFIG, ['bad'])).toThrow('Available: gpt-4, claude');
+  });
+});
+
+describe('loadConfig normalization', () => {
+  it('preserves scenario name from source config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - id: scn-1',
+          '    name: Check Weather',
+          '    servers: []',
+          '    prompt: test'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig } = loadConfig(configPath);
+      expect(sourceConfig.scenarios[0]?.name).toBe('Check Weather');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('supports mixed scenarios entries with ref + inline', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const scenariosDir = join(dir, 'scenarios');
+      mkdirSync(scenariosDir, { recursive: true });
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['tm:', '  transport: http', '  url: http://localhost:3001/mcp'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(dir, 'agents.yaml'),
+        ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(scenariosDir, 'check-weather.yaml'),
+        ['id: scn-weather', 'name: Check Weather', 'servers: []', 'prompt: "lookup"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'mixed.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - ref: scn-weather',
+          '  - id: scn-inline',
+          '    name: Inline Scenario',
+          '    servers: []',
+          '    prompt: do-inline'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config, sourceConfig } = loadConfig(configPath);
+      expect(sourceConfig.scenarios).toHaveLength(2);
+      expect(config.scenarios).toHaveLength(2);
+      expect((config.scenarios[0] as any).id).toBe('scn-weather');
+      expect((config.scenarios[1] as any).id).toBe('scn-inline');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('migrates legacy scenario_refs into scenarios ref entries with warning', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const scenariosDir = join(dir, 'scenarios');
+      mkdirSync(scenariosDir, { recursive: true });
+      writeFileSync(
+        join(scenariosDir, 'check-weather.yaml'),
+        ['id: scn-weather', 'name: Check Weather', 'servers: []', 'prompt: "lookup"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'legacy.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios: []',
+          'scenario_refs:',
+          '  - scn-weather'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig, warnings } = loadConfig(configPath);
+      expect(warnings.some((w) => w.includes('Legacy scenario_refs was migrated'))).toBe(true);
+      expect(sourceConfig.scenario_refs ?? []).toEqual([]);
+      expect(sourceConfig.scenarios).toEqual([{ ref: 'scn-weather' }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when inline and referenced scenario ids collide', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const scenariosDir = join(dir, 'scenarios');
+      mkdirSync(scenariosDir, { recursive: true });
+      writeFileSync(
+        join(scenariosDir, 'check-weather.yaml'),
+        ['id: scn-weather', 'name: Check Weather', 'servers: []', 'prompt: "lookup"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'duplicate.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - ref: scn-weather',
+          '  - id: scn-weather',
+          '    name: Inline duplicate',
+          '    servers: []',
+          '    prompt: test'
+        ].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow('Duplicate scenario id detected');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

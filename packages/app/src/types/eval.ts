@@ -50,6 +50,10 @@ export interface Scenario {
   extractRules: ExtractRule[];
 }
 
+export type ScenarioEntry =
+  | { kind: 'inline'; scenario: Scenario }
+  | { kind: 'referenced'; ref: string };
+
 export interface SnapshotEvalPolicy {
   enabled: boolean;
   mode: 'warn' | 'fail_on_drift';
@@ -70,6 +74,7 @@ export interface EvalConfig {
   agents: AgentConfig[];
   agentRefs?: string[];
   scenarios: Scenario[];
+  scenarioEntries?: ScenarioEntry[];
   scenarioRefs?: string[];
   runDefaults?: {
     selectedAgentNames?: string[];

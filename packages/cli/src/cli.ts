@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   loadConfig,
@@ -10,6 +10,7 @@ import {
   runAll,
   expandConfigForAgents,
   type EvalConfig,
+  type SourceEvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson
 } from '@inspectr/mcplab-core';
@@ -211,7 +212,7 @@ program
 
           const configPath = resolve(String(options.config));
           const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             snapshot_eval: {
               enabled: true,
@@ -248,7 +249,7 @@ program
           }
           const configPath = resolve(String(options.config));
           const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             snapshot_eval: {
               enabled,
@@ -282,14 +283,17 @@ program
           const scenarioId = String(options.scenario).trim();
           if (!scenarioId) throw new Error('scenario is required');
           const { sourceConfig } = loadConfig(configPath);
-          const scenarioIndex = (sourceConfig.scenarios ?? []).findIndex(
-            (s) => s.id === scenarioId
+          const scenarios = [...(sourceConfig.scenarios ?? [])];
+          const scenarioIndex = scenarios.findIndex(
+            (s) => typeof s === 'object' && s !== null && !('ref' in s) && s.id === scenarioId
           );
           if (scenarioIndex < 0) {
             throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
           }
-          const scenarios = [...(sourceConfig.scenarios ?? [])];
           const current = scenarios[scenarioIndex];
+          if (!current || typeof current !== 'object' || 'ref' in current) {
+            throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
+          }
           const nextScenarioSnapshotEval = {
             ...(current.snapshot_eval ?? {}),
             ...(options.snapshot !== undefined
@@ -324,7 +328,7 @@ program
               snapshot_eval: nextScenarioSnapshotEval
             };
           }
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             scenarios
           };
@@ -403,6 +407,68 @@ program
         }
       })
   );
+
+program
+  .command('migrate-configs')
+  .description('Migrate eval YAML files to mixed scenarios list format (scenarios: [{ref}|inline])')
+  .option('--to-mixed-scenarios', 'Migrate to mixed scenarios list format')
+  .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
+  .option('--dry-run', 'Preview migration without writing files')
+  .action((options) => {
+    try {
+      if (!options.toMixedScenarios) {
+        throw new Error('Specify --to-mixed-scenarios');
+      }
+      const evalsDir = resolve(String(options.evalsDir));
+      const files = readdirSync(evalsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
+      let migrated = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const file of files) {
+        const filePath = resolve(evalsDir, file);
+        try {
+          const { sourceConfig, warnings } = loadConfig(filePath);
+          const hadLegacyScenarioRefsWarning = warnings.some((warning) =>
+            warning.includes('Legacy scenario_refs was migrated')
+          );
+          const hadLegacyScenarioRefsField = Array.isArray((sourceConfig as { scenario_refs?: unknown }).scenario_refs)
+            && ((sourceConfig as { scenario_refs?: unknown[] }).scenario_refs?.length ?? 0) > 0;
+          if (!hadLegacyScenarioRefsWarning && !hadLegacyScenarioRefsField) {
+            skipped += 1;
+            continue;
+          }
+          if (options.dryRun) {
+            console.log(
+              kleur.cyan(
+                `[dry-run] ${file}: would normalize scenarios list${warnings.length ? ` (${warnings.join(' | ')})` : ''}`
+              )
+            );
+            migrated += 1;
+            continue;
+          }
+          const nextConfig: SourceEvalConfig = {
+            ...sourceConfig,
+            scenario_refs: undefined
+          };
+          writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+          migrated += 1;
+          console.log(kleur.green(`Migrated: ${file}`));
+        } catch (error: any) {
+          failed += 1;
+          console.error(kleur.red(`Failed: ${file} (${error?.message ?? String(error)})`));
+        }
+      }
+      console.log(
+        kleur.cyan(
+          `Migration summary${options.dryRun ? ' (dry-run)' : ''}: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
+        )
+      );
+    } catch (err: any) {
+      console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+      process.exit(1);
+    }
+  });
 
 program
   .command('report')
