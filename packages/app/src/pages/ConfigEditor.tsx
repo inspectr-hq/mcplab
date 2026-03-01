@@ -24,6 +24,7 @@ import type { SnapshotRecord } from "@/lib/data-sources/types";
 const emptyConfig = (): EvalConfig => ({
   id: `cfg-${Date.now()}`,
   name: "",
+  configName: "",
   description: "",
   servers: [],
   serverEntries: [],
@@ -245,7 +246,7 @@ const ConfigEditor = () => {
 
   const handleSave = async () => {
     if (!config.name.trim()) {
-      toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "Config ID is required.", variant: "destructive" });
       return;
     }
     const normalizedServerRefs = serverEntries
@@ -337,7 +338,8 @@ const ConfigEditor = () => {
     }
   };
 
-  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${config.name}` : config.name;
+  const displayConfigName = config.configName?.trim() || config.name;
+  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${displayConfigName}` : displayConfigName;
   const configBasePath = isNew ? "/mcp-evaluations/new" : `/mcp-evaluations/${encodeURIComponent(config.id || id || "")}`;
   const isBrokenConfig = Boolean(existing?.loadError);
 
@@ -883,10 +885,16 @@ const ConfigEditor = () => {
       {/* Meta fields */}
       <Card>
         <CardContent className="pt-6 space-y-3">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className={`grid gap-4 ${readOnly ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+            {!readOnly && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Config ID</Label>
+                <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. check-weather" />
+              </div>
+            )}
             <div className="space-y-1.5">
-              <Label className="text-xs">MCP Evaluation Name</Label>
-              <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. Basic OpenAI Eval" />
+              <Label className="text-xs">Name (optional)</Label>
+              <Input value={config.configName || ""} onChange={(e) => patch({ configName: e.target.value })} disabled={readOnly} placeholder="e.g. Weather checks baseline" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Description</Label>

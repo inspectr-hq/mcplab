@@ -24,6 +24,10 @@ function toId(base: string, index: number): string {
 }
 
 export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
+  const configName =
+    typeof record.config.name === 'string' && record.config.name.trim().length > 0
+      ? record.config.name.trim()
+      : undefined;
   const sourceServerEntries = Array.isArray(record.config.servers) ? record.config.servers : [];
   const sourceAgentEntries = Array.isArray(record.config.agents) ? record.config.agents : [];
   const serverIdByName = new Map<string, string>();
@@ -182,7 +186,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
 
   return {
     id: record.id,
-    name: record.name,
+    name: configName || record.name,
+    configName,
     description: record.path,
     loadError: record.error,
     loadWarnings: record.warnings,
@@ -384,6 +389,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       ]) as CoreSourceEvalConfig['scenarios'];
 
   return {
+    name: config.configName?.trim() || undefined,
     servers,
     server_refs: undefined,
     agents,

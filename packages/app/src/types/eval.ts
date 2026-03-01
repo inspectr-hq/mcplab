@@ -73,6 +73,7 @@ export interface SnapshotEvalPolicy {
 export interface EvalConfig {
   id: string;
   name: string;
+  configName?: string;
   description?: string;
   sourcePath?: string;
   loadError?: string;

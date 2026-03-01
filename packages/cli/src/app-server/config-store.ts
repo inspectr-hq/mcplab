@@ -42,6 +42,7 @@ export function readConfigRecord(
 
 function emptySourceConfig(): SourceEvalConfig {
   return {
+    name: undefined,
     servers: [],
     server_refs: [],
     agents: [],
@@ -58,6 +59,7 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptySourceConfig();
     const obj = parsed as Record<string, unknown>;
     return {
+      name: typeof obj.name === 'string' ? obj.name : undefined,
       servers:
         Array.isArray(obj.servers)
           ? (obj.servers as SourceEvalConfig['servers'])

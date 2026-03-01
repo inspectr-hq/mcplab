@@ -129,6 +129,7 @@ export interface SnapshotEvalPolicy {
 }
 
 export interface EvalConfig {
+  name?: string;
   servers: Record<string, ServerConfig>;
   server_refs?: string[];
   agents: Record<string, AgentConfig>;

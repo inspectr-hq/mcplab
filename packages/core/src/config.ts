@@ -395,6 +395,10 @@ function normalizeConfig(
 
   const normalized: SourceEvalConfig = {
     ...sourceConfig,
+    name:
+      typeof (sourceConfig as { name?: unknown }).name === 'string'
+        ? String((sourceConfig as { name?: unknown }).name).trim() || undefined
+        : undefined,
     servers: normalizedServers,
     server_refs: [],
     agents: normalizedAgents,

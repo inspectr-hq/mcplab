@@ -55,6 +55,28 @@ describe('expandConfigForAgents', () => {
 });
 
 describe('loadConfig normalization', () => {
+  it('preserves optional top-level config name from source config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'name: Weather checks baseline',
+          'servers: []',
+          'agents: []',
+          'scenarios: []'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig } = loadConfig(configPath);
+      expect(sourceConfig.name).toBe('Weather checks baseline');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('preserves scenario name from source config', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

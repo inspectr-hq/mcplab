@@ -42,7 +42,7 @@ const Configurations = () => {
 
   const handleClone = async (id: string) => {
     const cloned = await cloneConfig(id);
-    toast({ title: "Cloned", description: `Created "${cloned.name}".` });
+    toast({ title: "Cloned", description: `Created "${displayConfigName(cloned)}".` });
     navigate(`/mcp-evaluations/${cloned.id}`);
   };
 
@@ -55,7 +55,7 @@ const Configurations = () => {
   const sortedConfigs = useMemo(() => {
     const sorted = [...configs].sort((a, b) => {
       let cmp = 0;
-      if (sortBy === "name") cmp = a.name.localeCompare(b.name);
+      if (sortBy === "name") cmp = displayConfigName(a).localeCompare(displayConfigName(b));
       if (sortBy === "scenarios") cmp = scenarioCount(a) - scenarioCount(b);
       if (sortBy === "agents") cmp = agentCount(a) - agentCount(b);
       if (sortBy === "updatedAt") cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
@@ -129,7 +129,7 @@ const Configurations = () => {
                 <TableRow key={cfg.id}>
                   <TableCell>
                     <div>
-                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{cfg.name}</Link>
+                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{displayConfigName(cfg)}</Link>
                       {cfg.loadError && (
                         <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
                           <AlertTriangle className="mr-1 h-3 w-3" />
@@ -164,7 +164,7 @@ const Configurations = () => {
                           <Copy className="mr-2 h-3.5 w-3.5" />Clone
                         </DropdownMenuItem>
                         <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Download YAML</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, cfg.name)}>
+                        <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
                           <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -195,3 +195,4 @@ const Configurations = () => {
 };
 
 export default Configurations;
+  const displayConfigName = (cfg: (typeof configs)[number]) => cfg.configName?.trim() || cfg.name;
