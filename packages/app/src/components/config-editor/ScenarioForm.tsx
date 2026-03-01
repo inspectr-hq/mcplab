@@ -246,7 +246,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     <Collapsible open={expanded} onOpenChange={setExpanded}>
       <Card className={readOnly ? "rounded-md border shadow-none" : "border-dashed"}>
         <CardHeader className={readOnly ? "px-3 py-3 flex-row items-center justify-between space-y-0" : "pb-3 flex-row items-center justify-between space-y-0"}>
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-2">
             {!readOnly && (
               <CollapsibleTrigger asChild>
                 <Button type="button" variant="ghost" size="icon" className="h-7 w-7">

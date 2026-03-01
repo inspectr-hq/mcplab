@@ -157,7 +157,7 @@ export function AgentForm({
         >
           <Card className="border-dashed">
             <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-              <div className="flex min-w-0 items-center gap-1">
+              <div className="flex min-w-0 items-center gap-2">
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="ghost" size="icon" className="h-7 w-7">
                     <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", (openAgents[agent.id] ?? false) ? "rotate-0" : "-rotate-90")} />
