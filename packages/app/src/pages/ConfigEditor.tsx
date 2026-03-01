@@ -1723,18 +1723,22 @@ const ConfigEditor = () => {
             </Card>
           )}
           {readOnly ? (
-            <ScenarioForm
-              scenarios={scenarioViewRows.map((row) => row.scenario)}
-              scenarioOrigins={scenarioViewRows.map((row) => row.origin)}
-              agents={scenarioViewAgents}
-              servers={scenarioViewServers}
-              configId={config.id}
-              configPath={config.sourcePath}
-              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-              snapshotEval={config.snapshotEval}
-              onChange={() => {}}
-              readOnly
-            />
+            <Card>
+              <CardContent className="pt-4">
+                <ScenarioForm
+                  scenarios={scenarioViewRows.map((row) => row.scenario)}
+                  scenarioOrigins={scenarioViewRows.map((row) => row.origin)}
+                  agents={scenarioViewAgents}
+                  servers={scenarioViewServers}
+                  configId={config.id}
+                  configPath={config.sourcePath}
+                  defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+                  snapshotEval={config.snapshotEval}
+                  onChange={() => {}}
+                  readOnly
+                />
+              </CardContent>
+            </Card>
           ) : (
             <ScenarioForm
               scenarios={inlineScenarios}

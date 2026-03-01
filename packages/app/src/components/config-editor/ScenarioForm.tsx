@@ -77,7 +77,7 @@ export function ScenarioForm({
   };
 
   return (
-    <div className="space-y-4">
+    <div className={readOnly ? "space-y-2" : "space-y-4"}>
       {!readOnly && (
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">Scenarios</h3>
@@ -244,8 +244,8 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
-      <Card className={readOnly ? "" : "border-dashed"}>
-        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
+      <Card className={readOnly ? "rounded-md border shadow-none" : "border-dashed"}>
+        <CardHeader className={readOnly ? "px-3 py-3 flex-row items-center justify-between space-y-0" : "pb-3 flex-row items-center justify-between space-y-0"}>
           <div className="flex min-w-0 items-center gap-1">
             {!readOnly && (
               <CollapsibleTrigger asChild>
@@ -254,14 +254,15 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                 </Button>
               </CollapsibleTrigger>
             )}
+            <span className="text-xs text-muted-foreground">{index + 1}.</span>
             <CardTitle className="truncate text-sm font-medium">
-              {index + 1}. {scenario.name || `Scenario ${index + 1}`}
+              {scenario.name || `Scenario ${index + 1}`}
             </CardTitle>
           </div>
           {readOnly ? (
             <div className="flex items-center gap-2">
               {scenarioOrigin && (
-                <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                <Badge variant={scenarioOrigin === "inline" ? "secondary" : "outline"}>
                   {scenarioOrigin === "referenced" ? "Referenced" : "Inline"}
                 </Badge>
               )}
