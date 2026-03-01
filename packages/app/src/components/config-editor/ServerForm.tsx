@@ -12,6 +12,7 @@ interface ServerFormProps {
   readOnly?: boolean;
   allowAdd?: boolean;
   allowStructureEdits?: boolean;
+  showHeader?: boolean;
 }
 
 const emptyServer = (): ServerConfig => ({
@@ -27,7 +28,8 @@ export function ServerForm({
   onChange,
   readOnly,
   allowAdd = !readOnly,
-  allowStructureEdits = !readOnly
+  allowStructureEdits = !readOnly,
+  showHeader = true
 }: ServerFormProps) {
   const update = (index: number, patch: Partial<ServerConfig>) => {
     const next = servers.map((s, i) => (i === index ? { ...s, ...patch } : s));
@@ -57,14 +59,16 @@ export function ServerForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Servers</h3>
-        {!readOnly && allowAdd && (
-          <Button type="button" variant="outline" size="sm" onClick={add}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Add Server
-          </Button>
-        )}
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Servers</h3>
+          {!readOnly && allowAdd && (
+            <Button type="button" variant="outline" size="sm" onClick={add}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />Add Server
+            </Button>
+          )}
+        </div>
+      )}
       {servers.map((srv, i) => (
         <Card key={srv.id} className="border-dashed">
           <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">

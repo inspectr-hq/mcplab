@@ -67,6 +67,7 @@ const ConfigEditor = () => {
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
   const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
   const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
+  const [expandedInlineServerIds, setExpandedInlineServerIds] = useState<Record<string, boolean>>({});
   const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
   const [expandedViewServerIds, setExpandedViewServerIds] = useState<Record<string, boolean>>({});
   const [expandedInlineScenarioIds, setExpandedInlineScenarioIds] = useState<Record<string, boolean>>({});
@@ -352,6 +353,7 @@ const ConfigEditor = () => {
     if (!template) return;
     const inlineCopy = { ...structuredClone(template), id: `srv-${Date.now()}` };
     setServerEntries([...serverEntries, { kind: "inline", server: inlineCopy }]);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     setSelectedLibraryServerId("");
   };
 
@@ -380,9 +382,18 @@ const ConfigEditor = () => {
       oauthRedirectUrl: "http://localhost:6274/oauth/",
     };
     setServerEntries([{ kind: "inline", server: inlineServer }, ...serverEntries]);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineServer.id]: true }));
   };
 
   const removeServerEntryAt = (index: number) => {
+    const entry = serverEntries[index];
+    if (entry?.kind === "inline") {
+      setExpandedInlineServerIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.server.id];
+        return next;
+      });
+    }
     setServerEntries(serverEntries.filter((_, entryIndex) => entryIndex !== index));
   };
 
@@ -407,6 +418,7 @@ const ConfigEditor = () => {
     const nextEntries = [...serverEntries];
     nextEntries[index] = { kind: "inline", server: inlineCopy };
     setServerEntries(nextEntries);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     toast({ title: "Referenced server converted to inline", description: inlineCopy.name || inlineCopy.id });
     setSelectedLibraryServerId("");
   };
@@ -700,9 +712,6 @@ const ConfigEditor = () => {
   const referencedServers = referencedServerRefs
     .map(findLibraryServerByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const inlineServerEntries = serverEntries
-    .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline");
-  const inlineServers = inlineServerEntries.map((entry) => entry.server);
   const serverViewRows = serverEntries.flatMap((entry) => {
     if (entry.kind === "referenced") {
       const server = findLibraryServerByRef(entry.ref);
@@ -1123,43 +1132,62 @@ const ConfigEditor = () => {
                         : (referenceServer?.name || entry.ref);
                     const rowKey = entry.kind === "inline" ? entry.server.id : entry.ref;
                     const isMissingRef = entry.kind === "referenced" && !referenceServer;
+                    const serverExpanded =
+                      entry.kind === "inline" && Boolean(expandedInlineServerIds[entry.server.id]);
                     return (
-                      <div key={`server-entry-${index}-${rowKey}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => moveServerEntry(index, -1)}
-                              disabled={index === 0}
-                              aria-label="Move server up"
-                            >
-                              <ChevronUp className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-6 w-6"
-                              onClick={() => moveServerEntry(index, 1)}
-                              disabled={index === serverEntries.length - 1}
-                              aria-label="Move server down"
-                            >
-                              <ChevronDown className="h-3 w-3" />
-                            </Button>
+                      <div key={`server-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveServerEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move server up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveServerEntry(index, 1)}
+                                disabled={index === serverEntries.length - 1}
+                                aria-label="Move server down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowName}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
                           </div>
-                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                          <span className="truncate font-medium">{rowName}</span>
-                          <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
-                            {entry.kind === "inline" ? "Inline" : "Referenced"}
-                          </Badge>
-                          {isMissingRef && <Badge variant="destructive">Missing</Badge>}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {entry.kind === "referenced" && (
-                            <>
+                          <div className="flex items-center gap-1">
+                            {entry.kind === "inline" && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  setExpandedInlineServerIds((prev) => ({
+                                    ...prev,
+                                    [entry.server.id]: !Boolean(prev[entry.server.id])
+                                  }))
+                                }
+                                aria-label={serverExpanded ? "Collapse server details" : "Expand server details"}
+                              >
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${serverExpanded ? "rotate-180" : ""}`} />
+                              </Button>
+                            )}
+                            {entry.kind === "referenced" && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -1169,19 +1197,37 @@ const ConfigEditor = () => {
                               >
                                 Convert to inline
                               </Button>
-                            </>
-                          )}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => removeServerEntryAt(index)}
-                            aria-label="Remove server entry"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeServerEntryAt(index)}
+                              aria-label="Remove server entry"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
+                        {entry.kind === "inline" && serverExpanded && (
+                          <div className="border-t px-3 py-3">
+                            <ServerForm
+                              servers={[entry.server]}
+                              onChange={(servers) => {
+                                const nextServer = servers[0];
+                                if (!nextServer) return;
+                                const nextEntries = [...serverEntries];
+                                nextEntries[index] = { kind: "inline", server: nextServer };
+                                setServerEntries(nextEntries);
+                              }}
+                              readOnly={false}
+                              allowAdd={false}
+                              allowStructureEdits={false}
+                              showHeader={false}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1257,24 +1303,7 @@ const ConfigEditor = () => {
                 </div>
               </CardContent>
             </Card>
-          ) : (
-            <ServerForm
-              servers={inlineServers}
-              onChange={(servers) => {
-                let cursor = 0;
-                const nextEntries = serverEntries.map((entry) => {
-                  if (entry.kind === "referenced") return entry;
-                  const nextServer = servers[cursor];
-                  cursor += 1;
-                  return { kind: "inline" as const, server: nextServer ?? entry.server };
-                });
-                setServerEntries(nextEntries);
-              }}
-              readOnly={readOnly}
-              allowAdd={false}
-              allowStructureEdits={false}
-            />
-          )}
+          ) : null}
         </TabsContent>
 
         <TabsContent value="agents">
