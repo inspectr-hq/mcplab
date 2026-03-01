@@ -42,14 +42,14 @@ const emptyServer = (): ServerConfig => ({
 });
 
 const ServerDetail = () => {
-  const { serverName } = useParams<{ serverName: string }>();
+  const { serverId } = useParams<{ serverId: string }>();
   const navigate = useNavigate();
   const { servers, setServers } = useLibraries();
   const { source } = useDataSource();
 
-  const isNew = serverName === "new";
-  const decodedName = serverName ? decodeURIComponent(serverName) : "";
-  const existingServer = isNew ? null : servers.find((s) => s.id === decodedName || s.name === decodedName);
+  const isNew = serverId === "new";
+  const decodedParam = serverId ? decodeURIComponent(serverId) : "";
+  const existingServer = isNew ? null : servers.find((s) => s.id === decodedParam || s.name === decodedParam);
   const displayName = (server: ServerConfig) => server.name?.trim() || server.id;
 
   const [form, setForm] = useState<ServerConfig>(() => existingServer ?? emptyServer());
@@ -123,7 +123,7 @@ const ServerDetail = () => {
         const next = servers.map((s) => (s.id === existingServer?.id ? form : s));
         await setServers(next);
         toast({ title: "Server saved" });
-        if (form.id !== decodedName) {
+        if (form.id !== decodedParam) {
           navigate(`/libraries/servers/${encodeURIComponent(form.id)}`, { replace: true });
         }
       }
@@ -155,7 +155,7 @@ const ServerDetail = () => {
         >
           <ArrowLeft className="h-4 w-4" /> Servers
         </Link>
-        <p className="text-sm text-muted-foreground">Server "{decodedName}" not found.</p>
+        <p className="text-sm text-muted-foreground">Server "{decodedParam}" not found.</p>
       </div>
     );
   }

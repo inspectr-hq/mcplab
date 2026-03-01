@@ -76,15 +76,15 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Run Evaluation" });
     return crumbs;
   }
-  if (matchPath("/libraries/servers/:serverName", pathname)) {
-    const match = matchPath("/libraries/servers/:serverName", pathname);
-    const serverName = match?.params.serverName
-      ? decodeURIComponent(match.params.serverName)
+  if (matchPath("/libraries/servers/:serverId", pathname)) {
+    const match = matchPath("/libraries/servers/:serverId", pathname);
+    const serverId = match?.params.serverId
+      ? decodeURIComponent(match.params.serverId)
       : "Server";
     crumbs.push(
       { label: "Libraries", to: "/libraries/servers" },
       { label: "Servers", to: "/libraries/servers" },
-      { label: serverName === "new" ? "New Server" : serverName }
+      { label: serverId === "new" ? "New Server" : serverId }
     );
     return crumbs;
   }
