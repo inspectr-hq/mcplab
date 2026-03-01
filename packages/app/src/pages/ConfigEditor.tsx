@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save, Server, Bot, FileText, Play, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Server, Bot, FileText, Play, ChevronUp, ChevronDown, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,6 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { ServerForm } from "@/components/config-editor/ServerForm";
-import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
@@ -70,6 +69,7 @@ const ConfigEditor = () => {
   const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
   const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
   const [expandedViewServerIds, setExpandedViewServerIds] = useState<Record<string, boolean>>({});
+  const [expandedInlineScenarioIds, setExpandedInlineScenarioIds] = useState<Record<string, boolean>>({});
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
     return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
@@ -583,6 +583,7 @@ const ConfigEditor = () => {
       servers: nextServers
     });
     setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [importedScenario.id]: true }));
     setSelectedLibraryScenarioId("");
   };
 
@@ -597,6 +598,7 @@ const ConfigEditor = () => {
       extractRules: [],
     };
     setScenarioEntries([{ kind: "inline", scenario: inlineScenario }, ...scenarioEntries]);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineScenario.id]: true }));
   };
 
   const addScenarioReference = () => {
@@ -615,6 +617,14 @@ const ConfigEditor = () => {
   };
 
   const removeScenarioEntryAt = (index: number) => {
+    const entry = scenarioEntries[index];
+    if (entry?.kind === "inline") {
+      setExpandedInlineScenarioIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.scenario.id];
+        return next;
+      });
+    }
     setScenarioEntries(scenarioEntries.filter((_, entryIndex) => entryIndex !== index));
   };
 
@@ -674,6 +684,7 @@ const ConfigEditor = () => {
     const nextEntries = [...scenarioEntries];
     nextEntries[index] = { kind: "inline", scenario: inlineCopy };
     setScenarioEntries(nextEntries);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     toast({ title: "Referenced scenario converted to inline", description: nextName });
   };
 
@@ -718,9 +729,6 @@ const ConfigEditor = () => {
   const referencedScenarioIds = scenarioEntries
     .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
     .map((entry) => entry.ref);
-  const inlineScenarioEntries = scenarioEntries
-    .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline");
-  const inlineScenarios = inlineScenarioEntries.map((entry) => entry.scenario);
   const scenarioViewRows = scenarioEntries.flatMap((entry) => {
     if (entry.kind === "referenced") {
       const scenario = findLibraryScenarioByRef(entry.ref);
@@ -1172,8 +1180,15 @@ const ConfigEditor = () => {
                           >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => removeServerEntryAt(index)}>
-                            Remove
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => removeServerEntryAt(index)}
+                            aria-label="Remove server entry"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                       </div>
@@ -1398,8 +1413,15 @@ const ConfigEditor = () => {
                             >
                               <ChevronDown className="h-3.5 w-3.5" />
                             </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => removeAgentEntryAt(index)}>
-                              Remove
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeAgentEntryAt(index)}
+                              aria-label="Remove agent entry"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </div>
@@ -1639,72 +1661,119 @@ const ConfigEditor = () => {
                         ? entry.scenario.name?.trim() || entry.scenario.id
                         : referenceScenario?.name || entry.ref;
                     const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
+                    const scenarioExpanded =
+                      entry.kind === "inline" && Boolean(expandedInlineScenarioIds[entry.scenario.id]);
                     return (
-                      <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                          <span className="truncate font-medium">{rowTitle}</span>
-                          <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
-                            {entry.kind === "inline" ? "Inline" : "Referenced"}
-                          </Badge>
-                          {isMissingRef && <Badge variant="destructive">Missing</Badge>}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {entry.kind === "referenced" && (
-                            <>
+                      <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowTitle}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {entry.kind === "inline" && (
                               <Button
                                 type="button"
-                                size="sm"
+                                size="icon"
                                 variant="outline"
-                                onClick={() => convertReferencedScenarioToInline(index)}
-                                disabled={isMissingRef}
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  setExpandedInlineScenarioIds((prev) => ({
+                                    ...prev,
+                                    [entry.scenario.id]: !Boolean(prev[entry.scenario.id])
+                                  }))
+                                }
+                                aria-label={scenarioExpanded ? "Collapse scenario details" : "Expand scenario details"}
                               >
-                                Convert to inline
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scenarioExpanded ? "rotate-180" : ""}`} />
                               </Button>
-                              <Button size="sm" variant="outline" asChild>
-                                <Link
-                                  to={
-                                    referenceScenario
-                                      ? `/libraries/scenarios/${encodeURIComponent(referenceScenario.id)}`
-                                      : "/libraries/scenarios"
-                                  }
+                            )}
+                            {entry.kind === "referenced" && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => convertReferencedScenarioToInline(index)}
+                                  disabled={isMissingRef}
                                 >
-                                  Edit
-                                </Link>
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveScenarioEntry(index, -1)}
-                            disabled={index === 0}
-                            aria-label="Move scenario up"
-                          >
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveScenarioEntry(index, 1)}
-                            disabled={index === scenarioEntries.length - 1}
-                            aria-label="Move scenario down"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => removeScenarioEntryAt(index)}
-                          >
-                            Remove
-                          </Button>
+                                  Convert to inline
+                                </Button>
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link
+                                    to={
+                                      referenceScenario
+                                        ? `/libraries/scenarios/${encodeURIComponent(referenceScenario.id)}`
+                                        : "/libraries/scenarios"
+                                    }
+                                  >
+                                    Edit
+                                  </Link>
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7"
+                              onClick={() => moveScenarioEntry(index, -1)}
+                              disabled={index === 0}
+                              aria-label="Move scenario up"
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7"
+                              onClick={() => moveScenarioEntry(index, 1)}
+                              disabled={index === scenarioEntries.length - 1}
+                              aria-label="Move scenario down"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeScenarioEntryAt(index)}
+                              aria-label="Remove scenario entry"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
+                        {entry.kind === "inline" && scenarioExpanded && (
+                          <div className="border-t px-3 py-3">
+                            <ScenarioForm
+                              scenarios={[entry.scenario]}
+                              scenarioOrigins={["inline"]}
+                              agents={[...config.agents, ...referencedAgents]}
+                              servers={[...config.servers, ...referencedServers]}
+                              configId={config.id}
+                              configPath={config.sourcePath}
+                              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+                              snapshotEval={config.snapshotEval}
+                              onChange={(scenarios) => {
+                                const nextScenario = scenarios[0];
+                                if (!nextScenario) return;
+                                const nextEntries = [...scenarioEntries];
+                                nextEntries[index] = { kind: "inline", scenario: nextScenario };
+                                setScenarioEntries(nextEntries);
+                              }}
+                              readOnly={false}
+                              allowAdd={false}
+                              allowStructureEdits={false}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1739,31 +1808,7 @@ const ConfigEditor = () => {
                 />
               </CardContent>
             </Card>
-          ) : (
-            <ScenarioForm
-              scenarios={inlineScenarios}
-              scenarioOrigins={inlineScenarios.map(() => "inline")}
-              agents={[...config.agents, ...referencedAgents]}
-              servers={[...config.servers, ...referencedServers]}
-              configId={config.id}
-              configPath={config.sourcePath}
-              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-              snapshotEval={config.snapshotEval}
-              onChange={(scenarios) => {
-                let cursor = 0;
-                const nextEntries = scenarioEntries.map((entry) => {
-                  if (entry.kind === "referenced") return entry;
-                  const nextScenario = scenarios[cursor];
-                  cursor += 1;
-                  return { kind: "inline" as const, scenario: nextScenario ?? entry.scenario };
-                });
-                setScenarioEntries(nextEntries);
-              }}
-              readOnly={readOnly}
-              allowAdd={false}
-              allowStructureEdits={false}
-            />
-          )}
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>
