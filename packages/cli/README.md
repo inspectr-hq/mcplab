@@ -127,6 +127,12 @@ mcplab run -c my-eval.yaml
 
 ### Structure Overview
 
+Add this at the top of your eval file for editor validation/autocomplete:
+
+```yaml
+# yaml-language-server: $schema=./config-schema.json
+```
+
 ```yaml
 servers:     # MCP servers to test against
   - name: local-server

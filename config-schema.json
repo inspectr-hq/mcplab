@@ -1,313 +1,275 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "MCP Evaluation Config",
-  "description": "Configuration schema for MCP evaluation scenarios",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inspectr.dev/schemas/mcplab/config-schema.json",
+  "title": "MCPLab Evaluation Config",
+  "description": "Schema for MCPLab evaluation configs using mixed inline/reference lists.",
   "type": "object",
+  "additionalProperties": false,
+  "required": ["servers", "agents", "scenarios"],
   "properties": {
     "servers": {
-      "type": "object",
-      "description": "MCP server configurations",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["transport", "url"],
-        "properties": {
-          "transport": {
-            "type": "string",
-            "enum": ["http"],
-            "description": "Transport protocol (currently only 'http' supported)"
-          },
-          "url": {
-            "type": "string",
-            "format": "uri",
-            "description": "MCP server URL endpoint"
-          },
-          "auth": {
-            "type": "object",
-            "description": "Authentication configuration",
-            "oneOf": [
-              {
-                "type": "object",
-                "required": ["type", "env"],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "const": "bearer"
-                  },
-                  "env": {
-                    "type": "string",
-                    "description": "Environment variable name containing the bearer token"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": ["type", "token_url", "client_id_env", "client_secret_env"],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "const": "oauth_client_credentials"
-                  },
-                  "token_url": {
-                    "type": "string",
-                    "format": "uri",
-                    "description": "OAuth token endpoint URL"
-                  },
-                  "client_id_env": {
-                    "type": "string",
-                    "description": "Environment variable name containing client ID"
-                  },
-                  "client_secret_env": {
-                    "type": "string",
-                    "description": "Environment variable name containing client secret"
-                  },
-                  "scope": {
-                    "type": "string",
-                    "description": "OAuth scope"
-                  },
-                  "audience": {
-                    "type": "string",
-                    "description": "OAuth audience"
-                  },
-                  "token_params": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "description": "Additional token request parameters"
-                  }
-                }
-              }
-            ]
-          }
-        }
-      }
-    },
-    "server_refs": {
       "type": "array",
-      "description": "References to reusable servers defined in mcplab/servers.yaml",
-      "items": { "type": "string" }
+      "description": "Ordered server entries. Each item is either inline server config or a library reference.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref"],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Server name from mcplab/servers.yaml"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "transport", "url"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Inline server name"
+              },
+              "transport": {
+                "type": "string",
+                "enum": ["http"],
+                "description": "MCP transport"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "MCP server URL"
+              },
+              "auth": {
+                "description": "Optional server authentication",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["type", "env"],
+                    "properties": {
+                      "type": { "const": "bearer" },
+                      "env": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                    "properties": {
+                      "type": { "const": "oauth_client_credentials" },
+                      "token_url": { "type": "string", "format": "uri" },
+                      "client_id_env": { "type": "string", "minLength": 1 },
+                      "client_secret_env": { "type": "string", "minLength": 1 },
+                      "scope": { "type": "string" },
+                      "audience": { "type": "string" },
+                      "token_params": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["type", "client_id", "redirect_url"],
+                    "properties": {
+                      "type": { "const": "oauth_authorization_code" },
+                      "client_id": { "type": "string", "minLength": 1 },
+                      "client_secret": { "type": "string" },
+                      "redirect_url": { "type": "string", "format": "uri" },
+                      "scope": { "type": "string" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
     },
     "agents": {
-      "type": "object",
-      "description": "LLM agent configurations",
-      "additionalProperties": {
-        "type": "object",
-        "required": ["provider", "model"],
-        "properties": {
-          "provider": {
-            "type": "string",
-            "enum": ["openai", "anthropic", "azure_openai"],
-            "description": "LLM provider"
-          },
-          "model": {
-            "type": "string",
-            "description": "Model identifier",
-            "examples": [
-              "gpt-4o",
-              "gpt-4o-mini",
-              "gpt-4-turbo",
-              "claude-3-5-sonnet-20241022",
-              "claude-3-5-haiku-20241022",
-              "claude-3-opus-20240229"
-            ]
-          },
-          "temperature": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 2,
-            "default": 0,
-            "description": "Sampling temperature"
-          },
-          "max_tokens": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100000,
-            "description": "Maximum tokens in response"
-          },
-          "system": {
-            "type": "string",
-            "description": "System prompt"
-          }
-        }
-      }
-    },
-    "agent_refs": {
       "type": "array",
-      "description": "References to reusable agents defined in mcplab/agents.yaml",
-      "items": { "type": "string" }
+      "description": "Ordered agent entries. Each item is either inline agent config or a library reference.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref"],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Agent name from mcplab/agents.yaml"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "provider", "model"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "provider": {
+                "type": "string",
+                "enum": ["openai", "anthropic", "azure_openai"]
+              },
+              "model": { "type": "string", "minLength": 1 },
+              "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+              "max_tokens": { "type": "integer", "minimum": 1, "maximum": 200000 },
+              "system": { "type": "string" }
+            }
+          }
+        ]
+      }
     },
     "scenarios": {
       "type": "array",
-      "description": "Evaluation scenarios",
+      "description": "Ordered scenario entries. Each item is either inline scenario config or a library reference.",
       "items": {
-        "type": "object",
-        "required": ["id", "servers", "prompt"],
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-z0-9-]+$",
-            "description": "Unique scenario identifier (kebab-case)"
-          },
-          "agent": {
-            "type": "string",
-            "description": "Optional pinned agent name. If omitted, scenario can run against selected agents at runtime."
-          },
-          "servers": {
-            "type": "array",
-            "description": "List of server names to use (must reference servers defined in 'servers')",
-            "minItems": 1,
-            "items": {
-              "type": "string"
-            }
-          },
-          "prompt": {
-            "type": "string",
-            "description": "Evaluation prompt for the agent"
-          },
-          "snapshot_eval_enabled": {
-            "type": "boolean",
-            "description": "Override config-level snapshot eval for this scenario"
-          },
-          "eval": {
+        "oneOf": [
+          {
             "type": "object",
-            "description": "Evaluation criteria",
+            "additionalProperties": false,
+            "required": ["ref"],
             "properties": {
-              "tool_constraints": {
-                "type": "object",
-                "description": "Tool usage constraints",
-                "properties": {
-                  "required_tools": {
-                    "type": "array",
-                    "description": "Tools that must be called",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "forbidden_tools": {
-                    "type": "array",
-                    "description": "Tools that must not be called",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                }
-              },
-              "tool_sequence": {
-                "type": "object",
-                "description": "Tool sequence rules",
-                "properties": {
-                  "allow": {
-                    "type": "array",
-                    "description": "Allowed tool call sequences",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
-              },
-              "response_assertions": {
-                "type": "array",
-                "description": "Assertions on final response",
-                "items": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "required": ["type", "pattern"],
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "const": "regex"
-                        },
-                        "pattern": {
-                          "type": "string",
-                          "description": "Regular expression pattern"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "required": ["type", "path"],
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "const": "jsonpath"
-                        },
-                        "path": {
-                          "type": "string",
-                          "description": "JSONPath expression"
-                        },
-                        "equals": {
-                          "oneOf": [
-                            { "type": "string" },
-                            { "type": "number" },
-                            { "type": "boolean" }
-                          ],
-                          "description": "Expected value"
-                        }
-                      }
-                    }
-                  ]
-                }
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Scenario ID from mcplab/scenarios/*.yaml"
               }
             }
           },
-          "extract": {
-            "type": "array",
-            "description": "Value extraction rules",
-            "items": {
-              "type": "object",
-              "required": ["name", "from", "regex"],
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Name of extracted value"
-                },
-                "from": {
-                  "type": "string",
-                  "enum": ["final_text"],
-                  "description": "Source to extract from"
-                },
-                "regex": {
-                  "type": "string",
-                  "description": "Regular expression with named capture group 'value'"
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "servers", "prompt"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string" },
+              "servers": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "prompt": { "type": "string" },
+              "snapshot_eval": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "baseline_snapshot_id": { "type": "string", "minLength": 1 },
+                  "baseline_source_run_id": { "type": "string", "minLength": 1 },
+                  "last_updated_at": { "type": "string", "format": "date-time" }
+                }
+              },
+              "eval": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "tool_constraints": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "required_tools": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      },
+                      "forbidden_tools": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  },
+                  "tool_sequence": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "allow": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": { "type": "string", "minLength": 1 }
+                        }
+                      }
+                    }
+                  },
+                  "response_assertions": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["type", "pattern"],
+                          "properties": {
+                            "type": { "const": "regex" },
+                            "pattern": { "type": "string", "minLength": 1 }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["type", "path"],
+                          "properties": {
+                            "type": { "const": "jsonpath" },
+                            "path": { "type": "string", "minLength": 1 },
+                            "equals": {
+                              "oneOf": [
+                                { "type": "string" },
+                                { "type": "number" },
+                                { "type": "boolean" }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "extract": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "from", "regex"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "from": { "const": "final_text" },
+                    "regex": { "type": "string", "minLength": 1 }
+                  }
                 }
               }
             }
           }
+        ]
+      }
+    },
+    "run_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selected_agents": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     },
-    "scenario_refs": {
-      "type": "array",
-      "description": "References to reusable scenarios from mcplab/scenarios/*.yaml",
-      "items": { "type": "string" }
-    },
     "snapshot_eval": {
       "type": "object",
-      "description": "Config-level snapshot evaluation policy",
+      "additionalProperties": false,
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "mode": {
-          "type": "string",
-          "enum": ["warn", "fail_on_drift"],
-          "default": "warn"
-        },
-        "baseline_snapshot_id": {
-          "type": "string"
-        },
-        "baseline_source_run_id": {
-          "type": "string"
-        },
-        "last_updated_at": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "enabled": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["warn", "fail_on_drift"] },
+        "baseline_snapshot_id": { "type": "string", "minLength": 1 },
+        "baseline_source_run_id": { "type": "string", "minLength": 1 },
+        "last_updated_at": { "type": "string", "format": "date-time" }
       }
     }
   }
