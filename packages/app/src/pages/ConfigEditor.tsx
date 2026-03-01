@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Server, Bot, FileText, Play, ChevronUp, ChevronDown, A
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,6 +67,8 @@ const ConfigEditor = () => {
   const [selectedLibraryServerId, setSelectedLibraryServerId] = useState("");
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
   const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
+  const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
+  const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
     return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
@@ -461,6 +464,7 @@ const ConfigEditor = () => {
       maxTokens: 4096,
     };
     setAgentEntries([{ kind: "inline", agent: inlineAgent }, ...agentEntries]);
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineAgent.id]: true }));
   };
 
   const addAgentReference = () => {
@@ -489,6 +493,7 @@ const ConfigEditor = () => {
       name: customName
     };
     setAgentEntries([...agentEntries, { kind: "inline", agent: inlineCopy }]);
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     setSelectedLibraryAgentId("");
     toast({ title: "Imported agent as inline", description: customName });
   };
@@ -504,6 +509,13 @@ const ConfigEditor = () => {
         selectedAgentNames: nextDefaults
       }
     });
+    if (entry.kind === "inline") {
+      setExpandedInlineAgentIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.agent.id];
+        return next;
+      });
+    }
     setAgentEntries(agentEntries.filter((_, entryIndex) => entryIndex !== index));
   };
 
@@ -534,6 +546,7 @@ const ConfigEditor = () => {
     const nextEntries = [...agentEntries];
     nextEntries[index] = { kind: "inline", agent: inlineCopy };
     setAgentEntries(nextEntries);
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     toast({ title: "Referenced agent converted to inline", description: customName });
   };
 
@@ -1269,81 +1282,213 @@ const ConfigEditor = () => {
                     const isMissingRef = entry.kind === "referenced" && !referenceAgent;
                     const defaultName = entry.kind === "inline" ? entry.agent.id : entry.ref;
                     const defaultChecked = defaultRunAgentNames.includes(defaultName);
+                    const inlineExpanded = entry.kind === "inline" && Boolean(expandedInlineAgentIds[entry.agent.id]);
                     return (
-                      <div key={`agent-entry-${index}-${rowKey}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                          <span className="truncate font-medium">{rowName}</span>
-                          <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
-                            {entry.kind === "inline" ? "Inline" : "Referenced"}
-                          </Badge>
-                          <Badge variant="outline" className="font-mono text-[10px]">{rowModel}</Badge>
-                          {defaultChecked && (
-                            <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-                              Default
+                      <div key={`agent-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowName}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
                             </Badge>
-                          )}
-                          {isMissingRef && <Badge variant="destructive">Missing</Badge>}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <label className="mx-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={defaultChecked}
-                              onChange={(e) => toggleDefaultAgent(defaultName, e.target.checked)}
-                            />
-                            <span>Default</span>
-                          </label>
-                          {entry.kind === "referenced" && (
-                            <>
+                            <Badge variant="outline" className="font-mono text-[10px]">{rowModel}</Badge>
+                            {defaultChecked && (
+                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                                Default
+                              </Badge>
+                            )}
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <label className="mx-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={defaultChecked}
+                                onChange={(e) => toggleDefaultAgent(defaultName, e.target.checked)}
+                              />
+                              <span>Default</span>
+                            </label>
+                            {entry.kind === "inline" && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() => convertReferencedAgentToInline(index)}
-                                disabled={isMissingRef}
+                                onClick={() =>
+                                  setExpandedInlineAgentIds((prev) => ({
+                                    ...prev,
+                                    [entry.agent.id]: !Boolean(prev[entry.agent.id])
+                                  }))
+                                }
                               >
-                                Convert to inline
+                                {inlineExpanded ? "Collapse" : "Expand"}
                               </Button>
-                              <Button size="sm" variant="outline" asChild>
-                                <Link
-                                  to={
-                                    referenceAgent
-                                      ? `/libraries/agents/${encodeURIComponent(referenceAgent.id)}`
-                                      : "/libraries/agents"
-                                  }
+                            )}
+                            {entry.kind === "referenced" && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => convertReferencedAgentToInline(index)}
+                                  disabled={isMissingRef}
                                 >
-                                  Edit
-                                </Link>
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveAgentEntry(index, -1)}
-                            disabled={index === 0}
-                            aria-label="Move agent up"
-                          >
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-7 w-7"
-                            onClick={() => moveAgentEntry(index, 1)}
-                            disabled={index === agentEntries.length - 1}
-                            aria-label="Move agent down"
-                          >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => removeAgentEntryAt(index)}>
-                            Remove
-                          </Button>
+                                  Convert to inline
+                                </Button>
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link
+                                    to={
+                                      referenceAgent
+                                        ? `/libraries/agents/${encodeURIComponent(referenceAgent.id)}`
+                                        : "/libraries/agents"
+                                    }
+                                  >
+                                    Edit
+                                  </Link>
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7"
+                              onClick={() => moveAgentEntry(index, -1)}
+                              disabled={index === 0}
+                              aria-label="Move agent up"
+                            >
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-7 w-7"
+                              onClick={() => moveAgentEntry(index, 1)}
+                              disabled={index === agentEntries.length - 1}
+                              aria-label="Move agent down"
+                            >
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => removeAgentEntryAt(index)}>
+                              Remove
+                            </Button>
+                          </div>
                         </div>
+                        {entry.kind === "inline" && inlineExpanded && (
+                          <div className="border-t px-3 py-3 space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Name</Label>
+                                <Input
+                                  value={entry.agent.name}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, name: e.target.value }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  placeholder="e.g. GPT-5 Mini custom"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Provider</Label>
+                                <Select
+                                  value={entry.agent.provider}
+                                  onValueChange={(value) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, provider: value as AgentConfig["provider"] }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="openai">OpenAI</SelectItem>
+                                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                                    <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                    <SelectItem value="google">Google</SelectItem>
+                                    <SelectItem value="custom">Custom</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Model</Label>
+                                <Input
+                                  value={entry.agent.model}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, model: e.target.value }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  className="font-mono text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Max Tokens</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={128000}
+                                  value={entry.agent.maxTokens}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, maxTokens: parseInt(e.target.value) || 0 }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  className="font-mono text-xs"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">Temperature</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={2}
+                                step={0.01}
+                                value={entry.agent.temperature}
+                                onChange={(e) => {
+                                  const nextEntries = [...agentEntries];
+                                  nextEntries[index] = {
+                                    kind: "inline",
+                                    agent: { ...entry.agent, temperature: Number(e.target.value) || 0 }
+                                  };
+                                  setAgentEntries(nextEntries);
+                                }}
+                                className="font-mono text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">System Prompt</Label>
+                              <Textarea
+                                value={entry.agent.systemPrompt || ""}
+                                onChange={(e) => {
+                                  const nextEntries = [...agentEntries];
+                                  nextEntries[index] = {
+                                    kind: "inline",
+                                    agent: { ...entry.agent, systemPrompt: e.target.value }
+                                  };
+                                  setAgentEntries(nextEntries);
+                                }}
+                                rows={3}
+                                className="text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1368,26 +1513,51 @@ const ConfigEditor = () => {
                   {agentViewRows.map((row, index) => {
                     const name = row.agent.name || row.agent.id;
                     const isDefault = defaultRunAgentNames.includes(row.origin === "inline" ? row.agent.id : (row.ref || row.agent.id));
+                    const viewAgentKey = row.ref ?? row.agent.id;
+                    const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
                     return (
                       <div key={`agent-view-${index}-${row.ref ?? row.agent.id}`} className="rounded-md border p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
-                          <div className="font-medium text-sm">{name}</div>
-                          <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
-                            {row.origin === "inline" ? "Inline" : "Referenced"}
-                          </Badge>
-                          {isDefault && (
-                            <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-                              Default
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <div className="truncate font-medium text-sm">{name}</div>
+                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                              {row.origin === "inline" ? "Inline" : "Referenced"}
                             </Badge>
-                          )}
+                            {isDefault && (
+                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                                Default
+                              </Badge>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              setExpandedViewAgentIds((prev) => ({
+                                ...prev,
+                                [viewAgentKey]: !Boolean(prev[viewAgentKey])
+                              }))
+                            }
+                          >
+                            {expanded ? "Collapse" : "Expand"}
+                          </Button>
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <ProviderBadge provider={row.agent.provider} />
-                          <Badge variant="outline" className="text-xs font-mono">
-                            {row.agent.model}
-                          </Badge>
-                        </div>
+                        {expanded && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                            <ProviderBadge provider={row.agent.provider} />
+                            <Badge variant="outline" className="text-xs font-mono">
+                              {row.agent.model}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs font-mono">
+                              max_tokens: {row.agent.maxTokens}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs font-mono">
+                              temperature: {row.agent.temperature}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1399,26 +1569,7 @@ const ConfigEditor = () => {
                 </div>
               </CardContent>
             </Card>
-          ) : (
-            <AgentForm
-              agents={inlineAgents}
-              onChange={(agents) => {
-                let cursor = 0;
-                const nextEntries = agentEntries.map((entry) => {
-                  if (entry.kind === "referenced") return entry;
-                  const nextAgent = agents[cursor];
-                  cursor += 1;
-                  return { kind: "inline" as const, agent: nextAgent ?? entry.agent };
-                });
-                setAgentEntries(nextEntries);
-              }}
-              defaultAgentNames={defaultRunAgentNames}
-              onToggleDefaultAgent={(agentName, checked) => toggleDefaultAgent(agentName, checked)}
-              readOnly={readOnly}
-              allowAdd={false}
-              allowStructureEdits={false}
-            />
-          )}
+          ) : null}
         </TabsContent>
 
         <TabsContent value="scenarios">
