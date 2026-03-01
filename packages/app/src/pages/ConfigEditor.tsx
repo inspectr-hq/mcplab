@@ -1213,16 +1213,18 @@ const ConfigEditor = () => {
                             </Badge>
                             <Button
                               type="button"
-                              size="sm"
+                              size="icon"
                               variant="outline"
+                              className="h-8 w-8"
                               onClick={() =>
                                 setExpandedViewServerIds((prev) => ({
                                   ...prev,
                                   [viewServerKey]: !Boolean(prev[viewServerKey])
                                 }))
                               }
+                              aria-label={expanded ? "Collapse server details" : "Expand server details"}
                             >
-                              {expanded ? "Collapse" : "Expand"}
+                              <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
                             </Button>
                           </div>
                         </div>
@@ -1559,16 +1561,18 @@ const ConfigEditor = () => {
                             </Badge>
                             <Button
                               type="button"
-                              size="sm"
+                              size="icon"
                               variant="outline"
+                              className="h-8 w-8"
                               onClick={() =>
                                 setExpandedViewAgentIds((prev) => ({
                                   ...prev,
                                   [viewAgentKey]: !Boolean(prev[viewAgentKey])
                                 }))
                               }
+                              aria-label={expanded ? "Collapse agent details" : "Expand agent details"}
                             >
-                              {expanded ? "Collapse" : "Expand"}
+                              <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
                             </Button>
                           </div>
                         </div>

@@ -78,14 +78,16 @@ export function ScenarioForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Scenarios</h3>
-        {!readOnly && allowAdd && allowStructureEdits && (
-          <Button type="button" variant="outline" size="sm" onClick={add}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Add Scenario
-          </Button>
-        )}
-      </div>
+      {!readOnly && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Scenarios</h3>
+          {allowAdd && allowStructureEdits && (
+            <Button type="button" variant="outline" size="sm" onClick={add}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />Add Scenario
+            </Button>
+          )}
+        </div>
+      )}
       {scenarios.map((sc, i) => (
         <ScenarioCard
           key={sc.id}
@@ -242,7 +244,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
 
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
-      <Card className="border-dashed">
+      <Card className={readOnly ? "" : "border-dashed"}>
         <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
           <div className="flex min-w-0 items-center gap-1">
             {!readOnly && (
@@ -264,8 +266,14 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                 </Badge>
               )}
               <CollapsibleTrigger asChild>
-                <Button type="button" size="sm" variant="outline">
-                  {expanded ? "Collapse" : "Expand"}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  aria-label={expanded ? "Collapse scenario details" : "Expand scenario details"}
+                >
+                  <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
                 </Button>
               </CollapsibleTrigger>
             </div>
