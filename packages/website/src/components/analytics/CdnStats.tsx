@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 const SCRIPT_SRC = 'https://cdn.inspectr.dev/script.js';
 const SCRIPT_ID = 'cdn-stats';
-const DATA_DOMAIN = 'mcplab.inspetr.dev';
+const DATA_DOMAIN = 'mcplab.inspectr.dev';
 
 export function CdnStats() {
   useEffect(() => {
