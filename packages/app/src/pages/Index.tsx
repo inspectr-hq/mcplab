@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Settings, Play, BarChart3, Clock, Activity, Layers, Timer, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3, Clock, Activity, Layers, Timer, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -76,7 +76,10 @@ const Dashboard = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <LayoutDashboard className="h-6 w-6" />
+            Dashboard
+          </h1>
           <p className="text-sm text-muted-foreground">Overview of your MCP evaluation runs</p>
         </div>
         <div className="flex gap-3">

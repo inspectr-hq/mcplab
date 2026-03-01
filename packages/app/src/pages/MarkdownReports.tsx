@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { MarkdownReportSummary } from "@/lib/data-sources/types";
-import {Clock, MoreHorizontal} from "lucide-react";
+import {Clock, MoreHorizontal, NotepadText} from "lucide-react";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -46,7 +46,10 @@ export default function MarkdownReportsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Markdown Reports</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <NotepadText className="h-6 w-6" />
+            Markdown Reports
+          </h1>
           <p className="text-sm text-muted-foreground">
             Browse Markdown files under <code>mcplab/reports</code>.
           </p>

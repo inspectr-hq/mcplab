@@ -107,7 +107,10 @@ const Compare = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Compare Runs</h1>
+        <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+          <GitCompare className="h-6 w-6" />
+          Compare Runs
+        </h1>
         <p className="text-sm text-muted-foreground">Select 2–5 runs to compare</p>
       </div>
 

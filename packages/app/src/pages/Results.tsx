@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, MoreHorizontal, Eye, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Clock, MoreHorizontal, Eye, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -168,7 +168,10 @@ const Results = () => {
 
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Results</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <BarChart3 className="h-6 w-6" />
+            Results
+          </h1>
           <p className="text-sm text-muted-foreground">Browse and compare evaluation results</p>
         </div>
         <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>

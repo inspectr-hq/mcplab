@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Plus, Pencil, Copy, Trash2 } from "lucide-react";
+import { RefreshCw, Plus, Pencil, Copy, Trash2, Database } from "lucide-react";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,10 @@ const Servers = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Servers</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <Database className="h-6 w-6" />
+            Servers
+          </h1>
           <p className="text-sm text-muted-foreground">
             Reusable MCP server definitions shared across configurations.
           </p>

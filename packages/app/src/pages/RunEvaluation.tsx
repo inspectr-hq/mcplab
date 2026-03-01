@@ -383,7 +383,10 @@ const RunEvaluation = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Run Evaluation</h1>
+        <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+          <Play className="h-6 w-6" />
+          Run Evaluation
+        </h1>
         <p className="text-sm text-muted-foreground">Execute evaluation scenarios against MCP servers</p>
       </div>
 
