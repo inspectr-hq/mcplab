@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-inspectr-primary: #00e5ff;
+    --color-inspectr-secondary: #00b8d4;
+
+    --background: 195 100% 7%;
+    --foreground: 210 40% 92%;
+
+    --card: 220 35% 8%;
+    --card-foreground: 210 40% 92%;
+
+    --popover: 220 35% 8%;
+    --popover-foreground: 210 40% 92%;
+
+    --primary: 25 95% 53%;
+    --primary-foreground: 220 40% 5%;
+
+    --secondary: 39 90% 53%;
+    --secondary-foreground: 220 40% 5%;
+
+    --muted: 220 30% 12%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 220 30% 14%;
+    --accent-foreground: 210 40% 92%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 25% 16%;
+    --input: 220 25% 16%;
+    --ring: 25 95% 53%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 35% 8%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary-foreground: 220 40% 5%;
+    --sidebar-accent: 220 30% 14%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 220 25% 16%;
+    --sidebar-ring: 25 95% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Space Grotesk', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(220, 35%, 8%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220, 25%, 20%);
+  border-radius: 3px;
+}
+
+/* Brand gradient links */
+.link-brand {
+  background: linear-gradient(to right, var(--color-inspectr-secondary), var(--color-inspectr-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transition: opacity 0.2s ease;
+}
+.link-brand:hover {
+  opacity: 0.75;
+}
+
+/* Section gradients */
+.section-hero {
+  background: linear-gradient(to bottom, hsl(195, 100%, 5%) 0%, hsl(220, 80%, 15%) 100%);
+}
+.section-problem {
+  background: linear-gradient(to bottom, hsl(215, 70%, 10%) 0%, hsl(235, 60%, 17%) 100%);
+  /*background: linear-gradient(to bottom, hsl(215, 70%, 10%) 0%, hsl(235, 60%, 17%) 100%);*/
+}
+.section-features {
+  /*background: linear-gradient(to bottom, hsl(235, 55%, 13%) 0%, hsl(200, 75%, 14%) 100%);*/
+  background: linear-gradient(to bottom, hsl(235, 55%, 13%) 0%, hsl(195, 100%, 5%) 100%);
+}
+.section-preview {
+  background: linear-gradient(135deg, hsl(195, 85%, 8%) 0%, hsl(225, 70%, 16%) 50%, hsl(245, 55%, 14%) 100%);
+}
+.section-quickstart {
+  /*background: linear-gradient(to bottom, hsl(220, 65%, 13%) 0%, hsl(250, 50%, 19%) 100%);*/
+  background: linear-gradient(to bottom, hsl(235, 55%, 13%) 0%,  hsl(195, 100%, 5%) 0%);
+  /*background: linear-gradient(to top, hsl(235, 55%, 13%) 0%, hsl(200, 75%, 14%) 100%);*/
+}
+.section-footer {
+  background: linear-gradient(to bottom, hsl(245, 45%, 12%) 0%, hsl(195, 100%, 6%) 100%);
+}
+
+/* Glow effects */
+.glow-primary {
+  box-shadow: 0 0 30px -5px hsl(25 95% 53% / 0.3);
+}
+.glow-text {
+  text-shadow: 0 0 40px hsl(25 95% 53% / 0.5);
+}
