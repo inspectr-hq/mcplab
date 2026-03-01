@@ -59,13 +59,11 @@ function resolveReferences(
   const bundleRoot = bundleRootOverride
     ? resolve(bundleRootOverride)
     : detectBundleRoot(configPath);
-  const libraryServers = readYaml<Record<string, EvalConfig['servers'][string]>>(
-    join(bundleRoot, 'servers.yaml'),
-    {}
+  const libraryServers = normalizeLibraryServers(
+    readYaml<unknown>(join(bundleRoot, 'servers.yaml'), {})
   );
-  const libraryAgents = readYaml<Record<string, EvalConfig['agents'][string]>>(
-    join(bundleRoot, 'agents.yaml'),
-    {}
+  const libraryAgents = normalizeLibraryAgents(
+    readYaml<unknown>(join(bundleRoot, 'agents.yaml'), {})
   );
   const libraryScenarios = readScenarioLibrary(join(bundleRoot, 'scenarios'));
 
@@ -477,6 +475,84 @@ function readYaml<T>(path: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['servers'][string]> {
+  const out: Record<string, EvalConfig['servers'][string]> = {};
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const server = entry as {
+        id?: unknown;
+        name?: unknown;
+        transport?: EvalConfig['servers'][string]['transport'];
+        url?: string;
+        auth?: EvalConfig['servers'][string]['auth'];
+      };
+      const id = String(server.id ?? server.name ?? '').trim();
+      if (!id || !server.transport || !server.url) continue;
+      out[id] = {
+        transport: server.transport,
+        url: server.url,
+        auth: server.auth
+      };
+    }
+    return out;
+  }
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const server = value as EvalConfig['servers'][string];
+    if (!server.transport || !server.url) continue;
+    out[id] = {
+      transport: server.transport,
+      url: server.url,
+      auth: server.auth
+    };
+  }
+  return out;
+}
+
+function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents'][string]> {
+  const out: Record<string, EvalConfig['agents'][string]> = {};
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const agent = entry as {
+        id?: unknown;
+        name?: unknown;
+        provider?: EvalConfig['agents'][string]['provider'];
+        model?: string;
+        temperature?: number;
+        max_tokens?: number;
+        system?: string;
+      };
+      const id = String(agent.id ?? agent.name ?? '').trim();
+      if (!id || !agent.provider || !agent.model) continue;
+      out[id] = {
+        provider: agent.provider,
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system
+      };
+    }
+    return out;
+  }
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const agent = value as EvalConfig['agents'][string];
+    if (!agent.provider || !agent.model) continue;
+    out[id] = {
+      provider: agent.provider,
+      model: agent.model,
+      temperature: agent.temperature,
+      max_tokens: agent.max_tokens,
+      system: agent.system
+    };
+  }
+  return out;
 }
 
 function readScenarioLibrary(

@@ -249,4 +249,53 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('resolves server/agent refs from list-based libraries', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        [
+          '- id: weather-mcp',
+          '  transport: http',
+          '  url: http://localhost:3300/mcp'
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(dir, 'agents.yaml'),
+        [
+          '- id: claude-sonnet-46',
+          '  provider: anthropic',
+          '  model: claude-sonnet-4-6'
+        ].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'refs.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers:',
+          '  - ref: weather-mcp',
+          'agents:',
+          '  - ref: claude-sonnet-46',
+          'scenarios:',
+          '  - id: scn-1',
+          '    servers:',
+          '      - weather-mcp',
+          '    prompt: test',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - claude-sonnet-46'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.servers['weather-mcp']).toBeTruthy();
+      expect(config.agents['claude-sonnet-46']).toBeTruthy();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

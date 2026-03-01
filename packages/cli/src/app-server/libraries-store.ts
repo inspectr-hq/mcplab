@@ -35,7 +35,7 @@ function normalizeServers(raw: unknown): EvalConfig['servers'] {
         auth?: EvalConfig['servers'][string]['auth'];
       };
       const id = String(candidate.id ?? candidate.name ?? '').trim();
-      if (!id || !candidate.transport) continue;
+      if (!id || !candidate.transport || !candidate.url) continue;
       normalized[id] = {
         transport: candidate.transport,
         url: candidate.url,
@@ -48,7 +48,7 @@ function normalizeServers(raw: unknown): EvalConfig['servers'] {
     for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
       if (!value || typeof value !== 'object') continue;
       const candidate = value as EvalConfig['servers'][string];
-      if (!candidate.transport) continue;
+      if (!candidate.transport || !candidate.url) continue;
       normalized[id] = {
         transport: candidate.transport,
         url: candidate.url,

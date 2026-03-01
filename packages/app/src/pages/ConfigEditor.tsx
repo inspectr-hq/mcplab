@@ -1074,7 +1074,7 @@ const ConfigEditor = () => {
                   </Select>
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineServerEntry}>
-                      Add Inline
+                      Add server
                     </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={addServerReference}>
                       Add Ref
@@ -1239,7 +1239,7 @@ const ConfigEditor = () => {
                   </Select>
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineAgentEntry}>
-                      Add Inline
+                      Add agent
                     </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
                       Add Ref
@@ -1430,7 +1430,7 @@ const ConfigEditor = () => {
                   </Select>
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineScenarioEntry}>
-                      Add Inline
+                      Add scenario
                     </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
                       Add Ref
