@@ -22,6 +22,86 @@ function readYamlFile<T>(path: string, fallback: T): T {
   }
 }
 
+function normalizeServers(raw: unknown): EvalConfig['servers'] {
+  const normalized: EvalConfig['servers'] = {};
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const candidate = entry as {
+        id?: unknown;
+        name?: unknown;
+        transport?: EvalConfig['servers'][string]['transport'];
+        url?: string;
+        auth?: EvalConfig['servers'][string]['auth'];
+      };
+      const id = String(candidate.id ?? candidate.name ?? '').trim();
+      if (!id || !candidate.transport) continue;
+      normalized[id] = {
+        transport: candidate.transport,
+        url: candidate.url,
+        auth: candidate.auth
+      };
+    }
+    return normalized;
+  }
+  if (raw && typeof raw === 'object') {
+    for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue;
+      const candidate = value as EvalConfig['servers'][string];
+      if (!candidate.transport) continue;
+      normalized[id] = {
+        transport: candidate.transport,
+        url: candidate.url,
+        auth: candidate.auth
+      };
+    }
+  }
+  return normalized;
+}
+
+function normalizeAgents(raw: unknown): EvalConfig['agents'] {
+  const normalized: EvalConfig['agents'] = {};
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const candidate = entry as {
+        id?: unknown;
+        name?: unknown;
+        provider?: EvalConfig['agents'][string]['provider'];
+        model?: string;
+        temperature?: number;
+        max_tokens?: number;
+        system?: string;
+      };
+      const id = String(candidate.id ?? candidate.name ?? '').trim();
+      if (!id || !candidate.provider || !candidate.model) continue;
+      normalized[id] = {
+        provider: candidate.provider,
+        model: candidate.model,
+        temperature: candidate.temperature,
+        max_tokens: candidate.max_tokens,
+        system: candidate.system
+      };
+    }
+    return normalized;
+  }
+  if (raw && typeof raw === 'object') {
+    for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object') continue;
+      const candidate = value as EvalConfig['agents'][string];
+      if (!candidate.provider || !candidate.model) continue;
+      normalized[id] = {
+        provider: candidate.provider,
+        model: candidate.model,
+        temperature: candidate.temperature,
+        max_tokens: candidate.max_tokens,
+        system: candidate.system
+      };
+    }
+  }
+  return normalized;
+}
+
 export function readLibraries(librariesDir: string): {
   servers: EvalConfig['servers'];
   agents: EvalConfig['agents'];
@@ -29,8 +109,8 @@ export function readLibraries(librariesDir: string): {
 } {
   const root = resolve(librariesDir);
   const scenariosDir = join(root, 'scenarios');
-  const servers = readYamlFile<EvalConfig['servers']>(join(root, 'servers.yaml'), {});
-  const agents = readYamlFile<EvalConfig['agents']>(join(root, 'agents.yaml'), {});
+  const servers = normalizeServers(readYamlFile<unknown>(join(root, 'servers.yaml'), {}));
+  const agents = normalizeAgents(readYamlFile<unknown>(join(root, 'agents.yaml'), {}));
   const scenarios: EvalConfig['scenarios'] = [];
   if (existsSync(scenariosDir)) {
     const files = readdirSync(scenariosDir)
