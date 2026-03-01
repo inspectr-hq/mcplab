@@ -45,7 +45,7 @@ scenarios:
 
 const QuickStart = () => {
   return (
-    <section id="quickstart" className="py-20 border-t border-border/50">
+    <section id="quickstart" className="section-quickstart py-20 border-t border-border/50">
       <div className="container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
           {/* Quick Start */}

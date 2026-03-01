@@ -93,6 +93,26 @@
   opacity: 0.75;
 }
 
+/* Section gradients */
+.section-hero {
+  background: linear-gradient(to bottom, hsl(195, 100%, 5%) 0%, hsl(220, 80%, 15%) 100%);
+}
+.section-problem {
+  background: linear-gradient(to bottom, hsl(215, 70%, 10%) 0%, hsl(235, 60%, 17%) 100%);
+}
+.section-features {
+  background: linear-gradient(to bottom, hsl(235, 55%, 13%) 0%, hsl(200, 75%, 14%) 100%);
+}
+.section-preview {
+  background: linear-gradient(135deg, hsl(195, 85%, 8%) 0%, hsl(225, 70%, 16%) 50%, hsl(245, 55%, 14%) 100%);
+}
+.section-quickstart {
+  background: linear-gradient(to bottom, hsl(220, 65%, 13%) 0%, hsl(250, 50%, 19%) 100%);
+}
+.section-footer {
+  background: linear-gradient(to bottom, hsl(245, 45%, 12%) 0%, hsl(195, 100%, 6%) 100%);
+}
+
 /* Glow effects */
 .glow-primary {
   box-shadow: 0 0 30px -5px hsl(25 95% 53% / 0.3);

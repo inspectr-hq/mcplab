@@ -115,7 +115,7 @@ const ProductPreview = () => {
   }, [lightbox]);
 
   return (
-    <section id="product" className="py-20 border-t border-border/50">
+    <section id="product" className="section-preview py-20 border-t border-border/50">
       <div className="container mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

@@ -5,7 +5,7 @@ import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 
 const Hero = () => {
   return (
-    <section className="relative pt-32 pb-20 overflow-hidden">
+    <section className="section-hero relative pt-32 pb-20 overflow-hidden">
       {/* Background glow */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
