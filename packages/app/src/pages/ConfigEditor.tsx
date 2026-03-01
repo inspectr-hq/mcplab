@@ -916,8 +916,8 @@ const ConfigEditor = () => {
       {/* Meta fields */}
       <Card>
         <CardContent className="pt-6 space-y-3">
-          <div className={`grid gap-4 ${readOnly ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
-            {!readOnly && (
+          <div className={`grid gap-4 ${readOnly || !isNew ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+            {!readOnly && isNew && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Config ID</Label>
                 <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. check-weather" />
