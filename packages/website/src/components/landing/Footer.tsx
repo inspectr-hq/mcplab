@@ -13,7 +13,7 @@ const Footer = () => {
                 href="https://inspectr.dev"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-foreground transition-colors underline underline-offset-2"
+                className="link-brand underline underline-offset-2"
               >
                 Inspectr
               </a>

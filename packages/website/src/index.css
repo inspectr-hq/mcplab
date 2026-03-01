@@ -6,6 +6,9 @@
 
 @layer base {
   :root {
+    --color-inspectr-primary: #00e5ff;
+    --color-inspectr-secondary: #00b8d4;
+
     --background: 195 100% 7%;
     --foreground: 210 40% 92%;
 
@@ -76,6 +79,18 @@
 ::-webkit-scrollbar-thumb {
   background: hsl(220, 25%, 20%);
   border-radius: 3px;
+}
+
+/* Brand gradient links */
+.link-brand {
+  background: linear-gradient(to right, var(--color-inspectr-secondary), var(--color-inspectr-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transition: opacity 0.2s ease;
+}
+.link-brand:hover {
+  opacity: 0.75;
 }
 
 /* Glow effects */

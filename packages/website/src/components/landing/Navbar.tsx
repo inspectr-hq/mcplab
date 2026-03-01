@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Menu, X, Github } from "lucide-react";
 import IconInspectr from "@/components/ui/IconInspectr";
 
@@ -15,15 +14,16 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="max-w-7xl mx-auto w-full flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <a href="#" className="flex items-center gap-2.5">
-          <IconInspectr width={28} height={28} />
-          <span className="font-display text-xl font-bold text-primary">MCPLab</span>
-          <Badge variant="outline" className="border-border text-muted-foreground text-[10px] px-1.5 py-0">
-            by Inspectr
-          </Badge>
-        </a>
+        <div className="flex items-center gap-1.5">
+          <a href="#" className="flex items-center gap-2.5">
+            <IconInspectr width={28} height={28} />
+            <span className="font-display text-xl font-bold text-primary">MCPLab</span>
+          </a>
+          <span className="text-muted-foreground text-[10px]">by</span>
+          <a href="https://inspectr.dev" target="_blank" rel="noopener noreferrer" className="link-brand text-[10px]">Inspectr</a>
+        </div>
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-8">
