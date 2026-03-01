@@ -5,6 +5,7 @@ import FeaturesSection from "@/components/landing/FeaturesSection";
 import ProductPreview from "@/components/landing/ProductPreview";
 import QuickStart from "@/components/landing/QuickStart";
 import Footer from "@/components/landing/Footer";
+import CdnStats from "@/components/analytics/CdnStats";
 
 const Index = () => {
   return (
@@ -16,6 +17,7 @@ const Index = () => {
       <ProductPreview />
       <QuickStart />
       <Footer />
+      <CdnStats />
     </div>
   );
 };
