@@ -14,7 +14,7 @@ const problems = [
   },
   {
     icon: TrendingDown,
-    question: "Is quality consistent over time?",
+    question: "Is the answer quality consistent over time?",
     description: "Model updates and server changes can silently break workflows. Catch regressions before your users do.",
   },
 ];

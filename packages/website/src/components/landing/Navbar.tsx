@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Github } from "lucide-react";
 import IconInspectr from "@/components/ui/IconInspectr";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showBranding, setShowBranding] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setShowBranding(window.scrollY > 220);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const links = [
     { label: "Features", href: "#features" },
@@ -18,11 +25,20 @@ const Navbar = () => {
         {/* Logo */}
         <div className="flex items-center gap-1.5">
           <a href="#" className="flex items-center gap-2.5">
-            <IconInspectr width={28} height={28} />
+            <IconInspectr width={28} height={28} from="#7c2d12" to="#f97316" />
             <span className="font-display text-xl font-bold text-primary">MCPLab</span>
           </a>
-          <span className="text-muted-foreground text-[10px]">by</span>
-          <a href="https://inspectr.dev" target="_blank" rel="noopener noreferrer" className="link-brand text-[10px]">Inspectr</a>
+          <span
+            className="text-muted-foreground text-[10px] transition-all duration-300"
+            style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}
+          >by</span>
+          <a
+            href="https://inspectr.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link-brand text-[10px] transition-all duration-300"
+            style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}
+          >Inspectr</a>
         </div>
 
         {/* Desktop links */}

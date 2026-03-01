@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Github, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
+import IconInspectr from "@/components/ui/IconInspectr";
 
 const Hero = () => {
   return (
@@ -16,6 +17,12 @@ const Hero = () => {
           transition={{ duration: 0.6 }}
           className="text-center max-w-4xl mx-auto"
         >
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <IconInspectr width={44} height={44} from="#7c2d12" to="#f97316" />
+            <span className="font-display text-3xl font-bold text-primary">MCPLab</span>
+            <span className="text-muted-foreground text-sm">by <a href="https://inspectr.dev" target="_blank" rel="noopener noreferrer" className="link-brand">Inspectr</a></span>
+          </div>
+
           <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             🧪 Lab for Testing{" "}
             <span className="text-primary glow-text">MCP Servers</span>{" "}
@@ -51,7 +58,7 @@ const Hero = () => {
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-destructive/60" />
                 <div className="w-3 h-3 rounded-full bg-secondary/60" />
-                <div className="w-3 h-3 rounded-full bg-primary/60" />
+                <div className="w-3 h-3 rounded-full bg-green-500/60" />
               </div>
               <div className="flex-1 mx-4">
                 <div className="bg-background/50 rounded-md px-3 py-1 text-xs text-muted-foreground font-mono text-center">
