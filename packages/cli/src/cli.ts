@@ -431,6 +431,9 @@ program
           const hadLegacyAgentRefsWarning = warnings.some((warning) =>
             warning.includes('Legacy agent_refs was migrated')
           );
+          const hadLegacyServerRefsWarning = warnings.some((warning) =>
+            warning.includes('Legacy server_refs was migrated')
+          );
 
           const hadLegacyScenarioRefsField =
             Array.isArray((sourceConfig as { scenario_refs?: unknown }).scenario_refs) &&
@@ -438,12 +441,17 @@ program
           const hadLegacyAgentRefsField =
             Array.isArray((sourceConfig as { agent_refs?: unknown }).agent_refs) &&
             ((sourceConfig as { agent_refs?: unknown[] }).agent_refs?.length ?? 0) > 0;
+          const hadLegacyServerRefsField =
+            Array.isArray((sourceConfig as { server_refs?: unknown }).server_refs) &&
+            ((sourceConfig as { server_refs?: unknown[] }).server_refs?.length ?? 0) > 0;
 
           if (
             !hadLegacyScenarioRefsWarning &&
             !hadLegacyScenarioRefsField &&
             !hadLegacyAgentRefsWarning &&
-            !hadLegacyAgentRefsField
+            !hadLegacyAgentRefsField &&
+            !hadLegacyServerRefsWarning &&
+            !hadLegacyServerRefsField
           ) {
             skipped += 1;
             continue;
@@ -459,6 +467,7 @@ program
           }
           const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
+            server_refs: undefined,
             agent_refs: undefined,
             scenario_refs: undefined
           };

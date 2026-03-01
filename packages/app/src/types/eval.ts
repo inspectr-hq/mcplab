@@ -15,6 +15,10 @@ export interface ServerConfig {
   oauthScope?: string;
 }
 
+export type ServerEntry =
+  | { kind: 'inline'; server: ServerConfig }
+  | { kind: 'referenced'; ref: string };
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -75,6 +79,7 @@ export interface EvalConfig {
   loadWarnings?: string[];
   servers: ServerConfig[];
   serverRefs?: string[];
+  serverEntries?: ServerEntry[];
   agents: AgentConfig[];
   agentRefs?: string[];
   agentEntries?: AgentEntry[];

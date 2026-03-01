@@ -6,6 +6,38 @@ import { loadConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConfig {
+  const rawServers = (config as { servers?: unknown }).servers;
+  const servers = Array.isArray(rawServers)
+    ? [...rawServers]
+    : rawServers && typeof rawServers === 'object'
+      ? Object.entries(rawServers as Record<string, Record<string, unknown>>).map(([name, server]) => ({
+          name,
+          transport: String(server.transport ?? 'http') as 'http',
+          url: String(server.url ?? ''),
+          auth:
+            server.auth && typeof server.auth === 'object'
+              ? (server.auth as SourceEvalConfig['servers'][number] extends infer S
+                  ? S extends { auth?: infer A }
+                    ? A
+                    : never
+                  : never)
+              : undefined
+        }))
+      : [];
+  const legacyServerRefs = Array.isArray(config.server_refs)
+    ? config.server_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  const existingServerRefs = new Set(
+    servers
+      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
+      .map((entry) => String(entry.ref).trim())
+      .filter(Boolean)
+  );
+  for (const ref of legacyServerRefs) {
+    if (existingServerRefs.has(ref)) continue;
+    servers.push({ ref });
+  }
+
   const rawAgents = (config as { agents?: unknown }).agents;
   const agents = Array.isArray(rawAgents)
     ? [...rawAgents]
@@ -49,6 +81,8 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
   }
   return {
     ...config,
+    servers,
+    server_refs: undefined,
     agents,
     agent_refs: undefined,
     scenarios,

@@ -42,7 +42,7 @@ export function readConfigRecord(
 
 function emptySourceConfig(): SourceEvalConfig {
   return {
-    servers: {},
+    servers: [],
     server_refs: [],
     agents: [],
     agent_refs: [],
@@ -59,9 +59,25 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
     const obj = parsed as Record<string, unknown>;
     return {
       servers:
-        obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)
+        Array.isArray(obj.servers)
           ? (obj.servers as SourceEvalConfig['servers'])
-          : {},
+          : obj.servers && typeof obj.servers === 'object'
+            ? Object.entries(obj.servers as Record<string, Record<string, unknown>>).map(
+                ([name, server]) => ({
+                  name,
+                  transport: String(server.transport ?? 'http') as 'http',
+                  url: String(server.url ?? ''),
+                  auth:
+                    server.auth && typeof server.auth === 'object'
+                      ? (server.auth as SourceEvalConfig['servers'][number] extends infer S
+                          ? S extends { auth?: infer A }
+                            ? A
+                            : never
+                          : never)
+                      : undefined
+                })
+              )
+            : [],
       server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
       agents:
         Array.isArray(obj.agents)

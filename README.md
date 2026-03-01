@@ -94,12 +94,12 @@ Create `my-eval.yaml`:
 
 ```yaml
 servers:
-  my-server:
+  - name: my-server
     transport: "http"
     url: "http://localhost:3000/mcp"
 
 agents:
-  claude:
+  - name: claude
     provider: "anthropic"
     model: "claude-haiku-4-5-20251001"
     temperature: 0
@@ -107,7 +107,6 @@ agents:
 
 scenarios:
   - id: "basic-test"
-    agent: "claude"
     servers: ["my-server"]
     prompt: "Use the available tools to complete this task..."
     eval:
@@ -132,13 +131,22 @@ mcplab run -c my-eval.yaml
 
 ```yaml
 servers:     # MCP servers to test against
-  ...
+  - name: local-server
+    transport: "http"
+    url: "http://localhost:3000/mcp"
+  - ref: "shared-server"
 
 agents:      # LLM agents to use for testing
-  ...
+  - name: local-agent
+    provider: "anthropic"
+    model: "claude-sonnet-4-6"
+  - ref: "claude-sonnet-46"
 
 scenarios:   # Test scenarios to run
-  ...
+  - id: "basic-test"
+    servers: ["local-server"]
+    prompt: "..."
+  - ref: "scn-shared-basic"
 ```
 
 ### Servers
@@ -147,7 +155,7 @@ Define MCP servers with connection details and authentication:
 
 ```yaml
 servers:
-  my-server:
+  - name: my-server
     transport: "http"
     url: "https://api.example.com/mcp"
     auth:
@@ -182,7 +190,7 @@ Configure LLM agents with provider-specific settings:
 **Anthropic (Claude):**
 ```yaml
 agents:
-  claude-sonnet:
+  - name: claude-sonnet
     provider: "anthropic"
     model: "claude-sonnet-4-6"
     temperature: 0
@@ -193,7 +201,7 @@ agents:
 **OpenAI (ChatGPT):**
 ```yaml
 agents:
-  gpt-4:
+  - name: gpt-4
     provider: "openai"
     model: "gpt-4o-mini"
     temperature: 0
@@ -204,7 +212,7 @@ agents:
 **Azure OpenAI:**
 ```yaml
 agents:
-  azure-gpt:
+  - name: azure-gpt
     provider: "azure_openai"
     model: "gpt-4o"  # Deployment name
     temperature: 0
@@ -224,7 +232,6 @@ Define test scenarios with prompts and evaluation criteria:
 ```yaml
 scenarios:
   - id: "search-and-analyze"
-    agent: "claude-sonnet"
     servers: ["my-server"]
     prompt: |
       Search for items matching criteria X,
@@ -255,6 +262,10 @@ scenarios:
       - name: "item_count"
         from: "final_text"
         regex: "found (?<value>\\d+) items"
+
+run_defaults:
+  selected_agents:
+    - claude-sonnet
 ```
 
 **Evaluation options:**
@@ -485,9 +496,12 @@ mcplab/
 Reference library items in eval configs:
 
 ```yaml
-server_refs: ["my-server"]      # from servers.yaml
-agent_refs: ["claude-sonnet"]   # from agents.yaml
-scenario_refs: ["scenario-a"]   # from scenarios/scenario-a.yaml
+servers:
+  - ref: "my-server"          # from servers.yaml
+agents:
+  - ref: "claude-sonnet"      # from agents.yaml
+scenarios:
+  - ref: "scenario-a"         # from scenarios/scenario-a.yaml
 ```
 
 Libraries can be managed through the app's **Libraries** page.
@@ -590,14 +604,23 @@ Create `multi-agent-eval.yaml` with one agent defined:
 
 ```yaml
 agents:
-  claude-haiku: {...}
-  gpt-4o-mini: {...}
-  gpt-4o: {...}
+  - name: claude-haiku
+    provider: anthropic
+    model: claude-haiku-4-5-20251001
+  - name: gpt-4o-mini
+    provider: openai
+    model: gpt-4o-mini
+  - name: gpt-4o
+    provider: openai
+    model: gpt-4o
 
 scenarios:
   - id: "complex-task"
-    agent: "claude-haiku"  # Default agent
     prompt: "..."
+
+run_defaults:
+  selected_agents:
+    - claude-haiku
 ```
 
 Run with all agents:
@@ -703,7 +726,7 @@ mcp-evaluation/
 │   └── reporting/     # HTML report generation
 ├── examples/          # Example evaluation configs
 ├── scripts/           # Utility scripts (multi-LLM, comparison)
-├── mcplab/runs/       # Evaluation results (gitignored)
+├── mcplab/results/    # Evaluation results + analysis (gitignored)
 └── .claude/           # Claude Code skills (optional)
 ```
 

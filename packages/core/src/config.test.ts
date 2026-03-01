@@ -219,4 +219,34 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('migrates legacy server_refs into servers ref entries with warning', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['Weather MCP:', '  transport: http', '  url: http://localhost:3011/mcp'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'legacy-servers.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'server_refs:',
+          '  - Weather MCP',
+          'agents: []',
+          'scenarios: []'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig, warnings } = loadConfig(configPath);
+      expect(warnings.some((w) => w.includes('Legacy server_refs was migrated'))).toBe(true);
+      expect(sourceConfig.server_refs ?? []).toEqual([]);
+      expect(sourceConfig.servers).toEqual([{ ref: 'Weather MCP' }]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

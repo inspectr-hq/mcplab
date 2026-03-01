@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save, Server, Bot, FileText, Play, ExternalLink, ChevronUp, ChevronDown, AlertTriangle, X } from "lucide-react";
+import { ArrowLeft, Save, Server, Bot, FileText, Play, ChevronUp, ChevronDown, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import type { AgentConfig, AgentEntry, EvalConfig, Scenario, ScenarioEntry, ServerConfig } from "@/types/eval";
+import type { AgentConfig, AgentEntry, EvalConfig, Scenario, ScenarioEntry, ServerConfig, ServerEntry } from "@/types/eval";
 import type { SnapshotRecord } from "@/lib/data-sources/types";
 
 const emptyConfig = (): EvalConfig => ({
@@ -26,6 +26,7 @@ const emptyConfig = (): EvalConfig => ({
   name: "",
   description: "",
   servers: [],
+  serverEntries: [],
   serverRefs: [],
   agents: [],
   agentEntries: [],
@@ -36,45 +37,6 @@ const emptyConfig = (): EvalConfig => ({
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
-
-const ServerListReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
-  <div className="space-y-2">
-    {servers.map((server) => (
-      <div key={server.id} className="rounded-md border p-3">
-        <div className="flex items-center gap-2">
-          <div className="font-medium text-sm">{server.name || server.id}</div>
-          <Badge variant="secondary" className="font-mono text-xs">
-            {server.transport}
-          </Badge>
-          {server.authType && server.authType !== "none" && (
-            <Badge variant="outline" className="text-xs">
-              {server.authType}
-            </Badge>
-          )}
-        </div>
-        {server.url && (
-          <div className="mt-1 text-xs font-mono text-muted-foreground break-all">
-            {server.url}
-          </div>
-        )}
-        {server.command && (
-          <div className="mt-1 text-xs font-mono text-muted-foreground">
-            {[server.command, ...(server.args ?? [])].join(" ")}
-          </div>
-        )}
-      </div>
-    ))}
-  </div>
-);
-
-const InlineServersReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
-  <Card>
-    <CardContent className="pt-4 space-y-3">
-      <div className="text-sm font-medium">Inline servers</div>
-      <ServerListReadOnly servers={servers} />
-    </CardContent>
-  </Card>
-);
 
 const ConfigEditor = () => {
   const { id, tab: tabParam } = useParams<{ id: string; tab?: string }>();
@@ -154,6 +116,26 @@ const ConfigEditor = () => {
   }, [snapshotRunId, source]);
 
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
+
+  const serverEntries = useMemo<ServerEntry[]>(() => {
+    if (config.serverEntries && config.serverEntries.length > 0) return config.serverEntries;
+    return [
+      ...(config.serverRefs ?? []).map((ref) => ({ kind: "referenced" as const, ref })),
+      ...config.servers.map((server) => ({ kind: "inline" as const, server }))
+    ];
+  }, [config.serverEntries, config.serverRefs, config.servers]);
+
+  const setServerEntries = (entries: ServerEntry[]) => {
+    patch({
+      serverEntries: entries,
+      serverRefs: entries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref),
+      servers: entries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.server)
+    });
+  };
 
   const scenarioEntries = useMemo<ScenarioEntry[]>(() => {
     if (config.scenarioEntries && config.scenarioEntries.length > 0) return config.scenarioEntries;
@@ -266,6 +248,20 @@ const ConfigEditor = () => {
       toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
       return;
     }
+    const normalizedServerRefs = serverEntries
+      .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+      .map((entry) => entry.ref)
+      .map((ref) => {
+        const matched = libServers.find((item) => (item.name || item.id) === ref || item.id === ref);
+        return matched?.name || matched?.id || ref;
+      });
+    const normalizedServerEntries = serverEntries.map((entry) => {
+      if (entry.kind === "referenced") {
+        const matched = libServers.find((item) => (item.name || item.id) === entry.ref || item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.name || matched?.id || entry.ref };
+      }
+      return entry;
+    });
     const normalizedAgentRefs = agentEntries
       .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
       .map((entry) => entry.ref)
@@ -308,6 +304,11 @@ const ConfigEditor = () => {
     }
     const nextConfig = {
       ...config,
+      serverEntries: normalizedServerEntries,
+      serverRefs: normalizedServerRefs,
+      servers: normalizedServerEntries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.server),
       agentEntries: normalizedAgentEntries,
       agentRefs: normalizedAgentRefs,
       agents: normalizedAgentEntries
@@ -343,14 +344,8 @@ const ConfigEditor = () => {
   const importServerFromLibrary = () => {
     const template = libServers.find((item) => item.id === selectedLibraryServerId);
     if (!template) return;
-    const name = template.name || template.id;
-    if (config.servers.some((srv) => (srv.name || srv.id) === name)) {
-      toast({ title: "Server already exists in config" });
-      return;
-    }
-    patch({
-      servers: [...config.servers, { ...structuredClone(template), id: `srv-${Date.now()}` }]
-    });
+    const inlineCopy = { ...structuredClone(template), id: `srv-${Date.now()}` };
+    setServerEntries([...serverEntries, { kind: "inline", server: inlineCopy }]);
     setSelectedLibraryServerId("");
   };
 
@@ -358,8 +353,55 @@ const ConfigEditor = () => {
     const template = libServers.find((item) => item.id === selectedLibraryServerId);
     if (!template) return;
     const refName = template.name || template.id;
-    const nextRefs = Array.from(new Set([...(config.serverRefs ?? []), refName]));
-    patch({ serverRefs: nextRefs });
+    const existing = new Set(
+      serverEntries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    if (!existing.has(refName)) {
+      setServerEntries([...serverEntries, { kind: "referenced", ref: refName }]);
+    }
+    setSelectedLibraryServerId("");
+  };
+
+  const addInlineServerEntry = () => {
+    const createdAt = Date.now();
+    const inlineServer: ServerConfig = {
+      id: `srv-${createdAt}`,
+      name: "",
+      transport: "stdio",
+      authType: "none",
+      oauthRedirectUrl: "http://localhost:6274/oauth/",
+    };
+    setServerEntries([{ kind: "inline", server: inlineServer }, ...serverEntries]);
+  };
+
+  const removeServerEntryAt = (index: number) => {
+    setServerEntries(serverEntries.filter((_, entryIndex) => entryIndex !== index));
+  };
+
+  const moveServerEntry = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= serverEntries.length) return;
+    const nextEntries = [...serverEntries];
+    const [moved] = nextEntries.splice(index, 1);
+    nextEntries.splice(nextIndex, 0, moved);
+    setServerEntries(nextEntries);
+  };
+
+  const convertReferencedServerToInline = (index: number) => {
+    const entry = serverEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const template = findLibraryServerByRef(entry.ref);
+    if (!template) {
+      toast({ title: "Referenced server not found", variant: "destructive" });
+      return;
+    }
+    const inlineCopy = { ...structuredClone(template), id: `srv-${Date.now()}` };
+    const nextEntries = [...serverEntries];
+    nextEntries[index] = { kind: "inline", server: inlineCopy };
+    setServerEntries(nextEntries);
+    toast({ title: "Referenced server converted to inline", description: inlineCopy.name || inlineCopy.id });
     setSelectedLibraryServerId("");
   };
 
@@ -619,41 +661,28 @@ const ConfigEditor = () => {
     toast({ title: "Referenced scenario converted to inline", description: nextName });
   };
 
-  const removeRef = (
-    key: "serverRefs" | "agentRefs" | "scenarioRefs",
-    value: string
-  ) => {
-    if (key === "scenarioRefs") {
-      setScenarioEntries(scenarioEntries.filter((entry) => !(entry.kind === "referenced" && entry.ref === value)));
-      return;
-    }
-    const next = (config[key] ?? []).filter((item) => item !== value);
-    patch({ [key]: next } as Partial<EvalConfig>);
-  };
-
-  const moveRef = (
-    key: "serverRefs" | "agentRefs" | "scenarioRefs",
-    index: number,
-    direction: -1 | 1
-  ) => {
-    if (key === "scenarioRefs") return;
-    const current = [...(config[key] ?? [])];
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= current.length) return;
-    const [item] = current.splice(index, 1);
-    current.splice(nextIndex, 0, item);
-    patch({ [key]: current } as Partial<EvalConfig>);
-  };
-
   const findLibraryServerByRef = (ref: string) =>
     libServers.find((item) => (item.name || item.id) === ref);
   const findLibraryAgentByRef = (ref: string) =>
     libAgents.find((item) => (item.name || item.id) === ref);
   const findLibraryScenarioByRef = (ref: string) =>
     libScenarios.find((item) => item.id === ref || item.name === ref);
-  const referencedServers = (config.serverRefs ?? [])
+  const referencedServerRefs = serverEntries
+    .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .map((entry) => entry.ref);
+  const referencedServers = referencedServerRefs
     .map(findLibraryServerByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const inlineServerEntries = serverEntries
+    .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline");
+  const inlineServers = inlineServerEntries.map((entry) => entry.server);
+  const serverViewRows = serverEntries.flatMap((entry) => {
+    if (entry.kind === "referenced") {
+      const server = findLibraryServerByRef(entry.ref);
+      return server ? [{ server, origin: "referenced" as const, ref: entry.ref }] : [];
+    }
+    return [{ server: entry.server, origin: "inline" as const, ref: undefined }];
+  });
   const referencedAgentRefs = agentEntries
     .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
     .map((entry) => entry.ref);
@@ -693,12 +722,12 @@ const ConfigEditor = () => {
       [...libServers, ...config.servers, ...referencedServers].map((server) => [server.name || server.id, server] as const)
     ).values()
   );
-  const missingServerRefs = (config.serverRefs ?? []).filter((ref) => !findLibraryServerByRef(ref));
+  const missingServerRefs = referencedServerRefs.filter((ref) => !findLibraryServerByRef(ref));
   const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
   const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
-  const totalServerCount = config.servers.length + referencedServers.length;
+  const totalServerCount = serverEntries.length;
   const totalAgentCount = agentEntries.length;
   const totalScenarioCount = scenarioEntries.length;
 
@@ -1031,21 +1060,22 @@ const ConfigEditor = () => {
         <TabsContent value="servers">
           {!readOnly && (
             <Card className="mb-4">
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 space-y-3">
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Select value={selectedLibraryServerId} onValueChange={setSelectedLibraryServerId}>
                     <SelectTrigger className="h-8">
                       <SelectValue placeholder="Select server from library" />
                     </SelectTrigger>
                     <SelectContent>
-                      {libServers
-                        .filter((item) => !(config.serverRefs ?? []).includes(item.name || item.id))
-                        .map((item) => (
-                          <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                        ))}
+                      {libServers.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineServerEntry}>
+                      Add Inline
+                    </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={addServerReference}>
                       Add Ref
                     </Button>
@@ -1054,62 +1084,141 @@ const ConfigEditor = () => {
                     </Button>
                   </div>
                 </div>
-                {(config.serverRefs ?? []).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(config.serverRefs ?? []).map((ref) => (
-                      <Badge
-                        key={ref}
-                        variant={missingServerRefSet.has(ref) ? "destructive" : "secondary"}
-                        className="gap-1"
-                      >
-                        {missingServerRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                        {ref}
-                        <button
-                          type="button"
-                          onClick={() => removeRef("serverRefs", ref)}
-                          className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                          aria-label={`Remove server reference ${ref}`}
-                          title={`Remove server reference ${ref}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                          Remove
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-2">
+                  {serverEntries.map((entry, index) => {
+                    const referenceServer = entry.kind === "referenced" ? findLibraryServerByRef(entry.ref) : null;
+                    const rowName =
+                      entry.kind === "inline"
+                        ? (entry.server.name?.trim() || entry.server.id)
+                        : (referenceServer?.name || entry.ref);
+                    const rowKey = entry.kind === "inline" ? entry.server.id : entry.ref;
+                    const isMissingRef = entry.kind === "referenced" && !referenceServer;
+                    return (
+                      <div key={`server-entry-${index}-${rowKey}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                          <span className="truncate font-medium">{rowName}</span>
+                          <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                            {entry.kind === "inline" ? "Inline" : "Referenced"}
+                          </Badge>
+                          {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {entry.kind === "referenced" && (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertReferencedServerToInline(index)}
+                                disabled={isMissingRef}
+                              >
+                                Convert to inline
+                              </Button>
+                              <Button size="sm" variant="outline" asChild>
+                                <Link
+                                  to={
+                                    referenceServer
+                                      ? `/libraries/servers/${encodeURIComponent(referenceServer.id)}`
+                                      : "/libraries/servers"
+                                  }
+                                >
+                                  Edit
+                                </Link>
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => moveServerEntry(index, -1)}
+                            disabled={index === 0}
+                            aria-label="Move server up"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-7 w-7"
+                            onClick={() => moveServerEntry(index, 1)}
+                            disabled={index === serverEntries.length - 1}
+                            aria-label="Move server down"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => removeServerEntryAt(index)}>
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {serverEntries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No servers configured yet. Add inline servers or references.
+                    </p>
+                  )}
+                </div>
                 {missingServerRefs.length > 0 && (
-                  <p className="mt-2 text-xs text-destructive">
+                  <p className="text-xs text-destructive">
                     Missing server refs: {missingServerRefs.join(", ")}
                   </p>
                 )}
               </CardContent>
             </Card>
           )}
-          {referencedServers.length > 0 && (
-            <Card className="mb-4">
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Referenced servers (read-only)</div>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/libraries/servers">
-                      Edit in Manage Servers
-                      <ExternalLink className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+          {readOnly ? (
+            <Card>
+              <CardContent className="pt-4">
+                <div className="space-y-2">
+                  {serverViewRows.map((row, index) => (
+                    <div key={`server-view-${index}-${row.ref ?? row.server.id}`} className="rounded-md border p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                        <div className="font-medium text-sm">{row.server.name || row.server.id}</div>
+                        <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                          {row.origin === "inline" ? "Inline" : "Referenced"}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {row.server.transport}
+                        </Badge>
+                      </div>
+                      {row.server.url && (
+                        <div className="mt-1 text-xs font-mono text-muted-foreground break-all">
+                          {row.server.url}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {serverViewRows.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No servers configured.
+                    </p>
+                  )}
                 </div>
-                <ServerListReadOnly servers={referencedServers} />
               </CardContent>
             </Card>
-          )}
-          {readOnly && config.servers.length === 0 && referencedServers.length > 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No inline servers configured. Using {referencedServers.length} referenced server{referencedServers.length !== 1 ? "s" : ""} above.
-            </p>
-          ) : readOnly ? (
-            <InlineServersReadOnly servers={config.servers} />
           ) : (
-            <ServerForm servers={config.servers} onChange={(servers) => patch({ servers })} readOnly={readOnly} />
+            <ServerForm
+              servers={inlineServers}
+              onChange={(servers) => {
+                let cursor = 0;
+                const nextEntries = serverEntries.map((entry) => {
+                  if (entry.kind === "referenced") return entry;
+                  const nextServer = servers[cursor];
+                  cursor += 1;
+                  return { kind: "inline" as const, server: nextServer ?? entry.server };
+                });
+                setServerEntries(nextEntries);
+              }}
+              readOnly={readOnly}
+              allowAdd={false}
+              allowStructureEdits={false}
+            />
           )}
         </TabsContent>
 

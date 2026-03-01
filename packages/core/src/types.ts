@@ -34,6 +34,16 @@ export interface ServerConfig {
   auth?: ServerAuth;
 }
 
+export interface ServerInlineEntry extends ServerConfig {
+  name: string;
+}
+
+export interface ServerRefEntry {
+  ref: string;
+}
+
+export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
+
 export interface AgentConfig {
   provider: 'openai' | 'anthropic' | 'azure_openai';
   model: string;
@@ -129,7 +139,8 @@ export interface EvalConfig {
   snapshot_eval?: SnapshotEvalPolicy;
 }
 
-export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents'> {
+export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
+  servers: ServerListEntry[];
   agents: AgentListEntry[];
   scenarios: ScenarioListEntry[];
 }

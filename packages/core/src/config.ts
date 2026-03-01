@@ -11,6 +11,9 @@ import type {
   Scenario,
   ScenarioListEntry,
   ScenarioRefEntry,
+  ServerInlineEntry,
+  ServerListEntry,
+  ServerRefEntry,
   SourceEvalConfig
 } from './types.js';
 
@@ -66,14 +69,41 @@ function resolveReferences(
   );
   const libraryScenarios = readScenarioLibrary(join(bundleRoot, 'scenarios'));
 
-  const servers = { ...(sourceConfig.servers ?? {}) };
   const missingServerRefs: string[] = [];
-  for (const ref of sourceConfig.server_refs ?? []) {
-    if (!servers[ref] && libraryServers[ref]) {
-      servers[ref] = libraryServers[ref];
+  const resolvedServers: Record<string, EvalConfig['servers'][string]> = {};
+  const seenServerNames = new Set<string>();
+  for (const entry of sourceConfig.servers ?? []) {
+    if (isServerRefEntry(entry)) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) {
+        missingServerRefs.push('(empty-ref)');
+        continue;
+      }
+      const server = libraryServers[ref];
+      if (!server) {
+        missingServerRefs.push(ref);
+        continue;
+      }
+      if (seenServerNames.has(ref)) {
+        throw new Error(`Duplicate server name detected while resolving refs: ${ref}`);
+      }
+      seenServerNames.add(ref);
+      resolvedServers[ref] = server;
       continue;
     }
-    if (!servers[ref]) missingServerRefs.push(ref);
+    const inlineName = String((entry as { name?: unknown }).name ?? '').trim();
+    if (!inlineName) {
+      throw new Error('Invalid config: inline server is missing required name');
+    }
+    if (seenServerNames.has(inlineName)) {
+      throw new Error(`Duplicate server name detected: ${inlineName}`);
+    }
+    seenServerNames.add(inlineName);
+    resolvedServers[inlineName] = {
+      transport: entry.transport,
+      url: entry.url,
+      auth: entry.auth
+    };
   }
 
   const missingAgentRefs: string[] = [];
@@ -178,7 +208,7 @@ function resolveReferences(
 
   return {
     ...sourceConfig,
-    servers,
+    servers: resolvedServers,
     agents: resolvedAgents,
     scenarios
   };
@@ -189,6 +219,41 @@ function normalizeConfig(
 ): { config: SourceEvalConfig; warnings: string[] } {
   const warnings: string[] = [];
   const legacyPinnedAgents = new Set<string>();
+  const rawServers = (sourceConfig as { servers?: unknown }).servers;
+  const serversInput = Array.isArray(rawServers) ? rawServers : [];
+  const normalizedServers: ServerListEntry[] = [];
+  if (Array.isArray(rawServers)) {
+    for (const rawServer of serversInput) {
+      const server = rawServer as ServerListEntry;
+      if (isServerRefEntry(server)) {
+        const ref = String(server.ref ?? '').trim();
+        if (!ref) throw new Error('Invalid config: server ref must be a non-empty name');
+        normalizedServers.push({ ref });
+        continue;
+      }
+      const inlineName = String((server as ServerInlineEntry).name ?? '').trim();
+      if (!inlineName) throw new Error('Invalid config: inline server is missing required name');
+      normalizedServers.push({
+        name: inlineName,
+        transport: (server as ServerInlineEntry).transport,
+        url: (server as ServerInlineEntry).url,
+        auth: (server as ServerInlineEntry).auth
+      });
+    }
+  } else {
+    const legacyInlineServers =
+      rawServers && typeof rawServers === 'object' && !Array.isArray(rawServers)
+        ? (rawServers as Record<string, EvalConfig['servers'][string]>)
+        : {};
+    for (const [name, server] of Object.entries(legacyInlineServers)) {
+      normalizedServers.push({
+        name,
+        transport: server.transport,
+        url: server.url,
+        auth: server.auth
+      });
+    }
+  }
   const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
   const rawAgents = (sourceConfig as { agents?: unknown }).agents;
   const agentsInput = Array.isArray(rawAgents) ? rawAgents : [];
@@ -264,6 +329,20 @@ function normalizeConfig(
     normalizedScenarios.push(nextScenario);
   }
 
+  const legacyServerRefs = Array.isArray(sourceConfig.server_refs)
+    ? sourceConfig.server_refs.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+  if (legacyServerRefs.length > 0) {
+    const existingRefs = new Set(
+      normalizedServers.filter(isServerRefEntry).map((entry) => entry.ref)
+    );
+    for (const ref of legacyServerRefs) {
+      if (existingRefs.has(ref)) continue;
+      normalizedServers.push({ ref });
+    }
+    warnings.push('Legacy server_refs was migrated into servers[{ref}] and will be removed on next save.');
+  }
+
   const legacyAgentRefs = Array.isArray(sourceConfig.agent_refs)
     ? sourceConfig.agent_refs.map((value) => String(value).trim()).filter(Boolean)
     : [];
@@ -296,16 +375,16 @@ function normalizeConfig(
 
   const normalized: SourceEvalConfig = {
     ...sourceConfig,
-    servers: sourceConfig.servers ?? {},
-    server_refs: sourceConfig.server_refs ?? [],
+    servers: normalizedServers,
+    server_refs: [],
     agents: normalizedAgents,
     agent_refs: [],
     scenarios: normalizedScenarios,
     scenario_refs: []
   };
 
-  if (typeof normalized.servers !== 'object' || Array.isArray(normalized.servers)) {
-    throw new Error('Invalid config: servers must be an object');
+  if (!Array.isArray(normalized.servers)) {
+    throw new Error('Invalid config: servers must be an array');
   }
   if (!Array.isArray(normalized.agents)) {
     throw new Error('Invalid config: agents must be an array');
@@ -457,5 +536,9 @@ function isScenarioRefEntry(entry: ScenarioListEntry): entry is ScenarioRefEntry
 }
 
 function isAgentRefEntry(entry: AgentListEntry): entry is AgentRefEntry {
+  return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
+}
+
+function isServerRefEntry(entry: ServerListEntry): entry is ServerRefEntry {
   return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
 }
