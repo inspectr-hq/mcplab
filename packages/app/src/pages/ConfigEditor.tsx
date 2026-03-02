@@ -266,6 +266,14 @@ const ConfigEditor = () => {
       });
       return;
     }
+    const validAgentIds = new Set(
+      normalizedAgentEntries.map((entry) =>
+        entry.kind === "inline" ? entry.agent.id : entry.ref
+      )
+    );
+    const normalizedDefaultAgentIds = (config.runDefaults?.selectedAgentNames ?? []).filter((id) =>
+      validAgentIds.has(id)
+    );
     const nextConfig = {
       ...config,
       serverEntries: normalizedServerEntries,
@@ -280,6 +288,13 @@ const ConfigEditor = () => {
       scenarios: normalizedScenarioEntries
         .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.scenario as Scenario),
+      runDefaults:
+        normalizedDefaultAgentIds.length > 0
+          ? {
+              ...(config.runDefaults ?? {}),
+              selectedAgentNames: normalizedDefaultAgentIds
+            }
+          : undefined,
       updatedAt: new Date().toISOString()
     };
     if (isNew) {
@@ -471,8 +486,8 @@ const ConfigEditor = () => {
   const removeAgentEntryAt = (index: number) => {
     const entry = agentEntries[index];
     if (!entry) return;
-    const name = entry.kind === "inline" ? (entry.agent.name || entry.agent.id) : entry.ref;
-    const nextDefaults = defaultRunAgentNames.filter((item) => item !== name);
+    const removedAgentId = entry.kind === "inline" ? entry.agent.id : entry.ref;
+    const nextDefaults = defaultRunAgentNames.filter((item) => item !== removedAgentId);
     patch({
       runDefaults: {
         ...(config.runDefaults ?? {}),
@@ -516,6 +531,17 @@ const ConfigEditor = () => {
     const nextEntries = [...agentEntries];
     nextEntries[index] = { kind: "inline", agent: inlineCopy };
     setAgentEntries(nextEntries);
+    if (defaultRunAgentNames.includes(entry.ref)) {
+      const nextDefaults = defaultRunAgentNames.map((item) =>
+        item === entry.ref ? inlineCopy.id : item
+      );
+      patch({
+        runDefaults: {
+          ...(config.runDefaults ?? {}),
+          selectedAgentNames: Array.from(new Set(nextDefaults))
+        }
+      });
+    }
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     toast({ title: "Referenced agent converted to inline", description: customName });
   };
