@@ -207,6 +207,7 @@ function resolveReferences(
 
   for (const scenario of scenarios) {
     if (!scenario.mcp_servers || scenario.mcp_servers.length === 0) {
+      scenario.servers = Array.isArray(scenario.servers) ? scenario.servers : [];
       continue;
     }
     const resolvedIds: string[] = [];
@@ -687,7 +688,12 @@ function resolveScenarioLibraryDir(bundleRoot: string): {
 function detectBundleRoot(configPath: string): string {
   const abs = resolve(configPath);
   const configDir = dirname(abs);
-  if (configDir.endsWith('/configs') || configDir.endsWith('\\configs')) {
+  if (
+    configDir.endsWith('/configs') ||
+    configDir.endsWith('\\configs') ||
+    configDir.endsWith('/evals') ||
+    configDir.endsWith('\\evals')
+  ) {
     return dirname(configDir);
   }
   return configDir;
