@@ -1,0 +1,30 @@
+id: basic-asset-tags
+name: Basic - Asset tags
+mcp_servers:
+  - ref: trendminer
+prompt: Which tags are linked to the Batch Line Batch reactor 1?
+eval:
+  tool_constraints:
+    required_tools:
+      - navigate_asset_hierarchy
+    forbidden_tools:
+      - search_tags
+  response_assertions:
+    - type: regex
+      pattern: TM5-BP2-CONC.1
+    - type: regex
+      pattern: TM5-BP2-CW.1
+    - type: regex
+      pattern: TM5-BP2-LEVEL.1
+    - type: regex
+      pattern: TM5-BP2-PRESSURE.1
+    - type: regex
+      pattern: TM5-BP2-PRODUCT.1
+    - type: regex
+      pattern: TM5-BP2-SPEED.1
+    - type: regex
+      pattern: TM5-BP2-TEMP.1
+    - type: regex
+      pattern: TM5-BP2-UTIL.1
+extract: []
+

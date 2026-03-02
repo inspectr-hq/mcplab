@@ -1,0 +1,23 @@
+id: search-tags
+name: Basic - Search Tags
+mcp_servers:
+  - ref: trendminer
+prompt: Search for all tags with 'TM5-BP2' in the name and tell me how many you found.
+snapshot_eval:
+  enabled: true
+  baseline_snapshot_id: null
+eval:
+  tool_constraints:
+    required_tools:
+      - search_tags
+    forbidden_tools: []
+  response_assertions:
+    - type: regex
+      pattern: TM5-BP2
+    - type: regex
+      pattern: "9"
+extract:
+  - name: tag_count
+    from: final_text
+    regex: \b(9)\b
+
