@@ -202,6 +202,72 @@ function resolveReferences(
     scenarios.push(inline);
   }
 
+  // --- Resolve mcp_servers from scenarios and build server union ---
+  const scenarioServerUnion: Record<string, EvalConfig['servers'][string]> = {};
+
+  for (const scenario of scenarios) {
+    if (!scenario.mcp_servers || scenario.mcp_servers.length === 0) {
+      continue;
+    }
+    const resolvedIds: string[] = [];
+    for (const entry of scenario.mcp_servers) {
+      if (isServerRefEntry(entry)) {
+        const ref = String((entry as ServerRefEntry).ref || '').trim();
+        const server = libraryServers[ref];
+        if (!server) {
+          throw new Error(`Unresolved mcp_servers ref "${ref}" in scenario "${scenario.id}"`);
+        }
+        if (scenarioServerUnion[ref]) {
+          if (stableStringify(scenarioServerUnion[ref]) !== stableStringify(server)) {
+            throw new Error(
+              `Conflicting mcp_servers definition for id: ${ref} (first seen in a prior scenario, differs in scenario "${scenario.id}")`
+            );
+          }
+        } else {
+          scenarioServerUnion[ref] = server;
+        }
+        resolvedIds.push(ref);
+      } else {
+        const inlineEntry = entry as ServerInlineEntry;
+        const id = inlineEntry.id;
+        const inlineConfig: EvalConfig['servers'][string] = {
+          transport: inlineEntry.transport,
+          url: inlineEntry.url,
+          auth: inlineEntry.auth
+        };
+        if (scenarioServerUnion[id]) {
+          if (stableStringify(scenarioServerUnion[id]) !== stableStringify(inlineConfig)) {
+            throw new Error(
+              `Conflicting mcp_servers definition for id: ${id} (differs in scenario "${scenario.id}")`
+            );
+          }
+        } else {
+          scenarioServerUnion[id] = inlineConfig;
+        }
+        resolvedIds.push(id);
+      }
+    }
+    scenario.servers = resolvedIds;
+  }
+
+  // Merge scenario server union into resolvedServers
+  for (const [id, cfg] of Object.entries(scenarioServerUnion)) {
+    resolvedServers[id] = cfg;
+  }
+
+  // Legacy: validate that scenarios still using servers: string[] have all IDs resolvable
+  for (const scenario of scenarios) {
+    if (!scenario.mcp_servers) {
+      for (const id of scenario.servers) {
+        if (!resolvedServers[id]) {
+          throw new Error(
+            `Scenario "${scenario.id}" references server "${id}" which is not defined in servers or mcp_servers`
+          );
+        }
+      }
+    }
+  }
+
   const missingMessages: string[] = [];
   if (missingServerRefs.length > 0) {
     missingMessages.push(`servers refs: ${missingServerRefs.join(', ')}`);
@@ -304,6 +370,11 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       warnings.push('Legacy servers object map was migrated into servers[] entries.');
     }
   }
+  if (normalizedServers.length > 0) {
+    warnings.push(
+      'top-level servers is deprecated; move server definitions to scenario mcp_servers entries.'
+    );
+  }
   const scenariosInput = Array.isArray(sourceConfig.scenarios) ? sourceConfig.scenarios : [];
   const rawAgents = (sourceConfig as { agents?: unknown }).agents;
   const agentsInput = Array.isArray(rawAgents) ? rawAgents : [];
@@ -372,7 +443,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
     const nextScenario: Scenario = {
       id: rawScenario.id,
       name: rawScenario.name,
-      servers: rawScenario.servers,
+      servers: Array.isArray(rawScenario.servers) ? rawScenario.servers : [],
       prompt: rawScenario.prompt,
       eval: rawScenario.eval,
       extract: rawScenario.extract
@@ -388,6 +459,31 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
         ...(rawScenario.snapshot_eval ?? {}),
         ...(legacySnapshotEnabled !== undefined ? { enabled: legacySnapshotEnabled } : {})
       };
+    }
+    // Propagate mcp_servers if present in raw YAML
+    const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
+    if (Array.isArray(rawMcpServers)) {
+      const normalizedMcpServers: ServerListEntry[] = [];
+      for (const entry of rawMcpServers) {
+        if (isServerRefEntry(entry as ServerListEntry)) {
+          const ref = String((entry as ServerRefEntry).ref ?? '').trim();
+          if (!ref) throw new Error('Invalid config: mcp_servers ref must be a non-empty id');
+          normalizedMcpServers.push({ ref });
+        } else {
+          const inlineEntry = entry as ServerInlineEntry;
+          const id = String(inlineEntry.id ?? '').trim();
+          if (!id) throw new Error('Invalid config: inline mcp_servers entry is missing required id');
+          if (!inlineEntry.transport) throw new Error(`Invalid config: mcp_servers entry "${id}" is missing transport`);
+          if (!inlineEntry.url) throw new Error(`Invalid config: mcp_servers entry "${id}" is missing url`);
+          normalizedMcpServers.push({
+            id,
+            transport: inlineEntry.transport,
+            url: inlineEntry.url,
+            auth: inlineEntry.auth
+          });
+        }
+      }
+      nextScenario.mcp_servers = normalizedMcpServers;
     }
     normalizedScenarios.push(nextScenario);
   }
