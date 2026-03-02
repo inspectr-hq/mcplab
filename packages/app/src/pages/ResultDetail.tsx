@@ -1402,16 +1402,9 @@ const ResultDetail = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <p className="text-xs text-muted-foreground">
-                  Ask questions about this run result, failures, tool usage, and snapshot drift.
-                </p>
-                {assistantMeta && (
-                  <p className="shrink-0 text-[11px] text-muted-foreground">
-                    {assistantMeta.assistantAgentName} ({assistantMeta.provider}/{assistantMeta.model})
-                  </p>
-                )}
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Ask questions about this run result, failures, tool usage, and snapshot drift.
+              </p>
             </div>
           </CardHeader>
           <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
