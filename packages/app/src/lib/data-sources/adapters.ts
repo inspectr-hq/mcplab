@@ -49,10 +49,10 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       entry.auth?.type === 'bearer'
         ? 'bearer'
         : entry.auth?.type === 'oauth_client_credentials'
-          ? 'api-key'
-          : entry.auth?.type === 'oauth_authorization_code'
-            ? 'oauth2'
-            : 'none';
+        ? 'api-key'
+        : entry.auth?.type === 'oauth_authorization_code'
+        ? 'oauth2'
+        : 'none';
     const mappedServer = {
       id,
       name: String(entry.name || inlineId),
@@ -250,11 +250,10 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
           : undefined
     } satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
   };
-  const mixedServerEntries = config.serverEntries && config.serverEntries.length > 0
-    ? config.serverEntries
-    : [
-        ...config.servers.map((server) => ({ kind: 'inline' as const, server }))
-      ];
+  const mixedServerEntries =
+    config.serverEntries && config.serverEntries.length > 0
+      ? config.serverEntries
+      : [...config.servers.map((server) => ({ kind: 'inline' as const, server }))];
   const seenServerRefs = new Set<string>();
   const servers = mixedServerEntries.flatMap((entry) => {
     if (entry.kind === 'referenced') {
@@ -287,11 +286,10 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
   };
 
-  const mixedAgentEntries = config.agentEntries && config.agentEntries.length > 0
-    ? config.agentEntries
-    : [
-        ...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))
-      ];
+  const mixedAgentEntries =
+    config.agentEntries && config.agentEntries.length > 0
+      ? config.agentEntries
+      : [...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))];
   const seenAgentRefs = new Set<string>();
   const agents = mixedAgentEntries.flatMap((entry) => {
     if (entry.kind === 'referenced') {
@@ -344,14 +342,14 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     };
   };
 
-  const scenarios = (config.scenarioEntries && config.scenarioEntries.length > 0
-    ? config.scenarioEntries.map((entry) => {
-        if (entry.kind === 'referenced') return { ref: entry.ref };
-        return mapInlineScenario(entry.scenario);
-      })
-    : [
-        ...config.scenarios.map((scenario) => mapInlineScenario(scenario))
-      ]) as CoreSourceEvalConfig['scenarios'];
+  const scenarios = (
+    config.scenarioEntries && config.scenarioEntries.length > 0
+      ? config.scenarioEntries.map((entry) => {
+          if (entry.kind === 'referenced') return { ref: entry.ref };
+          return mapInlineScenario(entry.scenario);
+        })
+      : [...config.scenarios.map((scenario) => mapInlineScenario(scenario))]
+  ) as CoreSourceEvalConfig['scenarios'];
 
   return {
     name: config.configName?.trim() || undefined,
@@ -392,14 +390,14 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
           server.authType === 'bearer'
             ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
             : server.authType === 'oauth2'
-              ? {
-                  type: 'oauth_authorization_code' as const,
-                  client_id: server.oauthClientId || '',
-                  client_secret: server.oauthClientSecret || undefined,
-                  redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
-                  scope: server.oauthScope || undefined
-                }
-              : undefined
+            ? {
+                type: 'oauth_authorization_code' as const,
+                client_id: server.oauthClientId || '',
+                client_secret: server.oauthClientSecret || undefined,
+                redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+                scope: server.oauthScope || undefined
+              }
+            : undefined
       }
     ])
   ) as CoreEvalConfig['servers'];
@@ -413,8 +411,8 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
           agent.provider === 'azure'
             ? 'azure_openai'
             : agent.provider === 'anthropic'
-              ? 'anthropic'
-              : 'openai',
+            ? 'anthropic'
+            : 'openai',
         model: agent.model,
         temperature: agent.temperature,
         max_tokens: agent.maxTokens,
@@ -449,7 +447,9 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
             .map((rule) => rule.value)
         },
         response_assertions: scenario.evalRules
-          .filter((rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains')
+          .filter(
+            (rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains'
+          )
           .map((rule) => ({ type: 'regex' as const, pattern: rule.value }))
       },
       extract: scenario.extractRules.map((rule) => ({

@@ -417,7 +417,9 @@ program
     try {
       const evalsDir = resolve(String(options.evalsDir));
       const bundleRoot = resolve(evalsDir, '..');
-      const files = readdirSync(evalsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
+      const files = readdirSync(evalsDir).filter(
+        (name) => name.endsWith('.yaml') || name.endsWith('.yml')
+      );
       let migrated = 0;
       let skipped = 0;
       let failed = 0;
@@ -449,7 +451,9 @@ program
           if (options.dryRun) {
             console.log(
               kleur.cyan(
-                `[dry-run] ${file}: would normalize config format${warnings.length ? ` (${warnings.join(' | ')})` : ''}`
+                `[dry-run] ${file}: would normalize config format${
+                  warnings.length ? ` (${warnings.join(' | ')})` : ''
+                }`
               )
             );
             migrated += 1;
@@ -466,7 +470,9 @@ program
       }
       console.log(
         kleur.cyan(
-          `Migration summary${options.dryRun ? ' (dry-run)' : ''}: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
+          `Migration summary${
+            options.dryRun ? ' (dry-run)' : ''
+          }: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
         )
       );
     } catch (err: any) {

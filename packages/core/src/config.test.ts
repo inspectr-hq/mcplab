@@ -61,12 +61,7 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'config.yaml');
       writeFileSync(
         configPath,
-        [
-          'name: Weather checks baseline',
-          'servers: []',
-          'agents: []',
-          'scenarios: []'
-        ].join('\n'),
+        ['name: Weather checks baseline', 'servers: []', 'agents: []', 'scenarios: []'].join('\n'),
         'utf8'
       );
 
@@ -161,13 +156,9 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'legacy.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: {}',
-          'agents: {}',
-          'scenarios: []',
-          'scenario_refs:',
-          '  - scn-weather'
-        ].join('\n'),
+        ['servers: {}', 'agents: {}', 'scenarios: []', 'scenario_refs:', '  - scn-weather'].join(
+          '\n'
+        ),
         'utf8'
       );
 
@@ -220,13 +211,9 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'legacy-agents.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: {}',
-          'agents: {}',
-          'agent_refs:',
-          '  - claude-sonnet-46',
-          'scenarios: []'
-        ].join('\n'),
+        ['servers: {}', 'agents: {}', 'agent_refs:', '  - claude-sonnet-46', 'scenarios: []'].join(
+          '\n'
+        ),
         'utf8'
       );
 
@@ -247,13 +234,9 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'legacy-servers.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: {}',
-          'server_refs:',
-          '  - Weather MCP',
-          'agents: []',
-          'scenarios: []'
-        ].join('\n'),
+        ['servers: {}', 'server_refs:', '  - Weather MCP', 'agents: []', 'scenarios: []'].join(
+          '\n'
+        ),
         'utf8'
       );
 
@@ -268,20 +251,14 @@ describe('loadConfig normalization', () => {
     try {
       writeFileSync(
         join(dir, 'servers.yaml'),
-        [
-          '- id: weather-mcp',
-          '  transport: http',
-          '  url: http://localhost:3300/mcp'
-        ].join('\n'),
+        ['- id: weather-mcp', '  transport: http', '  url: http://localhost:3300/mcp'].join('\n'),
         'utf8'
       );
       writeFileSync(
         join(dir, 'agents.yaml'),
-        [
-          '- id: claude-sonnet-46',
-          '  provider: anthropic',
-          '  model: claude-sonnet-4-6'
-        ].join('\n'),
+        ['- id: claude-sonnet-46', '  provider: anthropic', '  model: claude-sonnet-4-6'].join(
+          '\n'
+        ),
         'utf8'
       );
       const configPath = join(dir, 'refs.yaml');

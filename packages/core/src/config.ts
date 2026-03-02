@@ -216,9 +216,10 @@ function resolveReferences(
   };
 }
 
-export function normalizeSourceConfig(
-  sourceConfig: SourceEvalConfig
-): { config: SourceEvalConfig; warnings: string[] } {
+export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
+  config: SourceEvalConfig;
+  warnings: string[];
+} {
   const warnings: string[] = [];
   const sourceConfigRecord = sourceConfig as unknown as Record<string, unknown>;
   if ('server_refs' in sourceConfigRecord) {
@@ -228,7 +229,9 @@ export function normalizeSourceConfig(
     throw new Error('Invalid config: agent_refs is not supported; use agents[{ ref: "<id>" }]');
   }
   if ('scenario_refs' in sourceConfigRecord) {
-    throw new Error('Invalid config: scenario_refs is not supported; use scenarios[{ ref: "<id>" }]');
+    throw new Error(
+      'Invalid config: scenario_refs is not supported; use scenarios[{ ref: "<id>" }]'
+    );
   }
   const legacyPinnedAgents = new Set<string>();
   const rawServers = (sourceConfig as { servers?: unknown }).servers;
@@ -266,7 +269,10 @@ export function normalizeSourceConfig(
     for (const [name, server] of Object.entries(legacyInlineServers)) {
       normalizedServers.push({
         id: name,
-        name: typeof (server as { name?: unknown }).name === 'string' ? String((server as { name?: unknown }).name) : undefined,
+        name:
+          typeof (server as { name?: unknown }).name === 'string'
+            ? String((server as { name?: unknown }).name)
+            : undefined,
         transport: server.transport,
         url: server.url,
         auth: server.auth
@@ -314,7 +320,10 @@ export function normalizeSourceConfig(
     for (const [name, agent] of Object.entries(legacyInlineAgents)) {
       normalizedAgents.push({
         id: name,
-        name: typeof (agent as { name?: unknown }).name === 'string' ? String((agent as { name?: unknown }).name) : undefined,
+        name:
+          typeof (agent as { name?: unknown }).name === 'string'
+            ? String((agent as { name?: unknown }).name)
+            : undefined,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
@@ -437,7 +446,9 @@ function readYaml<T>(path: string, fallback: T): T {
   }
 }
 
-export function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['servers'][string]> {
+export function normalizeLibraryServers(
+  raw: unknown
+): Record<string, EvalConfig['servers'][string]> {
   const out: Record<string, EvalConfig['servers'][string]> = {};
   if (Array.isArray(raw)) {
     for (const entry of raw) {
@@ -577,8 +588,8 @@ export function expandConfigForAgents(
       `Unknown agents: ${missing.join(', ')}. Available: ${Object.keys(config.agents).join(', ')}`
     );
   }
-  const inlineScenarios = config.scenarios.filter((scenario): scenario is Scenario =>
-    !isScenarioRefEntry(scenario)
+  const inlineScenarios = config.scenarios.filter(
+    (scenario): scenario is Scenario => !isScenarioRefEntry(scenario)
   );
   if (inlineScenarios.length !== config.scenarios.length) {
     throw new Error('Config contains unresolved scenario refs; resolve config before expansion');
