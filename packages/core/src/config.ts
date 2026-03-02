@@ -33,7 +33,7 @@ export function loadConfig(
   if (!sourceConfig || typeof sourceConfig !== 'object') {
     throw new Error('Invalid config: expected object');
   }
-  const { config: normalizedSource, warnings } = normalizeConfig(sourceConfig);
+  const { config: normalizedSource, warnings } = normalizeSourceConfig(sourceConfig);
   const config = resolveReferences(normalizedSource, path, options?.bundleRoot);
   const hash = createHash('sha256').update(stableStringify(config)).digest('hex');
   return { config, sourceConfig: normalizedSource, hash, raw, warnings };
@@ -216,7 +216,7 @@ function resolveReferences(
   };
 }
 
-function normalizeConfig(
+export function normalizeSourceConfig(
   sourceConfig: SourceEvalConfig
 ): { config: SourceEvalConfig; warnings: string[] } {
   const warnings: string[] = [];
@@ -437,7 +437,7 @@ function readYaml<T>(path: string, fallback: T): T {
   }
 }
 
-function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['servers'][string]> {
+export function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['servers'][string]> {
   const out: Record<string, EvalConfig['servers'][string]> = {};
   if (Array.isArray(raw)) {
     for (const entry of raw) {
@@ -475,7 +475,7 @@ function normalizeLibraryServers(raw: unknown): Record<string, EvalConfig['serve
   return out;
 }
 
-function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents'][string]> {
+export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents'][string]> {
   const out: Record<string, EvalConfig['agents'][string]> = {};
   if (Array.isArray(raw)) {
     for (const entry of raw) {

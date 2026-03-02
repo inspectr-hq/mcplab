@@ -2,7 +2,7 @@ import { basename, extname, join } from 'node:path';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import type { SourceEvalConfig } from '@inspectr/mcplab-core';
-import { loadConfig } from '@inspectr/mcplab-core';
+import { loadConfig, normalizeSourceConfig } from '@inspectr/mcplab-core';
 import { encodeEvalId, ensureInsideRoot } from './store-utils.js';
 
 export interface ConfigRecord {
@@ -54,58 +54,7 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
     const raw = readFileSync(absPath, 'utf8');
     const parsed = parseYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptySourceConfig();
-    const obj = parsed as Record<string, unknown>;
-    return {
-      name: typeof obj.name === 'string' ? obj.name : undefined,
-      servers:
-        Array.isArray(obj.servers)
-          ? (obj.servers as SourceEvalConfig['servers'])
-          : obj.servers && typeof obj.servers === 'object'
-            ? Object.entries(obj.servers as Record<string, Record<string, unknown>>).map(
-                ([name, server]) => ({
-                  id: name,
-                  transport: String(server.transport ?? 'http') as 'http',
-                  url: String(server.url ?? ''),
-                  auth:
-                    server.auth && typeof server.auth === 'object'
-                      ? (server.auth as SourceEvalConfig['servers'][number] extends infer S
-                          ? S extends { auth?: infer A }
-                            ? A
-                            : never
-                          : never)
-                      : undefined
-                })
-              )
-            : [],
-      agents:
-        Array.isArray(obj.agents)
-          ? (obj.agents as SourceEvalConfig['agents'])
-          : obj.agents && typeof obj.agents === 'object'
-            ? Object.entries(obj.agents as Record<string, Record<string, unknown>>).map(
-                ([name, agent]) => ({
-                  id: name,
-                  provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
-                  model: String(agent.model ?? ''),
-                  temperature:
-                    typeof agent.temperature === 'number' ? agent.temperature : undefined,
-                  max_tokens:
-                    typeof agent.max_tokens === 'number' ? agent.max_tokens : undefined,
-                  system: typeof agent.system === 'string' ? agent.system : undefined
-                })
-              )
-            : [],
-      scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as SourceEvalConfig['scenarios']) : [],
-      run_defaults:
-        obj.run_defaults && typeof obj.run_defaults === 'object' && !Array.isArray(obj.run_defaults)
-          ? (obj.run_defaults as SourceEvalConfig['run_defaults'])
-          : undefined,
-      snapshot_eval:
-        obj.snapshot_eval &&
-        typeof obj.snapshot_eval === 'object' &&
-        !Array.isArray(obj.snapshot_eval)
-          ? (obj.snapshot_eval as SourceEvalConfig['snapshot_eval'])
-          : undefined
-    };
+    return normalizeSourceConfig(parsed as SourceEvalConfig).config;
   } catch {
     return emptySourceConfig();
   }

@@ -2,49 +2,8 @@ import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { loadConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
+import { loadConfig, normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
-
-function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConfig {
-  const rawServers = (config as { servers?: unknown }).servers;
-  const servers = Array.isArray(rawServers)
-    ? [...rawServers]
-    : rawServers && typeof rawServers === 'object'
-      ? Object.entries(rawServers as Record<string, Record<string, unknown>>).map(([name, server]) => ({
-          id: name,
-          transport: String(server.transport ?? 'http') as 'http',
-          url: String(server.url ?? ''),
-          auth:
-            server.auth && typeof server.auth === 'object'
-              ? (server.auth as SourceEvalConfig['servers'][number] extends infer S
-                  ? S extends { auth?: infer A }
-                    ? A
-                    : never
-                  : never)
-              : undefined
-        }))
-      : [];
-  const rawAgents = (config as { agents?: unknown }).agents;
-  const agents = Array.isArray(rawAgents)
-    ? [...rawAgents]
-    : rawAgents && typeof rawAgents === 'object'
-      ? Object.entries(rawAgents as Record<string, Record<string, unknown>>).map(([name, agent]) => ({
-          id: name,
-          provider: String(agent.provider ?? 'openai') as 'openai' | 'anthropic' | 'azure_openai',
-          model: String(agent.model ?? ''),
-          temperature: typeof agent.temperature === 'number' ? agent.temperature : undefined,
-          max_tokens: typeof agent.max_tokens === 'number' ? agent.max_tokens : undefined,
-          system: typeof agent.system === 'string' ? agent.system : undefined
-        }))
-      : [];
-  const scenarios = Array.isArray(config.scenarios) ? [...config.scenarios] : [];
-  return {
-    ...config,
-    servers,
-    agents,
-    scenarios
-  };
-}
 
 export type EvalsRouteDeps = Pick<
   AppRouteDeps,
@@ -100,7 +59,14 @@ export async function handleEvalsRoutes(params: {
       );
       suffix += 1;
     }
-    writeFileSync(filePath, `${stringifyYaml(normalizeSourceConfigForWrite(config))}\n`, 'utf8');
+    let normalizedConfig: SourceEvalConfig;
+    try {
+      normalizedConfig = normalizeSourceConfig(config).config;
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    writeFileSync(filePath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
     asJson(res, 201, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
@@ -187,7 +153,14 @@ export async function handleEvalsRoutes(params: {
         targetPath = uniquePath;
       }
     }
-    writeFileSync(targetPath, `${stringifyYaml(normalizeSourceConfigForWrite(config))}\n`, 'utf8');
+    let normalizedConfig: SourceEvalConfig;
+    try {
+      normalizedConfig = normalizeSourceConfig(config).config;
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    writeFileSync(targetPath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
     asJson(res, 200, readConfigRecord(targetPath, settings.evalsDir, settings.librariesDir));
     return true;
   }
