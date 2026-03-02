@@ -250,8 +250,13 @@ function resolveReferences(
     scenario.servers = resolvedIds;
   }
 
-  // Merge scenario server union into resolvedServers
+  // Merge scenario server union into resolvedServers (conflict check against legacy top-level pool)
   for (const [id, cfg] of Object.entries(scenarioServerUnion)) {
+    if (resolvedServers[id] && stableStringify(resolvedServers[id]) !== stableStringify(cfg)) {
+      throw new Error(
+        `Conflicting server definition for id "${id}": top-level servers and mcp_servers define it differently`
+      );
+    }
     resolvedServers[id] = cfg;
   }
 

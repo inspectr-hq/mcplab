@@ -504,6 +504,13 @@ program
           }: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
         )
       );
+      if (!options.testCasesDir) {
+        console.log(
+          kleur.yellow(
+            'Note: if referenced test-cases still use legacy servers: [...], run with --test-cases-dir <path> to migrate them too.'
+          )
+        );
+      }
 
       if (options.testCasesDir) {
         const testCasesDir = resolve(String(options.testCasesDir));

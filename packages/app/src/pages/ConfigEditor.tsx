@@ -471,46 +471,11 @@ const ConfigEditor = () => {
   const importScenarioFromLibrary = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
-    const nextServerEntries = [...serverEntries];
-
-    const mappedServerIds: string[] = [];
-    for (const templateServerId of template.serverIds) {
-      const existingRef = nextServerEntries.find(
-        (entry): entry is Extract<ServerEntry, { kind: "referenced" }> =>
-          entry.kind === "referenced" && entry.ref === templateServerId
-      );
-      if (existingRef) {
-        mappedServerIds.push(existingRef.ref);
-        continue;
-      }
-
-      const templateServer = libServers.find((item) => item.id === templateServerId);
-      if (!templateServer) continue;
-      const templateServerName = templateServer.name || templateServer.id;
-      const existingInlineServer = nextServerEntries.find(
-        (entry): entry is Extract<ServerEntry, { kind: "inline" }> =>
-          entry.kind === "inline" &&
-          (entry.server.id === templateServer.id || (entry.server.name || entry.server.id) === templateServerName)
-      );
-      if (existingInlineServer) {
-        mappedServerIds.push(existingInlineServer.server.id);
-        continue;
-      }
-      const imported = {
-        ...structuredClone(templateServer),
-        id: `srv-${Date.now()}-${mappedServerIds.length}`
-      };
-      nextServerEntries.push({ kind: "inline", server: imported });
-      mappedServerIds.push(imported.id);
-    }
-
     const importedScenario = {
       ...structuredClone(template),
       id: `scn-${Date.now()}`,
-      serverIds: mappedServerIds.length > 0 ? mappedServerIds : []
+      serverIds: [...template.serverIds]
     };
-
-    setServerEntries(nextServerEntries);
     setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
     setExpandedInlineScenarioIds((prev) => ({ ...prev, [importedScenario.id]: true }));
     setSelectedLibraryScenarioId("");
@@ -588,39 +553,11 @@ const ConfigEditor = () => {
       suffix += 1;
     }
     const createdAt = Date.now();
-    const nextServerEntries = [...serverEntries];
-    const mappedServerIds: string[] = [];
-    for (const templateServerId of template.serverIds) {
-      const existingRef = nextServerEntries.find(
-        (item): item is Extract<ServerEntry, { kind: "referenced" }> =>
-          item.kind === "referenced" && item.ref === templateServerId
-      );
-      if (existingRef) {
-        mappedServerIds.push(existingRef.ref);
-        continue;
-      }
-      const templateServer = libServers.find((item) => item.id === templateServerId);
-      if (!templateServer) continue;
-      const templateServerName = templateServer.name || templateServer.id;
-      const existingInlineServer = nextServerEntries.find(
-        (item): item is Extract<ServerEntry, { kind: "inline" }> =>
-          item.kind === "inline" &&
-          (item.server.id === templateServer.id || (item.server.name || item.server.id) === templateServerName)
-      );
-      if (existingInlineServer) {
-        mappedServerIds.push(existingInlineServer.server.id);
-        continue;
-      }
-      const imported = { ...structuredClone(templateServer), id: `srv-${createdAt}-${mappedServerIds.length}` };
-      nextServerEntries.push({ kind: "inline", server: imported });
-      mappedServerIds.push(imported.id);
-    }
-    setServerEntries(nextServerEntries);
     const inlineCopy: Scenario = {
       ...structuredClone(template),
       id: `scn-${createdAt}`,
       name: nextName,
-      serverIds: mappedServerIds,
+      serverIds: [...template.serverIds],
     };
     const nextEntries = [...scenarioEntries];
     nextEntries[index] = { kind: "inline", scenario: inlineCopy };

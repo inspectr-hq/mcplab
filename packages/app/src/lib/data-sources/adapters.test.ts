@@ -443,7 +443,10 @@ describe('config adapters round-trip', () => {
           {
             id: 'scn-inline',
             name: 'Inline Scenario',
-            servers: ['weather-mcp', 'inline-mcp'],
+            mcp_servers: [
+              { ref: 'weather-mcp' },
+              { id: 'inline-mcp', name: 'Inline MCP', transport: 'http', url: 'http://localhost:3011/mcp' }
+            ],
             prompt: 'Check latest weather alerts',
             eval: {
               tool_constraints: {

@@ -140,7 +140,32 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         if (Array.isArray(mcpServers)) {
           return mcpServers.flatMap((entry: Record<string, unknown>) => {
             if ('ref' in entry && entry.ref) return [String(entry.ref)];
-            if ('id' in entry && entry.id) return [String(entry.id)];
+            if ('id' in entry && entry.id) {
+              const id = String(entry.id);
+              // Register inline mcp_servers entry in the server pool so it survives round-trips
+              if (!serverIdByName.has(id)) {
+                serverIdByName.set(id, id);
+                const authType: 'none' | 'bearer' | 'oauth2' =
+                  (entry.auth as Record<string, unknown>)?.type === 'bearer' ? 'bearer'
+                  : (entry.auth as Record<string, unknown>)?.type === 'oauth_authorization_code' ? 'oauth2'
+                  : 'none';
+                const auth = entry.auth as Record<string, unknown> | undefined;
+                servers.push({
+                  id,
+                  name: String(entry.name || id),
+                  transport: 'streamable-http' as const,
+                  url: String(entry.url || ''),
+                  authType,
+                  authValue: auth?.type === 'bearer' ? String(auth.env || '') : undefined,
+                  oauthClientId: auth?.type === 'oauth_authorization_code' ? String(auth.client_id || '') : undefined,
+                  oauthClientSecret: auth?.type === 'oauth_authorization_code' ? String(auth.client_secret || '') : undefined,
+                  oauthRedirectUrl: auth?.type === 'oauth_authorization_code' ? String(auth.redirect_url || '') : undefined,
+                  oauthScope: auth?.type === 'oauth_authorization_code' ? String(auth.scope || '') : undefined,
+                });
+                mixedServerEntries.push({ kind: 'inline', server: servers[servers.length - 1] });
+              }
+              return [id];
+            }
             return [];
           });
         }
@@ -244,23 +269,24 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 
   const mapInlineServer = (server: EvalConfig['servers'][number]) => {
     const sourceId = server.id;
+    const auth =
+      server.authType === 'bearer'
+        ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+        : server.authType === 'oauth2'
+        ? {
+            type: 'oauth_authorization_code' as const,
+            client_id: server.oauthClientId || '',
+            client_secret: server.oauthClientSecret || undefined,
+            redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+            scope: server.oauthScope || undefined
+          }
+        : undefined;
     return {
       id: sourceId,
       ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
       transport: 'http',
       url: server.url || 'http://localhost:3000/mcp',
-      auth:
-        server.authType === 'bearer'
-          ? { type: 'bearer', env: server.authValue || 'MCP_TOKEN' }
-          : server.authType === 'oauth2'
-          ? {
-              type: 'oauth_authorization_code',
-              client_id: server.oauthClientId || '',
-              client_secret: server.oauthClientSecret || undefined,
-              redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
-              scope: server.oauthScope || undefined
-            }
-          : undefined
+      ...(auth !== undefined ? { auth } : {})
     } satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
   };
   const mixedServerEntries =
@@ -268,6 +294,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       ? config.serverEntries
       : [...config.servers.map((server) => ({ kind: 'inline' as const, server }))];
   const seenServerRefs = new Set<string>();
+  const inlineServerById = new Map<string, ReturnType<typeof mapInlineServer>>();
   const servers = mixedServerEntries.flatMap((entry) => {
     if (entry.kind === 'referenced') {
       const ref = String(entry.ref || '').trim();
@@ -278,6 +305,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     }
     const mapped = mapInlineServer(entry.server);
     serverNameById.set(entry.server.id, mapped.id);
+    inlineServerById.set(mapped.id, mapped);
     return [mapped];
   });
 
@@ -329,7 +357,11 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       id: scenario.id,
       name: scenario.name || undefined,
       mcp_servers: scenario.serverIds.length > 0
-        ? scenario.serverIds.map((id) => ({ ref: serverNameById.get(id) ?? id }))
+        ? scenario.serverIds.map((id) => {
+            const resolvedId = serverNameById.get(id) ?? id;
+            const inline = inlineServerById.get(resolvedId);
+            return inline ?? { ref: resolvedId };
+          })
         : undefined,
       prompt: scenario.prompt,
       ...(scenario.snapshotEval
