@@ -31,7 +31,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const sourceServerEntries = Array.isArray(record.config.servers) ? record.config.servers : [];
   const sourceAgentEntries = Array.isArray(record.config.agents) ? record.config.agents : [];
   const serverIdByName = new Map<string, string>();
-  const agentIdByName = new Map<string, string>();
   const servers: EvalConfig['servers'] = [];
   const mixedServerEntries: ServerEntry[] = [];
   for (const entry of sourceServerEntries) {
@@ -72,20 +71,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     servers.push(mappedServer);
     mixedServerEntries.push({ kind: 'inline', server: mappedServer });
   }
-  const normalizedServerRefs = (record.config.server_refs ?? [])
-    .map((ref) => String(ref).trim())
-    .filter(Boolean);
-  const serverRefs = Array.from(new Set([
-    ...mixedServerEntries
-      .filter((entry): entry is Extract<ServerEntry, { kind: 'referenced' }> => entry.kind === 'referenced')
-      .map((entry) => entry.ref),
-    ...normalizedServerRefs
-  ]));
-  for (const ref of normalizedServerRefs) {
-    const exists = mixedServerEntries.some((entry) => entry.kind === 'referenced' && entry.ref === ref);
-    if (!exists) mixedServerEntries.push({ kind: 'referenced', ref });
-  }
-
   const agents: EvalConfig['agents'] = [];
   const mixedAgentEntries: AgentEntry[] = [];
   for (const entry of sourceAgentEntries) {
@@ -98,7 +83,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
-    agentIdByName.set(inlineId, id);
     const provider: 'openai' | 'anthropic' | 'azure' =
       entry.provider === 'azure_openai' ? 'azure' : entry.provider;
     const mappedAgent = {
@@ -113,29 +97,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     agents.push(mappedAgent);
     mixedAgentEntries.push({ kind: 'inline', agent: mappedAgent });
   }
-  const normalizedAgentRefs = (record.config.agent_refs ?? [])
-    .map((ref) => String(ref).trim())
-    .filter(Boolean);
-  const agentRefs = Array.from(new Set([
-    ...mixedAgentEntries
-      .filter((entry): entry is Extract<AgentEntry, { kind: 'referenced' }> => entry.kind === 'referenced')
-      .map((entry) => entry.ref),
-    ...normalizedAgentRefs
-  ]));
-  for (const ref of normalizedAgentRefs) {
-    const exists = mixedAgentEntries.some((entry) => entry.kind === 'referenced' && entry.ref === ref);
-    if (!exists) mixedAgentEntries.push({ kind: 'referenced', ref });
-  }
-
   const inlineScenarios: EvalConfig['scenarios'] = [];
-  const scenarioRefs: string[] = [];
   const scenarioEntries: ScenarioEntry[] = [];
 
   record.config.scenarios.forEach((scenario, index) => {
     if ('ref' in scenario) {
       const ref = String(scenario.ref || '').trim();
       if (!ref) return;
-      scenarioRefs.push(ref);
       scenarioEntries.push({ kind: 'referenced', ref });
       return;
     }
@@ -192,14 +160,11 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     loadError: record.error,
     loadWarnings: record.warnings,
     servers,
-    serverRefs,
     serverEntries: mixedServerEntries,
     agents,
-    agentRefs,
     agentEntries: mixedAgentEntries,
     scenarios: inlineScenarios,
     scenarioEntries,
-    scenarioRefs: scenarioRefs.length > 0 ? scenarioRefs : record.config.scenario_refs ?? [],
     runDefaults:
       record.config.run_defaults?.selected_agents &&
       record.config.run_defaults.selected_agents.length > 0
@@ -288,7 +253,6 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const mixedServerEntries = config.serverEntries && config.serverEntries.length > 0
     ? config.serverEntries
     : [
-        ...(config.serverRefs ?? []).map((ref) => ({ kind: 'referenced' as const, ref })),
         ...config.servers.map((server) => ({ kind: 'inline' as const, server }))
       ];
   const seenServerRefs = new Set<string>();
@@ -297,6 +261,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       const ref = String(entry.ref || '').trim();
       if (!ref || seenServerRefs.has(ref)) return [];
       seenServerRefs.add(ref);
+      serverNameById.set(ref, ref);
       return [{ ref }];
     }
     const mapped = mapInlineServer(entry.server);
@@ -325,7 +290,6 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const mixedAgentEntries = config.agentEntries && config.agentEntries.length > 0
     ? config.agentEntries
     : [
-        ...(config.agentRefs ?? []).map((ref) => ({ kind: 'referenced' as const, ref })),
         ...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))
       ];
   const seenAgentRefs = new Set<string>();
@@ -355,14 +319,16 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       name: scenario.name || undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
-      snapshot_eval: scenario.snapshotEval
+      ...(scenario.snapshotEval
         ? {
-            enabled: scenario.snapshotEval.enabled,
-            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
-            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
-            last_updated_at: scenario.snapshotEval.lastUpdatedAt
+            snapshot_eval: {
+              enabled: scenario.snapshotEval.enabled,
+              baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+              baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+              last_updated_at: scenario.snapshotEval.lastUpdatedAt
+            }
           }
-        : undefined,
+        : {}),
       eval: {
         tool_constraints: {
           required_tools,
@@ -384,16 +350,13 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
         return mapInlineScenario(entry.scenario);
       })
     : [
-        ...(config.scenarioRefs ?? []).map((ref) => ({ ref })),
         ...config.scenarios.map((scenario) => mapInlineScenario(scenario))
       ]) as CoreSourceEvalConfig['scenarios'];
 
   return {
     name: config.configName?.trim() || undefined,
     servers,
-    server_refs: undefined,
     agents,
-    agent_refs: undefined,
     scenarios,
     run_defaults:
       config.runDefaults?.selectedAgentNames && config.runDefaults.selectedAgentNames.length > 0

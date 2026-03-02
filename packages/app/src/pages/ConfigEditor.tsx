@@ -28,13 +28,10 @@ const emptyConfig = (): EvalConfig => ({
   description: "",
   servers: [],
   serverEntries: [],
-  serverRefs: [],
   agents: [],
   agentEntries: [],
-  agentRefs: [],
   scenarios: [],
   scenarioEntries: [],
-  scenarioRefs: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -125,18 +122,12 @@ const ConfigEditor = () => {
 
   const serverEntries = useMemo<ServerEntry[]>(() => {
     if (config.serverEntries && config.serverEntries.length > 0) return config.serverEntries;
-    return [
-      ...(config.serverRefs ?? []).map((ref) => ({ kind: "referenced" as const, ref })),
-      ...config.servers.map((server) => ({ kind: "inline" as const, server }))
-    ];
-  }, [config.serverEntries, config.serverRefs, config.servers]);
+    return config.servers.map((server) => ({ kind: "inline" as const, server }));
+  }, [config.serverEntries, config.servers]);
 
   const setServerEntries = (entries: ServerEntry[]) => {
     patch({
       serverEntries: entries,
-      serverRefs: entries
-        .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
-        .map((entry) => entry.ref),
       servers: entries
         .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.server)
@@ -145,18 +136,12 @@ const ConfigEditor = () => {
 
   const scenarioEntries = useMemo<ScenarioEntry[]>(() => {
     if (config.scenarioEntries && config.scenarioEntries.length > 0) return config.scenarioEntries;
-    return [
-      ...(config.scenarioRefs ?? []).map((ref) => ({ kind: "referenced" as const, ref })),
-      ...config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }))
-    ];
-  }, [config.scenarioEntries, config.scenarioRefs, config.scenarios]);
+    return config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+  }, [config.scenarioEntries, config.scenarios]);
 
   const setScenarioEntries = (entries: ScenarioEntry[]) => {
     patch({
       scenarioEntries: entries,
-      scenarioRefs: entries
-        .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
-        .map((entry) => entry.ref),
       scenarios: entries
         .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.scenario)
@@ -165,18 +150,12 @@ const ConfigEditor = () => {
 
   const agentEntries = useMemo<AgentEntry[]>(() => {
     if (config.agentEntries && config.agentEntries.length > 0) return config.agentEntries;
-    return [
-      ...(config.agentRefs ?? []).map((ref) => ({ kind: "referenced" as const, ref })),
-      ...config.agents.map((agent) => ({ kind: "inline" as const, agent }))
-    ];
-  }, [config.agentEntries, config.agentRefs, config.agents]);
+    return config.agents.map((agent) => ({ kind: "inline" as const, agent }));
+  }, [config.agentEntries, config.agents]);
 
   const setAgentEntries = (entries: AgentEntry[]) => {
     patch({
       agentEntries: entries,
-      agentRefs: entries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
-        .map((entry) => entry.ref),
       agents: entries
         .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.agent)
@@ -254,13 +233,6 @@ const ConfigEditor = () => {
       toast({ title: "Validation Error", description: "Config ID is required.", variant: "destructive" });
       return;
     }
-    const normalizedServerRefs = serverEntries
-      .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
-      .map((entry) => entry.ref)
-      .map((ref) => {
-        const matched = libServers.find((item) => item.id === ref);
-        return matched?.id || ref;
-      });
     const normalizedServerEntries = serverEntries.map((entry) => {
       if (entry.kind === "referenced") {
         const matched = libServers.find((item) => item.id === entry.ref);
@@ -268,13 +240,6 @@ const ConfigEditor = () => {
       }
       return entry;
     });
-    const normalizedAgentRefs = agentEntries
-      .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
-      .map((entry) => entry.ref)
-      .map((ref) => {
-        const matched = libAgents.find((item) => item.id === ref);
-        return matched?.id || ref;
-      });
     const normalizedAgentEntries = agentEntries.map((entry) => {
       if (entry.kind === "referenced") {
         const matched = libAgents.find((item) => item.id === entry.ref);
@@ -283,16 +248,9 @@ const ConfigEditor = () => {
       return entry;
     });
 
-    const normalizedScenarioRefs = scenarioEntries
-      .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
-      .map((entry) => entry.ref)
-      .map((ref) => {
-        const matched = libScenarios.find((item) => item.id === ref || item.name === ref);
-        return matched?.id || ref;
-      });
     const normalizedScenarioEntries = scenarioEntries.map((entry) => {
       if (entry.kind === "referenced") {
-        const matched = libScenarios.find((item) => item.id === entry.ref || item.name === entry.ref);
+        const matched = libScenarios.find((item) => item.id === entry.ref);
         return { kind: "referenced" as const, ref: matched?.id || entry.ref };
       }
       return entry;
@@ -311,17 +269,14 @@ const ConfigEditor = () => {
     const nextConfig = {
       ...config,
       serverEntries: normalizedServerEntries,
-      serverRefs: normalizedServerRefs,
       servers: normalizedServerEntries
         .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.server),
       agentEntries: normalizedAgentEntries,
-      agentRefs: normalizedAgentRefs,
       agents: normalizedAgentEntries
         .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.agent),
       scenarioEntries: normalizedScenarioEntries,
-      scenarioRefs: normalizedScenarioRefs,
       scenarios: normalizedScenarioEntries
         .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
         .map((entry) => entry.scenario as Scenario),
@@ -330,12 +285,14 @@ const ConfigEditor = () => {
     if (isNew) {
       const created = await addConfig(nextConfig);
       setConfig(created);
-      toast({ title: "MCP Evaluation Created", description: `"${created.name}" has been saved.` });
+      const createdDisplayName = created.configName?.trim() || created.name;
+      toast({ title: "MCP Evaluation Created", description: `"${createdDisplayName}" has been saved.` });
       navigate(`/mcp-evaluations/${created.id}`);
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
-      toast({ title: "MCP Evaluation Updated", description: `"${updated.name}" has been updated.` });
+      const updatedDisplayName = updated.configName?.trim() || updated.name;
+      toast({ title: "MCP Evaluation Updated", description: `"${updatedDisplayName}" has been updated.` });
       setEditing(false);
       if (updated.id !== id) {
         navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
@@ -566,21 +523,36 @@ const ConfigEditor = () => {
   const importScenarioFromLibrary = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
-    const nextAgents = [...config.agents];
-    const nextServers = [...config.servers];
+    const nextServerEntries = [...serverEntries];
 
     const mappedServerIds: string[] = [];
     for (const templateServerId of template.serverIds) {
+      const existingRef = nextServerEntries.find(
+        (entry): entry is Extract<ServerEntry, { kind: "referenced" }> =>
+          entry.kind === "referenced" && entry.ref === templateServerId
+      );
+      if (existingRef) {
+        mappedServerIds.push(existingRef.ref);
+        continue;
+      }
+
       const templateServer = libServers.find((item) => item.id === templateServerId);
       if (!templateServer) continue;
       const templateServerName = templateServer.name || templateServer.id;
-      const existingServer = nextServers.find((item) => (item.name || item.id) === templateServerName);
-      if (existingServer) {
-        mappedServerIds.push(existingServer.id);
+      const existingInlineServer = nextServerEntries.find(
+        (entry): entry is Extract<ServerEntry, { kind: "inline" }> =>
+          entry.kind === "inline" &&
+          (entry.server.id === templateServer.id || (entry.server.name || entry.server.id) === templateServerName)
+      );
+      if (existingInlineServer) {
+        mappedServerIds.push(existingInlineServer.server.id);
         continue;
       }
-      const imported = { ...structuredClone(templateServer), id: `srv-${Date.now()}-${mappedServerIds.length}` };
-      nextServers.push(imported);
+      const imported = {
+        ...structuredClone(templateServer),
+        id: `srv-${Date.now()}-${mappedServerIds.length}`
+      };
+      nextServerEntries.push({ kind: "inline", server: imported });
       mappedServerIds.push(imported.id);
     }
 
@@ -590,10 +562,7 @@ const ConfigEditor = () => {
       serverIds: mappedServerIds.length > 0 ? mappedServerIds : []
     };
 
-    patch({
-      agents: nextAgents,
-      servers: nextServers
-    });
+    setServerEntries(nextServerEntries);
     setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
     setExpandedInlineScenarioIds((prev) => ({ ...prev, [importedScenario.id]: true }));
     setSelectedLibraryScenarioId("");
@@ -671,22 +640,34 @@ const ConfigEditor = () => {
       suffix += 1;
     }
     const createdAt = Date.now();
-    const nextServers = [...config.servers];
+    const nextServerEntries = [...serverEntries];
     const mappedServerIds: string[] = [];
     for (const templateServerId of template.serverIds) {
+      const existingRef = nextServerEntries.find(
+        (item): item is Extract<ServerEntry, { kind: "referenced" }> =>
+          item.kind === "referenced" && item.ref === templateServerId
+      );
+      if (existingRef) {
+        mappedServerIds.push(existingRef.ref);
+        continue;
+      }
       const templateServer = libServers.find((item) => item.id === templateServerId);
       if (!templateServer) continue;
       const templateServerName = templateServer.name || templateServer.id;
-      const existingServer = nextServers.find((item) => (item.name || item.id) === templateServerName);
-      if (existingServer) {
-        mappedServerIds.push(existingServer.id);
+      const existingInlineServer = nextServerEntries.find(
+        (item): item is Extract<ServerEntry, { kind: "inline" }> =>
+          item.kind === "inline" &&
+          (item.server.id === templateServer.id || (item.server.name || item.server.id) === templateServerName)
+      );
+      if (existingInlineServer) {
+        mappedServerIds.push(existingInlineServer.server.id);
         continue;
       }
       const imported = { ...structuredClone(templateServer), id: `srv-${createdAt}-${mappedServerIds.length}` };
-      nextServers.push(imported);
+      nextServerEntries.push({ kind: "inline", server: imported });
       mappedServerIds.push(imported.id);
     }
-    patch({ servers: nextServers });
+    setServerEntries(nextServerEntries);
     const inlineCopy: Scenario = {
       ...structuredClone(template),
       id: `scn-${createdAt}`,
@@ -705,7 +686,7 @@ const ConfigEditor = () => {
   const findLibraryAgentByRef = (ref: string) =>
     libAgents.find((item) => item.id === ref);
   const findLibraryScenarioByRef = (ref: string) =>
-    libScenarios.find((item) => item.id === ref || item.name === ref);
+    libScenarios.find((item) => item.id === ref);
   const referencedServerRefs = serverEntries
     .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
     .map((entry) => entry.ref);
@@ -1671,6 +1652,8 @@ const ConfigEditor = () => {
                       entry.kind === "inline"
                         ? entry.scenario.name?.trim() || entry.scenario.id
                         : referenceScenario?.name || entry.ref;
+                    const hasMissingInlineName =
+                      entry.kind === "inline" && !entry.scenario.name?.trim();
                     const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
                     const scenarioExpanded =
                       entry.kind === "inline" && Boolean(expandedInlineScenarioIds[entry.scenario.id]);
@@ -1707,6 +1690,7 @@ const ConfigEditor = () => {
                             <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
                               {entry.kind === "inline" ? "Inline" : "Referenced"}
                             </Badge>
+                            {hasMissingInlineName && <Badge variant="destructive">Name required</Badge>}
                             {isMissingRef && <Badge variant="destructive">Missing</Badge>}
                           </div>
                           <div className="flex items-center gap-1">

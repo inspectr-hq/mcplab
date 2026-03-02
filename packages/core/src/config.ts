@@ -185,13 +185,13 @@ function resolveReferences(
 
   const missingMessages: string[] = [];
   if (missingServerRefs.length > 0) {
-    missingMessages.push(`server_refs: ${missingServerRefs.join(', ')}`);
+    missingMessages.push(`servers refs: ${missingServerRefs.join(', ')}`);
   }
   if (missingAgentRefs.length > 0) {
-    missingMessages.push(`agent_refs: ${missingAgentRefs.join(', ')}`);
+    missingMessages.push(`agents refs: ${missingAgentRefs.join(', ')}`);
   }
   if (missingScenarioRefs.length > 0) {
-    missingMessages.push(`scenario_refs: ${missingScenarioRefs.join(', ')}`);
+    missingMessages.push(`scenarios refs: ${missingScenarioRefs.join(', ')}`);
   }
   const defaultAgents = sourceConfig.run_defaults?.selected_agents ?? [];
   const missingDefaultAgents = defaultAgents.filter((agent) => !resolvedAgents[agent]);
@@ -220,6 +220,16 @@ function normalizeConfig(
   sourceConfig: SourceEvalConfig
 ): { config: SourceEvalConfig; warnings: string[] } {
   const warnings: string[] = [];
+  const sourceConfigRecord = sourceConfig as unknown as Record<string, unknown>;
+  if ('server_refs' in sourceConfigRecord) {
+    throw new Error('Invalid config: server_refs is not supported; use servers[{ ref: "<id>" }]');
+  }
+  if ('agent_refs' in sourceConfigRecord) {
+    throw new Error('Invalid config: agent_refs is not supported; use agents[{ ref: "<id>" }]');
+  }
+  if ('scenario_refs' in sourceConfigRecord) {
+    throw new Error('Invalid config: scenario_refs is not supported; use scenarios[{ ref: "<id>" }]');
+  }
   const legacyPinnedAgents = new Set<string>();
   const rawServers = (sourceConfig as { servers?: unknown }).servers;
   const serversInput = Array.isArray(rawServers) ? rawServers : [];
@@ -351,50 +361,6 @@ function normalizeConfig(
     normalizedScenarios.push(nextScenario);
   }
 
-  const legacyServerRefs = Array.isArray(sourceConfig.server_refs)
-    ? sourceConfig.server_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  if (legacyServerRefs.length > 0) {
-    const existingRefs = new Set(
-      normalizedServers.filter(isServerRefEntry).map((entry) => entry.ref)
-    );
-    for (const ref of legacyServerRefs) {
-      if (existingRefs.has(ref)) continue;
-      normalizedServers.push({ ref });
-    }
-    warnings.push('Legacy server_refs was migrated into servers[{ref}] and will be removed on next save.');
-  }
-
-  const legacyAgentRefs = Array.isArray(sourceConfig.agent_refs)
-    ? sourceConfig.agent_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  if (legacyAgentRefs.length > 0) {
-    const existingRefs = new Set(
-      normalizedAgents.filter(isAgentRefEntry).map((entry) => entry.ref)
-    );
-    for (const ref of legacyAgentRefs) {
-      if (existingRefs.has(ref)) continue;
-      normalizedAgents.push({ ref });
-    }
-    warnings.push('Legacy agent_refs was migrated into agents[{ref}] and will be removed on next save.');
-  }
-
-  const legacyScenarioRefs = Array.isArray(sourceConfig.scenario_refs)
-    ? sourceConfig.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  if (legacyScenarioRefs.length > 0) {
-    const existingRefs = new Set(
-      normalizedScenarios.filter(isScenarioRefEntry).map((entry) => entry.ref)
-    );
-    for (const ref of legacyScenarioRefs) {
-      if (existingRefs.has(ref)) continue;
-      normalizedScenarios.push({ ref });
-    }
-    warnings.push(
-      'Legacy scenario_refs was migrated into scenarios[{ref}] and will be removed on next save.'
-    );
-  }
-
   const normalized: SourceEvalConfig = {
     ...sourceConfig,
     name:
@@ -402,11 +368,8 @@ function normalizeConfig(
         ? String((sourceConfig as { name?: unknown }).name).trim() || undefined
         : undefined,
     servers: normalizedServers,
-    server_refs: [],
     agents: normalizedAgents,
-    agent_refs: [],
-    scenarios: normalizedScenarios,
-    scenario_refs: []
+    scenarios: normalizedScenarios
   };
 
   if (!Array.isArray(normalized.servers)) {
@@ -417,15 +380,6 @@ function normalizeConfig(
   }
   if (!Array.isArray(normalized.scenarios)) {
     throw new Error('Invalid config: scenarios must be an array');
-  }
-  if (!Array.isArray(normalized.server_refs)) {
-    throw new Error('Invalid config: server_refs must be an array');
-  }
-  if (!Array.isArray(normalized.agent_refs)) {
-    throw new Error('Invalid config: agent_refs must be an array');
-  }
-  if (!Array.isArray(normalized.scenario_refs)) {
-    throw new Error('Invalid config: scenario_refs must be an array');
   }
   if (
     normalized.run_defaults &&

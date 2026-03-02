@@ -209,10 +209,6 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   }, [assistantAutoOpenNonce, consumedAutoOpenNonce]);
 
   useEffect(() => {
-    setExpanded(!readOnly);
-  }, [readOnly]);
-
-  useEffect(() => {
     setAvailableToolNames(null);
     setToolNamesError(null);
     setToolPickerValue("");

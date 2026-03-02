@@ -148,7 +148,7 @@ describe('loadConfig normalization', () => {
     }
   });
 
-  it('migrates legacy scenario_refs into scenarios ref entries with warning', () => {
+  it('rejects legacy scenario_refs field', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {
       const scenariosDir = join(dir, 'scenarios');
@@ -171,10 +171,7 @@ describe('loadConfig normalization', () => {
         'utf8'
       );
 
-      const { sourceConfig, warnings } = loadConfig(configPath);
-      expect(warnings.some((w) => w.includes('Legacy scenario_refs was migrated'))).toBe(true);
-      expect(sourceConfig.scenario_refs ?? []).toEqual([]);
-      expect(sourceConfig.scenarios).toEqual([{ ref: 'scn-weather' }]);
+      expect(() => loadConfig(configPath)).toThrow('scenario_refs is not supported');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -212,7 +209,7 @@ describe('loadConfig normalization', () => {
     }
   });
 
-  it('migrates legacy agent_refs into agents ref entries with warning', () => {
+  it('rejects legacy agent_refs field', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {
       writeFileSync(
@@ -233,16 +230,13 @@ describe('loadConfig normalization', () => {
         'utf8'
       );
 
-      const { sourceConfig, warnings } = loadConfig(configPath);
-      expect(warnings.some((w) => w.includes('Legacy agent_refs was migrated'))).toBe(true);
-      expect(sourceConfig.agent_refs ?? []).toEqual([]);
-      expect(sourceConfig.agents).toEqual([{ ref: 'claude-sonnet-46' }]);
+      expect(() => loadConfig(configPath)).toThrow('agent_refs is not supported');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('migrates legacy server_refs into servers ref entries with warning', () => {
+  it('rejects legacy server_refs field', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {
       writeFileSync(
@@ -263,10 +257,7 @@ describe('loadConfig normalization', () => {
         'utf8'
       );
 
-      const { sourceConfig, warnings } = loadConfig(configPath);
-      expect(warnings.some((w) => w.includes('Legacy server_refs was migrated'))).toBe(true);
-      expect(sourceConfig.server_refs ?? []).toEqual([]);
-      expect(sourceConfig.servers).toEqual([{ ref: 'Weather MCP' }]);
+      expect(() => loadConfig(configPath)).toThrow('server_refs is not supported');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

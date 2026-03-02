@@ -9,6 +9,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useConfigs } from "@/contexts/ConfigContext";
 import { toast } from "@/hooks/use-toast";
 
+const displayConfigName = (cfg: { configName?: string; name: string }) =>
+  cfg.configName?.trim() || cfg.name;
+
 const Configurations = () => {
   const { configs, deleteConfig, cloneConfig, loading, reload } = useConfigs();
   const navigate = useNavigate();
@@ -47,10 +50,10 @@ const Configurations = () => {
   };
 
   const agentCount = (cfg: (typeof configs)[number]) =>
-    (cfg.agents?.length ?? 0) + (cfg.agentRefs?.length ?? 0);
+    cfg.agentEntries?.length ?? cfg.agents?.length ?? 0;
 
   const scenarioCount = (cfg: (typeof configs)[number]) =>
-    (cfg.scenarios?.length ?? 0) + (cfg.scenarioRefs?.length ?? 0);
+    cfg.scenarioEntries?.length ?? cfg.scenarios?.length ?? 0;
 
   const sortedConfigs = useMemo(() => {
     const sorted = [...configs].sort((a, b) => {
@@ -195,4 +198,3 @@ const Configurations = () => {
 };
 
 export default Configurations;
-  const displayConfigName = (cfg: (typeof configs)[number]) => cfg.configName?.trim() || cfg.name;

@@ -44,11 +44,8 @@ function emptySourceConfig(): SourceEvalConfig {
   return {
     name: undefined,
     servers: [],
-    server_refs: [],
     agents: [],
-    agent_refs: [],
-    scenarios: [],
-    scenario_refs: []
+    scenarios: []
   };
 }
 
@@ -80,7 +77,6 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
                 })
               )
             : [],
-      server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
       agents:
         Array.isArray(obj.agents)
           ? (obj.agents as SourceEvalConfig['agents'])
@@ -98,11 +94,7 @@ function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
                 })
               )
             : [],
-      agent_refs: Array.isArray(obj.agent_refs) ? obj.agent_refs.map((v) => String(v)) : [],
       scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as SourceEvalConfig['scenarios']) : [],
-      scenario_refs: Array.isArray(obj.scenario_refs)
-        ? obj.scenario_refs.map((v) => String(v))
-        : [],
       run_defaults:
         obj.run_defaults && typeof obj.run_defaults === 'object' && !Array.isArray(obj.run_defaults)
           ? (obj.run_defaults as SourceEvalConfig['run_defaults'])

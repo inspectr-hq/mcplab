@@ -79,14 +79,11 @@ export interface EvalConfig {
   loadError?: string;
   loadWarnings?: string[];
   servers: ServerConfig[];
-  serverRefs?: string[];
   serverEntries?: ServerEntry[];
   agents: AgentConfig[];
-  agentRefs?: string[];
   agentEntries?: AgentEntry[];
   scenarios: Scenario[];
   scenarioEntries?: ScenarioEntry[];
-  scenarioRefs?: string[];
   runDefaults?: {
     selectedAgentNames?: string[];
   };

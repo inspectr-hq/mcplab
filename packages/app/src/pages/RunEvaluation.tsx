@@ -67,15 +67,19 @@ const RunEvaluation = () => {
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
     const byName = new Map<string, (typeof selectedConfig.agents)[number]>();
-    for (const agent of selectedConfig.agents) {
-      const key = agent.name || agent.id;
-      if (!byName.has(key)) byName.set(key, agent);
-    }
-    for (const ref of selectedConfig.agentRefs ?? []) {
-      if (byName.has(ref)) continue;
-      const fromLibrary = libraryAgents.find((agent) => (agent.name || agent.id) === ref);
-      if (fromLibrary) {
-        byName.set(ref, fromLibrary);
+    const entries =
+      selectedConfig.agentEntries && selectedConfig.agentEntries.length > 0
+        ? selectedConfig.agentEntries
+        : selectedConfig.agents.map((agent) => ({ kind: "inline" as const, agent }));
+    for (const entry of entries) {
+      if (entry.kind === "inline") {
+        const key = entry.agent.id;
+        if (!byName.has(key)) byName.set(key, entry.agent);
+        continue;
+      }
+      const fromLibrary = libraryAgents.find((agent) => agent.id === entry.ref);
+      if (fromLibrary && !byName.has(fromLibrary.id)) {
+        byName.set(fromLibrary.id, fromLibrary);
       }
     }
     return Array.from(byName.values());
@@ -83,13 +87,17 @@ const RunEvaluation = () => {
   const availableScenarios = useMemo(() => {
     if (!selectedConfig) return [];
     const byId = new Map<string, (typeof selectedConfig.scenarios)[number]>();
-    for (const scenario of selectedConfig.scenarios) {
-      if (!byId.has(scenario.id)) byId.set(scenario.id, scenario);
-    }
-    for (const ref of selectedConfig.scenarioRefs ?? []) {
-      if (byId.has(ref)) continue;
-      const fromLibrary = libraryScenarios.find((scenario) => scenario.id === ref || scenario.name === ref);
-      if (fromLibrary) byId.set(ref, fromLibrary);
+    const entries =
+      selectedConfig.scenarioEntries && selectedConfig.scenarioEntries.length > 0
+        ? selectedConfig.scenarioEntries
+        : selectedConfig.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+    for (const entry of entries) {
+      if (entry.kind === "inline") {
+        if (!byId.has(entry.scenario.id)) byId.set(entry.scenario.id, entry.scenario);
+        continue;
+      }
+      const fromLibrary = libraryScenarios.find((scenario) => scenario.id === entry.ref);
+      if (fromLibrary && !byId.has(fromLibrary.id)) byId.set(fromLibrary.id, fromLibrary);
     }
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
@@ -107,7 +115,7 @@ const RunEvaluation = () => {
     }
     const configuredDefaultAgentIds = availableAgents
       .filter((agent) =>
-        (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.name || agent.id)
+        (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.id)
       )
       .map((agent) => agent.id);
     setSelectedAgentIds(
@@ -161,10 +169,9 @@ const RunEvaluation = () => {
     setStopped(false);
     setRunId("");
     const compositionMode =
-      (selectedConfig.serverRefs?.length || 0) +
-        (selectedConfig.agentRefs?.length || 0) +
-        (selectedConfig.scenarioRefs?.length || 0) >
-      0
+      (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === "referenced") ||
+      (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === "referenced") ||
+      (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === "referenced")
         ? "refs-composed"
         : "single-file/inline";
     setLogs([
@@ -176,7 +183,7 @@ const RunEvaluation = () => {
       const { jobId } = await source.startRun({
         configPath: selectedConfig.sourcePath,
         runsPerScenario: Number(varianceRuns),
-        agents: selectedAgents.map((agent) => agent.name || agent.id),
+        agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
       });

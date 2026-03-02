@@ -410,7 +410,7 @@ program
 
 program
   .command('migrate-configs')
-  .description('Migrate eval YAML files to mixed list formats (agents/scenarios with inline + {ref})')
+  .description('Migrate eval YAML files to the canonical list-based format')
   .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
   .option('--dry-run', 'Preview migration without writing files')
   .action((options) => {
@@ -426,15 +426,6 @@ program
         const filePath = resolve(evalsDir, file);
         try {
           const { sourceConfig, warnings } = loadConfig(filePath, { bundleRoot });
-          const hadLegacyScenarioRefsWarning = warnings.some((warning) =>
-            warning.includes('Legacy scenario_refs was migrated')
-          );
-          const hadLegacyAgentRefsWarning = warnings.some((warning) =>
-            warning.includes('Legacy agent_refs was migrated')
-          );
-          const hadLegacyServerRefsWarning = warnings.some((warning) =>
-            warning.includes('Legacy server_refs was migrated')
-          );
           const hadLegacyServersMapWarning = warnings.some((warning) =>
             warning.includes('Legacy servers object map was migrated')
           );
@@ -447,23 +438,7 @@ program
               warning.includes('Legacy inline agent.name migrated')
           );
 
-          const hadLegacyScenarioRefsField =
-            Array.isArray((sourceConfig as { scenario_refs?: unknown }).scenario_refs) &&
-            ((sourceConfig as { scenario_refs?: unknown[] }).scenario_refs?.length ?? 0) > 0;
-          const hadLegacyAgentRefsField =
-            Array.isArray((sourceConfig as { agent_refs?: unknown }).agent_refs) &&
-            ((sourceConfig as { agent_refs?: unknown[] }).agent_refs?.length ?? 0) > 0;
-          const hadLegacyServerRefsField =
-            Array.isArray((sourceConfig as { server_refs?: unknown }).server_refs) &&
-            ((sourceConfig as { server_refs?: unknown[] }).server_refs?.length ?? 0) > 0;
-
           if (
-            !hadLegacyScenarioRefsWarning &&
-            !hadLegacyScenarioRefsField &&
-            !hadLegacyAgentRefsWarning &&
-            !hadLegacyAgentRefsField &&
-            !hadLegacyServerRefsWarning &&
-            !hadLegacyServerRefsField &&
             !hadLegacyServersMapWarning &&
             !hadLegacyAgentsMapWarning &&
             !hadLegacyInlineIdsWarning
@@ -474,18 +449,13 @@ program
           if (options.dryRun) {
             console.log(
               kleur.cyan(
-                `[dry-run] ${file}: would normalize scenarios list${warnings.length ? ` (${warnings.join(' | ')})` : ''}`
+                `[dry-run] ${file}: would normalize config format${warnings.length ? ` (${warnings.join(' | ')})` : ''}`
               )
             );
             migrated += 1;
             continue;
           }
-          const nextConfig: SourceEvalConfig = {
-            ...sourceConfig,
-            server_refs: undefined,
-            agent_refs: undefined,
-            scenario_refs: undefined
-          };
+          const nextConfig: SourceEvalConfig = { ...sourceConfig };
           writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
           migrated += 1;
           console.log(kleur.green(`Migrated: ${file}`));

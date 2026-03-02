@@ -24,20 +24,6 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
               : undefined
         }))
       : [];
-  const legacyServerRefs = Array.isArray(config.server_refs)
-    ? config.server_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  const existingServerRefs = new Set(
-    servers
-      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
-      .map((entry) => String(entry.ref).trim())
-      .filter(Boolean)
-  );
-  for (const ref of legacyServerRefs) {
-    if (existingServerRefs.has(ref)) continue;
-    servers.push({ ref });
-  }
-
   const rawAgents = (config as { agents?: unknown }).agents;
   const agents = Array.isArray(rawAgents)
     ? [...rawAgents]
@@ -51,42 +37,12 @@ function normalizeSourceConfigForWrite(config: SourceEvalConfig): SourceEvalConf
           system: typeof agent.system === 'string' ? agent.system : undefined
         }))
       : [];
-  const legacyAgentRefs = Array.isArray(config.agent_refs)
-    ? config.agent_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  const existingAgentRefs = new Set(
-    agents
-      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
-      .map((entry) => String(entry.ref).trim())
-      .filter(Boolean)
-  );
-  for (const ref of legacyAgentRefs) {
-    if (existingAgentRefs.has(ref)) continue;
-    agents.push({ ref });
-  }
-
   const scenarios = Array.isArray(config.scenarios) ? [...config.scenarios] : [];
-  const legacyRefs = Array.isArray(config.scenario_refs)
-    ? config.scenario_refs.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-  const existingRefs = new Set(
-    scenarios
-      .filter((entry): entry is { ref: string } => Boolean(entry && typeof entry === 'object' && 'ref' in entry))
-      .map((entry) => String(entry.ref).trim())
-      .filter(Boolean)
-  );
-  for (const ref of legacyRefs) {
-    if (existingRefs.has(ref)) continue;
-    scenarios.push({ ref });
-  }
   return {
     ...config,
     servers,
-    server_refs: undefined,
     agents,
-    agent_refs: undefined,
-    scenarios,
-    scenario_refs: undefined
+    scenarios
   };
 }
 
