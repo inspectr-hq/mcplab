@@ -258,7 +258,7 @@ function resolveReferences(
   // Legacy: validate that scenarios still using servers: string[] have all IDs resolvable
   for (const scenario of scenarios) {
     if (!scenario.mcp_servers) {
-      for (const id of scenario.servers) {
+      for (const id of scenario.servers ?? []) {
         if (!resolvedServers[id]) {
           throw new Error(
             `Scenario "${scenario.id}" references server "${id}" which is not defined in servers or mcp_servers`
