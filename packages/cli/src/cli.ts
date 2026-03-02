@@ -187,13 +187,6 @@ program
         console.log(formatSnapshotComparisonTable(comparison));
       }
 
-      // If multi-agent test, show comparison
-      if (resolvedOptions.agents || resolvedOptions.agentsAll) {
-        console.log(kleur.cyan(`\n📈 Run comparison script:`));
-        console.log(
-          kleur.gray(`   node scripts/compare-llm-results.mjs ${join(runDir, 'results.json')}`)
-        );
-      }
       if (shouldFailOnDrift) {
         console.error(kleur.red('Snapshot eval drift detected in fail_on_drift mode.'));
         process.exit(2);
