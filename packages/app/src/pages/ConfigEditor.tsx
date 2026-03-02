@@ -393,10 +393,10 @@ const ConfigEditor = () => {
     [libAgents]
   );
 
-  const toggleDefaultAgent = (agentName: string, checked: boolean) => {
+  const toggleDefaultAgent = (agentId: string, checked: boolean) => {
     const nextDefaults = checked
-      ? Array.from(new Set([...defaultRunAgentNames, agentName]))
-      : defaultRunAgentNames.filter((name) => name !== agentName);
+      ? Array.from(new Set([...defaultRunAgentNames, agentId]))
+      : defaultRunAgentNames.filter((name) => name !== agentId);
 
     patch({
       runDefaults: {
@@ -708,7 +708,6 @@ const ConfigEditor = () => {
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const inlineAgentEntries = agentEntries
     .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline");
-  const inlineAgents = inlineAgentEntries.map((entry) => entry.agent);
   const agentViewRows = agentEntries.flatMap((entry) => {
     if (entry.kind === "referenced") {
       const agent = findLibraryAgentByRef(entry.ref);
