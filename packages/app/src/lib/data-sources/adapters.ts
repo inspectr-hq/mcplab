@@ -130,7 +130,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
-      serverIds: scenario.servers
+      serverIds: (scenario.servers ?? [])
         .map((name) => serverIdByName.get(name))
         .filter(Boolean) as string[],
       prompt: scenario.prompt,
@@ -380,7 +380,7 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
   scenarios: CoreEvalConfig['scenarios'];
 } {
   const servers = Object.fromEntries(
-    input.servers.map((server) => [
+    (input.servers ?? []).map((server) => [
       server.id,
       {
         ...(server.name && server.name !== server.id ? { name: server.name } : {}),
