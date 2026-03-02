@@ -22,6 +22,10 @@ import { startAppServer } from './app-server/index.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
 import {
+  promptAppOptionsInteractive,
+  selectRunDirInteractive
+} from './interactive-helpers.js';
+import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
   compareRunToSnapshot,
@@ -582,10 +586,23 @@ program
 program
   .command('report')
   .description('Regenerate report.html from a previous run')
-  .requiredOption('--input <runDir>', 'Run directory containing results.json')
-  .action((options) => {
+  .option('--input <runDir>', 'Run directory containing results.json')
+  .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
+  .option('--interactive', 'Pick a run directory interactively')
+  .action(async (options) => {
     try {
-      const runDir = resolve(options.input);
+      const runDir = options.interactive
+        ? options.input
+          ? resolve(String(options.input))
+          : await selectRunDirInteractive({
+              runsDir: String(options.runsDir),
+              cwd: process.cwd()
+            })
+        : options.input
+        ? resolve(String(options.input))
+        : (() => {
+            throw new Error('input is required');
+          })();
       const resultsPath = join(runDir, 'results.json');
       const reportPath = join(runDir, 'report.html');
       const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
@@ -615,20 +632,41 @@ program
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
   .option('--dev', 'Proxy frontend requests to Vite dev server (API remains local)')
+  .option('--interactive', 'Prompt for host/port/paths before startup')
   .action(async (options) => {
     try {
-      const port = Number(options.port);
+      const resolvedAppOptions = options.interactive
+        ? await promptAppOptionsInteractive({
+            host: String(options.host),
+            port: String(options.port),
+            evalsDir: String(options.evalsDir),
+            runsDir: String(options.runsDir),
+            snapshotsDir: String(options.snapshotsDir),
+            toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
+            librariesDir: String(options.librariesDir)
+          })
+        : {
+            host: String(options.host),
+            port: String(options.port),
+            evalsDir: String(options.evalsDir),
+            runsDir: String(options.runsDir),
+            snapshotsDir: String(options.snapshotsDir),
+            toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
+            librariesDir: String(options.librariesDir)
+          };
+
+      const port = Number(resolvedAppOptions.port);
       if (Number.isNaN(port) || port <= 0) {
         throw new Error('Port must be a positive number');
       }
       await startAppServer({
-        host: options.host,
+        host: resolvedAppOptions.host,
         port,
-        evalsDir: resolve(options.evalsDir),
-        runsDir: resolve(options.runsDir),
-        snapshotsDir: resolve(options.snapshotsDir),
-        toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
-        librariesDir: resolve(options.librariesDir),
+        evalsDir: resolve(resolvedAppOptions.evalsDir),
+        runsDir: resolve(resolvedAppOptions.runsDir),
+        snapshotsDir: resolve(resolvedAppOptions.snapshotsDir),
+        toolAnalysisResultsDir: resolve(resolvedAppOptions.toolAnalysisResultsDir),
+        librariesDir: resolve(resolvedAppOptions.librariesDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)
       });
