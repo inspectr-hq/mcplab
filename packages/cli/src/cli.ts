@@ -48,6 +48,7 @@ program
     '--agents <agents>',
     'Comma-separated list of agents to test (runs each scenario with each agent)'
   )
+  .option('--agents-all', 'Run all configured agents for the selected scenarios')
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
@@ -59,11 +60,19 @@ program
         console.log(kleur.yellow(`⚠ ${warning}`));
       }
 
-      const requestedAgents = options.agents
+      const requestedAgentsFromCsv = options.agents
         ? options.agents
             .split(',')
             .map((a: string) => a.trim())
             .filter(Boolean)
+        : [];
+      if (options.agentsAll && requestedAgentsFromCsv.length > 0) {
+        throw new Error('Use either --agents or --agents-all, not both.');
+      }
+      const requestedAgents = options.agentsAll
+        ? Object.keys(config.agents)
+        : requestedAgentsFromCsv.length > 0
+        ? requestedAgentsFromCsv
         : undefined;
       const beforeExpandCount = config.scenarios.length;
       const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
