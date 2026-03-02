@@ -605,7 +605,7 @@ const ResultDetail = () => {
           sourceReply: assistantReply
         })
       );
-      navigate(`/libraries/scenarios/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
+      navigate(`/libraries/test-cases/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
     } catch (error: unknown) {
       toast({
         title: "Could not create handoff",
@@ -1230,15 +1230,19 @@ const ResultDetail = () => {
                                         </button>
                                       </CollapsibleTrigger>
                                       <CollapsibleContent>
-                                        <div className="flex flex-wrap gap-1">
-                                          {run.toolCalls.map((tc, i) => (
-                                            <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
-                                              <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                              {tc.name}
-                                              <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
-                                            </Badge>
-                                          ))}
-                                        </div>
+                                        {run.toolCalls.length === 0 ? (
+                                          <p className="text-xs text-muted-foreground">No tool calls captured for this run.</p>
+                                        ) : (
+                                          <div className="flex flex-wrap gap-1">
+                                            {run.toolCalls.map((tc, i) => (
+                                              <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
+                                                <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                                {tc.name}
+                                                <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        )}
                                       </CollapsibleContent>
                                     </div>
                                   </Collapsible>

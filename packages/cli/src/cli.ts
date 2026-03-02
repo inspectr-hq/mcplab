@@ -16,7 +16,6 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync } from 'node:child_process';
-import chokidar from 'chokidar';
 import { stringify as stringifyYaml } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import {
@@ -512,7 +511,7 @@ program
     'Directory for saved tool analysis reports',
     'mcplab/results/tool-analysis'
   )
-  .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
+  .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/test-cases', 'mcplab')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
@@ -539,100 +538,6 @@ program
       console.error(kleur.red(`Error: ${message}`));
       process.exit(1);
     }
-  });
-
-program
-  .command('watch')
-  .description('Watch config file and auto-rerun evaluations on changes')
-  .requiredOption('-c, --config <path>', 'Path to eval.yaml')
-  .option('-s, --scenario <id>', 'Run a single scenario')
-  .option('-n, --runs <count>', 'Variance runs', '1')
-  .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
-  .option('--debounce <ms>', 'Debounce delay in milliseconds', '500')
-  .action(async (options) => {
-    const configPath = resolve(options.config);
-    const runsPerScenario = Number(options.runs);
-    const debounceMs = Number(options.debounce);
-
-    if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
-      console.error(kleur.red('Error: Runs must be a positive number'));
-      process.exit(1);
-    }
-
-    console.log(kleur.cyan(`👀 Watching: ${configPath}`));
-    console.log(kleur.gray(`Press Ctrl+C to stop\n`));
-
-    let running = false;
-    let debounceTimer: NodeJS.Timeout | null = null;
-
-    const runEvaluation = async () => {
-      if (running) {
-        console.log(kleur.yellow('⏭️  Evaluation already running, skipping...'));
-        return;
-      }
-
-      running = true;
-      const timestamp = new Date().toLocaleTimeString();
-      console.log(kleur.cyan(`\n⚡ [${timestamp}] Running evaluation...`));
-
-      try {
-        const { config, hash } = loadConfig(configPath);
-        const expanded = expandConfigForAgents(config, config.run_defaults?.selected_agents);
-        const selected = selectScenarios(expanded, options.scenario);
-        const { runDir, results } = await runAll(selected, {
-          runsPerScenario,
-          scenarioId: options.scenario,
-          configHash: hash,
-          gitCommit: getGitCommit(),
-          cliVersion: pkgVersion,
-          runsDir: String(options.runsDir)
-        });
-        const reportPath = join(runDir, 'report.html');
-        writeFileSync(reportPath, renderReport(results), 'utf8');
-        console.log(kleur.green(`✅ Run completed: ${runDir}`));
-      } catch (err: any) {
-        const message = err?.message ?? String(err);
-        const hint = message.includes('fetch failed')
-          ? ' Hint: verify the MCP server is running, the SSE URL is correct, and any bearer token env var is set.'
-          : '';
-        console.error(kleur.red(`❌ Error: ${message}${hint}`));
-      } finally {
-        running = false;
-      }
-    };
-
-    // Initial run
-    await runEvaluation();
-
-    // Watch for changes
-    const watcher = chokidar.watch(configPath, {
-      persistent: true,
-      ignoreInitial: true,
-      awaitWriteFinish: {
-        stabilityThreshold: 100,
-        pollInterval: 50
-      }
-    });
-
-    watcher.on('change', () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
-      }
-      debounceTimer = setTimeout(() => {
-        runEvaluation();
-      }, debounceMs);
-    });
-
-    watcher.on('error', (error) => {
-      console.error(kleur.red(`Watcher error: ${error}`));
-    });
-
-    // Handle graceful shutdown
-    process.on('SIGINT', () => {
-      console.log(kleur.cyan('\n\n👋 Stopping watcher...'));
-      watcher.close();
-      process.exit(0);
-    });
   });
 
 program.parse();

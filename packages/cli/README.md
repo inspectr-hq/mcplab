@@ -745,7 +745,7 @@ npm run build
 # Run CLI directly with tsx (no build needed)
 npm run dev -- app --dev
 
-# Or run just the frontend in watch mode
+# Or run just the frontend dev server
 npm run app:dev:ui
 ```
 

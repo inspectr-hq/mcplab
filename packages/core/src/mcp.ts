@@ -194,15 +194,38 @@ export class McpClientManager {
 }
 
 function formatMcpError(prefix: string, url: string | undefined, err: any): string {
-  const message = err?.message ?? String(err);
+  const rawMessage = err?.message ?? String(err);
+  const message = sanitizeMcpTransportErrorMessage(rawMessage);
   const hints: string[] = [];
-  if (message.includes('fetch failed')) {
+  if (rawMessage.includes('fetch failed')) {
     hints.push('Verify the MCP server is running and reachable.');
     if (url) hints.push(`Check the URL: ${url}`);
     hints.push('If auth is required, confirm the bearer token env var is set.');
   }
   const hintText = hints.length > 0 ? ` Hints: ${hints.join(' ')}` : '';
   return `${prefix}. ${message}.${hintText}`;
+}
+
+export function sanitizeMcpTransportErrorMessage(message: string): string {
+  const normalized = message.replace(/\s+/g, ' ').trim();
+  const htmlLike = /<!doctype html|<html|<\/html>/i.test(normalized);
+
+  if (htmlLike) {
+    const titleMatch = normalized.match(/<title>([^<]+)<\/title>/i);
+    const title = titleMatch?.[1]?.trim();
+    const hostFromTitle = title?.split('|')[0]?.trim();
+    const statusMatch = title?.match(/\b(\d{3})\b/);
+    const status = statusMatch?.[1];
+
+    const summaryParts = ['streamable HTTP error'];
+    if (hostFromTitle) summaryParts.push(`from ${hostFromTitle}`);
+    if (status) summaryParts.push(`(HTTP ${status})`);
+    summaryParts.push('upstream returned an HTML error page');
+    return summaryParts.join(' ');
+  }
+
+  if (normalized.length <= 220) return normalized;
+  return `${normalized.slice(0, 217)}...`;
 }
 
 async function safeReadText(response: Response): Promise<string> {

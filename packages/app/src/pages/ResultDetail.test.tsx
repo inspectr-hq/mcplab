@@ -122,4 +122,25 @@ describe('ResultDetail conversation toggle', () => {
     });
     expect(screen.getAllByText('Here are the requested tags.').length).toBeGreaterThan(0);
   });
+
+  it('shows an explicit empty state when no tool calls are present', async () => {
+    const result = makeResult();
+    result.scenarios[0]!.runs[0]!.toolCalls = [];
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('No tool calls captured for this run.')).toBeInTheDocument();
+    });
+  });
 });

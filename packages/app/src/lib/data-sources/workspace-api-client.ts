@@ -107,6 +107,10 @@ export const workspaceApiClient = {
     request<MarkdownReportContent>(
       `/api/markdown-reports/content?path=${encodeURIComponent(path)}`
     ),
+  deleteMarkdownReport: (path: string) =>
+    request<{ ok: boolean }>(`/api/markdown-reports?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE'
+    }).then(() => undefined),
   getRun: (runId: string) =>
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   deleteRun: (runId: string) =>

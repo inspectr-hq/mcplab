@@ -25,8 +25,8 @@ import type { Scenario } from "@/types/eval";
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
 
-const ManageScenarios = () => {
-  const { scenarioId } = useParams<{ scenarioId?: string }>();
+const ManageTestCases = () => {
+  const { testCaseId } = useParams<{ testCaseId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { source } = useDataSource();
@@ -48,7 +48,7 @@ const ManageScenarios = () => {
   const latestDraftRef = useRef<Scenario | null>(null);
   const saveSeqRef = useRef(0);
 
-  const selectedScenarioId = scenarioId ? decodeURIComponent(scenarioId) : undefined;
+  const selectedScenarioId = testCaseId ? decodeURIComponent(testCaseId) : undefined;
   const selectedIndex = selectedScenarioId
     ? scenarios.findIndex((scenario) => scenario.id === selectedScenarioId)
     : -1;
@@ -128,8 +128,8 @@ const ManageScenarios = () => {
       extractRules: []
     };
     await setScenarios([...scenarios, nextScenario]);
-    navigate(`/libraries/scenarios/${encodeURIComponent(nextId)}`);
-    toast({ title: "Scenario created", description: `Opened ${nextId} for editing.` });
+    navigate(`/libraries/test-cases/${encodeURIComponent(nextId)}`);
+    toast({ title: "Test case created", description: `Opened ${nextId} for editing.` });
   };
 
   const buildUniqueScenarioId = (base: string) => {
@@ -156,9 +156,9 @@ const ManageScenarios = () => {
       name: scenarioToDuplicate.name ? `${scenarioToDuplicate.name} (Copy)` : "",
     };
     await setScenarios([...scenarios, duplicate]);
-    toast({ title: "Scenario duplicated", description: `Created ${duplicate.id}.` });
+    toast({ title: "Test case duplicated", description: `Created ${duplicate.id}.` });
     if (navigateToCopy) {
-      navigate(`/libraries/scenarios/${encodeURIComponent(duplicate.id)}`);
+      navigate(`/libraries/test-cases/${encodeURIComponent(duplicate.id)}`);
     }
   };
 
@@ -169,13 +169,13 @@ const ManageScenarios = () => {
     }
     const next = scenarios.filter((scenario) => scenario.id !== scenarioToDelete.id);
     await setScenarios(next);
-    toast({ title: "Scenario deleted", description: `${scenarioToDelete.id} was removed.` });
+    toast({ title: "Test case deleted", description: `${scenarioToDelete.id} was removed.` });
     if (selectedScenario?.id === scenarioToDelete.id) {
       setDraftScenario(null);
       latestDraftRef.current = null;
       setSaveStatus("idle");
       setSaveError("");
-      navigate("/libraries/scenarios");
+      navigate("/libraries/test-cases");
     }
   };
 
@@ -320,15 +320,15 @@ const ManageScenarios = () => {
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
             <FileCode className="h-6 w-6" />
-            Manage Scenarios
+            Manage Test Cases
           </h1>
           <p className="text-sm text-muted-foreground">
-            Reusable scenario templates shared across configurations.
+            Reusable test case templates shared across configurations.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {selectedScenario && (
-            <Button type="button" size="sm" variant="outline" onClick={() => navigate("/libraries/scenarios")}>
+            <Button type="button" size="sm" variant="outline" onClick={() => navigate("/libraries/test-cases")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Overview
             </Button>
@@ -340,7 +340,7 @@ const ManageScenarios = () => {
           {!selectedScenario && (
             <Button type="button" size="sm" onClick={() => void handleAddScenario()}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add Scenario
+              Add Test Case
             </Button>
           )}
         </div>
@@ -408,22 +408,22 @@ const ManageScenarios = () => {
           <Card>
           <CardContent className="space-y-3 pt-6">
             <div className="text-xs text-muted-foreground">
-              Showing {filteredScenarios.length} of {scenarios.length} scenario{scenarios.length !== 1 ? "s" : ""}.
+              Showing {filteredScenarios.length} of {scenarios.length} test case{scenarios.length !== 1 ? "s" : ""}.
             </div>
             {selectedScenarioId && !selectedScenario && (
               <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Scenario <code className="font-mono">{selectedScenarioId}</code> was not found.
+                Test case <code className="font-mono">{selectedScenarioId}</code> was not found.
               </div>
             )}
             {scenarios.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No library scenarios yet.</p>
+              <p className="text-sm text-muted-foreground">No library test cases yet.</p>
             ) : filteredScenarios.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No scenarios match the current filters.</p>
+              <p className="text-sm text-muted-foreground">No test cases match the current filters.</p>
             ) : (
               <div className="grid gap-3">
                 {filteredScenarios.map((scenario) => {
                   const isSelected = selectedScenarioId === scenario.id;
-                  const href = `/libraries/scenarios/${encodeURIComponent(scenario.id)}`;
+                  const href = `/libraries/test-cases/${encodeURIComponent(scenario.id)}`;
                   const serverNames = scenarioServerNames(scenario.serverIds);
                   return (
                     <div
@@ -497,7 +497,7 @@ const ManageScenarios = () => {
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <CardTitle className="text-base">Edit Scenario</CardTitle>
+                <CardTitle className="text-base">Edit Test Case</CardTitle>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -587,7 +587,7 @@ const ManageScenarios = () => {
       <AlertDialog open={Boolean(scenarioPendingDelete)} onOpenChange={(open) => !open && setScenarioPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete scenario?</AlertDialogTitle>
+            <AlertDialogTitle>Delete test case?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove{" "}
               <span className="font-medium">
@@ -606,7 +606,7 @@ const ManageScenarios = () => {
                 setScenarioPendingDelete(null);
               }}
             >
-              Delete Scenario
+              Delete Test Case
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -615,4 +615,4 @@ const ManageScenarios = () => {
   );
 };
 
-export default ManageScenarios;
+export default ManageTestCases;

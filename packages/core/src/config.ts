@@ -17,6 +17,9 @@ import type {
   SourceEvalConfig
 } from './types.js';
 
+const TEST_CASES_DIR = 'test-cases';
+const LEGACY_SCENARIOS_DIR = 'scenarios';
+
 export function loadConfig(
   path: string,
   options?: { bundleRoot?: string }
@@ -33,10 +36,21 @@ export function loadConfig(
   if (!sourceConfig || typeof sourceConfig !== 'object') {
     throw new Error('Invalid config: expected object');
   }
-  const { config: normalizedSource, warnings } = normalizeSourceConfig(sourceConfig);
-  const config = resolveReferences(normalizedSource, path, options?.bundleRoot);
+  const { config: normalizedSource, warnings: normalizeWarnings } =
+    normalizeSourceConfig(sourceConfig);
+  const { config, warnings: resolveWarnings } = resolveReferences(
+    normalizedSource,
+    path,
+    options?.bundleRoot
+  );
   const hash = createHash('sha256').update(stableStringify(config)).digest('hex');
-  return { config, sourceConfig: normalizedSource, hash, raw, warnings };
+  return {
+    config,
+    sourceConfig: normalizedSource,
+    hash,
+    raw,
+    warnings: [...normalizeWarnings, ...resolveWarnings]
+  };
 }
 
 export function selectScenarios<T extends { scenarios: Array<{ id: string }> }>(
@@ -55,17 +69,22 @@ function resolveReferences(
   sourceConfig: SourceEvalConfig,
   configPath: string,
   bundleRootOverride?: string
-): EvalConfig {
+): { config: EvalConfig; warnings: string[] } {
   const bundleRoot = bundleRootOverride
     ? resolve(bundleRootOverride)
     : detectBundleRoot(configPath);
+  const warnings: string[] = [];
   const libraryServers = normalizeLibraryServers(
     readYaml<unknown>(join(bundleRoot, 'servers.yaml'), {})
   );
   const libraryAgents = normalizeLibraryAgents(
     readYaml<unknown>(join(bundleRoot, 'agents.yaml'), {})
   );
-  const libraryScenarios = readScenarioLibrary(join(bundleRoot, 'scenarios'));
+  const resolvedScenarioLibrary = resolveScenarioLibraryDir(bundleRoot);
+  if (resolvedScenarioLibrary.usedLegacy) {
+    warnings.push("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+  }
+  const libraryScenarios = readScenarioLibrary(resolvedScenarioLibrary.path);
 
   const missingServerRefs: string[] = [];
   const resolvedServers: Record<string, EvalConfig['servers'][string]> = {};
@@ -209,10 +228,13 @@ function resolveReferences(
   }
 
   return {
-    ...sourceConfig,
-    servers: resolvedServers,
-    agents: resolvedAgents,
-    scenarios
+    config: {
+      ...sourceConfig,
+      servers: resolvedServers,
+      agents: resolvedAgents,
+      scenarios
+    },
+    warnings
   };
 }
 
@@ -547,6 +569,18 @@ function readScenarioLibrary(
     out[scenario.id] = scenario;
   }
   return out;
+}
+
+function resolveScenarioLibraryDir(bundleRoot: string): {
+  path: string;
+  usedLegacy: boolean;
+} {
+  const testCasesPath = join(bundleRoot, TEST_CASES_DIR);
+  if (existsSync(testCasesPath)) {
+    return { path: testCasesPath, usedLegacy: false };
+  }
+  const legacyScenariosPath = join(bundleRoot, LEGACY_SCENARIOS_DIR);
+  return { path: legacyScenariosPath, usedLegacy: existsSync(legacyScenariosPath) };
 }
 
 function detectBundleRoot(configPath: string): string {

@@ -710,6 +710,7 @@ export interface EvalDataSource {
   deleteToolAnalysisSavedResult: (id: string) => Promise<void>;
   listMarkdownReports: () => Promise<MarkdownReportSummary[]>;
   getMarkdownReport: (relativePath: string) => Promise<MarkdownReportContent>;
+  deleteMarkdownReport: (relativePath: string) => Promise<void>;
   createOAuthDebuggerSession: (
     config: OAuthDebuggerSessionConfig
   ) => Promise<{ sessionId: string; session: OAuthDebuggerSessionView }>;

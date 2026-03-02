@@ -37,7 +37,7 @@ const navSections = [
   {
     title: "Libraries",
     items: [
-      { title: "Scenarios", url: "/libraries/scenarios", icon: FileCode },
+      { title: "Test Cases", url: "/libraries/test-cases", icon: FileCode },
       { title: "Servers", url: "/libraries/servers", icon: Database },
       { title: "Agents", url: "/libraries/agents", icon: Bot },
     ]

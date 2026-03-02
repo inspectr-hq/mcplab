@@ -75,6 +75,9 @@ export const workspaceSource: EvalDataSource = {
   async getMarkdownReport(relativePath) {
     return workspaceApiClient.getMarkdownReport(relativePath);
   },
+  async deleteMarkdownReport(relativePath) {
+    await workspaceApiClient.deleteMarkdownReport(relativePath);
+  },
   async startRun(params) {
     return workspaceApiClient.startRun(params);
   },

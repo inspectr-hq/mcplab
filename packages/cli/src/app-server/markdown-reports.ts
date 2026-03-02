@@ -1,5 +1,5 @@
 import { basename, extname, relative, resolve, sep } from 'node:path';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
@@ -34,6 +34,45 @@ export async function handleMarkdownReportsRoutes(params: {
       exists: safeIsDirectory(root),
       items
     });
+    return true;
+  }
+
+  if (pathname === '/api/markdown-reports' && method === 'DELETE') {
+    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+    const pathParam = String(url.searchParams.get('path') ?? '').trim();
+    if (!pathParam) {
+      asJson(res, 400, { error: 'path is required' });
+      return true;
+    }
+    const root = resolveReportsRoot(settings);
+    let targetPath: string;
+    try {
+      targetPath = resolveReportPath(root, pathParam);
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
+    if (!isMarkdownExt(targetPath)) {
+      asJson(res, 400, { error: 'path must point to a .md or .markdown file' });
+      return true;
+    }
+    let st;
+    try {
+      st = statSync(targetPath);
+    } catch {
+      asJson(res, 404, { error: 'Report not found' });
+      return true;
+    }
+    if (!st.isFile()) {
+      asJson(res, 404, { error: 'Report not found' });
+      return true;
+    }
+    try {
+      unlinkSync(targetPath);
+      asJson(res, 200, { ok: true });
+    } catch (error) {
+      asJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+    }
     return true;
   }
 
