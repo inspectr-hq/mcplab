@@ -71,7 +71,7 @@ const capabilities = [
   {
     title: "Developer Experience",
     items: [
-      "Watch mode with auto-rerun",
+      "CI-friendly CLI for scheduled runs",
       "Snapshot regression detection",
       "Interactive HTML reports",
       "Multi-agent testing via CLI",
