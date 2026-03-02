@@ -478,4 +478,96 @@ describe('config adapters round-trip', () => {
     expect('agent_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
     expect('scenario_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
   });
+
+  it('round-trips oauth_client_credentials auth on top-level and scenario-owned inline servers', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-2',
+      name: 'oauth-cc-test',
+      path: '/tmp/oauth-cc-test.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-2',
+      config: {
+        servers: [
+          {
+            id: 'my-api',
+            name: 'My API',
+            transport: 'http',
+            url: 'http://localhost:3012/mcp',
+            auth: {
+              type: 'oauth_client_credentials',
+              token_url: 'https://auth.example.com/token',
+              client_id_env: 'MY_CLIENT_ID',
+              client_secret_env: 'MY_CLIENT_SECRET',
+              scope: 'read write',
+              audience: 'https://api.example.com'
+            }
+          }
+        ],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-cc',
+            name: 'OAuth CC Scenario',
+            mcp_servers: [
+              {
+                id: 'scoped-api',
+                name: 'Scoped API',
+                transport: 'http',
+                url: 'http://localhost:3013/mcp',
+                auth: {
+                  type: 'oauth_client_credentials',
+                  token_url: 'https://auth2.example.com/token',
+                  client_id_env: 'SCOPED_CLIENT_ID',
+                  client_secret_env: 'SCOPED_CLIENT_SECRET'
+                }
+              }
+            ],
+            prompt: 'test',
+            eval: { tool_constraints: { required_tools: [], forbidden_tools: [] }, response_assertions: [] },
+            extract: []
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+
+    // Both servers should round-trip with api-key authType
+    const topLevel = uiConfig.servers.find((s) => s.id === 'my-api');
+    expect(topLevel?.authType).toBe('api-key');
+    expect(topLevel?.oauthTokenUrl).toBe('https://auth.example.com/token');
+    expect(topLevel?.oauthClientIdEnv).toBe('MY_CLIENT_ID');
+    expect(topLevel?.oauthClientSecretEnv).toBe('MY_CLIENT_SECRET');
+    expect(topLevel?.oauthScope).toBe('read write');
+    expect(topLevel?.oauthAudience).toBe('https://api.example.com');
+
+    const scenarioOwned = uiConfig.servers.find((s) => s.id === 'scoped-api');
+    expect(scenarioOwned?.authType).toBe('api-key');
+    expect(scenarioOwned?.oauthTokenUrl).toBe('https://auth2.example.com/token');
+    expect(scenarioOwned?.oauthClientIdEnv).toBe('SCOPED_CLIENT_ID');
+    expect(scenarioOwned?.oauthClientSecretEnv).toBe('SCOPED_CLIENT_SECRET');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+
+    // Top-level server preserves oauth_client_credentials
+    const writtenTopLevel = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-api');
+    expect(writtenTopLevel?.auth).toEqual({
+      type: 'oauth_client_credentials',
+      token_url: 'https://auth.example.com/token',
+      client_id_env: 'MY_CLIENT_ID',
+      client_secret_env: 'MY_CLIENT_SECRET',
+      scope: 'read write',
+      audience: 'https://api.example.com'
+    });
+
+    // Scenario-owned inline server preserves oauth_client_credentials in mcp_servers
+    const writtenScenario = (roundTripped.scenarios as any[]).find((s: any) => s.id === 'scn-cc');
+    const writtenScopedApi = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'scoped-api');
+    expect(writtenScopedApi?.auth).toEqual({
+      type: 'oauth_client_credentials',
+      token_url: 'https://auth2.example.com/token',
+      client_id_env: 'SCOPED_CLIENT_ID',
+      client_secret_env: 'SCOPED_CLIENT_SECRET'
+    });
+  });
 });

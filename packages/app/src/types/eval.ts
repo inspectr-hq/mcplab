@@ -9,10 +9,16 @@ export interface ServerConfig {
   args?: string[];
   authType?: 'none' | 'bearer' | 'api-key' | 'oauth2';
   authValue?: string;
+  // oauth2 (authorization code) fields
   oauthClientId?: string;
   oauthClientSecret?: string;
   oauthRedirectUrl?: string;
   oauthScope?: string;
+  // api-key (oauth_client_credentials) fields
+  oauthTokenUrl?: string;
+  oauthClientIdEnv?: string;
+  oauthClientSecretEnv?: string;
+  oauthAudience?: string;
 }
 
 export type ServerEntry =

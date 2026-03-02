@@ -66,7 +66,20 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_secret : undefined,
       oauthRedirectUrl:
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.redirect_url : undefined,
-      oauthScope: entry.auth?.type === 'oauth_authorization_code' ? entry.auth.scope : undefined
+      oauthScope:
+        entry.auth?.type === 'oauth_authorization_code'
+          ? entry.auth.scope
+          : entry.auth?.type === 'oauth_client_credentials'
+          ? entry.auth.scope
+          : undefined,
+      oauthTokenUrl:
+        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.token_url : undefined,
+      oauthClientIdEnv:
+        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.client_id_env : undefined,
+      oauthClientSecretEnv:
+        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.client_secret_env : undefined,
+      oauthAudience:
+        entry.auth?.type === 'oauth_client_credentials' ? entry.auth.audience : undefined
     };
     servers.push(mappedServer);
     mixedServerEntries.push({ kind: 'inline', server: mappedServer });
@@ -145,11 +158,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
               // Register inline mcp_servers entry in the server pool so it survives round-trips
               if (!serverIdByName.has(id)) {
                 serverIdByName.set(id, id);
-                const authType: 'none' | 'bearer' | 'oauth2' =
-                  (entry.auth as Record<string, unknown>)?.type === 'bearer' ? 'bearer'
-                  : (entry.auth as Record<string, unknown>)?.type === 'oauth_authorization_code' ? 'oauth2'
-                  : 'none';
                 const auth = entry.auth as Record<string, unknown> | undefined;
+                const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
+                  auth?.type === 'bearer' ? 'bearer'
+                  : auth?.type === 'oauth_client_credentials' ? 'api-key'
+                  : auth?.type === 'oauth_authorization_code' ? 'oauth2'
+                  : 'none';
                 servers.push({
                   id,
                   name: String(entry.name || id),
@@ -160,7 +174,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                   oauthClientId: auth?.type === 'oauth_authorization_code' ? String(auth.client_id || '') : undefined,
                   oauthClientSecret: auth?.type === 'oauth_authorization_code' ? String(auth.client_secret || '') : undefined,
                   oauthRedirectUrl: auth?.type === 'oauth_authorization_code' ? String(auth.redirect_url || '') : undefined,
-                  oauthScope: auth?.type === 'oauth_authorization_code' ? String(auth.scope || '') : undefined,
+                  oauthScope: auth?.type === 'oauth_authorization_code' || auth?.type === 'oauth_client_credentials'
+                    ? String((auth.scope as string) || '') || undefined
+                    : undefined,
+                  oauthTokenUrl: auth?.type === 'oauth_client_credentials' ? String(auth.token_url || '') : undefined,
+                  oauthClientIdEnv: auth?.type === 'oauth_client_credentials' ? String(auth.client_id_env || '') : undefined,
+                  oauthClientSecretEnv: auth?.type === 'oauth_client_credentials' ? String(auth.client_secret_env || '') : undefined,
+                  oauthAudience: auth?.type === 'oauth_client_credentials' ? String(auth.audience || '') || undefined : undefined,
                 });
                 mixedServerEntries.push({ kind: 'inline', server: servers[servers.length - 1] });
               }
@@ -272,6 +292,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     const auth =
       server.authType === 'bearer'
         ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+        : server.authType === 'api-key'
+        ? {
+            type: 'oauth_client_credentials' as const,
+            token_url: server.oauthTokenUrl || '',
+            client_id_env: server.oauthClientIdEnv || '',
+            client_secret_env: server.oauthClientSecretEnv || '',
+            ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+            ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
+          }
         : server.authType === 'oauth2'
         ? {
             type: 'oauth_authorization_code' as const,
@@ -436,6 +465,15 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
         auth:
           server.authType === 'bearer'
             ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+            : server.authType === 'api-key'
+            ? {
+                type: 'oauth_client_credentials' as const,
+                token_url: server.oauthTokenUrl || '',
+                client_id_env: server.oauthClientIdEnv || '',
+                client_secret_env: server.oauthClientSecretEnv || '',
+                ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                ...(server.oauthAudience ? { audience: server.oauthAudience } : {})
+              }
             : server.authType === 'oauth2'
             ? {
                 type: 'oauth_authorization_code' as const,
