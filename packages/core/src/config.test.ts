@@ -288,4 +288,104 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('loads scenario ref from test-cases folder', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'check-weather.yaml'),
+        ['id: check-weather', 'name: Check Weather', 'servers: []', 'prompt: "lookup"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'refs.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: []',
+          'agents: []',
+          'scenarios:',
+          '  - ref: check-weather'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config, warnings } = loadConfig(configPath);
+      expect(config.scenarios).toHaveLength(1);
+      expect(config.scenarios[0]?.id).toBe('check-weather');
+      expect(warnings).not.toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to scenarios folder when test-cases is absent and warns', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const scenariosDir = join(dir, 'scenarios');
+      mkdirSync(scenariosDir, { recursive: true });
+      writeFileSync(
+        join(scenariosDir, 'check-weather.yaml'),
+        ['id: check-weather', 'name: Check Weather', 'servers: []', 'prompt: "lookup"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'refs.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: []',
+          'agents: []',
+          'scenarios:',
+          '  - ref: check-weather'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config, warnings } = loadConfig(configPath);
+      expect(config.scenarios).toHaveLength(1);
+      expect(config.scenarios[0]?.id).toBe('check-weather');
+      expect(warnings).toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prefers test-cases over scenarios when both folders exist', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      const legacyScenariosDir = join(dir, 'scenarios');
+      mkdirSync(testCasesDir, { recursive: true });
+      mkdirSync(legacyScenariosDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'check-weather.yaml'),
+        ['id: check-weather', 'name: Canonical', 'servers: []', 'prompt: "canonical"'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(legacyScenariosDir, 'check-weather.yaml'),
+        ['id: check-weather', 'name: Legacy', 'servers: []', 'prompt: "legacy"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'refs.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: []',
+          'agents: []',
+          'scenarios:',
+          '  - ref: check-weather'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config, warnings } = loadConfig(configPath);
+      expect(config.scenarios).toHaveLength(1);
+      expect(config.scenarios[0]?.prompt).toBe('canonical');
+      expect(warnings).not.toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

@@ -108,18 +108,18 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Libraries", to: "/libraries/agents" }, { label: "Agents" });
     return crumbs;
   }
-  if (matchPath("/libraries/scenarios/:scenarioId", pathname)) {
-    const match = matchPath("/libraries/scenarios/:scenarioId", pathname);
-    const scenarioId = match?.params.scenarioId ? decodeURIComponent(match.params.scenarioId) : "Scenario";
+  if (matchPath("/libraries/test-cases/:testCaseId", pathname)) {
+    const match = matchPath("/libraries/test-cases/:testCaseId", pathname);
+    const testCaseId = match?.params.testCaseId ? decodeURIComponent(match.params.testCaseId) : "Test Case";
     crumbs.push(
-      { label: "Libraries", to: "/libraries/scenarios" },
-      { label: "Scenarios", to: "/libraries/scenarios" },
-      { label: scenarioId }
+      { label: "Libraries", to: "/libraries/test-cases" },
+      { label: "Test Cases", to: "/libraries/test-cases" },
+      { label: testCaseId }
     );
     return crumbs;
   }
-  if (matchPath("/libraries/scenarios", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/scenarios" }, { label: "Scenarios" });
+  if (matchPath("/libraries/test-cases", pathname)) {
+    crumbs.push({ label: "Libraries", to: "/libraries/test-cases" }, { label: "Test Cases" });
     return crumbs;
   }
   if (matchPath("/compare", pathname)) {

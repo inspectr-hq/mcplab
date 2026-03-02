@@ -97,7 +97,7 @@ const SettingsPage = () => {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Scenario Assistant</CardTitle>
           <CardDescription>
-            Default assistant model used on library scenario pages. If unset, MCP Lab uses the first available agent automatically.
+            Default assistant model used on library test case pages. If unset, MCP Lab uses the first available agent automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
@@ -123,7 +123,7 @@ const SettingsPage = () => {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Applies to `/libraries/scenarios/:scenarioId`. MCP Evaluation editors can still override the assistant agent from their evaluation context.
+              Applies to `/libraries/test-cases/:testCaseId`. MCP Evaluation editors can still override the assistant agent from their evaluation context.
             </p>
           </div>
           <div className="text-xs text-muted-foreground">

@@ -161,7 +161,7 @@ export async function startAppServer(options: AppServerOptions) {
   mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
-  mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+  mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
   applySettingsOverrides(settings);
 
   const appDist = resolveAppDist(workspaceRoot);
@@ -304,7 +304,7 @@ export async function startAppServer(options: AppServerOptions) {
         if (body.librariesDir) {
           settings.librariesDir = resolve(String(body.librariesDir));
           mkdirSync(settings.librariesDir, { recursive: true });
-          mkdirSync(join(settings.librariesDir, 'scenarios'), { recursive: true });
+          mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
           applySettingsOverrides(settings);
         }
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {

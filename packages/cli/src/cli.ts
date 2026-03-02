@@ -511,7 +511,7 @@ program
     'Directory for saved tool analysis reports',
     'mcplab/results/tool-analysis'
   )
-  .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/scenarios', 'mcplab')
+  .option('--libraries-dir <path>', 'Bundle root for reusable servers/agents/test-cases', 'mcplab')
   .option('--port <number>', 'Port to bind', '8787')
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')

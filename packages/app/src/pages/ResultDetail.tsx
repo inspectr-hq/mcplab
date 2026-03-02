@@ -605,7 +605,7 @@ const ResultDetail = () => {
           sourceReply: assistantReply
         })
       );
-      navigate(`/libraries/scenarios/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
+      navigate(`/libraries/test-cases/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
     } catch (error: unknown) {
       toast({
         title: "Could not create handoff",
