@@ -18,6 +18,8 @@ MCPLab is a testing and evaluation framework for [MCP servers](https://modelcont
 
 Perfect for MCP server developers who want to ensure their tools work reliably across different AI models.
 
+[![MCPLab](https://mcplab.inspectr.dev/screenshots/evaluation-results-assistance.png)](https://mcplab.inspectr.dev/)
+
 ---
 
 ## ✨ Features
