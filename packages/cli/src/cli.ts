@@ -16,7 +16,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync } from 'node:child_process';
-import { stringify as stringifyYaml } from 'yaml';
+import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import {
   applySnapshotPolicyToRunResult,
@@ -412,6 +412,7 @@ program
   .description('Migrate eval YAML files to the canonical list-based format')
   .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
   .option('--dry-run', 'Preview migration without writing files')
+  .option('--test-cases-dir <path>', 'Also migrate test-case YAML files in this directory', '')
   .action((options) => {
     try {
       const evalsDir = resolve(String(options.evalsDir));
@@ -438,11 +439,20 @@ program
               warning.includes('Legacy inline server.name migrated') ||
               warning.includes('Legacy inline agent.name migrated')
           );
+          const hasScenariosWithLegacyServers = sourceConfig.scenarios.some(
+            (s) =>
+              !('ref' in s) &&
+              Array.isArray((s as any).servers) &&
+              (s as any).servers.length > 0 &&
+              typeof (s as any).servers[0] === 'string' &&
+              !(s as any).mcp_servers
+          );
 
           if (
             !hadLegacyServersMapWarning &&
             !hadLegacyAgentsMapWarning &&
-            !hadLegacyInlineIdsWarning
+            !hadLegacyInlineIdsWarning &&
+            !hasScenariosWithLegacyServers
           ) {
             skipped += 1;
             continue;
@@ -458,7 +468,27 @@ program
             migrated += 1;
             continue;
           }
-          const nextConfig: SourceEvalConfig = { ...sourceConfig };
+          const nextConfig: SourceEvalConfig = {
+            ...sourceConfig,
+            servers: [],  // clear top-level servers pool
+            scenarios: sourceConfig.scenarios.map((s) => {
+              if ('ref' in s) return s;
+              const scenario = s as any;
+              if (
+                Array.isArray(scenario.servers) &&
+                scenario.servers.length > 0 &&
+                typeof scenario.servers[0] === 'string' &&
+                !scenario.mcp_servers
+              ) {
+                const { servers: _legacyServers, ...rest } = scenario;
+                return {
+                  ...rest,
+                  mcp_servers: _legacyServers.map((id: string) => ({ ref: id }))
+                };
+              }
+              return s;
+            })
+          };
           writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
           migrated += 1;
           console.log(kleur.green(`Migrated: ${file}`));
@@ -474,6 +504,56 @@ program
           }: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
         )
       );
+
+      if (options.testCasesDir) {
+        const testCasesDir = resolve(String(options.testCasesDir));
+        let tcMigrated = 0;
+        let tcSkipped = 0;
+        let tcFailed = 0;
+        let tcFiles: string[] = [];
+        try {
+          tcFiles = readdirSync(testCasesDir).filter(
+            (name: string) => name.endsWith('.yaml') || name.endsWith('.yml')
+          );
+        } catch {
+          console.error(kleur.red(`Could not read test-cases-dir: ${testCasesDir}`));
+        }
+        for (const file of tcFiles) {
+          const filePath = resolve(testCasesDir, file);
+          try {
+            const raw = readFileSync(filePath, 'utf8');
+            const parsed = parse(raw) as any;
+            if (!parsed || typeof parsed !== 'object') { tcSkipped += 1; continue; }
+            const hasLegacyServers =
+              Array.isArray(parsed.servers) &&
+              parsed.servers.length > 0 &&
+              typeof parsed.servers[0] === 'string' &&
+              !parsed.mcp_servers;
+            if (!hasLegacyServers) { tcSkipped += 1; continue; }
+            if (options.dryRun) {
+              console.log(kleur.cyan(`[dry-run] test-case ${file}: would migrate servers to mcp_servers`));
+              tcMigrated += 1;
+              continue;
+            }
+            const { servers: legacyServers, ...rest } = parsed;
+            const migrated = {
+              ...rest,
+              mcp_servers: legacyServers.map((id: string) => ({ ref: id }))
+            };
+            writeFileSync(filePath, `${stringifyYaml(migrated)}\n`, 'utf8');
+            tcMigrated += 1;
+            console.log(kleur.green(`Migrated test-case: ${file}`));
+          } catch (error: any) {
+            tcFailed += 1;
+            console.error(kleur.red(`Failed test-case: ${file} (${error?.message ?? String(error)})`));
+          }
+        }
+        console.log(
+          kleur.cyan(
+            `Test-cases migration${options.dryRun ? ' (dry-run)' : ''}: migrated=${tcMigrated}, skipped=${tcSkipped}, failed=${tcFailed}`
+          )
+        );
+      }
     } catch (err: any) {
       console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
       process.exit(1);
