@@ -98,6 +98,23 @@ export class McpClientManager {
     }
   }
 
+  async disconnectAll(): Promise<void> {
+    const clients = Array.from(this.clients.values());
+    this.clients.clear();
+    await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const close = (client as unknown as { close?: () => Promise<void> | void }).close;
+          if (typeof close === 'function') {
+            await close.call(client);
+          }
+        } catch {
+          // Best-effort shutdown: ignore close errors to avoid masking run results.
+        }
+      })
+    );
+  }
+
   private async getAuthHeaders(
     serverName: string,
     server: ServerConfig

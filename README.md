@@ -20,6 +20,8 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 
 [![MCPLab](https://mcplab.inspectr.dev/screenshots/evaluation-results-assistance.png)](https://mcplab.inspectr.dev/)
 
+Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
+
 ---
 
 ## ✨ Features
@@ -339,6 +341,9 @@ OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 # Run all scenarios
 mcplab run -c mcplab/evals/eval.yaml
 
+# Interactive mode (choose config + agents)
+mcplab run --interactive
+
 # Run specific scenario
 mcplab run -c mcplab/evals/eval.yaml -s basic-test
 
@@ -352,6 +357,9 @@ Serve the web app and local API in one process:
 
 ```bash
 mcplab app --open
+
+# Interactive startup (host/port/paths prompt + summary)
+mcplab app --interactive
 ```
 
 Optional custom paths:
@@ -449,6 +457,9 @@ mcplab run -c mcplab/evals/eval.yaml --snapshot-eval
 ```bash
 # Regenerate HTML report from previous run
 mcplab report --input mcplab/results/evaluation-runs/20260206-212239
+
+# Interactive run selection from recent runs
+mcplab report --interactive
 ```
 
 ---

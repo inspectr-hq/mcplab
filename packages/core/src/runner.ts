@@ -96,149 +96,153 @@ export async function runAll(
   });
 
   const mcp = new McpClientManager();
-  await emitProgress({
-    type: 'mcp_connect_started',
-    serverCount: Object.keys(config.servers).length
-  });
-  await mcp.connectAll(config.servers, options.signal);
-  await emitProgress({
-    type: 'mcp_connect_finished',
-    serverCount: Object.keys(config.servers).length
-  });
+  try {
+    await emitProgress({
+      type: 'mcp_connect_started',
+      serverCount: Object.keys(config.servers).length
+    });
+    await mcp.connectAll(config.servers, options.signal);
+    await emitProgress({
+      type: 'mcp_connect_finished',
+      serverCount: Object.keys(config.servers).length
+    });
 
-  const scenarioRuns: Array<{
-    scenario_id: string;
-    scenario_name?: string;
-    agent: string;
-    eval?: ExecutableScenario['eval'];
-    runs: ScenarioRunResult[];
-  }> = [];
+    const scenarioRuns: Array<{
+      scenario_id: string;
+      scenario_name?: string;
+      agent: string;
+      eval?: ExecutableScenario['eval'];
+      runs: ScenarioRunResult[];
+    }> = [];
 
-  let scenarioRunIndex = 0;
-  for (const scenario of config.scenarios) {
-    throwIfAborted(options.signal);
-    if (!scenario.agent) {
-      throw new Error(
-        `Scenario '${scenario.id}' has no execution agent. Provide run agent selection or config run_defaults.selected_agents.`
-      );
-    }
-    const agent = config.agents[scenario.agent];
-    if (!agent) {
-      throw new Error(`Agent not found: ${scenario.agent}`);
-    }
-    const runs: ScenarioRunResult[] = [];
-
-    for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
+    let scenarioRunIndex = 0;
+    for (const scenario of config.scenarios) {
       throwIfAborted(options.signal);
-      scenarioRunIndex += 1;
-      await emitProgress({
-        type: 'scenario_run_started',
-        scenarioId: scenario.id,
-        agentName: scenario.agent,
-        scenarioRunIndex,
-        totalScenarioRuns,
-        runIndex,
-        runsPerScenario: options.runsPerScenario
-      });
-      const runResult = await runAgentScenario({
-        scenario,
-        agent,
-        mcp,
-        signal: options.signal,
-        onProgress: async (event) => {
-          await emitProgress({
-            type: 'agent_progress',
-            scenarioRunIndex,
-            totalScenarioRuns,
-            event
-          });
-        }
-      });
-      const evalResult = evaluateScenario(
-        runResult.finalText,
-        runResult.toolSequence,
-        scenario.eval
-      );
-      const extracted = extractValues(
-        runResult.finalText,
-        scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
-      );
+      if (!scenario.agent) {
+        throw new Error(
+          `Scenario '${scenario.id}' has no execution agent. Provide run agent selection or config run_defaults.selected_agents.`
+        );
+      }
+      const agent = config.agents[scenario.agent];
+      if (!agent) {
+        throw new Error(`Agent not found: ${scenario.agent}`);
+      }
+      const runs: ScenarioRunResult[] = [];
 
-      const toolUsage: Record<string, number> = {};
-      for (const tool of runResult.toolSequence) {
-        toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
+      for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
+        throwIfAborted(options.signal);
+        scenarioRunIndex += 1;
+        await emitProgress({
+          type: 'scenario_run_started',
+          scenarioId: scenario.id,
+          agentName: scenario.agent,
+          scenarioRunIndex,
+          totalScenarioRuns,
+          runIndex,
+          runsPerScenario: options.runsPerScenario
+        });
+        const runResult = await runAgentScenario({
+          scenario,
+          agent,
+          mcp,
+          signal: options.signal,
+          onProgress: async (event) => {
+            await emitProgress({
+              type: 'agent_progress',
+              scenarioRunIndex,
+              totalScenarioRuns,
+              event
+            });
+          }
+        });
+        const evalResult = evaluateScenario(
+          runResult.finalText,
+          runResult.toolSequence,
+          scenario.eval
+        );
+        const extracted = extractValues(
+          runResult.finalText,
+          scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
+        );
+
+        const toolUsage: Record<string, number> = {};
+        for (const tool of runResult.toolSequence) {
+          toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
+        }
+
+        const scenarioRun: ScenarioRunResult = {
+          run_index: runIndex,
+          pass: evalResult.pass,
+          failures: evalResult.failures,
+          tool_calls: runResult.toolSequence,
+          tool_call_count: runResult.toolSequence.length,
+          tool_sequence: runResult.toolSequence,
+          tool_usage: toolUsage,
+          tool_durations_ms: runResult.toolDurationsMs,
+          final_text: runResult.finalText,
+          extracted
+        };
+        runs.push(scenarioRun);
+        const traceRecord: ScenarioRunTraceRecord = {
+          type: 'scenario_run',
+          trace_version: 3,
+          run_index: runIndex,
+          scenario_id: scenario.id,
+          agent: scenario.agent,
+          provider: runResult.traceProvider,
+          model: runResult.traceModel,
+          ts_start: runResult.traceStartedAt,
+          ts_end: runResult.traceEndedAt,
+          pass: evalResult.pass,
+          messages: runResult.traceMessages,
+          metrics: {
+            tool_call_count: runResult.toolSequence.length,
+            total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)
+          }
+        };
+        trace.write(traceRecord);
+        await emitProgress({
+          type: 'scenario_run_finished',
+          scenarioId: scenario.id,
+          agentName: scenario.agent,
+          scenarioRunIndex,
+          totalScenarioRuns,
+          runIndex,
+          runsPerScenario: options.runsPerScenario,
+          pass: evalResult.pass,
+          toolCallCount: runResult.toolSequence.length
+        });
       }
 
-      const scenarioRun: ScenarioRunResult = {
-        run_index: runIndex,
-        pass: evalResult.pass,
-        failures: evalResult.failures,
-        tool_calls: runResult.toolSequence,
-        tool_call_count: runResult.toolSequence.length,
-        tool_sequence: runResult.toolSequence,
-        tool_usage: toolUsage,
-        tool_durations_ms: runResult.toolDurationsMs,
-        final_text: runResult.finalText,
-        extracted
-      };
-      runs.push(scenarioRun);
-      const traceRecord: ScenarioRunTraceRecord = {
-        type: 'scenario_run',
-        trace_version: 3,
-        run_index: runIndex,
+      scenarioRuns.push({
         scenario_id: scenario.id,
+        scenario_name: scenario.name,
         agent: scenario.agent,
-        provider: runResult.traceProvider,
-        model: runResult.traceModel,
-        ts_start: runResult.traceStartedAt,
-        ts_end: runResult.traceEndedAt,
-        pass: evalResult.pass,
-        messages: runResult.traceMessages,
-        metrics: {
-          tool_call_count: runResult.toolSequence.length,
-          total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)
-        }
-      };
-      trace.write(traceRecord);
-      await emitProgress({
-        type: 'scenario_run_finished',
-        scenarioId: scenario.id,
-        agentName: scenario.agent,
-        scenarioRunIndex,
-        totalScenarioRuns,
-        runIndex,
-        runsPerScenario: options.runsPerScenario,
-        pass: evalResult.pass,
-        toolCallCount: runResult.toolSequence.length
+        eval: scenario.eval,
+        runs
       });
     }
 
-    scenarioRuns.push({
-      scenario_id: scenario.id,
-      scenario_name: scenario.name,
-      agent: scenario.agent,
-      eval: scenario.eval,
-      runs
+    const results = aggregateResults({
+      runId,
+      timestamp: new Date().toISOString(),
+      gitCommit: options.gitCommit,
+      configHash: options.configHash,
+      cliVersion: options.cliVersion,
+      scenarioRuns
     });
+
+    const resultsPath = join(runDir, 'results.json');
+    writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+
+    const summaryPath = join(runDir, 'summary.md');
+    writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
+    await emitProgress({ type: 'run_finished', runId, totalScenarioRuns });
+
+    return { runDir, results };
+  } finally {
+    await mcp.disconnectAll();
   }
-
-  const results = aggregateResults({
-    runId,
-    timestamp: new Date().toISOString(),
-    gitCommit: options.gitCommit,
-    configHash: options.configHash,
-    cliVersion: options.cliVersion,
-    scenarioRuns
-  });
-
-  const resultsPath = join(runDir, 'results.json');
-  writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-
-  const summaryPath = join(runDir, 'summary.md');
-  writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
-  await emitProgress({ type: 'run_finished', runId, totalScenarioRuns });
-
-  return { runDir, results };
 }
 
 function createRunId(): string {

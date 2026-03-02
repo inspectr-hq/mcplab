@@ -12,13 +12,19 @@ import {
   type EvalConfig,
   type SourceEvalConfig,
   type ExecutableEvalConfig,
-  type ResultsJson
+  type ResultsJson,
+  type RunProgressEvent
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { migrateSourceConfig } from './migrate-utils.js';
+import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
+import {
+  promptAppOptionsInteractive,
+  selectRunDirInteractive
+} from './interactive-helpers.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -41,29 +47,58 @@ program
 program
   .command('run')
   .description('Run evaluation scenarios')
-  .requiredOption('-c, --config <path>', 'Path to eval.yaml')
+  .option('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
   .option(
     '--agents <agents>',
     'Comma-separated list of agents to test (runs each scenario with each agent)'
   )
+  .option('--agents-all', 'Run all configured agents for the selected scenarios')
+  .option('--interactive', 'Prompt for required inputs')
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .action(async (options) => {
     try {
-      let { config, hash, warnings } = loadConfig(resolve(options.config));
+      const hasAgentOverride = Boolean(options.agents) || Boolean(options.agentsAll);
+      const needsConfigPrompt = Boolean(options.interactive) && !options.config;
+      const needsAgentPrompt = Boolean(options.interactive) && !hasAgentOverride;
+      const interactiveSelection =
+        needsConfigPrompt || needsAgentPrompt
+          ? await runInteractiveSelection({
+              initialConfigPath: options.config ? String(options.config) : undefined,
+              defaultEvalsDir: 'mcplab/evals',
+              cwd: process.cwd(),
+              promptAgentSelection: needsAgentPrompt,
+              loadConfigForValidation: (path: string) => loadConfig(path)
+            })
+          : undefined;
+
+      const resolvedOptions = resolveRunOptions({
+        interactive: Boolean(options.interactive),
+        config: options.config ? String(options.config) : undefined,
+        agents: options.agents ? String(options.agents) : undefined,
+        agentsAll: Boolean(options.agentsAll),
+        interactiveSelection
+      });
+
+      let { config, hash, warnings } = loadConfig(resolve(resolvedOptions.config));
       for (const warning of warnings) {
         console.log(kleur.yellow(`⚠ ${warning}`));
       }
 
-      const requestedAgents = options.agents
-        ? options.agents
+      const requestedAgentsFromCsv = resolvedOptions.agents
+        ? resolvedOptions.agents
             .split(',')
             .map((a: string) => a.trim())
             .filter(Boolean)
+        : [];
+      const requestedAgents = resolvedOptions.agentsAll
+        ? Object.keys(config.agents)
+        : requestedAgentsFromCsv.length > 0
+        ? requestedAgentsFromCsv
         : undefined;
       const beforeExpandCount = config.scenarios.length;
       const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
@@ -88,7 +123,13 @@ program
         configHash: hash,
         gitCommit: getGitCommit(),
         cliVersion: pkgVersion,
-        runsDir: String(options.runsDir)
+        runsDir: String(options.runsDir),
+        onProgress: async (event) => {
+          const line = formatRunProgressEvent(event);
+          if (line) {
+            console.log(`[${formatNowTime()}] ${line}`);
+          }
+        }
       });
       let shouldFailOnDrift = false;
       const useSnapshotEval =
@@ -137,7 +178,7 @@ program
       const resultsPath = join(runDir, 'results.json');
       writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
       writeFileSync(reportPath, renderReport(results), 'utf8');
-      console.log(kleur.green(`Run completed: ${runDir}`));
+      console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
 
       if (options.compareSnapshot) {
         const snapshot = loadSnapshot(
@@ -150,17 +191,11 @@ program
         console.log(formatSnapshotComparisonTable(comparison));
       }
 
-      // If multi-agent test, show comparison
-      if (options.agents) {
-        console.log(kleur.cyan(`\n📈 Run comparison script:`));
-        console.log(
-          kleur.gray(`   node scripts/compare-llm-results.mjs ${join(runDir, 'results.json')}`)
-        );
-      }
       if (shouldFailOnDrift) {
         console.error(kleur.red('Snapshot eval drift detected in fail_on_drift mode.'));
         process.exit(2);
       }
+      console.log(kleur.gray('Process exiting.'));
     } catch (err: any) {
       const message = err?.message ?? String(err);
       const hint = message.includes('fetch failed')
@@ -551,10 +586,23 @@ program
 program
   .command('report')
   .description('Regenerate report.html from a previous run')
-  .requiredOption('--input <runDir>', 'Run directory containing results.json')
-  .action((options) => {
+  .option('--input <runDir>', 'Run directory containing results.json')
+  .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
+  .option('--interactive', 'Pick a run directory interactively')
+  .action(async (options) => {
     try {
-      const runDir = resolve(options.input);
+      const runDir = options.interactive
+        ? options.input
+          ? resolve(String(options.input))
+          : await selectRunDirInteractive({
+              runsDir: String(options.runsDir),
+              cwd: process.cwd()
+            })
+        : options.input
+        ? resolve(String(options.input))
+        : (() => {
+            throw new Error('input is required');
+          })();
       const resultsPath = join(runDir, 'results.json');
       const reportPath = join(runDir, 'report.html');
       const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
@@ -584,20 +632,41 @@ program
   .option('--host <host>', 'Host to bind', '127.0.0.1')
   .option('--open', 'Open browser after startup')
   .option('--dev', 'Proxy frontend requests to Vite dev server (API remains local)')
+  .option('--interactive', 'Prompt for host/port/paths before startup')
   .action(async (options) => {
     try {
-      const port = Number(options.port);
+      const resolvedAppOptions = options.interactive
+        ? await promptAppOptionsInteractive({
+            host: String(options.host),
+            port: String(options.port),
+            evalsDir: String(options.evalsDir),
+            runsDir: String(options.runsDir),
+            snapshotsDir: String(options.snapshotsDir),
+            toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
+            librariesDir: String(options.librariesDir)
+          })
+        : {
+            host: String(options.host),
+            port: String(options.port),
+            evalsDir: String(options.evalsDir),
+            runsDir: String(options.runsDir),
+            snapshotsDir: String(options.snapshotsDir),
+            toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
+            librariesDir: String(options.librariesDir)
+          };
+
+      const port = Number(resolvedAppOptions.port);
       if (Number.isNaN(port) || port <= 0) {
         throw new Error('Port must be a positive number');
       }
       await startAppServer({
-        host: options.host,
+        host: resolvedAppOptions.host,
         port,
-        evalsDir: resolve(options.evalsDir),
-        runsDir: resolve(options.runsDir),
-        snapshotsDir: resolve(options.snapshotsDir),
-        toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
-        librariesDir: resolve(options.librariesDir),
+        evalsDir: resolve(resolvedAppOptions.evalsDir),
+        runsDir: resolve(resolvedAppOptions.runsDir),
+        snapshotsDir: resolve(resolvedAppOptions.snapshotsDir),
+        toolAnalysisResultsDir: resolve(resolvedAppOptions.toolAnalysisResultsDir),
+        librariesDir: resolve(resolvedAppOptions.librariesDir),
         dev: Boolean(options.dev),
         open: Boolean(options.open)
       });
@@ -618,5 +687,30 @@ function getGitCommit(): string | undefined {
     return output || undefined;
   } catch {
     return undefined;
+  }
+}
+
+function formatNowTime(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+
+function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
+  switch (event.type) {
+    case 'run_started':
+      return `Run started (${event.totalScenarioRuns} scenario run(s), ${event.runsPerScenario} run(s) each).`;
+    case 'mcp_connect_started':
+      return `Connecting MCP servers (${event.serverCount})...`;
+    case 'mcp_connect_finished':
+      return `Connected MCP servers (${event.serverCount}).`;
+    case 'scenario_run_started':
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${event.scenarioId} [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
+    case 'scenario_run_finished':
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${event.toolCallCount} tool calls)`;
+    case 'run_finished':
+      return `Run finished: ${event.runId}`;
+    default:
+      return undefined;
   }
 }

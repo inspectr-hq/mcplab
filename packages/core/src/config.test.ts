@@ -317,6 +317,32 @@ describe('loadConfig normalization', () => {
     }
   });
 
+  it('defaults referenced scenario servers to empty array when omitted', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'llm-only.yaml'),
+        ['id: llm-only', 'name: LLM Only', 'prompt: "Which version are you?"'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'refs.yaml');
+      writeFileSync(
+        configPath,
+        ['servers: []', 'agents: []', 'scenarios:', '  - ref: llm-only'].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.scenarios).toHaveLength(1);
+      expect(config.scenarios[0]?.id).toBe('llm-only');
+      expect(config.scenarios[0]?.servers).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('falls back to scenarios folder when test-cases is absent and warns', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {
@@ -375,6 +401,59 @@ describe('loadConfig normalization', () => {
       expect(warnings).not.toContain(
         "Using legacy library folder 'scenarios'; migrate to 'test-cases'."
       );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('detects bundle root from evals directory and resolves refs from parent library files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const evalsDir = join(dir, 'evals');
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(evalsDir, { recursive: true });
+      mkdirSync(testCasesDir, { recursive: true });
+
+      writeFileSync(
+        join(dir, 'agents.yaml'),
+        ['claude-sonnet-46:', '  provider: anthropic', '  model: claude-sonnet-4-6'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['weather-mcp:', '  transport: http', '  url: http://localhost:3300/mcp'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(testCasesDir, 'search-tags.yaml'),
+        [
+          'id: search-tags',
+          'name: Search tags',
+          'mcp_servers:',
+          '  - ref: weather-mcp',
+          'prompt: Search tags'
+        ].join('\n'),
+        'utf8'
+      );
+      const configPath = join(evalsDir, 'llm-evaluation.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: claude-sonnet-46',
+          'scenarios:',
+          '  - ref: search-tags',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - claude-sonnet-46'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.agents['claude-sonnet-46']).toBeTruthy();
+      expect(config.scenarios[0]?.id).toBe('search-tags');
+      expect(config.servers['weather-mcp']).toBeTruthy();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
