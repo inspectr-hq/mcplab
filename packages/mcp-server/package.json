@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab-mcp-server",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "MCP server that exposes MCPLab evaluation tools — query runs, results, and traces via the Model Context Protocol",
   "license": "MIT",
   "repository": {
