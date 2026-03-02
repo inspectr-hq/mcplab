@@ -21,3 +21,4 @@ tsconfig.tsbuildinfo
 .npm-cache
 packages/app/.vite
 docs/plans
+.changeset
