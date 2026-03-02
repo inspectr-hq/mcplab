@@ -42,7 +42,8 @@ export interface ExtractRule {
 export interface Scenario {
   id: string;
   name: string;
-  serverIds: string[];
+  mcpServers?: ServerEntry[];   // scenario-owned server definitions (new model)
+  serverIds: string[];          // runtime resolved IDs (computed)
   prompt: string;
   snapshotEval?: {
     enabled?: boolean;
@@ -78,8 +79,8 @@ export interface EvalConfig {
   sourcePath?: string;
   loadError?: string;
   loadWarnings?: string[];
-  servers: ServerConfig[];
-  serverEntries?: ServerEntry[];
+  servers?: ServerConfig[];       // deprecated: computed union from scenario mcpServers
+  serverEntries?: ServerEntry[];  // deprecated: top-level server pool entries
   agents: AgentConfig[];
   agentEntries?: AgentEntry[];
   scenarios: Scenario[];
