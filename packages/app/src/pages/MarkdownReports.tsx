@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -7,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { MarkdownReportSummary } from "@/lib/data-sources/types";
-import {Clock, MoreHorizontal, NotepadText} from "lucide-react";
+import {Clock, MoreHorizontal, NotepadText, Trash2} from "lucide-react";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,6 +20,8 @@ export default function MarkdownReportsPage() {
   const { source } = useDataSource();
   const [items, setItems] = useState<MarkdownReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletePath, setDeletePath] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -41,6 +44,26 @@ export default function MarkdownReportsPage() {
   }, []);
 
   const latest = useMemo(() => items[0], [items]);
+  const deleteTarget = useMemo(() => items.find((item) => item.relativePath === deletePath) ?? null, [items, deletePath]);
+
+  const handleDelete = async () => {
+    if (!deletePath) return;
+    setDeleting(true);
+    try {
+      await source.deleteMarkdownReport(deletePath);
+      setItems((prev) => prev.filter((item) => item.relativePath !== deletePath));
+      toast({ title: "Markdown report deleted" });
+      setDeletePath(null);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not delete markdown report",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -123,6 +146,15 @@ export default function MarkdownReportsPage() {
                               View
                             </Link>
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              setDeletePath(item.relativePath);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -133,6 +165,25 @@ export default function MarkdownReportsPage() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={Boolean(deletePath)} onOpenChange={(open) => !open && setDeletePath(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete markdown report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `Delete '${deleteTarget.name}' from disk? This cannot be undone.`
+                : "Delete this report from disk? This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
