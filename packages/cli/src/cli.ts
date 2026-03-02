@@ -18,6 +18,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
+import { migrateSourceConfig } from './migrate-utils.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -468,27 +469,7 @@ program
             migrated += 1;
             continue;
           }
-          const nextConfig: SourceEvalConfig = {
-            ...sourceConfig,
-            servers: [],  // clear top-level servers pool
-            scenarios: sourceConfig.scenarios.map((s) => {
-              if ('ref' in s) return s;
-              const scenario = s as any;
-              if (
-                Array.isArray(scenario.servers) &&
-                scenario.servers.length > 0 &&
-                typeof scenario.servers[0] === 'string' &&
-                !scenario.mcp_servers
-              ) {
-                const { servers: _legacyServers, ...rest } = scenario;
-                return {
-                  ...rest,
-                  mcp_servers: _legacyServers.map((id: string) => ({ ref: id }))
-                };
-              }
-              return s;
-            })
-          };
+          const nextConfig = migrateSourceConfig(sourceConfig);
           writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
           migrated += 1;
           console.log(kleur.green(`Migrated: ${file}`));
