@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save, Server, Bot, FileText, Play, ExternalLink, ChevronUp, ChevronDown, AlertTriangle, X } from "lucide-react";
+import { ArrowLeft, Save, Server, Bot, FileText, Play, ChevronUp, ChevronDown, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,109 +15,26 @@ import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { ServerForm } from "@/components/config-editor/ServerForm";
-import { AgentForm } from "@/components/config-editor/AgentForm";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import type { AgentConfig, EvalConfig, ServerConfig } from "@/types/eval";
+import type { AgentConfig, AgentEntry, EvalConfig, Scenario, ScenarioEntry, ServerConfig, ServerEntry } from "@/types/eval";
 import type { SnapshotRecord } from "@/lib/data-sources/types";
 
 const emptyConfig = (): EvalConfig => ({
   id: `cfg-${Date.now()}`,
   name: "",
+  configName: "",
   description: "",
   servers: [],
-  serverRefs: [],
+  serverEntries: [],
   agents: [],
-  agentRefs: [],
+  agentEntries: [],
   scenarios: [],
-  scenarioRefs: [],
+  scenarioEntries: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
-
-const ServerListReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
-  <div className="space-y-2">
-    {servers.map((server) => (
-      <div key={server.id} className="rounded-md border p-3">
-        <div className="flex items-center gap-2">
-          <div className="font-medium text-sm">{server.name || server.id}</div>
-          <Badge variant="secondary" className="font-mono text-xs">
-            {server.transport}
-          </Badge>
-          {server.authType && server.authType !== "none" && (
-            <Badge variant="outline" className="text-xs">
-              {server.authType}
-            </Badge>
-          )}
-        </div>
-        {server.url && (
-          <div className="mt-1 text-xs font-mono text-muted-foreground break-all">
-            {server.url}
-          </div>
-        )}
-        {server.command && (
-          <div className="mt-1 text-xs font-mono text-muted-foreground">
-            {[server.command, ...(server.args ?? [])].join(" ")}
-          </div>
-        )}
-      </div>
-    ))}
-  </div>
-);
-
-const InlineServersReadOnly = ({ servers }: { servers: ServerConfig[] }) => (
-  <Card>
-    <CardContent className="pt-4 space-y-3">
-      <div className="text-sm font-medium">Inline servers</div>
-      <ServerListReadOnly servers={servers} />
-    </CardContent>
-  </Card>
-);
-
-const AgentListReadOnly = ({
-  agents,
-  defaultAgentNames = [],
-}: {
-  agents: AgentConfig[];
-  defaultAgentNames?: string[];
-}) => (
-  <div className="space-y-2">
-    {agents.map((agent) => (
-      <div key={agent.id} className="rounded-md border p-3">
-        <div className="flex items-center gap-2">
-          <div className="font-medium text-sm">{agent.name || agent.id}</div>
-          {defaultAgentNames.includes(agent.name || agent.id) && (
-            <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-              Default
-            </Badge>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <ProviderBadge provider={agent.provider} />
-          <Badge variant="outline" className="text-xs font-mono">
-            {agent.model}
-          </Badge>
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const InlineAgentsReadOnly = ({
-  agents,
-  defaultAgentNames = [],
-}: {
-  agents: AgentConfig[];
-  defaultAgentNames?: string[];
-}) => (
-  <Card>
-    <CardContent className="pt-4 space-y-3">
-      <div className="text-sm font-medium">Inline agents</div>
-      <AgentListReadOnly agents={agents} defaultAgentNames={defaultAgentNames} />
-    </CardContent>
-  </Card>
-);
 
 const ConfigEditor = () => {
   const { id, tab: tabParam } = useParams<{ id: string; tab?: string }>();
@@ -143,8 +61,13 @@ const ConfigEditor = () => {
   const [updatingSnapshotPolicy, setUpdatingSnapshotPolicy] = useState(false);
   const [generatingBaseline, setGeneratingBaseline] = useState(false);
   const [selectedLibraryServerId, setSelectedLibraryServerId] = useState("");
-  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
+  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
+  const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
+  const [expandedInlineServerIds, setExpandedInlineServerIds] = useState<Record<string, boolean>>({});
+  const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
+  const [expandedViewServerIds, setExpandedViewServerIds] = useState<Record<string, boolean>>({});
+  const [expandedInlineScenarioIds, setExpandedInlineScenarioIds] = useState<Record<string, boolean>>({});
   const activeTab = useMemo(() => {
     const tab = tabParam || searchParams.get("tab");
     return tab === "agents" || tab === "scenarios" || tab === "servers" ? tab : "agents";
@@ -196,6 +119,48 @@ const ConfigEditor = () => {
   }, [snapshotRunId, source]);
 
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
+
+  const serverEntries = useMemo<ServerEntry[]>(() => {
+    if (config.serverEntries && config.serverEntries.length > 0) return config.serverEntries;
+    return config.servers.map((server) => ({ kind: "inline" as const, server }));
+  }, [config.serverEntries, config.servers]);
+
+  const setServerEntries = (entries: ServerEntry[]) => {
+    patch({
+      serverEntries: entries,
+      servers: entries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.server)
+    });
+  };
+
+  const scenarioEntries = useMemo<ScenarioEntry[]>(() => {
+    if (config.scenarioEntries && config.scenarioEntries.length > 0) return config.scenarioEntries;
+    return config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+  }, [config.scenarioEntries, config.scenarios]);
+
+  const setScenarioEntries = (entries: ScenarioEntry[]) => {
+    patch({
+      scenarioEntries: entries,
+      scenarios: entries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.scenario)
+    });
+  };
+
+  const agentEntries = useMemo<AgentEntry[]>(() => {
+    if (config.agentEntries && config.agentEntries.length > 0) return config.agentEntries;
+    return config.agents.map((agent) => ({ kind: "inline" as const, agent }));
+  }, [config.agentEntries, config.agents]);
+
+  const setAgentEntries = (entries: AgentEntry[]) => {
+    patch({
+      agentEntries: entries,
+      agents: entries
+        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.agent)
+    });
+  };
 
   const readOnly = !editing;
   const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
@@ -265,27 +230,84 @@ const ConfigEditor = () => {
 
   const handleSave = async () => {
     if (!config.name.trim()) {
-      toast({ title: "Validation Error", description: "MCP evaluation name is required.", variant: "destructive" });
+      toast({ title: "Validation Error", description: "Config ID is required.", variant: "destructive" });
       return;
     }
-    const normalizedScenarioRefs = (config.scenarioRefs ?? []).map((ref) => {
-      const matched = libScenarios.find((item) => item.id === ref || item.name === ref);
-      return matched?.id || ref;
+    const normalizedServerEntries = serverEntries.map((entry) => {
+      if (entry.kind === "referenced") {
+        const matched = libServers.find((item) => item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+      }
+      return entry;
     });
+    const normalizedAgentEntries = agentEntries.map((entry) => {
+      if (entry.kind === "referenced") {
+        const matched = libAgents.find((item) => item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+      }
+      return entry;
+    });
+
+    const normalizedScenarioEntries = scenarioEntries.map((entry) => {
+      if (entry.kind === "referenced") {
+        const matched = libScenarios.find((item) => item.id === entry.ref);
+        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+      }
+      return entry;
+    });
+    const unnamedInline = normalizedScenarioEntries
+      .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+      .some((entry) => !entry.scenario.name?.trim());
+    if (unnamedInline) {
+      toast({
+        title: "Validation Error",
+        description: "Inline scenarios must have a name before saving.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const validAgentIds = new Set(
+      normalizedAgentEntries.map((entry) =>
+        entry.kind === "inline" ? entry.agent.id : entry.ref
+      )
+    );
+    const normalizedDefaultAgentIds = (config.runDefaults?.selectedAgentNames ?? []).filter((id) =>
+      validAgentIds.has(id)
+    );
     const nextConfig = {
       ...config,
-      scenarioRefs: normalizedScenarioRefs,
+      serverEntries: normalizedServerEntries,
+      servers: normalizedServerEntries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.server),
+      agentEntries: normalizedAgentEntries,
+      agents: normalizedAgentEntries
+        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.agent),
+      scenarioEntries: normalizedScenarioEntries,
+      scenarios: normalizedScenarioEntries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.scenario as Scenario),
+      runDefaults:
+        normalizedDefaultAgentIds.length > 0
+          ? {
+              ...(config.runDefaults ?? {}),
+              selectedAgentNames: normalizedDefaultAgentIds
+            }
+          : undefined,
       updatedAt: new Date().toISOString()
     };
     if (isNew) {
       const created = await addConfig(nextConfig);
       setConfig(created);
-      toast({ title: "MCP Evaluation Created", description: `"${created.name}" has been saved.` });
+      const createdDisplayName = created.configName?.trim() || created.name;
+      toast({ title: "MCP Evaluation Created", description: `"${createdDisplayName}" has been saved.` });
       navigate(`/mcp-evaluations/${created.id}`);
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
-      toast({ title: "MCP Evaluation Updated", description: `"${updated.name}" has been updated.` });
+      const updatedDisplayName = updated.configName?.trim() || updated.name;
+      toast({ title: "MCP Evaluation Updated", description: `"${updatedDisplayName}" has been updated.` });
       setEditing(false);
       if (updated.id !== id) {
         navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
@@ -293,74 +315,270 @@ const ConfigEditor = () => {
     }
   };
 
-  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${config.name}` : config.name;
+  const displayConfigName = config.configName?.trim() || config.name;
+  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${displayConfigName}` : displayConfigName;
   const configBasePath = isNew ? "/mcp-evaluations/new" : `/mcp-evaluations/${encodeURIComponent(config.id || id || "")}`;
   const isBrokenConfig = Boolean(existing?.loadError);
 
   const importServerFromLibrary = () => {
     const template = libServers.find((item) => item.id === selectedLibraryServerId);
     if (!template) return;
-    const name = template.name || template.id;
-    if (config.servers.some((srv) => (srv.name || srv.id) === name)) {
-      toast({ title: "Server already exists in config" });
-      return;
-    }
-    patch({
-      servers: [...config.servers, { ...structuredClone(template), id: `srv-${Date.now()}` }]
-    });
+    const inlineCopy = { ...structuredClone(template), id: `srv-${Date.now()}` };
+    setServerEntries([...serverEntries, { kind: "inline", server: inlineCopy }]);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
     setSelectedLibraryServerId("");
   };
 
   const addServerReference = () => {
     const template = libServers.find((item) => item.id === selectedLibraryServerId);
     if (!template) return;
-    const refName = template.name || template.id;
-    const nextRefs = Array.from(new Set([...(config.serverRefs ?? []), refName]));
-    patch({ serverRefs: nextRefs });
+    const refName = template.id;
+    const existing = new Set(
+      serverEntries
+        .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    if (!existing.has(refName)) {
+      setServerEntries([...serverEntries, { kind: "referenced", ref: refName }]);
+    }
     setSelectedLibraryServerId("");
   };
 
-  const importAgentFromLibrary = () => {
-    const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
-    if (!template) return;
-    const name = template.name || template.id;
-    if (config.agents.some((agent) => (agent.name || agent.id) === name)) {
-      toast({ title: "Agent already exists in config" });
+  const addInlineServerEntry = () => {
+    const createdAt = Date.now();
+    const inlineServer: ServerConfig = {
+      id: `srv-${createdAt}`,
+      name: "",
+      transport: "stdio",
+      authType: "none",
+      oauthRedirectUrl: "http://localhost:6274/oauth/",
+    };
+    setServerEntries([{ kind: "inline", server: inlineServer }, ...serverEntries]);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineServer.id]: true }));
+  };
+
+  const removeServerEntryAt = (index: number) => {
+    const entry = serverEntries[index];
+    if (entry?.kind === "inline") {
+      setExpandedInlineServerIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.server.id];
+        return next;
+      });
+    }
+    setServerEntries(serverEntries.filter((_, entryIndex) => entryIndex !== index));
+  };
+
+  const moveServerEntry = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= serverEntries.length) return;
+    const nextEntries = [...serverEntries];
+    const [moved] = nextEntries.splice(index, 1);
+    nextEntries.splice(nextIndex, 0, moved);
+    setServerEntries(nextEntries);
+  };
+
+  const convertReferencedServerToInline = (index: number) => {
+    const entry = serverEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const template = findLibraryServerByRef(entry.ref);
+    if (!template) {
+      toast({ title: "Referenced server not found", variant: "destructive" });
       return;
     }
+    const inlineCopy = { ...structuredClone(template), id: `srv-${Date.now()}` };
+    const nextEntries = [...serverEntries];
+    nextEntries[index] = { kind: "inline", server: inlineCopy };
+    setServerEntries(nextEntries);
+    setExpandedInlineServerIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
+    toast({ title: "Referenced server converted to inline", description: inlineCopy.name || inlineCopy.id });
+    setSelectedLibraryServerId("");
+  };
+
+  const libraryAgentRefOptions = useMemo(
+    () =>
+      libAgents
+        .map((item) => ({
+          id: item.id,
+          ref: item.id,
+          label: item.name || item.id,
+          model: item.model
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [libAgents]
+  );
+
+  const toggleDefaultAgent = (agentId: string, checked: boolean) => {
+    const nextDefaults = checked
+      ? Array.from(new Set([...defaultRunAgentNames, agentId]))
+      : defaultRunAgentNames.filter((name) => name !== agentId);
+
     patch({
-      agents: [...config.agents, { ...structuredClone(template), id: `agt-${Date.now()}` }]
+      runDefaults: {
+        ...(config.runDefaults ?? {}),
+        selectedAgentNames: nextDefaults
+      }
     });
-    setSelectedLibraryAgentId("");
+  };
+
+  const createCustomInlineAgentName = (baseName: string) => {
+    const usedNames = new Set([
+      ...agentEntries
+        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .map((entry) => entry.agent.name || entry.agent.id),
+      ...libAgents.map((agent) => agent.name || agent.id)
+    ]);
+    const customBase = `${baseName}-custom`;
+    let customName = customBase;
+    let suffix = 2;
+    while (usedNames.has(customName)) {
+      customName = `${customBase}-${suffix}`;
+      suffix += 1;
+    }
+    return customName;
+  };
+
+  const addInlineAgentEntry = () => {
+    const createdAt = Date.now();
+    const inlineAgent: AgentConfig = {
+      id: `agt-${createdAt}`,
+      name: "",
+      provider: "openai",
+      model: "gpt-4o",
+      temperature: 0,
+      maxTokens: 4096,
+    };
+    setAgentEntries([{ kind: "inline", agent: inlineAgent }, ...agentEntries]);
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineAgent.id]: true }));
   };
 
   const addAgentReference = () => {
     const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
     if (!template) return;
-    const refName = template.name || template.id;
-    const nextRefs = Array.from(new Set([...(config.agentRefs ?? []), refName]));
-    patch({ agentRefs: nextRefs });
+    const refName = template.id;
+    const existing = new Set(
+      agentEntries
+        .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    if (!existing.has(refName)) {
+      setAgentEntries([...agentEntries, { kind: "referenced", ref: refName }]);
+    }
     setSelectedLibraryAgentId("");
+  };
+
+  const importAgentFromLibraryInline = () => {
+    const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
+    if (!template) return;
+    const displayName = template.name || template.id;
+    const customName = createCustomInlineAgentName(displayName);
+    const inlineCopy: AgentConfig = {
+      ...structuredClone(template),
+      id: `agt-${Date.now()}`,
+      name: customName
+    };
+    setAgentEntries([...agentEntries, { kind: "inline", agent: inlineCopy }]);
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
+    setSelectedLibraryAgentId("");
+    toast({ title: "Imported agent as inline", description: customName });
+  };
+
+  const removeAgentEntryAt = (index: number) => {
+    const entry = agentEntries[index];
+    if (!entry) return;
+    const removedAgentId = entry.kind === "inline" ? entry.agent.id : entry.ref;
+    const nextDefaults = defaultRunAgentNames.filter((item) => item !== removedAgentId);
+    patch({
+      runDefaults: {
+        ...(config.runDefaults ?? {}),
+        selectedAgentNames: nextDefaults
+      }
+    });
+    if (entry.kind === "inline") {
+      setExpandedInlineAgentIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.agent.id];
+        return next;
+      });
+    }
+    setAgentEntries(agentEntries.filter((_, entryIndex) => entryIndex !== index));
+  };
+
+  const moveAgentEntry = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= agentEntries.length) return;
+    const nextEntries = [...agentEntries];
+    const [moved] = nextEntries.splice(index, 1);
+    nextEntries.splice(nextIndex, 0, moved);
+    setAgentEntries(nextEntries);
+  };
+
+  const convertReferencedAgentToInline = (index: number) => {
+    const entry = agentEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const template = findLibraryAgentByRef(entry.ref);
+    if (!template) {
+      toast({ title: "Referenced agent not found", variant: "destructive" });
+      return;
+    }
+    const displayName = template.name || template.id;
+    const customName = createCustomInlineAgentName(displayName);
+    const inlineCopy: AgentConfig = {
+      ...structuredClone(template),
+      id: `agt-${Date.now()}`,
+      name: customName
+    };
+    const nextEntries = [...agentEntries];
+    nextEntries[index] = { kind: "inline", agent: inlineCopy };
+    setAgentEntries(nextEntries);
+    if (defaultRunAgentNames.includes(entry.ref)) {
+      const nextDefaults = defaultRunAgentNames.map((item) =>
+        item === entry.ref ? inlineCopy.id : item
+      );
+      patch({
+        runDefaults: {
+          ...(config.runDefaults ?? {}),
+          selectedAgentNames: Array.from(new Set(nextDefaults))
+        }
+      });
+    }
+    setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
+    toast({ title: "Referenced agent converted to inline", description: customName });
   };
 
   const importScenarioFromLibrary = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
-    const nextAgents = [...config.agents];
-    const nextServers = [...config.servers];
+    const nextServerEntries = [...serverEntries];
 
     const mappedServerIds: string[] = [];
     for (const templateServerId of template.serverIds) {
+      const existingRef = nextServerEntries.find(
+        (entry): entry is Extract<ServerEntry, { kind: "referenced" }> =>
+          entry.kind === "referenced" && entry.ref === templateServerId
+      );
+      if (existingRef) {
+        mappedServerIds.push(existingRef.ref);
+        continue;
+      }
+
       const templateServer = libServers.find((item) => item.id === templateServerId);
       if (!templateServer) continue;
       const templateServerName = templateServer.name || templateServer.id;
-      const existingServer = nextServers.find((item) => (item.name || item.id) === templateServerName);
-      if (existingServer) {
-        mappedServerIds.push(existingServer.id);
+      const existingInlineServer = nextServerEntries.find(
+        (entry): entry is Extract<ServerEntry, { kind: "inline" }> =>
+          entry.kind === "inline" &&
+          (entry.server.id === templateServer.id || (entry.server.name || entry.server.id) === templateServerName)
+      );
+      if (existingInlineServer) {
+        mappedServerIds.push(existingInlineServer.server.id);
         continue;
       }
-      const imported = { ...structuredClone(templateServer), id: `srv-${Date.now()}-${mappedServerIds.length}` };
-      nextServers.push(imported);
+      const imported = {
+        ...structuredClone(templateServer),
+        id: `srv-${Date.now()}-${mappedServerIds.length}`
+      };
+      nextServerEntries.push({ kind: "inline", server: imported });
       mappedServerIds.push(imported.id);
     }
 
@@ -370,68 +588,193 @@ const ConfigEditor = () => {
       serverIds: mappedServerIds.length > 0 ? mappedServerIds : []
     };
 
-    patch({
-      agents: nextAgents,
-      servers: nextServers,
-      scenarios: [...config.scenarios, importedScenario]
-    });
+    setServerEntries(nextServerEntries);
+    setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [importedScenario.id]: true }));
     setSelectedLibraryScenarioId("");
+  };
+
+  const addInlineScenarioEntry = () => {
+    const createdAt = Date.now();
+    const inlineScenario: Scenario = {
+      id: `scn-${createdAt}`,
+      name: "",
+      serverIds: [],
+      prompt: "",
+      evalRules: [],
+      extractRules: [],
+    };
+    setScenarioEntries([{ kind: "inline", scenario: inlineScenario }, ...scenarioEntries]);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineScenario.id]: true }));
   };
 
   const addScenarioReference = () => {
     const template = libScenarios.find((item) => item.id === selectedLibraryScenarioId);
     if (!template) return;
     const refId = template.id;
-    const nextRefs = Array.from(new Set([...(config.scenarioRefs ?? []), refId]));
-    patch({ scenarioRefs: nextRefs });
+    const existing = new Set(
+      scenarioEntries
+        .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    if (!existing.has(refId)) {
+      setScenarioEntries([...scenarioEntries, { kind: "referenced", ref: refId }]);
+    }
     setSelectedLibraryScenarioId("");
   };
 
-  const removeRef = (
-    key: "serverRefs" | "agentRefs" | "scenarioRefs",
-    value: string
-  ) => {
-    const next = (config[key] ?? []).filter((item) => item !== value);
-    patch({ [key]: next } as Partial<EvalConfig>);
+  const removeScenarioEntryAt = (index: number) => {
+    const entry = scenarioEntries[index];
+    if (entry?.kind === "inline") {
+      setExpandedInlineScenarioIds((prev) => {
+        const next = { ...prev };
+        delete next[entry.scenario.id];
+        return next;
+      });
+    }
+    setScenarioEntries(scenarioEntries.filter((_, entryIndex) => entryIndex !== index));
   };
 
-  const moveRef = (
-    key: "serverRefs" | "agentRefs" | "scenarioRefs",
-    index: number,
-    direction: -1 | 1
-  ) => {
-    const current = [...(config[key] ?? [])];
+  const moveScenarioEntry = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= current.length) return;
-    const [item] = current.splice(index, 1);
-    current.splice(nextIndex, 0, item);
-    patch({ [key]: current } as Partial<EvalConfig>);
+    if (nextIndex < 0 || nextIndex >= scenarioEntries.length) return;
+    const nextEntries = [...scenarioEntries];
+    const [moved] = nextEntries.splice(index, 1);
+    nextEntries.splice(nextIndex, 0, moved);
+    setScenarioEntries(nextEntries);
+  };
+
+  const convertReferencedScenarioToInline = (index: number) => {
+    const entry = scenarioEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const template = findLibraryScenarioByRef(entry.ref);
+    if (!template) {
+      toast({ title: "Referenced scenario not found", variant: "destructive" });
+      return;
+    }
+    const usedNames = new Set(
+      scenarioEntries
+        .filter((item): item is Extract<ScenarioEntry, { kind: "inline" }> => item.kind === "inline")
+        .map((item) => item.scenario.name?.trim().toLowerCase())
+        .filter(Boolean) as string[]
+    );
+    const baseName = `${(template.name || template.id).trim()}-custom`;
+    let nextName = baseName;
+    let suffix = 2;
+    while (usedNames.has(nextName.toLowerCase())) {
+      nextName = `${baseName}-${suffix}`;
+      suffix += 1;
+    }
+    const createdAt = Date.now();
+    const nextServerEntries = [...serverEntries];
+    const mappedServerIds: string[] = [];
+    for (const templateServerId of template.serverIds) {
+      const existingRef = nextServerEntries.find(
+        (item): item is Extract<ServerEntry, { kind: "referenced" }> =>
+          item.kind === "referenced" && item.ref === templateServerId
+      );
+      if (existingRef) {
+        mappedServerIds.push(existingRef.ref);
+        continue;
+      }
+      const templateServer = libServers.find((item) => item.id === templateServerId);
+      if (!templateServer) continue;
+      const templateServerName = templateServer.name || templateServer.id;
+      const existingInlineServer = nextServerEntries.find(
+        (item): item is Extract<ServerEntry, { kind: "inline" }> =>
+          item.kind === "inline" &&
+          (item.server.id === templateServer.id || (item.server.name || item.server.id) === templateServerName)
+      );
+      if (existingInlineServer) {
+        mappedServerIds.push(existingInlineServer.server.id);
+        continue;
+      }
+      const imported = { ...structuredClone(templateServer), id: `srv-${createdAt}-${mappedServerIds.length}` };
+      nextServerEntries.push({ kind: "inline", server: imported });
+      mappedServerIds.push(imported.id);
+    }
+    setServerEntries(nextServerEntries);
+    const inlineCopy: Scenario = {
+      ...structuredClone(template),
+      id: `scn-${createdAt}`,
+      name: nextName,
+      serverIds: mappedServerIds,
+    };
+    const nextEntries = [...scenarioEntries];
+    nextEntries[index] = { kind: "inline", scenario: inlineCopy };
+    setScenarioEntries(nextEntries);
+    setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
+    toast({ title: "Referenced scenario converted to inline", description: nextName });
   };
 
   const findLibraryServerByRef = (ref: string) =>
-    libServers.find((item) => (item.name || item.id) === ref);
+    libServers.find((item) => item.id === ref);
   const findLibraryAgentByRef = (ref: string) =>
-    libAgents.find((item) => (item.name || item.id) === ref);
+    libAgents.find((item) => item.id === ref);
   const findLibraryScenarioByRef = (ref: string) =>
-    libScenarios.find((item) => item.id === ref || item.name === ref);
-  const referencedServers = (config.serverRefs ?? [])
+    libScenarios.find((item) => item.id === ref);
+  const referencedServerRefs = serverEntries
+    .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .map((entry) => entry.ref);
+  const referencedServers = referencedServerRefs
     .map(findLibraryServerByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const referencedAgents = (config.agentRefs ?? [])
+  const serverViewRows = serverEntries.flatMap((entry) => {
+    if (entry.kind === "referenced") {
+      const server = findLibraryServerByRef(entry.ref);
+      return server ? [{ server, origin: "referenced" as const, ref: entry.ref }] : [];
+    }
+    return [{ server: entry.server, origin: "inline" as const, ref: undefined }];
+  });
+  const referencedAgentRefs = agentEntries
+    .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .map((entry) => entry.ref);
+  const referencedAgents = referencedAgentRefs
     .map(findLibraryAgentByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const referencedScenarios = (config.scenarioRefs ?? [])
-    .map(findLibraryScenarioByRef)
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const missingServerRefs = (config.serverRefs ?? []).filter((ref) => !findLibraryServerByRef(ref));
-  const missingAgentRefs = (config.agentRefs ?? []).filter((ref) => !findLibraryAgentByRef(ref));
-  const missingScenarioRefs = (config.scenarioRefs ?? []).filter((ref) => !findLibraryScenarioByRef(ref));
+  const inlineAgentEntries = agentEntries
+    .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline");
+  const agentViewRows = agentEntries.flatMap((entry) => {
+    if (entry.kind === "referenced") {
+      const agent = findLibraryAgentByRef(entry.ref);
+      return agent ? [{ agent, origin: "referenced" as const, ref: entry.ref }] : [];
+    }
+    return [{ agent: entry.agent, origin: "inline" as const, ref: undefined }];
+  });
+  const referencedScenarioIds = scenarioEntries
+    .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .map((entry) => entry.ref);
+  const scenarioViewRows = scenarioEntries.flatMap((entry) => {
+    if (entry.kind === "referenced") {
+      const scenario = findLibraryScenarioByRef(entry.ref);
+      return scenario ? [{ scenario, origin: "referenced" as const }] : [];
+    }
+    return [{ scenario: entry.scenario, origin: "inline" as const }];
+  });
+  const scenarioViewAgents = Array.from(
+    new Map(
+      [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.name || agent.id, agent] as const)
+    ).values()
+  );
+  const scenarioViewServers = Array.from(
+    new Map(
+      [...libServers, ...config.servers, ...referencedServers].map((server) => [server.name || server.id, server] as const)
+    ).values()
+  );
+  const missingServerRefs = referencedServerRefs.filter((ref) => !findLibraryServerByRef(ref));
+  const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
+  const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
-  const missingAgentRefSet = new Set(missingAgentRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
-  const totalServerCount = config.servers.length + referencedServers.length;
-  const totalAgentCount = config.agents.length + referencedAgents.length;
-  const totalScenarioCount = config.scenarios.length + referencedScenarios.length;
+  const totalServerCount = serverEntries.length;
+  const totalAgentCount = agentEntries.length;
+  const totalScenarioCount = scenarioEntries.length;
+
+  useEffect(() => {
+    if (!selectedLibraryAgentId) return;
+    const exists = libAgents.some((item) => item.id === selectedLibraryAgentId);
+    if (!exists) setSelectedLibraryAgentId("");
+  }, [libAgents, selectedLibraryAgentId]);
 
   return (
     <div className="space-y-6">
@@ -579,10 +922,16 @@ const ConfigEditor = () => {
       {/* Meta fields */}
       <Card>
         <CardContent className="pt-6 space-y-3">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className={`grid gap-4 ${readOnly || !isNew ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+            {!readOnly && isNew && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Config ID</Label>
+                <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. check-weather" />
+              </div>
+            )}
             <div className="space-y-1.5">
-              <Label className="text-xs">MCP Evaluation Name</Label>
-              <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. Basic OpenAI Eval" />
+              <Label className="text-xs">Name (optional)</Label>
+              <Input value={config.configName || ""} onChange={(e) => patch({ configName: e.target.value })} disabled={readOnly} placeholder="e.g. Weather checks baseline" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Description</Label>
@@ -591,99 +940,6 @@ const ConfigEditor = () => {
           </div>
         </CardContent>
       </Card>
-
-      {!readOnly && (
-      <Card>
-        <CardContent className="pt-6 space-y-3">
-          <div>
-            <p className="text-sm font-semibold">Run Defaults</p>
-            <p className="text-xs text-muted-foreground">
-              Default agent selection for Run UI/CLI. Users can override at run time.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs">Default agents</Label>
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="text-xs text-primary hover:underline"
-                  onClick={() =>
-                    patch({
-                      runDefaults: {
-                        ...(config.runDefaults ?? {}),
-                        selectedAgentNames: [
-                          ...new Set(
-                            [
-                              ...config.agents.map((a) => a.name || a.id),
-                              ...referencedAgents.map((a) => a.name || a.id)
-                            ]
-                          )
-                        ]
-                      }
-                    })
-                  }
-                >
-                  Select all
-                </button>
-              )}
-            </div>
-            {readOnly ? (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Default run agents are highlighted in the agent cards above.
-                </p>
-                {defaultRunAgentNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {defaultRunAgentNames.map((name) => (
-                      <Badge key={`default-run-agent-${name}`} variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
-                        {name}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No default agents selected.</p>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {[...config.agents, ...referencedAgents].map((agent) => {
-                  const agentName = agent.name || agent.id;
-                  const checked = defaultRunAgentNames.includes(agentName);
-                  return (
-                    <label key={`run-default-${agent.id}`} className="flex items-center gap-2 rounded-md border p-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={readOnly}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...defaultRunAgentNames, agentName]
-                            : defaultRunAgentNames.filter((name) => name !== agentName);
-                          patch({
-                            runDefaults: {
-                              ...(config.runDefaults ?? {}),
-                              selectedAgentNames: Array.from(new Set(next))
-                            }
-                          });
-                        }}
-                      />
-                      <span>{agent.name || agent.id}</span>
-                      {referencedAgents.some((a) => a.id === agent.id) && (
-                        <span className="text-xs text-muted-foreground">(ref)</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-            {[...config.agents, ...referencedAgents].length === 0 && (
-              <p className="text-xs text-muted-foreground">No agents available yet.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-      )}
 
       {snapshotsUiEnabled && (
       <Card>
@@ -849,18 +1105,16 @@ const ConfigEditor = () => {
         <TabsContent value="servers">
           {!readOnly && (
             <Card className="mb-4">
-              <CardContent className="pt-4">
+              <CardContent className="pt-4 space-y-3">
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Select value={selectedLibraryServerId} onValueChange={setSelectedLibraryServerId}>
                     <SelectTrigger className="h-8">
                       <SelectValue placeholder="Select server from library" />
                     </SelectTrigger>
                     <SelectContent>
-                      {libServers
-                        .filter((item) => !(config.serverRefs ?? []).includes(item.name || item.id))
-                        .map((item) => (
-                          <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                        ))}
+                      {libServers.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
@@ -870,279 +1124,692 @@ const ConfigEditor = () => {
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryServerId} onClick={importServerFromLibrary}>
                       Import Inline
                     </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineServerEntry}>
+                      Add server
+                    </Button>
                   </div>
                 </div>
-                {(config.serverRefs ?? []).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(config.serverRefs ?? []).map((ref) => (
-                      <Badge
-                        key={ref}
-                        variant={missingServerRefSet.has(ref) ? "destructive" : "secondary"}
-                        className="gap-1"
-                      >
-                        {missingServerRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                        {ref}
-                        <button
-                          type="button"
-                          onClick={() => removeRef("serverRefs", ref)}
-                          className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                          aria-label={`Remove server reference ${ref}`}
-                          title={`Remove server reference ${ref}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                          Remove
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-2">
+                  {serverEntries.map((entry, index) => {
+                    const referenceServer = entry.kind === "referenced" ? findLibraryServerByRef(entry.ref) : null;
+                    const rowName =
+                      entry.kind === "inline"
+                        ? (entry.server.name?.trim() || entry.server.id)
+                        : (referenceServer?.name || entry.ref);
+                    const rowKey = entry.kind === "inline" ? entry.server.id : entry.ref;
+                    const isMissingRef = entry.kind === "referenced" && !referenceServer;
+                    const serverExpanded =
+                      entry.kind === "inline" && Boolean(expandedInlineServerIds[entry.server.id]);
+                    return (
+                      <div key={`server-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveServerEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move server up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveServerEntry(index, 1)}
+                                disabled={index === serverEntries.length - 1}
+                                aria-label="Move server down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowName}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {entry.kind === "inline" && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  setExpandedInlineServerIds((prev) => ({
+                                    ...prev,
+                                    [entry.server.id]: !Boolean(prev[entry.server.id])
+                                  }))
+                                }
+                                aria-label={serverExpanded ? "Collapse server details" : "Expand server details"}
+                              >
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${serverExpanded ? "rotate-180" : ""}`} />
+                              </Button>
+                            )}
+                            {entry.kind === "referenced" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => convertReferencedServerToInline(index)}
+                                disabled={isMissingRef}
+                              >
+                                Convert to inline
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeServerEntryAt(index)}
+                              aria-label="Remove server entry"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        {entry.kind === "inline" && serverExpanded && (
+                          <div className="border-t px-3 py-3">
+                            <ServerForm
+                              servers={[entry.server]}
+                              onChange={(servers) => {
+                                const nextServer = servers[0];
+                                if (!nextServer) return;
+                                const nextEntries = [...serverEntries];
+                                nextEntries[index] = { kind: "inline", server: nextServer };
+                                setServerEntries(nextEntries);
+                              }}
+                              readOnly={false}
+                              allowAdd={false}
+                              allowStructureEdits={false}
+                              showHeader={false}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {serverEntries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No servers configured yet. Add inline servers or references.
+                    </p>
+                  )}
+                </div>
                 {missingServerRefs.length > 0 && (
-                  <p className="mt-2 text-xs text-destructive">
+                  <p className="text-xs text-destructive">
                     Missing server refs: {missingServerRefs.join(", ")}
                   </p>
                 )}
               </CardContent>
             </Card>
           )}
-          {referencedServers.length > 0 && (
-            <Card className="mb-4">
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Referenced servers (read-only)</div>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/libraries/servers">
-                      Edit in Manage Servers
-                      <ExternalLink className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+          {readOnly ? (
+            <Card>
+              <CardContent className="pt-4">
+                <div className="space-y-2">
+                  {serverViewRows.map((row, index) => {
+                    const viewServerKey = row.ref ?? row.server.id;
+                    const expanded = Boolean(expandedViewServerIds[viewServerKey]);
+                    return (
+                      <div key={`server-view-${index}-${viewServerKey}`} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <div className="truncate font-medium text-sm">{row.server.name || row.server.id}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                              {row.origin === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              onClick={() =>
+                                setExpandedViewServerIds((prev) => ({
+                                  ...prev,
+                                  [viewServerKey]: !Boolean(prev[viewServerKey])
+                                }))
+                              }
+                              aria-label={expanded ? "Collapse server details" : "Expand server details"}
+                            >
+                              <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                            </Button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                            <Badge variant="outline" className="text-xs font-mono">
+                              {row.server.transport}
+                            </Badge>
+                            {row.server.url && (
+                              <span className="text-xs font-mono text-muted-foreground break-all">
+                                {row.server.url}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {serverViewRows.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No servers configured.
+                    </p>
+                  )}
                 </div>
-                <ServerListReadOnly servers={referencedServers} />
               </CardContent>
             </Card>
-          )}
-          {readOnly && config.servers.length === 0 && referencedServers.length > 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No inline servers configured. Using {referencedServers.length} referenced server{referencedServers.length !== 1 ? "s" : ""} above.
-            </p>
-          ) : readOnly ? (
-            <InlineServersReadOnly servers={config.servers} />
-          ) : (
-            <ServerForm servers={config.servers} onChange={(servers) => patch({ servers })} readOnly={readOnly} />
-          )}
+          ) : null}
         </TabsContent>
 
         <TabsContent value="agents">
-          {!readOnly && <Card className="mb-4">
-            <CardContent className="pt-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <Select value={selectedLibraryAgentId} onValueChange={setSelectedLibraryAgentId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select agent from library" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libAgents
-                      .filter((item) => !(config.agentRefs ?? []).includes(item.name || item.id))
-                      .map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
-                    Add Ref
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibrary}>
-                    Import Inline
-                  </Button>
-                </div>
-              </div>
-              {(config.agentRefs ?? []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(config.agentRefs ?? []).map((ref) => (
-                    <Badge
-                      key={ref}
-                      variant={missingAgentRefSet.has(ref) ? "destructive" : "secondary"}
-                      className="gap-1"
-                    >
-                      {missingAgentRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                      {ref}
-                      <button
-                        type="button"
-                        onClick={() => removeRef("agentRefs", ref)}
-                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                        aria-label={`Remove agent reference ${ref}`}
-                        title={`Remove agent reference ${ref}`}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                        Remove
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {missingAgentRefs.length > 0 && (
-                <p className="mt-2 text-xs text-destructive">
-                  Missing agent refs: {missingAgentRefs.join(", ")}
-                </p>
-              )}
-            </CardContent>
-          </Card>}
-          {referencedAgents.length > 0 && (
+          {!readOnly && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Referenced agents (read-only)</div>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/libraries/agents">
-                      Edit in Manage Agents
-                      <ExternalLink className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select value={selectedLibraryAgentId} onValueChange={setSelectedLibraryAgentId}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select agent from library" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {libraryAgentRefOptions.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
+                      Add Ref
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibraryInline}>
+                      Import Inline
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineAgentEntry}>
+                      Add agent
+                    </Button>
+                  </div>
                 </div>
-                <AgentListReadOnly agents={referencedAgents} defaultAgentNames={defaultRunAgentNames} />
+                <div className="space-y-2">
+                  {agentEntries.map((entry, index) => {
+                    const referenceAgent = entry.kind === "referenced" ? findLibraryAgentByRef(entry.ref) : null;
+                    const rowName =
+                      entry.kind === "inline"
+                        ? (entry.agent.name?.trim() || entry.agent.id)
+                        : (referenceAgent?.name || entry.ref);
+                    const rowModel = entry.kind === "inline" ? entry.agent.model : (referenceAgent?.model || "unknown");
+                    const rowKey = entry.kind === "inline" ? entry.agent.id : entry.ref;
+                    const isMissingRef = entry.kind === "referenced" && !referenceAgent;
+                    const defaultName = entry.kind === "inline" ? entry.agent.id : entry.ref;
+                    const defaultChecked = defaultRunAgentNames.includes(defaultName);
+                    const inlineExpanded = entry.kind === "inline" && Boolean(expandedInlineAgentIds[entry.agent.id]);
+                    return (
+                      <div key={`agent-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveAgentEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move agent up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveAgentEntry(index, 1)}
+                                disabled={index === agentEntries.length - 1}
+                                aria-label="Move agent down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowName}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            <Badge variant="outline" className="font-mono text-[10px]">{rowModel}</Badge>
+                            {defaultChecked && (
+                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                                Default
+                              </Badge>
+                            )}
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <label className="mx-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={defaultChecked}
+                                onChange={(e) => toggleDefaultAgent(defaultName, e.target.checked)}
+                              />
+                              <span>Default</span>
+                            </label>
+                            {entry.kind === "inline" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setExpandedInlineAgentIds((prev) => ({
+                                    ...prev,
+                                    [entry.agent.id]: !Boolean(prev[entry.agent.id])
+                                  }))
+                                }
+                              >
+                                {inlineExpanded ? "Collapse" : "Expand"}
+                              </Button>
+                            )}
+                            {entry.kind === "referenced" && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => convertReferencedAgentToInline(index)}
+                                  disabled={isMissingRef}
+                                >
+                                  Convert to inline
+                                </Button>
+                              </>
+                            )}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeAgentEntryAt(index)}
+                              aria-label="Remove agent entry"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        {entry.kind === "inline" && inlineExpanded && (
+                          <div className="border-t px-3 py-3 space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Name</Label>
+                                <Input
+                                  value={entry.agent.name}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, name: e.target.value }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  placeholder="e.g. GPT-5 Mini custom"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Provider</Label>
+                                <Select
+                                  value={entry.agent.provider}
+                                  onValueChange={(value) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, provider: value as AgentConfig["provider"] }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                >
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="openai">OpenAI</SelectItem>
+                                    <SelectItem value="anthropic">Anthropic</SelectItem>
+                                    <SelectItem value="azure">Azure OpenAI</SelectItem>
+                                    <SelectItem value="google">Google</SelectItem>
+                                    <SelectItem value="custom">Custom</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Model</Label>
+                                <Input
+                                  value={entry.agent.model}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, model: e.target.value }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  className="font-mono text-xs"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-xs">Max Tokens</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={128000}
+                                  value={entry.agent.maxTokens}
+                                  onChange={(e) => {
+                                    const nextEntries = [...agentEntries];
+                                    nextEntries[index] = {
+                                      kind: "inline",
+                                      agent: { ...entry.agent, maxTokens: parseInt(e.target.value) || 0 }
+                                    };
+                                    setAgentEntries(nextEntries);
+                                  }}
+                                  className="font-mono text-xs"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">Temperature</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={2}
+                                step={0.01}
+                                value={entry.agent.temperature}
+                                onChange={(e) => {
+                                  const nextEntries = [...agentEntries];
+                                  nextEntries[index] = {
+                                    kind: "inline",
+                                    agent: { ...entry.agent, temperature: Number(e.target.value) || 0 }
+                                  };
+                                  setAgentEntries(nextEntries);
+                                }}
+                                className="font-mono text-xs"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs">System Prompt</Label>
+                              <Textarea
+                                value={entry.agent.systemPrompt || ""}
+                                onChange={(e) => {
+                                  const nextEntries = [...agentEntries];
+                                  nextEntries[index] = {
+                                    kind: "inline",
+                                    agent: { ...entry.agent, systemPrompt: e.target.value }
+                                  };
+                                  setAgentEntries(nextEntries);
+                                }}
+                                rows={3}
+                                className="text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {agentEntries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No agents configured yet. Add inline agents or references.
+                    </p>
+                  )}
+                </div>
+                {missingAgentRefs.length > 0 && (
+                  <p className="text-xs text-destructive">
+                    Missing agent refs: {missingAgentRefs.join(", ")}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
-          {readOnly && config.agents.length === 0 && referencedAgents.length > 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No inline agents configured. Using {referencedAgents.length} referenced agent{referencedAgents.length !== 1 ? "s" : ""} above.
-            </p>
-          ) : readOnly ? (
-            <InlineAgentsReadOnly agents={config.agents} defaultAgentNames={defaultRunAgentNames} />
-          ) : (
-            <AgentForm agents={config.agents} onChange={(agents) => patch({ agents })} readOnly={readOnly} />
-          )}
+          {readOnly ? (
+            <Card>
+              <CardContent className="pt-4">
+                <div className="space-y-2">
+                  {agentViewRows.map((row, index) => {
+                    const name = row.agent.name || row.agent.id;
+                    const isDefault = defaultRunAgentNames.includes(row.origin === "inline" ? row.agent.id : (row.ref || row.agent.id));
+                    const viewAgentKey = row.ref ?? row.agent.id;
+                    const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
+                    return (
+                      <div key={`agent-view-${index}-${row.ref ?? row.agent.id}`} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <div className="truncate font-medium text-sm">{name}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isDefault && (
+                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                                Default
+                              </Badge>
+                            )}
+                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
+                              {row.origin === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-8 w-8"
+                              onClick={() =>
+                                setExpandedViewAgentIds((prev) => ({
+                                  ...prev,
+                                  [viewAgentKey]: !Boolean(prev[viewAgentKey])
+                                }))
+                              }
+                              aria-label={expanded ? "Collapse agent details" : "Expand agent details"}
+                            >
+                              <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                            </Button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t pt-2">
+                            <ProviderBadge provider={row.agent.provider} />
+                            <Badge variant="outline" className="text-xs font-mono">
+                              {row.agent.model}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs font-mono">
+                              max_tokens: {row.agent.maxTokens}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs font-mono">
+                              temperature: {row.agent.temperature}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {agentViewRows.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">
+                      No agents configured.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="scenarios">
-          {!readOnly && <Card className="mb-4">
-            <CardContent className="pt-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select scenario from library" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {libScenarios.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
-                    Add Ref
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
-                    Import Inline
-                  </Button>
-                </div>
-              </div>
-              {(config.scenarioRefs ?? []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(config.scenarioRefs ?? []).map((ref) => (
-                    <Badge
-                      key={ref}
-                      variant={missingScenarioRefSet.has(ref) ? "destructive" : "secondary"}
-                      className="gap-1"
-                    >
-                      {missingScenarioRefSet.has(ref) ? "Missing ref: " : "Ref: "}
-                      {ref}
-                      <button
-                        type="button"
-                        onClick={() => removeRef("scenarioRefs", ref)}
-                        className="inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] leading-none hover:bg-background"
-                        aria-label={`Remove scenario reference ${ref}`}
-                        title={`Remove scenario reference ${ref}`}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                        Remove
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {missingScenarioRefs.length > 0 && (
-                <p className="mt-2 text-xs text-destructive">
-                  Missing scenario refs: {missingScenarioRefs.join(", ")}
-                </p>
-              )}
-            </CardContent>
-          </Card>}
-          {referencedScenarios.length > 0 && (
+          {!readOnly && (
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Referenced scenario order</div>
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to="/libraries/scenarios">
-                      Scenarios Overview
-                      <ExternalLink className="ml-1.5 h-3 w-3" />
-                    </Link>
-                  </Button>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select scenario from library" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {libScenarios.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
+                      Add Ref
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
+                      Import Inline
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineScenarioEntry}>
+                      Add scenario
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  {(config.scenarioRefs ?? []).map((ref, index) => (
-                    <div key={`scenario-order-${ref}-${index}`} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-sm">
-                      <span>{index + 1}. {ref}</span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          asChild
-                        >
-                          <Link
-                            to={
-                              findLibraryScenarioByRef(ref)
-                                ? `/libraries/scenarios/${encodeURIComponent(findLibraryScenarioByRef(ref)!.id)}`
-                                : "/libraries/scenarios"
-                            }
-                          >
-                            Edit
-                          </Link>
-                        </Button>
-                        {!readOnly && (
-                          <>
+                  {scenarioEntries.map((entry, index) => {
+                    const referenceScenario = entry.kind === "referenced" ? findLibraryScenarioByRef(entry.ref) : null;
+                    const rowTitle =
+                      entry.kind === "inline"
+                        ? entry.scenario.name?.trim() || entry.scenario.id
+                        : referenceScenario?.name || entry.ref;
+                    const hasMissingInlineName =
+                      entry.kind === "inline" && !entry.scenario.name?.trim();
+                    const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
+                    const scenarioExpanded =
+                      entry.kind === "inline" && Boolean(expandedInlineScenarioIds[entry.scenario.id]);
+                    return (
+                      <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="rounded-md border text-sm">
+                        <div className="flex items-center justify-between px-2 py-1.5">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveScenarioEntry(index, -1)}
+                                disabled={index === 0}
+                                aria-label="Move scenario up"
+                              >
+                                <ChevronUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-6 w-6"
+                                onClick={() => moveScenarioEntry(index, 1)}
+                                disabled={index === scenarioEntries.length - 1}
+                                aria-label="Move scenario down"
+                              >
+                                <ChevronDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            <span className="text-xs text-muted-foreground">{index + 1}.</span>
+                            <span className="truncate font-medium">{rowTitle}</span>
+                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
+                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            </Badge>
+                            {hasMissingInlineName && <Badge variant="destructive">Name required</Badge>}
+                            {isMissingRef && <Badge variant="destructive">Missing</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {entry.kind === "inline" && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  setExpandedInlineScenarioIds((prev) => ({
+                                    ...prev,
+                                    [entry.scenario.id]: !Boolean(prev[entry.scenario.id])
+                                  }))
+                                }
+                                aria-label={scenarioExpanded ? "Collapse scenario details" : "Expand scenario details"}
+                              >
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scenarioExpanded ? "rotate-180" : ""}`} />
+                              </Button>
+                            )}
+                            {entry.kind === "referenced" && (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => convertReferencedScenarioToInline(index)}
+                                  disabled={isMissingRef}
+                                >
+                                  Convert to inline
+                                </Button>
+                              </>
+                            )}
                             <Button
                               type="button"
                               size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveRef("scenarioRefs", index, -1)}
-                              disabled={index === 0}
-                              aria-label="Move referenced scenario up"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => removeScenarioEntryAt(index)}
+                              aria-label="Remove scenario entry"
                             >
-                              <ChevronUp className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-7 w-7"
-                              onClick={() => moveRef("scenarioRefs", index, 1)}
-                              disabled={index === (config.scenarioRefs ?? []).length - 1}
-                              aria-label="Move referenced scenario down"
-                            >
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                        {!readOnly && (
-                          <Button type="button" size="sm" variant="outline" onClick={() => removeRef("scenarioRefs", ref)}>
-                            Remove
-                          </Button>
+                          </div>
+                        </div>
+                        {entry.kind === "inline" && scenarioExpanded && (
+                          <div className="border-t px-3 py-3">
+                            <ScenarioForm
+                              scenarios={[entry.scenario]}
+                              scenarioOrigins={["inline"]}
+                              agents={[...config.agents, ...referencedAgents]}
+                              servers={[...config.servers, ...referencedServers]}
+                              configId={config.id}
+                              configPath={config.sourcePath}
+                              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+                              snapshotEval={config.snapshotEval}
+                              onChange={(scenarios) => {
+                                const nextScenario = scenarios[0];
+                                if (!nextScenario) return;
+                                const nextEntries = [...scenarioEntries];
+                                nextEntries[index] = { kind: "inline", scenario: nextScenario };
+                                setScenarioEntries(nextEntries);
+                              }}
+                              readOnly={false}
+                              allowAdd={false}
+                              allowStructureEdits={false}
+                            />
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                  {scenarioEntries.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No scenarios configured yet. Add inline scenarios or references.
+                    </p>
+                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Referenced scenarios are shown below in read-only form layout.
-                </div>
+                {missingScenarioRefs.length > 0 && (
+                  <p className="text-xs text-destructive">
+                    Missing scenario refs: {missingScenarioRefs.join(", ")}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {readOnly ? (
+            <Card>
+              <CardContent className="pt-4">
                 <ScenarioForm
-                  scenarios={referencedScenarios}
-                  agents={libAgents}
-                  servers={libServers}
+                  scenarios={scenarioViewRows.map((row) => row.scenario)}
+                  scenarioOrigins={scenarioViewRows.map((row) => row.origin)}
+                  agents={scenarioViewAgents}
+                  servers={scenarioViewServers}
                   configId={config.id}
                   configPath={config.sourcePath}
                   defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
@@ -1152,24 +1819,7 @@ const ConfigEditor = () => {
                 />
               </CardContent>
             </Card>
-          )}
-          {readOnly && config.scenarios.length === 0 && referencedScenarios.length > 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No inline scenarios configured. Using {referencedScenarios.length} referenced scenario{referencedScenarios.length !== 1 ? "s" : ""} above.
-            </p>
-          ) : (
-            <ScenarioForm
-              scenarios={config.scenarios}
-              agents={[...config.agents, ...referencedAgents]}
-              servers={[...config.servers, ...referencedServers]}
-              configId={config.id}
-              configPath={config.sourcePath}
-              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-              snapshotEval={config.snapshotEval}
-              onChange={(scenarios) => patch({ scenarios })}
-              readOnly={readOnly}
-            />
-          )}
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>

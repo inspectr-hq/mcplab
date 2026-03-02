@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fromCoreResultsJson } from './adapters';
-import type { CoreResultsJson, ScenarioRunTraceRecord } from './types';
+import { fromCoreConfigYaml, fromCoreResultsJson, toCoreConfigYaml } from './adapters';
+import type { CoreResultsJson, ScenarioRunTraceRecord, WorkspaceConfigRecord } from './types';
 
 function baseResults(): CoreResultsJson {
   return {
@@ -405,5 +405,74 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(typeof run.toolCalls[0].timestamp).toBe('string'); // falls back to generated timestamp
     expect(run.conversation.find((item) => item.kind === 'tool_call')?.timestamp).toBeUndefined();
     expect(run.conversation.find((item) => item.kind === 'tool_result')?.timestamp).toBeUndefined();
+  });
+});
+
+describe('config adapters round-trip', () => {
+  it('round-trips mixed inline/reference entries in stable order', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-1',
+      name: 'batch-quality',
+      path: '/tmp/batch-quality.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-1',
+      config: {
+        name: 'Batch Quality',
+        servers: [
+          { ref: 'weather-mcp' },
+          {
+            id: 'inline-mcp',
+            name: 'Inline MCP',
+            transport: 'http',
+            url: 'http://localhost:3011/mcp'
+          }
+        ],
+        agents: [
+          { ref: 'claude-sonnet-46' },
+          {
+            id: 'azure-gpt-5-mini-custom',
+            name: 'Azure GPT 5 Mini Custom',
+            provider: 'azure_openai',
+            model: 'gpt-5-mini',
+            temperature: 0,
+            max_tokens: 2048
+          }
+        ],
+        scenarios: [
+          { ref: 'scn-weather' },
+          {
+            id: 'scn-inline',
+            name: 'Inline Scenario',
+            servers: ['weather-mcp', 'inline-mcp'],
+            prompt: 'Check latest weather alerts',
+            eval: {
+              tool_constraints: {
+                required_tools: ['get_alerts'],
+                forbidden_tools: ['delete_alerts']
+              },
+              response_assertions: [{ type: 'regex', pattern: 'alerts' }]
+            },
+            extract: [{ name: 'alert_count', from: 'final_text', regex: '(\\d+)' }]
+          }
+        ],
+        run_defaults: {
+          selected_agents: ['claude-sonnet-46', 'azure-gpt-5-mini-custom']
+        }
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    expect(uiConfig.serverEntries?.map((entry) => entry.kind)).toEqual(['referenced', 'inline']);
+    expect(uiConfig.agentEntries?.map((entry) => entry.kind)).toEqual(['referenced', 'inline']);
+    expect(uiConfig.scenarioEntries?.map((entry) => entry.kind)).toEqual(['referenced', 'inline']);
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    expect(roundTripped.servers).toEqual(sourceRecord.config.servers);
+    expect(roundTripped.agents).toEqual(sourceRecord.config.agents);
+    expect(roundTripped.scenarios).toEqual(sourceRecord.config.scenarios);
+    expect(roundTripped.run_defaults).toEqual(sourceRecord.config.run_defaults);
+    expect('server_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
+    expect('agent_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
+    expect('scenario_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
   });
 });

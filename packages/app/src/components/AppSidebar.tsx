@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { LayoutDashboard, Settings, Play, BarChart3, NotepadText, NotebookTabs, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3, NotepadText, NotebookTabs, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck, Github } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
@@ -10,6 +10,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarSeparator,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -57,7 +58,12 @@ const navSections = [
   }
 ] as const;
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  version: string | null;
+}
+
+export function AppSidebar(props: AppSidebarProps = { version: null }) {
+  const appVersion = props.version ?? null;
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
@@ -122,6 +128,38 @@ export function AppSidebar() {
           </div>
         ))}
       </SidebarContent>
+      <SidebarFooter className={collapsed ? "px-2 py-2" : "px-3 py-3"}>
+        <SidebarSeparator className="my-1.5" />
+        <div className={`flex ${collapsed ? "justify-center" : "items-center justify-center gap-2"} w-full`}>
+          <a
+            href="https://github.com/inspectr-hq/mcp-lab"
+            target="_blank"
+            rel="noreferrer"
+            className={`inline-flex items-center rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent/35 hover:text-sidebar-foreground ${
+              collapsed ? "justify-center p-2" : "gap-2 px-2.5 py-1.5"
+            }`}
+            title={`GitHub${appVersion ? ` · v${appVersion}` : ""}`}
+            aria-label="GitHub repository"
+          >
+            <Github className="h-4 w-4 shrink-0" />
+            {!collapsed && (
+              <span className="text-xs text-sidebar-foreground/85">
+                {`v${appVersion ?? "unknown"}`}
+              </span>
+            )}
+          </a>
+          {!collapsed && (
+            <a
+              href="https://inspectr.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-muted-foreground transition-colors hover:text-sidebar-foreground"
+            >
+              Built by <span className="text-[#00e5ff] hover:text-[#00b8d4]">Inspectr</span>
+            </a>
+          )}
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }

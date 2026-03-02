@@ -14,7 +14,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { CircleHelp, Download, Loader2, RefreshCw, Search } from "lucide-react";
+import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = "mcplab.toolAnalysis.activeJobId";
 
@@ -412,7 +412,10 @@ const ToolAnalysisPage = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Analyze MCP Tools</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <Microscope className="h-6 w-6" />
+            Analyze MCP Tools
+          </h1>
           <p className="text-sm text-muted-foreground">
             Review MCP tools for schema quality, ergonomics, and agent/eval readiness.
           </p>

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Settings as SettingsIcon } from "lucide-react";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
@@ -73,7 +73,10 @@ const SettingsPage = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <SettingsIcon className="h-6 w-6" />
+            Settings
+          </h1>
           <p className="text-sm text-muted-foreground">
             Workspace-level MCP Lab settings and defaults.
           </p>

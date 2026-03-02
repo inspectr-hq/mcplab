@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   loadConfig,
@@ -10,6 +10,7 @@ import {
   runAll,
   expandConfigForAgents,
   type EvalConfig,
+  type SourceEvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson
 } from '@inspectr/mcplab-core';
@@ -211,7 +212,7 @@ program
 
           const configPath = resolve(String(options.config));
           const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             snapshot_eval: {
               enabled: true,
@@ -248,7 +249,7 @@ program
           }
           const configPath = resolve(String(options.config));
           const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             snapshot_eval: {
               enabled,
@@ -282,14 +283,17 @@ program
           const scenarioId = String(options.scenario).trim();
           if (!scenarioId) throw new Error('scenario is required');
           const { sourceConfig } = loadConfig(configPath);
-          const scenarioIndex = (sourceConfig.scenarios ?? []).findIndex(
-            (s) => s.id === scenarioId
+          const scenarios = [...(sourceConfig.scenarios ?? [])];
+          const scenarioIndex = scenarios.findIndex(
+            (s) => typeof s === 'object' && s !== null && !('ref' in s) && s.id === scenarioId
           );
           if (scenarioIndex < 0) {
             throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
           }
-          const scenarios = [...(sourceConfig.scenarios ?? [])];
           const current = scenarios[scenarioIndex];
+          if (!current || typeof current !== 'object' || 'ref' in current) {
+            throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
+          }
           const nextScenarioSnapshotEval = {
             ...(current.snapshot_eval ?? {}),
             ...(options.snapshot !== undefined
@@ -324,7 +328,7 @@ program
               snapshot_eval: nextScenarioSnapshotEval
             };
           }
-          const nextConfig: EvalConfig = {
+          const nextConfig: SourceEvalConfig = {
             ...sourceConfig,
             scenarios
           };
@@ -403,6 +407,73 @@ program
         }
       })
   );
+
+program
+  .command('migrate-configs')
+  .description('Migrate eval YAML files to the canonical list-based format')
+  .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
+  .option('--dry-run', 'Preview migration without writing files')
+  .action((options) => {
+    try {
+      const evalsDir = resolve(String(options.evalsDir));
+      const bundleRoot = resolve(evalsDir, '..');
+      const files = readdirSync(evalsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
+      let migrated = 0;
+      let skipped = 0;
+      let failed = 0;
+
+      for (const file of files) {
+        const filePath = resolve(evalsDir, file);
+        try {
+          const { sourceConfig, warnings } = loadConfig(filePath, { bundleRoot });
+          const hadLegacyServersMapWarning = warnings.some((warning) =>
+            warning.includes('Legacy servers object map was migrated')
+          );
+          const hadLegacyAgentsMapWarning = warnings.some((warning) =>
+            warning.includes('Legacy agents object map was migrated')
+          );
+          const hadLegacyInlineIdsWarning = warnings.some(
+            (warning) =>
+              warning.includes('Legacy inline server.name migrated') ||
+              warning.includes('Legacy inline agent.name migrated')
+          );
+
+          if (
+            !hadLegacyServersMapWarning &&
+            !hadLegacyAgentsMapWarning &&
+            !hadLegacyInlineIdsWarning
+          ) {
+            skipped += 1;
+            continue;
+          }
+          if (options.dryRun) {
+            console.log(
+              kleur.cyan(
+                `[dry-run] ${file}: would normalize config format${warnings.length ? ` (${warnings.join(' | ')})` : ''}`
+              )
+            );
+            migrated += 1;
+            continue;
+          }
+          const nextConfig: SourceEvalConfig = { ...sourceConfig };
+          writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
+          migrated += 1;
+          console.log(kleur.green(`Migrated: ${file}`));
+        } catch (error: any) {
+          failed += 1;
+          console.error(kleur.red(`Failed: ${file} (${error?.message ?? String(error)})`));
+        }
+      }
+      console.log(
+        kleur.cyan(
+          `Migration summary${options.dryRun ? ' (dry-run)' : ''}: migrated=${migrated}, skipped=${skipped}, failed=${failed}`
+        )
+      );
+    } catch (err: any) {
+      console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+      process.exit(1);
+    }
+  });
 
 program
   .command('report')

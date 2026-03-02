@@ -2,6 +2,7 @@ import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
+  SourceEvalConfig as CoreSourceEvalConfig,
   ResultsJson as CoreResultsJson,
   Scenario as CoreScenario,
   ScenarioAggregate as CoreScenarioAggregate,
@@ -23,6 +24,7 @@ export type {
   CoreAgentConfig,
   CoreScenario,
   CoreEvalConfig,
+  CoreSourceEvalConfig,
   CoreScenarioRun,
   CoreScenarioAggregate,
   CoreResultsJson
@@ -38,7 +40,7 @@ export interface WorkspaceConfigRecord {
   path: string;
   mtime: string;
   hash: string;
-  config: CoreEvalConfig;
+  config: CoreSourceEvalConfig;
   error?: string;
   warnings?: string[];
 }

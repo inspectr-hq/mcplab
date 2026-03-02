@@ -29,18 +29,42 @@ export type ServerAuth =
   | ServerAuthOauthAuthorizationCode;
 
 export interface ServerConfig {
+  name?: string;
   transport: TransportType;
   url: string;
   auth?: ServerAuth;
 }
 
+export interface ServerInlineEntry extends ServerConfig {
+  id: string;
+  name?: string;
+}
+
+export interface ServerRefEntry {
+  ref: string;
+}
+
+export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
+
 export interface AgentConfig {
+  name?: string;
   provider: 'openai' | 'anthropic' | 'azure_openai';
   model: string;
   temperature?: number;
   max_tokens?: number;
   system?: string;
 }
+
+export interface AgentInlineEntry extends AgentConfig {
+  id: string;
+  name?: string;
+}
+
+export interface AgentRefEntry {
+  ref: string;
+}
+
+export type AgentListEntry = AgentInlineEntry | AgentRefEntry;
 
 export interface ToolConstraints {
   required_tools?: string[];
@@ -91,6 +115,13 @@ export interface Scenario {
   extract?: ExtractRule[];
 }
 
+export interface ScenarioRefEntry {
+  ref: string;
+}
+
+export type ScenarioInlineEntry = Scenario;
+export type ScenarioListEntry = ScenarioInlineEntry | ScenarioRefEntry;
+
 export interface SnapshotEvalPolicy {
   enabled: boolean;
   mode: 'warn' | 'fail_on_drift';
@@ -100,16 +131,20 @@ export interface SnapshotEvalPolicy {
 }
 
 export interface EvalConfig {
+  name?: string;
   servers: Record<string, ServerConfig>;
-  server_refs?: string[];
   agents: Record<string, AgentConfig>;
-  agent_refs?: string[];
   scenarios: Scenario[];
-  scenario_refs?: string[];
   run_defaults?: {
     selected_agents?: string[];
   };
   snapshot_eval?: SnapshotEvalPolicy;
+}
+
+export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
+  servers: ServerListEntry[];
+  agents: AgentListEntry[];
+  scenarios: ScenarioListEntry[];
 }
 
 export interface ExecutableScenario extends Scenario {

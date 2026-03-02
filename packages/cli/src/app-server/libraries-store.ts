@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvalConfig } from '@inspectr/mcplab-core';
+import { normalizeLibraryAgents, normalizeLibraryServers } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 
 function readYamlFile<T>(path: string, fallback: T): T {
@@ -29,8 +30,8 @@ export function readLibraries(librariesDir: string): {
 } {
   const root = resolve(librariesDir);
   const scenariosDir = join(root, 'scenarios');
-  const servers = readYamlFile<EvalConfig['servers']>(join(root, 'servers.yaml'), {});
-  const agents = readYamlFile<EvalConfig['agents']>(join(root, 'agents.yaml'), {});
+  const servers = normalizeLibraryServers(readYamlFile<unknown>(join(root, 'servers.yaml'), {}));
+  const agents = normalizeLibraryAgents(readYamlFile<unknown>(join(root, 'agents.yaml'), {}));
   const scenarios: EvalConfig['scenarios'] = [];
   if (existsSync(scenariosDir)) {
     const files = readdirSync(scenariosDir)

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2 } from "lucide-react";
+import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2, FileCode } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Scenario } from "@/types/eval";
@@ -318,7 +318,10 @@ const ManageScenarios = () => {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Manage Scenarios</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <FileCode className="h-6 w-6" />
+            Manage Scenarios
+          </h1>
           <p className="text-sm text-muted-foreground">
             Reusable scenario templates shared across configurations.
           </p>
@@ -334,27 +337,18 @@ const ManageScenarios = () => {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+          {!selectedScenario && (
+            <Button type="button" size="sm" onClick={() => void handleAddScenario()}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Scenario
+            </Button>
+          )}
         </div>
       </div>
 
       {!selectedScenario && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">Scenario Overview</CardTitle>
-                <CardDescription>
-                  Browse reusable scenarios and open a focused scenario editor to manage checks, value capture rules, and prompts.
-                </CardDescription>
-              </div>
-              <Button type="button" size="sm" onClick={() => void handleAddScenario()}>
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Scenario
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 rounded-md border p-3 md:grid-cols-[1.6fr_1fr_1fr_auto]">
+        <>
+          <div className="grid gap-3 rounded-md border bg-muted/30 p-3 md:grid-cols-[1.6fr_1fr_1fr_auto]">
               <div className="space-y-1.5">
                 <Label className="text-xs">Search</Label>
                 <div className="relative">
@@ -410,7 +404,9 @@ const ManageScenarios = () => {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
+          </div>
+          <Card>
+          <CardContent className="space-y-3 pt-6">
             <div className="text-xs text-muted-foreground">
               Showing {filteredScenarios.length} of {scenarios.length} scenario{scenarios.length !== 1 ? "s" : ""}.
             </div>
@@ -493,6 +489,7 @@ const ManageScenarios = () => {
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {selectedScenario && draftScenario ? (

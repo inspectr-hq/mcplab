@@ -1,8 +1,8 @@
 import { basename, extname, join } from 'node:path';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
-import type { EvalConfig } from '@inspectr/mcplab-core';
-import { loadConfig } from '@inspectr/mcplab-core';
+import type { SourceEvalConfig } from '@inspectr/mcplab-core';
+import { loadConfig, normalizeSourceConfig } from '@inspectr/mcplab-core';
 import { encodeEvalId, ensureInsideRoot } from './store-utils.js';
 
 export interface ConfigRecord {
@@ -11,7 +11,7 @@ export interface ConfigRecord {
   path: string;
   mtime: string;
   hash: string;
-  config: EvalConfig;
+  config: SourceEvalConfig;
   error?: string;
   warnings?: string[];
 }
@@ -40,49 +40,21 @@ export function readConfigRecord(
   };
 }
 
-function emptySourceConfig(): EvalConfig {
+function emptySourceConfig(): SourceEvalConfig {
   return {
-    servers: {},
-    server_refs: [],
-    agents: {},
-    agent_refs: [],
-    scenarios: [],
-    scenario_refs: []
+    name: undefined,
+    servers: [],
+    agents: [],
+    scenarios: []
   };
 }
 
-function parseSourceConfigForInvalidRecord(absPath: string): EvalConfig {
+function parseSourceConfigForInvalidRecord(absPath: string): SourceEvalConfig {
   try {
     const raw = readFileSync(absPath, 'utf8');
     const parsed = parseYaml(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptySourceConfig();
-    const obj = parsed as Record<string, unknown>;
-    return {
-      servers:
-        obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)
-          ? (obj.servers as EvalConfig['servers'])
-          : {},
-      server_refs: Array.isArray(obj.server_refs) ? obj.server_refs.map((v) => String(v)) : [],
-      agents:
-        obj.agents && typeof obj.agents === 'object' && !Array.isArray(obj.agents)
-          ? (obj.agents as EvalConfig['agents'])
-          : {},
-      agent_refs: Array.isArray(obj.agent_refs) ? obj.agent_refs.map((v) => String(v)) : [],
-      scenarios: Array.isArray(obj.scenarios) ? (obj.scenarios as EvalConfig['scenarios']) : [],
-      scenario_refs: Array.isArray(obj.scenario_refs)
-        ? obj.scenario_refs.map((v) => String(v))
-        : [],
-      run_defaults:
-        obj.run_defaults && typeof obj.run_defaults === 'object' && !Array.isArray(obj.run_defaults)
-          ? (obj.run_defaults as EvalConfig['run_defaults'])
-          : undefined,
-      snapshot_eval:
-        obj.snapshot_eval &&
-        typeof obj.snapshot_eval === 'object' &&
-        !Array.isArray(obj.snapshot_eval)
-          ? (obj.snapshot_eval as EvalConfig['snapshot_eval'])
-          : undefined
-    };
+    return normalizeSourceConfig(parsed as SourceEvalConfig).config;
   } catch {
     return emptySourceConfig();
   }

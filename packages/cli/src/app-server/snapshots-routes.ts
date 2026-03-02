@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { stringify as stringifyYaml } from 'yaml';
-import { loadConfig, type EvalConfig } from '@inspectr/mcplab-core';
+import { loadConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 export type SnapshotsRouteDeps = Pick<
@@ -79,7 +79,7 @@ export async function handleSnapshotsRoutes(params: {
 
     const configPath = decodeEvalId(configId, settings.evalsDir);
     const { sourceConfig } = loadConfig(configPath, { bundleRoot: settings.librariesDir });
-    const nextConfig: EvalConfig = {
+    const nextConfig: SourceEvalConfig = {
       ...sourceConfig,
       snapshot_eval: {
         enabled: true,

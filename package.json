@@ -15,7 +15,7 @@
     "mcp:test:bearer": "tsx dev/mcp-test-servers/manual-test-bearer.ts",
     "mcp:test:oauth-mock": "tsx dev/mcp-test-servers/manual-test-oauth-mock.ts",
     "app": "node dist/cli.js app",
-    "app:dev": "tsx packages/cli/src/cli.ts app --dev",
+    "app:dev": "npm run build -w @inspectr/mcplab-core && tsx packages/cli/src/cli.ts app --dev",
     "app:dev:ui": "npm run dev -w @inspectr/mcplab-app",
     "release:prepare:cli": "node scripts/prepare-cli-package.mjs",
     "publish:core": "npm publish -w packages/core",
@@ -34,7 +34,8 @@
     "site:preview": "npm run preview -w @inspectr/mcplab-site",
     "website:dev": "npm run dev -w @inspectr/mcplab-website",
     "website:build": "npm run build -w @inspectr/mcplab-website",
-    "website:preview": "npm run preview -w @inspectr/mcplab-website"
+    "website:preview": "npm run preview -w @inspectr/mcplab-website",
+    "validate:configs": "node scripts/validate-configs.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

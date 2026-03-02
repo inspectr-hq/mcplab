@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { ToolAnalysisResultSummary } from "@/lib/data-sources/types";
-import {Clock, Download, MoreHorizontal, Trash2} from "lucide-react";
+import {Clock, Download, MoreHorizontal, Trash2, NotebookTabs} from "lucide-react";
 import { toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -79,7 +79,10 @@ export default function ToolAnalysisResultsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Tool Analysis Results</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <NotebookTabs className="h-6 w-6" />
+            Tool Analysis Results
+          </h1>
           <p className="text-sm text-muted-foreground">Browse persisted Analyze MCP Tools reports.</p>
         </div>
         <div className="flex items-center gap-2">

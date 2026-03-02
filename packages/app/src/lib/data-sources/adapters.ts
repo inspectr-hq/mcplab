@@ -1,14 +1,18 @@
 import type {
   ConversationItem,
+  AgentEntry,
   EvalConfig,
   EvalResult,
   EvalRule,
+  ServerEntry,
+  ScenarioEntry,
   ScenarioRun,
   ToolCall
 } from '@/types/eval';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
+  CoreSourceEvalConfig,
   ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
@@ -20,56 +24,89 @@ function toId(base: string, index: number): string {
 }
 
 export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
-  const serverEntries = Object.entries(record.config.servers);
-  const agentEntries = Object.entries(record.config.agents);
+  const configName =
+    typeof record.config.name === 'string' && record.config.name.trim().length > 0
+      ? record.config.name.trim()
+      : undefined;
+  const sourceServerEntries = Array.isArray(record.config.servers) ? record.config.servers : [];
+  const sourceAgentEntries = Array.isArray(record.config.agents) ? record.config.agents : [];
   const serverIdByName = new Map<string, string>();
-  const agentIdByName = new Map<string, string>();
-
-  const servers = serverEntries.map(([name, server], index) => {
-    const id = toId('srv', index);
-    serverIdByName.set(name, id);
+  const servers: EvalConfig['servers'] = [];
+  const mixedServerEntries: ServerEntry[] = [];
+  for (const entry of sourceServerEntries) {
+    if ('ref' in entry) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) continue;
+      serverIdByName.set(ref, ref);
+      mixedServerEntries.push({ kind: 'referenced', ref });
+      continue;
+    }
+    const inlineId = String(entry.id || entry.name || '').trim();
+    if (!inlineId) continue;
+    const id = inlineId;
+    serverIdByName.set(inlineId, id);
     const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
-      server.auth?.type === 'bearer'
+      entry.auth?.type === 'bearer'
         ? 'bearer'
-        : server.auth?.type === 'oauth_client_credentials'
-        ? 'api-key'
-        : server.auth?.type === 'oauth_authorization_code'
-        ? 'oauth2'
-        : 'none';
-    return {
+        : entry.auth?.type === 'oauth_client_credentials'
+          ? 'api-key'
+          : entry.auth?.type === 'oauth_authorization_code'
+            ? 'oauth2'
+            : 'none';
+    const mappedServer = {
       id,
-      name,
+      name: String(entry.name || inlineId),
       transport: 'streamable-http' as const,
-      url: server.url,
+      url: entry.url,
       authType,
-      authValue: server.auth?.type === 'bearer' ? server.auth.env : undefined,
+      authValue: entry.auth?.type === 'bearer' ? entry.auth.env : undefined,
       oauthClientId:
-        server.auth?.type === 'oauth_authorization_code' ? server.auth.client_id : undefined,
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_id : undefined,
       oauthClientSecret:
-        server.auth?.type === 'oauth_authorization_code' ? server.auth.client_secret : undefined,
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_secret : undefined,
       oauthRedirectUrl:
-        server.auth?.type === 'oauth_authorization_code' ? server.auth.redirect_url : undefined,
-      oauthScope: server.auth?.type === 'oauth_authorization_code' ? server.auth.scope : undefined
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.redirect_url : undefined,
+      oauthScope: entry.auth?.type === 'oauth_authorization_code' ? entry.auth.scope : undefined
     };
-  });
-
-  const agents = agentEntries.map(([name, agent], index) => {
-    const id = toId('agt', index);
-    agentIdByName.set(name, id);
+    servers.push(mappedServer);
+    mixedServerEntries.push({ kind: 'inline', server: mappedServer });
+  }
+  const agents: EvalConfig['agents'] = [];
+  const mixedAgentEntries: AgentEntry[] = [];
+  for (const entry of sourceAgentEntries) {
+    if ('ref' in entry) {
+      const ref = String(entry.ref || '').trim();
+      if (!ref) continue;
+      mixedAgentEntries.push({ kind: 'referenced', ref });
+      continue;
+    }
+    const inlineId = String(entry.id || entry.name || '').trim();
+    if (!inlineId) continue;
+    const id = inlineId;
     const provider: 'openai' | 'anthropic' | 'azure' =
-      agent.provider === 'azure_openai' ? 'azure' : agent.provider;
-    return {
+      entry.provider === 'azure_openai' ? 'azure' : entry.provider;
+    const mappedAgent = {
       id,
-      name,
+      name: String(entry.name || inlineId),
       provider,
-      model: agent.model,
-      temperature: agent.temperature ?? 0,
-      maxTokens: agent.max_tokens ?? 2048,
-      systemPrompt: agent.system
+      model: entry.model,
+      temperature: entry.temperature ?? 0,
+      maxTokens: entry.max_tokens ?? 2048,
+      systemPrompt: entry.system
     };
-  });
+    agents.push(mappedAgent);
+    mixedAgentEntries.push({ kind: 'inline', agent: mappedAgent });
+  }
+  const inlineScenarios: EvalConfig['scenarios'] = [];
+  const scenarioEntries: ScenarioEntry[] = [];
 
-  const scenarios = record.config.scenarios.map((scenario, index) => {
+  record.config.scenarios.forEach((scenario, index) => {
+    if ('ref' in scenario) {
+      const ref = String(scenario.ref || '').trim();
+      if (!ref) return;
+      scenarioEntries.push({ kind: 'referenced', ref });
+      return;
+    }
     const evalRules: EvalRule[] = [];
     for (const tool of scenario.eval?.tool_constraints?.required_tools ?? []) {
       evalRules.push({ type: 'required_tool', value: tool });
@@ -90,7 +127,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       }
     }
 
-    return {
+    const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
       serverIds: scenario.servers
@@ -111,20 +148,23 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         pattern: rule.regex
       }))
     };
+    inlineScenarios.push(mappedScenario);
+    scenarioEntries.push({ kind: 'inline', scenario: mappedScenario });
   });
 
   return {
     id: record.id,
-    name: record.name,
+    name: configName || record.name,
+    configName,
     description: record.path,
     loadError: record.error,
     loadWarnings: record.warnings,
     servers,
-    serverRefs: record.config.server_refs ?? [],
+    serverEntries: mixedServerEntries,
     agents,
-    agentRefs: record.config.agent_refs ?? [],
-    scenarios,
-    scenarioRefs: record.config.scenario_refs ?? [],
+    agentEntries: mixedAgentEntries,
+    scenarios: inlineScenarios,
+    scenarioEntries,
     runDefaults:
       record.config.run_defaults?.selected_agents &&
       record.config.run_defaults.selected_agents.length > 0
@@ -159,8 +199,22 @@ export function fromCoreLibraries(libraries: {
     mtime: new Date(0).toISOString(),
     hash: '',
     config: {
-      servers: libraries.servers,
-      agents: libraries.agents,
+      servers: Object.entries(libraries.servers).map(([name, server]) => ({
+        id: name,
+        name: server.name || name,
+        transport: server.transport,
+        url: server.url,
+        auth: server.auth
+      })),
+      agents: Object.entries(libraries.agents).map(([name, agent]) => ({
+        id: name,
+        name: agent.name || name,
+        provider: agent.provider,
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system
+      })),
       scenarios: libraries.scenarios
     }
   };
@@ -172,15 +226,14 @@ export function fromCoreLibraries(libraries: {
   };
 }
 
-export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
+export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const serverNameById = new Map<string, string>();
-  const agentNameById = new Map<string, string>();
 
-  const servers: CoreEvalConfig['servers'] = {};
-  for (const server of config.servers) {
-    const name = server.name || server.id;
-    serverNameById.set(server.id, name);
-    servers[name] = {
+  const mapInlineServer = (server: EvalConfig['servers'][number]) => {
+    const sourceId = server.id;
+    return {
+      id: sourceId,
+      ...(server.name && server.name !== sourceId ? { name: server.name } : {}),
       transport: 'http',
       url: server.url || 'http://localhost:3000/mcp',
       auth:
@@ -195,14 +248,32 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
               scope: server.oauthScope || undefined
             }
           : undefined
-    };
-  }
+    } satisfies NonNullable<CoreSourceEvalConfig['servers']>[number];
+  };
+  const mixedServerEntries = config.serverEntries && config.serverEntries.length > 0
+    ? config.serverEntries
+    : [
+        ...config.servers.map((server) => ({ kind: 'inline' as const, server }))
+      ];
+  const seenServerRefs = new Set<string>();
+  const servers = mixedServerEntries.flatMap((entry) => {
+    if (entry.kind === 'referenced') {
+      const ref = String(entry.ref || '').trim();
+      if (!ref || seenServerRefs.has(ref)) return [];
+      seenServerRefs.add(ref);
+      serverNameById.set(ref, ref);
+      return [{ ref }];
+    }
+    const mapped = mapInlineServer(entry.server);
+    serverNameById.set(entry.server.id, mapped.id);
+    return [mapped];
+  });
 
-  const agents: CoreEvalConfig['agents'] = {};
-  for (const agent of config.agents) {
-    const name = agent.name || agent.id;
-    agentNameById.set(agent.id, name);
-    agents[name] = {
+  const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
+    const sourceId = agent.id;
+    return {
+      id: sourceId,
+      ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
       provider:
         agent.provider === 'azure'
           ? 'azure_openai'
@@ -213,10 +284,26 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
       temperature: agent.temperature,
       max_tokens: agent.maxTokens,
       system: agent.systemPrompt
-    };
-  }
+    } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
+  };
 
-  const scenarios = config.scenarios.map((scenario) => {
+  const mixedAgentEntries = config.agentEntries && config.agentEntries.length > 0
+    ? config.agentEntries
+    : [
+        ...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))
+      ];
+  const seenAgentRefs = new Set<string>();
+  const agents = mixedAgentEntries.flatMap((entry) => {
+    if (entry.kind === 'referenced') {
+      const ref = String(entry.ref || '').trim();
+      if (!ref || seenAgentRefs.has(ref)) return [];
+      seenAgentRefs.add(ref);
+      return [{ ref }];
+    }
+    return [mapInlineAgent(entry.agent)];
+  });
+
+  const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
     const required_tools = scenario.evalRules
       .filter((rule) => rule.type === 'required_tool')
       .map((rule) => rule.value);
@@ -232,14 +319,16 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
       name: scenario.name || undefined,
       servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
       prompt: scenario.prompt,
-      snapshot_eval: scenario.snapshotEval
+      ...(scenario.snapshotEval
         ? {
-            enabled: scenario.snapshotEval.enabled,
-            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
-            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
-            last_updated_at: scenario.snapshotEval.lastUpdatedAt
+            snapshot_eval: {
+              enabled: scenario.snapshotEval.enabled,
+              baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+              baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+              last_updated_at: scenario.snapshotEval.lastUpdatedAt
+            }
           }
-        : undefined,
+        : {}),
       eval: {
         tool_constraints: {
           required_tools,
@@ -253,15 +342,22 @@ export function toCoreConfigYaml(config: EvalConfig): CoreEvalConfig {
         regex: rule.pattern
       }))
     };
-  });
+  };
+
+  const scenarios = (config.scenarioEntries && config.scenarioEntries.length > 0
+    ? config.scenarioEntries.map((entry) => {
+        if (entry.kind === 'referenced') return { ref: entry.ref };
+        return mapInlineScenario(entry.scenario);
+      })
+    : [
+        ...config.scenarios.map((scenario) => mapInlineScenario(scenario))
+      ]) as CoreSourceEvalConfig['scenarios'];
 
   return {
+    name: config.configName?.trim() || undefined,
     servers,
-    server_refs: config.serverRefs ?? [],
     agents,
-    agent_refs: config.agentRefs ?? [],
     scenarios,
-    scenario_refs: config.scenarioRefs ?? [],
     run_defaults:
       config.runDefaults?.selectedAgentNames && config.runDefaults.selectedAgentNames.length > 0
         ? {
@@ -285,23 +381,83 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
   agents: CoreEvalConfig['agents'];
   scenarios: CoreEvalConfig['scenarios'];
 } {
-  const core = toCoreConfigYaml({
-    id: 'library',
-    name: 'library',
-    description: '',
-    servers: input.servers,
-    serverRefs: [],
-    agents: input.agents,
-    agentRefs: [],
-    scenarios: input.scenarios,
-    scenarioRefs: [],
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString()
-  });
+  const servers = Object.fromEntries(
+    input.servers.map((server) => [
+      server.id,
+      {
+        ...(server.name && server.name !== server.id ? { name: server.name } : {}),
+        transport: 'http' as const,
+        url: server.url || 'http://localhost:3000/mcp',
+        auth:
+          server.authType === 'bearer'
+            ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+            : server.authType === 'oauth2'
+              ? {
+                  type: 'oauth_authorization_code' as const,
+                  client_id: server.oauthClientId || '',
+                  client_secret: server.oauthClientSecret || undefined,
+                  redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+                  scope: server.oauthScope || undefined
+                }
+              : undefined
+      }
+    ])
+  ) as CoreEvalConfig['servers'];
+
+  const agents = Object.fromEntries(
+    input.agents.map((agent) => [
+      agent.id,
+      {
+        ...(agent.name && agent.name !== agent.id ? { name: agent.name } : {}),
+        provider:
+          agent.provider === 'azure'
+            ? 'azure_openai'
+            : agent.provider === 'anthropic'
+              ? 'anthropic'
+              : 'openai',
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.maxTokens,
+        system: agent.systemPrompt
+      }
+    ])
+  ) as CoreEvalConfig['agents'];
+
   return {
-    servers: core.servers,
-    agents: core.agents,
-    scenarios: core.scenarios
+    servers,
+    agents,
+    scenarios: input.scenarios.map((scenario) => ({
+      id: scenario.id,
+      name: scenario.name || undefined,
+      servers: scenario.serverIds,
+      prompt: scenario.prompt,
+      snapshot_eval: scenario.snapshotEval
+        ? {
+            enabled: scenario.snapshotEval.enabled,
+            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+            last_updated_at: scenario.snapshotEval.lastUpdatedAt
+          }
+        : undefined,
+      eval: {
+        tool_constraints: {
+          required_tools: scenario.evalRules
+            .filter((rule) => rule.type === 'required_tool')
+            .map((rule) => rule.value),
+          forbidden_tools: scenario.evalRules
+            .filter((rule) => rule.type === 'forbidden_tool')
+            .map((rule) => rule.value)
+        },
+        response_assertions: scenario.evalRules
+          .filter((rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains')
+          .map((rule) => ({ type: 'regex' as const, pattern: rule.value }))
+      },
+      extract: scenario.extractRules.map((rule) => ({
+        name: rule.name,
+        from: 'final_text' as const,
+        regex: rule.pattern
+      }))
+    }))
   };
 }
 

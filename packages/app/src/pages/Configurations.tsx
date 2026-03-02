@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { toast } from "@/hooks/use-toast";
+
+const displayConfigName = (cfg: { configName?: string; name: string }) =>
+  cfg.configName?.trim() || cfg.name;
 
 const Configurations = () => {
   const { configs, deleteConfig, cloneConfig, loading, reload } = useConfigs();
@@ -42,20 +45,20 @@ const Configurations = () => {
 
   const handleClone = async (id: string) => {
     const cloned = await cloneConfig(id);
-    toast({ title: "Cloned", description: `Created "${cloned.name}".` });
+    toast({ title: "Cloned", description: `Created "${displayConfigName(cloned)}".` });
     navigate(`/mcp-evaluations/${cloned.id}`);
   };
 
   const agentCount = (cfg: (typeof configs)[number]) =>
-    (cfg.agents?.length ?? 0) + (cfg.agentRefs?.length ?? 0);
+    cfg.agentEntries?.length ?? cfg.agents?.length ?? 0;
 
   const scenarioCount = (cfg: (typeof configs)[number]) =>
-    (cfg.scenarios?.length ?? 0) + (cfg.scenarioRefs?.length ?? 0);
+    cfg.scenarioEntries?.length ?? cfg.scenarios?.length ?? 0;
 
   const sortedConfigs = useMemo(() => {
     const sorted = [...configs].sort((a, b) => {
       let cmp = 0;
-      if (sortBy === "name") cmp = a.name.localeCompare(b.name);
+      if (sortBy === "name") cmp = displayConfigName(a).localeCompare(displayConfigName(b));
       if (sortBy === "scenarios") cmp = scenarioCount(a) - scenarioCount(b);
       if (sortBy === "agents") cmp = agentCount(a) - agentCount(b);
       if (sortBy === "updatedAt") cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
@@ -73,7 +76,10 @@ const Configurations = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">MCP Evaluations</h1>
+          <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
+            <FlaskConical className="h-6 w-6" />
+            MCP Evaluations
+          </h1>
           <p className="text-sm text-muted-foreground">Manage your MCP evaluation suites</p>
         </div>
         <div className="flex gap-2">
@@ -126,7 +132,7 @@ const Configurations = () => {
                 <TableRow key={cfg.id}>
                   <TableCell>
                     <div>
-                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{cfg.name}</Link>
+                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{displayConfigName(cfg)}</Link>
                       {cfg.loadError && (
                         <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
                           <AlertTriangle className="mr-1 h-3 w-3" />
@@ -161,7 +167,7 @@ const Configurations = () => {
                           <Copy className="mr-2 h-3.5 w-3.5" />Clone
                         </DropdownMenuItem>
                         <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Download YAML</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, cfg.name)}>
+                        <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
                           <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>

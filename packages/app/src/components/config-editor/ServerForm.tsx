@@ -10,6 +10,9 @@ interface ServerFormProps {
   servers: ServerConfig[];
   onChange: (servers: ServerConfig[]) => void;
   readOnly?: boolean;
+  allowAdd?: boolean;
+  allowStructureEdits?: boolean;
+  showHeader?: boolean;
 }
 
 const emptyServer = (): ServerConfig => ({
@@ -20,7 +23,14 @@ const emptyServer = (): ServerConfig => ({
   oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
-export function ServerForm({ servers, onChange, readOnly }: ServerFormProps) {
+export function ServerForm({
+  servers,
+  onChange,
+  readOnly,
+  allowAdd = !readOnly,
+  allowStructureEdits = !readOnly,
+  showHeader = true
+}: ServerFormProps) {
   const update = (index: number, patch: Partial<ServerConfig>) => {
     const next = servers.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
@@ -49,19 +59,21 @@ export function ServerForm({ servers, onChange, readOnly }: ServerFormProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Servers</h3>
-        {!readOnly && (
-          <Button type="button" variant="outline" size="sm" onClick={add}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />Add Server
-          </Button>
-        )}
-      </div>
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Servers</h3>
+          {!readOnly && allowAdd && (
+            <Button type="button" variant="outline" size="sm" onClick={add}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />Add Server
+            </Button>
+          )}
+        </div>
+      )}
       {servers.map((srv, i) => (
         <Card key={srv.id} className="border-dashed">
           <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">{srv.name || `Server ${i + 1}`}</CardTitle>
-            {!readOnly && (
+            {!readOnly && allowStructureEdits && (
               <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>

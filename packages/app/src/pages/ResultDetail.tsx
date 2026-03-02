@@ -263,16 +263,13 @@ const ResultDetail = () => {
         map.set(scenario.id, scenario);
         if (scenario.name && !map.has(scenario.name)) map.set(scenario.name, scenario);
       }
-      if ((activeConfig.scenarioRefs?.length ?? 0) > 0) {
-        for (const ref of activeConfig.scenarioRefs ?? []) {
-          const libScenario =
-            libraryScenarios.find((s) => s.name === ref) ??
-            libraryScenarios.find((s) => s.id === ref);
-          if (libScenario) {
-            map.set(libScenario.id, libScenario);
-            if (libScenario.name) map.set(libScenario.name, libScenario);
-            if (!map.has(ref)) map.set(ref, libScenario);
-          }
+      for (const entry of activeConfig.scenarioEntries ?? []) {
+        if (entry.kind !== "referenced") continue;
+        const libScenario = libraryScenarios.find((s) => s.id === entry.ref);
+        if (libScenario) {
+          map.set(libScenario.id, libScenario);
+          if (libScenario.name) map.set(libScenario.name, libScenario);
+          if (!map.has(entry.ref)) map.set(entry.ref, libScenario);
         }
       }
     }

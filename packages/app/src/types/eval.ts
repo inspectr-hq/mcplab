@@ -15,6 +15,10 @@ export interface ServerConfig {
   oauthScope?: string;
 }
 
+export type ServerEntry =
+  | { kind: 'inline'; server: ServerConfig }
+  | { kind: 'referenced'; ref: string };
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -50,6 +54,14 @@ export interface Scenario {
   extractRules: ExtractRule[];
 }
 
+export type ScenarioEntry =
+  | { kind: 'inline'; scenario: Scenario }
+  | { kind: 'referenced'; ref: string };
+
+export type AgentEntry =
+  | { kind: 'inline'; agent: AgentConfig }
+  | { kind: 'referenced'; ref: string };
+
 export interface SnapshotEvalPolicy {
   enabled: boolean;
   mode: 'warn' | 'fail_on_drift';
@@ -61,16 +73,17 @@ export interface SnapshotEvalPolicy {
 export interface EvalConfig {
   id: string;
   name: string;
+  configName?: string;
   description?: string;
   sourcePath?: string;
   loadError?: string;
   loadWarnings?: string[];
   servers: ServerConfig[];
-  serverRefs?: string[];
+  serverEntries?: ServerEntry[];
   agents: AgentConfig[];
-  agentRefs?: string[];
+  agentEntries?: AgentEntry[];
   scenarios: Scenario[];
-  scenarioRefs?: string[];
+  scenarioEntries?: ScenarioEntry[];
   runDefaults?: {
     selectedAgentNames?: string[];
   };
