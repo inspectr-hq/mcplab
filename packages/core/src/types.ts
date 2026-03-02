@@ -103,7 +103,8 @@ export interface ExtractRule {
 export interface Scenario {
   id: string;
   name?: string;
-  servers: string[];
+  mcp_servers?: ServerListEntry[];   // source field: scenario-owned server definitions
+  servers: string[];                 // runtime IDs (computed by resolveReferences)
   prompt: string;
   snapshot_eval?: {
     enabled?: boolean;
@@ -142,7 +143,7 @@ export interface EvalConfig {
 }
 
 export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
-  servers: ServerListEntry[];
+  servers?: ServerListEntry[];   // optional: legacy only, will be deprecated
   agents: AgentListEntry[];
   scenarios: ScenarioListEntry[];
 }
