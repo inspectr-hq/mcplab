@@ -130,9 +130,22 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
-      serverIds: (scenario.servers ?? [])
-        .map((name) => serverIdByName.get(name))
-        .filter(Boolean) as string[],
+      serverIds: (() => {
+        if ((scenario.servers ?? []).length > 0) {
+          return (scenario.servers as string[])
+            .map((name) => serverIdByName.get(name) ?? name)
+            .filter(Boolean) as string[];
+        }
+        const mcpServers = (scenario as Record<string, unknown>).mcp_servers;
+        if (Array.isArray(mcpServers)) {
+          return mcpServers.flatMap((entry: Record<string, unknown>) => {
+            if ('ref' in entry && entry.ref) return [String(entry.ref)];
+            if ('id' in entry && entry.id) return [String(entry.id)];
+            return [];
+          });
+        }
+        return [];
+      })(),
       prompt: scenario.prompt,
       snapshotEval: scenario.snapshot_eval
         ? {
@@ -315,7 +328,9 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     return {
       id: scenario.id,
       name: scenario.name || undefined,
-      servers: scenario.serverIds.map((id) => serverNameById.get(id)).filter(Boolean) as string[],
+      mcp_servers: scenario.serverIds.length > 0
+        ? scenario.serverIds.map((id) => ({ ref: serverNameById.get(id) ?? id }))
+        : undefined,
       prompt: scenario.prompt,
       ...(scenario.snapshotEval
         ? {
@@ -427,7 +442,9 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
     scenarios: input.scenarios.map((scenario) => ({
       id: scenario.id,
       name: scenario.name || undefined,
-      servers: scenario.serverIds,
+      mcp_servers: scenario.serverIds.length > 0
+        ? scenario.serverIds.map((id) => ({ ref: id }))
+        : undefined,
       prompt: scenario.prompt,
       snapshot_eval: scenario.snapshotEval
         ? {

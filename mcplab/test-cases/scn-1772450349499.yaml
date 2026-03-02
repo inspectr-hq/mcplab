@@ -1,6 +1,5 @@
 id: scn-1772450349499
 name: LLM Test
-mcp_servers: []
 prompt: Which version are you?
 eval:
   tool_constraints:

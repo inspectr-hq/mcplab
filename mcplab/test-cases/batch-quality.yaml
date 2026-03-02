@@ -2,10 +2,10 @@ id: batch-quality
 name: RCA - Batch Line - Concentration Quality
 mcp_servers:
   - ref: trendminer
-prompt: "We have the Batch Line Batch reactor 1, which is producing different
+prompt: We have the Batch Line Batch reactor 1, which is producing different
   products. Can you help to review the quality of the different products. The
-  quality is given by the max concentration, I noticed some low quality batches
-  could you help me investigate across all products?\v\v"
+  quality is given by the max concentration. I noticed some low quality batches,
+  could you help me investigate across all products?
 snapshot_eval:
   enabled: true
 eval:
