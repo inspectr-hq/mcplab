@@ -40,8 +40,8 @@ export function readLibraries(librariesDir: string): {
   const sourceDir = existsSync(testCasesDir)
     ? testCasesDir
     : existsSync(legacyScenariosDir)
-      ? legacyScenariosDir
-      : null;
+    ? legacyScenariosDir
+    : null;
   if (sourceDir) {
     const files = readdirSync(sourceDir)
       .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))

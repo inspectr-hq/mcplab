@@ -4,7 +4,7 @@ import { sanitizeMcpTransportErrorMessage } from './mcp.js';
 describe('sanitizeMcpTransportErrorMessage', () => {
   it('condenses HTML upstream failures into a short summary', () => {
     const raw =
-      "Streamable HTTP error: Error POSTing to endpoint: <!DOCTYPE html><html><head><title>in-spectr.dev | 502: Bad gateway</title></head><body>very long cloudflare page...</body></html>";
+      'Streamable HTTP error: Error POSTing to endpoint: <!DOCTYPE html><html><head><title>in-spectr.dev | 502: Bad gateway</title></head><body>very long cloudflare page...</body></html>';
 
     const sanitized = sanitizeMcpTransportErrorMessage(raw);
 

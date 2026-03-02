@@ -302,19 +302,16 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'refs.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: []',
-          'agents: []',
-          'scenarios:',
-          '  - ref: check-weather'
-        ].join('\n'),
+        ['servers: []', 'agents: []', 'scenarios:', '  - ref: check-weather'].join('\n'),
         'utf8'
       );
 
       const { config, warnings } = loadConfig(configPath);
       expect(config.scenarios).toHaveLength(1);
       expect(config.scenarios[0]?.id).toBe('check-weather');
-      expect(warnings).not.toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+      expect(warnings).not.toContain(
+        "Using legacy library folder 'scenarios'; migrate to 'test-cases'."
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -333,19 +330,16 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'refs.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: []',
-          'agents: []',
-          'scenarios:',
-          '  - ref: check-weather'
-        ].join('\n'),
+        ['servers: []', 'agents: []', 'scenarios:', '  - ref: check-weather'].join('\n'),
         'utf8'
       );
 
       const { config, warnings } = loadConfig(configPath);
       expect(config.scenarios).toHaveLength(1);
       expect(config.scenarios[0]?.id).toBe('check-weather');
-      expect(warnings).toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+      expect(warnings).toContain(
+        "Using legacy library folder 'scenarios'; migrate to 'test-cases'."
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -371,19 +365,16 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'refs.yaml');
       writeFileSync(
         configPath,
-        [
-          'servers: []',
-          'agents: []',
-          'scenarios:',
-          '  - ref: check-weather'
-        ].join('\n'),
+        ['servers: []', 'agents: []', 'scenarios:', '  - ref: check-weather'].join('\n'),
         'utf8'
       );
 
       const { config, warnings } = loadConfig(configPath);
       expect(config.scenarios).toHaveLength(1);
       expect(config.scenarios[0]?.prompt).toBe('canonical');
-      expect(warnings).not.toContain("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
+      expect(warnings).not.toContain(
+        "Using legacy library folder 'scenarios'; migrate to 'test-cases'."
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

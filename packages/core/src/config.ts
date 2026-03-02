@@ -36,7 +36,8 @@ export function loadConfig(
   if (!sourceConfig || typeof sourceConfig !== 'object') {
     throw new Error('Invalid config: expected object');
   }
-  const { config: normalizedSource, warnings: normalizeWarnings } = normalizeSourceConfig(sourceConfig);
+  const { config: normalizedSource, warnings: normalizeWarnings } =
+    normalizeSourceConfig(sourceConfig);
   const { config, warnings: resolveWarnings } = resolveReferences(
     normalizedSource,
     path,

@@ -20,7 +20,10 @@ describe('libraries-store test-case directory migration', () => {
           name: 'Test Case 1',
           servers: [],
           prompt: 'hello',
-          eval: { tool_constraints: { required_tools: [], forbidden_tools: [] }, response_assertions: [] },
+          eval: {
+            tool_constraints: { required_tools: [], forbidden_tools: [] },
+            response_assertions: []
+          },
           extract: []
         }
       ]
