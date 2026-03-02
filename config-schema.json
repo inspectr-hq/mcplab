@@ -5,7 +5,7 @@
   "description": "Schema for MCPLab evaluation configs using mixed inline/reference lists.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["servers", "agents", "scenarios"],
+  "required": ["agents", "scenarios"],
   "properties": {
     "name": {
       "type": "string",
@@ -14,7 +14,7 @@
     },
     "servers": {
       "type": "array",
-      "description": "Ordered server entries. Each item is either inline server config or a library reference.",
+      "description": "DEPRECATED: top-level server pool. Move server definitions to scenario mcp_servers entries.",
       "items": {
         "oneOf": [
           {
@@ -165,6 +165,91 @@
               "servers": {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1 }
+              },
+              "mcp_servers": {
+                "type": "array",
+                "description": "Optional MCP servers for this scenario. Each entry is a library ref or inline server config.",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["ref"],
+                      "properties": {
+                        "ref": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Server name from mcplab/servers.yaml"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["id", "transport", "url"],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Inline server id"
+                        },
+                        "transport": {
+                          "type": "string",
+                          "enum": ["http"],
+                          "description": "MCP transport"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "MCP server URL"
+                        },
+                        "auth": {
+                          "description": "Optional server authentication",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "env"],
+                              "properties": {
+                                "type": { "const": "bearer" },
+                                "env": { "type": "string", "minLength": 1 }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                              "properties": {
+                                "type": { "const": "oauth_client_credentials" },
+                                "token_url": { "type": "string", "format": "uri" },
+                                "client_id_env": { "type": "string", "minLength": 1 },
+                                "client_secret_env": { "type": "string", "minLength": 1 },
+                                "scope": { "type": "string" },
+                                "audience": { "type": "string" },
+                                "token_params": {
+                                  "type": "object",
+                                  "additionalProperties": { "type": "string" }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "client_id", "redirect_url"],
+                              "properties": {
+                                "type": { "const": "oauth_authorization_code" },
+                                "client_id": { "type": "string", "minLength": 1 },
+                                "client_secret": { "type": "string" },
+                                "redirect_url": { "type": "string", "format": "uri" },
+                                "scope": { "type": "string" }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
               },
               "prompt": { "type": "string" },
               "snapshot_eval": {

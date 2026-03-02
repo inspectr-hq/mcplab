@@ -379,4 +379,207 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('resolves scenario mcp_servers ref from library servers.yaml', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['weather-mcp:', '  transport: http', '  url: http://localhost:3300/mcp'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    mcp_servers:',
+          '      - ref: weather-mcp',
+          '    prompt: test',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.servers['weather-mcp']).toMatchObject({ transport: 'http', url: 'http://localhost:3300/mcp' });
+      expect(config.scenarios[0]?.servers).toContain('weather-mcp');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves scenario mcp_servers inline entry', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    mcp_servers:',
+          '      - id: local-server',
+          '        transport: http',
+          '        url: http://localhost:9999/mcp',
+          '    prompt: test',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.servers['local-server']).toMatchObject({ transport: 'http', url: 'http://localhost:9999/mcp' });
+      expect(config.scenarios[0]?.servers).toContain('local-server');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves scenario with no mcp_servers to empty servers array', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    prompt: pure LLM test',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.scenarios[0]?.servers).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws on conflicting mcp_servers definitions across scenarios', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    mcp_servers:',
+          '      - id: my-server',
+          '        transport: http',
+          '        url: http://localhost:3001/mcp',
+          '    prompt: test 1',
+          '  - id: scn-2',
+          '    mcp_servers:',
+          '      - id: my-server',
+          '        transport: http',
+          '        url: http://localhost:3002/mcp',
+          '    prompt: test 2',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow('Conflicting mcp_servers definition for id: my-server');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows identical mcp_servers definitions across scenarios (deduped silently)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3001/mcp',
+          '    prompt: test 1',
+          '  - id: scn-2',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3001/mcp',
+          '    prompt: test 2',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(Object.keys(config.servers)).toHaveLength(1);
+      expect(config.servers['shared']).toMatchObject({ url: 'http://localhost:3001/mcp' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('loads legacy format (top-level servers + scenario servers string[]) with deprecation warnings', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      writeFileSync(join(dir, 'agents.yaml'), ['agent-a:', '  provider: openai', '  model: gpt-4o-mini'].join('\n'), 'utf8');
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers:',
+          '  - id: legacy-server',
+          '    transport: http',
+          '    url: http://localhost:3001/mcp',
+          'agents:',
+          '  - ref: agent-a',
+          'scenarios:',
+          '  - id: scn-1',
+          '    servers:',
+          '      - legacy-server',
+          '    prompt: test',
+          'run_defaults:',
+          '  selected_agents:',
+          '    - agent-a'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config, warnings } = loadConfig(configPath);
+      expect(config.servers['legacy-server']).toBeTruthy();
+      expect(config.scenarios[0]?.servers).toContain('legacy-server');
+      expect(warnings.some((w) => w.includes('top-level servers is deprecated'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

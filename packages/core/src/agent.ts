@@ -342,7 +342,7 @@ class OpenAiAdapter implements LlmAdapter {
       max_tokens: options.max_tokens
     });
     const message = response.choices[0]?.message;
-    const toolCalls = (message?.tool_calls ?? []).map((call) => ({
+    const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
       name: call.function.name,
       arguments: safeJsonParse(call.function.arguments)
@@ -436,7 +436,7 @@ class AzureOpenAiAdapter implements LlmAdapter {
     }
 
     const message = response.choices[0]?.message;
-    const toolCalls = (message?.tool_calls ?? []).map((call) => ({
+    const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
       name: call.function.name,
       arguments: safeJsonParse(call.function.arguments)
