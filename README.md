@@ -20,6 +20,9 @@ Perfect for MCP server developers who want to ensure their tools work reliably a
 
 [![MCPLab](https://mcplab.inspectr.dev/screenshots/evaluation-results-assistance.png)](https://mcplab.inspectr.dev/)
 
+
+Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
+
 ---
 
 ## ✨ Features
@@ -338,6 +341,9 @@ OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```bash
 # Run all scenarios
 mcplab run -c mcplab/evals/eval.yaml
+
+# Interactive mode (choose config + agents)
+mcplab run --interactive
 
 # Run specific scenario
 mcplab run -c mcplab/evals/eval.yaml -s basic-test
