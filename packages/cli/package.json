@@ -3,6 +3,7 @@
   "version": "0.4.0",
   "description": "MCPLab - Test and evaluate MCP servers with LLMs — run evals, compare agents and launch the MCPLab web app",
   "license": "MIT",
+  "homepage": "https://mcplab.inspectr.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/inspectr-hq/mcplab.git"

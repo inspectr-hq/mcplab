@@ -132,7 +132,7 @@ export function AppSidebar(props: AppSidebarProps = { version: null }) {
         <SidebarSeparator className="my-1.5" />
         <div className={`flex ${collapsed ? "justify-center" : "items-center justify-center gap-2"} w-full`}>
           <a
-            href="https://github.com/inspectr-hq/mcp-lab"
+            href="https://github.com/inspectr-hq/mcplab"
             target="_blank"
             rel="noreferrer"
             className={`inline-flex items-center rounded-md border border-sidebar-border/70 bg-sidebar-accent/20 text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent/35 hover:text-sidebar-foreground ${
