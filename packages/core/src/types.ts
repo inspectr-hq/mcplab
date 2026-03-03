@@ -32,6 +32,7 @@ export interface ServerConfig {
   name?: string;
   transport: TransportType;
   url: string;
+  headers?: Record<string, string>;
   auth?: ServerAuth;
 }
 

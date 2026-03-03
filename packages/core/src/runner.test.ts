@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildScenarioRequestId } from './runner.js';
+import { buildFallbackScenarioRequestId, buildScenarioRequestId } from './runner.js';
 
 describe('buildScenarioRequestId', () => {
   it('builds deterministic IDs with run fallback suffix', () => {
@@ -23,7 +23,7 @@ describe('buildScenarioRequestId', () => {
     });
 
     expect(requestId).toBe(
-      'mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:batch-quality-azure-gpt-52-chat'
+      'mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:batch-quality-azure-gpt-52-chat-run2'
     );
   });
 
@@ -49,5 +49,43 @@ describe('buildScenarioRequestId', () => {
 
     expect(requestId.length).toBe(180);
     expect(requestId.startsWith('mcplab-run:run-123:')).toBe(true);
+    expect(requestId.endsWith('-run1')).toBe(true);
+  });
+
+  it('keeps IDs distinct across runs when scenario_exec_id is set and clamped', () => {
+    const run1 = buildScenarioRequestId({
+      runId: 'run-123',
+      scenarioId: 's'.repeat(300),
+      agentName: 'agent',
+      scenarioExecId: 'exec'.repeat(80),
+      runIndex: 0
+    });
+    const run2 = buildScenarioRequestId({
+      runId: 'run-123',
+      scenarioId: 's'.repeat(300),
+      agentName: 'agent',
+      scenarioExecId: 'exec'.repeat(80),
+      runIndex: 1
+    });
+
+    expect(run1).not.toBe(run2);
+    expect(run1.length).toBeLessThanOrEqual(180);
+    expect(run2.length).toBeLessThanOrEqual(180);
+    expect(run1.endsWith('-run1')).toBe(true);
+    expect(run2.endsWith('-run2')).toBe(true);
+  });
+});
+
+describe('buildFallbackScenarioRequestId', () => {
+  it('clamps fallback IDs to 180 characters', () => {
+    const requestId = buildFallbackScenarioRequestId({
+      runId: 'run-123',
+      runIndex: 0,
+      scenarioAgent: `agent-${'x'.repeat(400)}`
+    });
+
+    expect(requestId.length).toBeLessThanOrEqual(180);
+    expect(requestId.startsWith('mcplab-run:run-123:unknown:')).toBe(true);
+    expect(requestId.endsWith(':run1')).toBe(true);
   });
 });

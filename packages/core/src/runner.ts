@@ -141,8 +141,11 @@ export async function runAll(
             runIndex
           });
         } catch (err: any) {
-          const fallbackAgentSlug = slugifyAgentName(scenario.agent ?? 'unknown-agent');
-          requestId = `mcplab-run:${runId}:unknown:${fallbackAgentSlug}:run${runIndex + 1}`;
+          requestId = buildFallbackScenarioRequestId({
+            runId,
+            runIndex,
+            scenarioAgent: scenario.agent
+          });
           console.debug(
             `Failed to build scenario request ID for scenario '${scenario.id}': ${String(err?.message ?? err)}`
           );
@@ -290,9 +293,25 @@ export function buildScenarioRequestId(params: {
   const runId = normalizeRequestIdPart(params.runId, 'unknown-run');
   const scenarioId = normalizeRequestIdPart(params.scenarioId, 'unknown');
   const agentSlug = slugifyAgentName(params.agentName ?? 'unknown-agent');
-  const fallbackRunSuffix = `run${Math.max(1, params.runIndex + 1)}`;
-  const execSuffix = normalizeRequestIdPart(params.scenarioExecId, fallbackRunSuffix);
-  return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`);
+  const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
+  const execBase = normalizeRequestIdPart(params.scenarioExecId, '');
+  const execSuffix = execBase ? `${execBase}-${runSuffix}` : runSuffix;
+  return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`, {
+    requiredSuffix: `:${agentSlug}:${execSuffix}`
+  });
+}
+
+export function buildFallbackScenarioRequestId(params: {
+  runId: string;
+  runIndex: number;
+  scenarioAgent?: string;
+}): string {
+  const runId = normalizeRequestIdPart(params.runId, 'unknown-run');
+  const fallbackAgentSlug = slugifyAgentName(params.scenarioAgent ?? 'unknown-agent');
+  const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
+  return clampRequestIdLength(`mcplab-run:${runId}:unknown:${fallbackAgentSlug}:${runSuffix}`, {
+    requiredSuffix: `:${runSuffix}`
+  });
 }
 
 function normalizeRequestIdPart(value: string | undefined, fallback: string): string {
@@ -301,9 +320,24 @@ function normalizeRequestIdPart(value: string | undefined, fallback: string): st
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-function clampRequestIdLength(value: string): string {
+function clampRequestIdLength(
+  value: string,
+  options?: {
+    requiredSuffix?: string;
+  }
+): string {
   if (value.length <= MAX_REQUEST_ID_LENGTH) return value;
-  return value.slice(0, MAX_REQUEST_ID_LENGTH);
+  const requiredSuffix = options?.requiredSuffix;
+  if (!requiredSuffix) {
+    return value.slice(0, MAX_REQUEST_ID_LENGTH);
+  }
+  const normalizedSuffix =
+    requiredSuffix.length > MAX_REQUEST_ID_LENGTH
+      ? requiredSuffix.slice(requiredSuffix.length - MAX_REQUEST_ID_LENGTH)
+      : requiredSuffix;
+  const prefixLength = MAX_REQUEST_ID_LENGTH - normalizedSuffix.length;
+  if (prefixLength <= 0) return normalizedSuffix;
+  return `${value.slice(0, prefixLength)}${normalizedSuffix}`;
 }
 
 function slugifyAgentName(agentName: string): string {

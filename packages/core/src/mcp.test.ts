@@ -35,4 +35,13 @@ describe('mergeRequestHeaders', () => {
     const merged = mergeRequestHeaders(undefined, { 'x-request-id': 'runtime-id' }, undefined);
     expect(merged).toEqual({ 'x-request-id': 'runtime-id' });
   });
+
+  it('normalizes keys to lowercase and applies precedence case-insensitively', () => {
+    const merged = mergeRequestHeaders(
+      { Authorization: 'Bearer auth' },
+      { authorization: 'Bearer static' },
+      { AUTHORIZATION: 'Bearer runtime' }
+    );
+    expect(merged).toEqual({ authorization: 'Bearer runtime' });
+  });
 });
