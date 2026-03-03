@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 0.5.0
+
+### Minor Changes
+
+- chore: Add request ID tracking
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@0.5.0
+  - @inspectr/mcplab-mcp-server@0.3.1
+  - @inspectr/mcplab-reporting@0.3.1
+
 ## 0.4.0
 
 ### Minor Changes

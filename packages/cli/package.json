@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "MCPLab - Test and evaluate MCP servers with LLMs — run evals, compare agents and launch the MCPLab web app",
   "license": "MIT",
   "homepage": "https://mcplab.inspectr.dev",
@@ -44,9 +44,9 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@inspectr/mcplab-core": "0.4.0",
-    "@inspectr/mcplab-mcp-server": "0.3.0",
-    "@inspectr/mcplab-reporting": "0.3.0",
+    "@inspectr/mcplab-core": "0.5.0",
+    "@inspectr/mcplab-mcp-server": "0.3.1",
+    "@inspectr/mcplab-reporting": "0.3.1",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "kleur": "^4.1.5",

@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 0.5.0
+
+### Minor Changes
+
+- chore: Add request ID tracking
+
 ## 0.4.0
 
 ### Minor Changes

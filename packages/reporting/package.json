@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab-reporting",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "HTML report generation for MCPLab evaluation runs",
   "license": "MIT",
   "repository": {
@@ -33,6 +33,6 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@inspectr/mcplab-core": "0.4.0"
+    "@inspectr/mcplab-core": "0.5.0"
   }
 }
