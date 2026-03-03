@@ -8,46 +8,46 @@ export interface McpToolInfo {
   inputSchema?: unknown;
 }
 
+export interface McpCallToolOptions {
+  requestHeaders?: Record<string, string>;
+}
+
 export class McpClientManager {
   private clients = new Map<string, Client>();
+  private scopedClients = new Map<string, Client>();
+  private scopedClientConnectPromises = new Map<string, Promise<Client>>();
+  private servers = new Map<string, ServerConfig>();
+  private authHeaders = new Map<string, Record<string, string>>();
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
   private static readonly MAX_CONNECT_RETRIES = 3;
+  private static readonly MAX_SCOPED_CLIENTS = 100;
+  private readonly maxScopedClients: number;
+
+  constructor(options?: { maxScopedClients?: number }) {
+    const configuredMax = options?.maxScopedClients ?? McpClientManager.MAX_SCOPED_CLIENTS;
+    this.maxScopedClients = Math.max(1, configuredMax);
+  }
 
   async connectAll(servers: Record<string, ServerConfig>, signal?: AbortSignal): Promise<void> {
     throwIfAborted(signal);
+    this.servers = new Map(Object.entries(servers));
     for (const [name, server] of Object.entries(servers)) {
       throwIfAborted(signal);
       if (server.transport !== 'http') {
         throw new Error(`Unsupported transport for server ${name}: ${server.transport}`);
       }
-      let lastError: any;
-      for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
-        try {
-          const client = new Client({
-            name: `mcp-eval-${name}`,
-            version: '0.1.0'
-          });
-          const headers = await this.getAuthHeaders(name, server);
-          const transport = new StreamableHTTPClientTransport(new URL(server.url), {
-            requestInit: { headers }
-          });
-          await client.connect(transport);
-          this.clients.set(name, client);
-          lastError = undefined;
-          break;
-        } catch (err: any) {
-          throwIfAborted(signal);
-          lastError = err;
-          if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
-          await sleep(250 * (attempt + 1), signal);
-        }
-      }
-      if (lastError) {
+      try {
+        const authHeaders = await this.getAuthHeaders(name, server);
+        this.authHeaders.set(name, authHeaders);
+        const headers = mergeRequestHeaders(authHeaders, getStaticHeaders(server));
+        const client = await this.connectClientWithRetry(`mcp-eval-${name}`, server, headers, signal);
+        this.clients.set(name, client);
+      } catch (err: any) {
         throw new Error(
           formatMcpError(
             `Failed to connect to MCP server '${name}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
             server.url,
-            lastError
+            err
           )
         );
       }
@@ -83,8 +83,17 @@ export class McpClientManager {
     }
   }
 
-  async callTool(serverName: string, tool: string, args: unknown): Promise<any> {
-    const client = this.getClient(serverName);
+  async callTool(
+    serverName: string,
+    tool: string,
+    args: unknown,
+    options?: McpCallToolOptions
+  ): Promise<any> {
+    const callHeaders = options?.requestHeaders;
+    const client =
+      callHeaders && Object.keys(callHeaders).length > 0
+        ? await this.getOrCreateScopedClient(serverName, callHeaders)
+        : this.getClient(serverName);
     try {
       const result = await client.callTool({
         name: tool,
@@ -99,8 +108,21 @@ export class McpClientManager {
   }
 
   async disconnectAll(): Promise<void> {
-    const clients = Array.from(this.clients.values());
+    const scopedClientSnapshot = Array.from(this.scopedClients.values());
+    const inflightClients = await Promise.allSettled(this.scopedClientConnectPromises.values());
+    const connectedInflightClients = inflightClients.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : []
+    );
+    const clients = [
+      ...Array.from(this.clients.values()),
+      ...scopedClientSnapshot,
+      ...connectedInflightClients
+    ];
     this.clients.clear();
+    this.scopedClients.clear();
+    this.scopedClientConnectPromises.clear();
+    this.servers.clear();
+    this.authHeaders.clear();
     await Promise.all(
       clients.map(async (client) => {
         try {
@@ -113,6 +135,100 @@ export class McpClientManager {
         }
       })
     );
+  }
+
+  private async connectClient(
+    clientName: string,
+    server: ServerConfig,
+    headers: Record<string, string>
+  ): Promise<Client> {
+    const client = new Client({
+      name: clientName,
+      version: '0.1.0'
+    });
+    const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+      requestInit: { headers }
+    });
+    await client.connect(transport);
+    return client;
+  }
+
+  private async connectClientWithRetry(
+    clientName: string,
+    server: ServerConfig,
+    headers: Record<string, string>,
+    signal?: AbortSignal
+  ): Promise<Client> {
+    let lastError: any;
+    for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
+      try {
+        return await this.connectClient(clientName, server, headers);
+      } catch (err: any) {
+        throwIfAborted(signal);
+        lastError = err;
+        if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
+        await sleep(250 * (attempt + 1), signal);
+      }
+    }
+    throw lastError;
+  }
+
+  private async evictIfNeeded(): Promise<void> {
+    while (this.scopedClients.size >= this.maxScopedClients) {
+      const oldest = this.scopedClients.entries().next();
+      if (oldest.done) break;
+      const [oldestKey, oldestClient] = oldest.value;
+      this.scopedClients.delete(oldestKey);
+      try {
+        const close = (oldestClient as unknown as { close?: () => Promise<void> | void }).close;
+        if (typeof close === 'function') {
+          await close.call(oldestClient);
+        }
+      } catch {
+        // Best-effort shutdown: ignore close errors while evicting.
+      }
+    }
+  }
+
+  private async getOrCreateScopedClient(
+    serverName: string,
+    requestHeaders: Record<string, string>
+  ): Promise<Client> {
+    const server = this.servers.get(serverName);
+    if (!server) {
+      throw new Error(`MCP server config not found for server: ${serverName}`);
+    }
+    const headers = mergeRequestHeaders(
+      this.authHeaders.get(serverName),
+      getStaticHeaders(server),
+      requestHeaders
+    );
+    const key = `${serverName}:${serializeHeaders(headers)}`;
+    const existing = this.scopedClients.get(key);
+    if (existing) {
+      // Refresh insertion order so the map acts as an LRU.
+      this.scopedClients.delete(key);
+      this.scopedClients.set(key, existing);
+      return existing;
+    }
+    const inFlight = this.scopedClientConnectPromises.get(key);
+    if (inFlight) return inFlight;
+
+    const connectPromise = this.connectClientWithRetry(
+      `mcp-eval-${serverName}-scoped`,
+      server,
+      headers
+    )
+      .then(async (client) => {
+        await this.evictIfNeeded();
+        this.scopedClients.set(key, client);
+        return client;
+      })
+      .finally(() => {
+        this.scopedClientConnectPromises.delete(key);
+      });
+    this.scopedClientConnectPromises.set(key, connectPromise);
+    return connectPromise;
   }
 
   private async getAuthHeaders(
@@ -208,6 +324,28 @@ export class McpClientManager {
       );
     }
   }
+}
+
+function getStaticHeaders(server: ServerConfig): Record<string, string> {
+  return server.headers ?? {};
+}
+
+export function mergeRequestHeaders(
+  ...headerSources: Array<Record<string, string> | undefined>
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const source of headerSources) {
+    if (!source) continue;
+    for (const [key, value] of Object.entries(source)) {
+      merged[key.toLowerCase()] = value;
+    }
+  }
+  return merged;
+}
+
+function serializeHeaders(headers: Record<string, string>): string {
+  const sortedEntries = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(Object.fromEntries(sortedEntries));
 }
 
 function formatMcpError(prefix: string, url: string | undefined, err: any): string {

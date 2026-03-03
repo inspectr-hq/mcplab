@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeMcpTransportErrorMessage } from './mcp.js';
+import { mergeRequestHeaders, sanitizeMcpTransportErrorMessage } from './mcp.js';
 
 describe('sanitizeMcpTransportErrorMessage', () => {
   it('condenses HTML upstream failures into a short summary', () => {
@@ -13,5 +13,35 @@ describe('sanitizeMcpTransportErrorMessage', () => {
     expect(sanitized).toContain('502');
     expect(sanitized).not.toContain('<!DOCTYPE html>');
     expect(sanitized.length).toBeLessThan(220);
+  });
+});
+
+describe('mergeRequestHeaders', () => {
+  it('merges headers with later sources taking precedence', () => {
+    const merged = mergeRequestHeaders(
+      { authorization: 'Bearer abc', 'x-request-id': 'auth-id' },
+      { 'x-request-id': 'static-id', 'x-env': 'prod' },
+      { 'x-request-id': 'runtime-id' }
+    );
+
+    expect(merged).toEqual({
+      authorization: 'Bearer abc',
+      'x-request-id': 'runtime-id',
+      'x-env': 'prod'
+    });
+  });
+
+  it('ignores undefined header sources', () => {
+    const merged = mergeRequestHeaders(undefined, { 'x-request-id': 'runtime-id' }, undefined);
+    expect(merged).toEqual({ 'x-request-id': 'runtime-id' });
+  });
+
+  it('normalizes keys to lowercase and applies precedence case-insensitively', () => {
+    const merged = mergeRequestHeaders(
+      { Authorization: 'Bearer auth' },
+      { authorization: 'Bearer static' },
+      { AUTHORIZATION: 'Bearer runtime' }
+    );
+    expect(merged).toEqual({ authorization: 'Bearer runtime' });
   });
 });

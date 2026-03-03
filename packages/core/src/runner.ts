@@ -131,6 +131,25 @@ export async function runAll(
 
       for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
         throwIfAborted(options.signal);
+        let requestId: string;
+        try {
+          requestId = buildScenarioRequestId({
+            runId,
+            scenarioId: scenario.id,
+            agentName: scenario.agent,
+            scenarioExecId: scenario.scenario_exec_id,
+            runIndex
+          });
+        } catch (err: any) {
+          requestId = buildFallbackScenarioRequestId({
+            runId,
+            runIndex,
+            scenarioAgent: scenario.agent
+          });
+          console.debug(
+            `Failed to build scenario request ID for scenario '${scenario.id}': ${String(err?.message ?? err)}`
+          );
+        }
         scenarioRunIndex += 1;
         await emitProgress({
           type: 'scenario_run_started',
@@ -145,6 +164,7 @@ export async function runAll(
           scenario,
           agent,
           mcp,
+          requestId,
           signal: options.signal,
           onProgress: async (event) => {
             await emitProgress({
@@ -172,6 +192,7 @@ export async function runAll(
 
         const scenarioRun: ScenarioRunResult = {
           run_index: runIndex,
+          request_id: requestId,
           pass: evalResult.pass,
           failures: evalResult.failures,
           tool_calls: runResult.toolSequence,
@@ -187,6 +208,7 @@ export async function runAll(
           type: 'scenario_run',
           trace_version: 3,
           run_index: runIndex,
+          request_id: requestId,
           scenario_id: scenario.id,
           agent: scenario.agent,
           provider: runResult.traceProvider,
@@ -257,6 +279,71 @@ function createRunId(): string {
     pad(now.getMinutes()),
     pad(now.getSeconds())
   ].join('');
+}
+
+const MAX_REQUEST_ID_LENGTH = 180;
+
+export function buildScenarioRequestId(params: {
+  runId: string;
+  scenarioId?: string;
+  agentName?: string;
+  scenarioExecId?: string;
+  runIndex: number;
+}): string {
+  const runId = normalizeRequestIdPart(params.runId, 'unknown-run');
+  const scenarioId = normalizeRequestIdPart(params.scenarioId, 'unknown');
+  const agentSlug = slugifyAgentName(params.agentName ?? 'unknown-agent');
+  const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
+  const execBase = normalizeRequestIdPart(params.scenarioExecId, '');
+  const execSuffix = execBase ? `${execBase}-${runSuffix}` : runSuffix;
+  return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`, {
+    requiredSuffix: `:${agentSlug}:${execSuffix}`
+  });
+}
+
+export function buildFallbackScenarioRequestId(params: {
+  runId: string;
+  runIndex: number;
+  scenarioAgent?: string;
+}): string {
+  const runId = normalizeRequestIdPart(params.runId, 'unknown-run');
+  const fallbackAgentSlug = slugifyAgentName(params.scenarioAgent ?? 'unknown-agent');
+  const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
+  return clampRequestIdLength(`mcplab-run:${runId}:unknown:${fallbackAgentSlug}:${runSuffix}`, {
+    requiredSuffix: `:${runSuffix}`
+  });
+}
+
+function normalizeRequestIdPart(value: string | undefined, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function clampRequestIdLength(
+  value: string,
+  options?: {
+    requiredSuffix?: string;
+  }
+): string {
+  if (value.length <= MAX_REQUEST_ID_LENGTH) return value;
+  const requiredSuffix = options?.requiredSuffix;
+  if (!requiredSuffix) {
+    return value.slice(0, MAX_REQUEST_ID_LENGTH);
+  }
+  const normalizedSuffix =
+    requiredSuffix.length > MAX_REQUEST_ID_LENGTH
+      ? requiredSuffix.slice(requiredSuffix.length - MAX_REQUEST_ID_LENGTH)
+      : requiredSuffix;
+  const prefixLength = MAX_REQUEST_ID_LENGTH - normalizedSuffix.length;
+  if (prefixLength <= 0) return normalizedSuffix;
+  return `${value.slice(0, prefixLength)}${normalizedSuffix}`;
+}
+
+function slugifyAgentName(agentName: string): string {
+  const normalized = agentName.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
+  const compact = normalized.replace(/^_+|_+$/g, '').replace(/_{2,}/g, '_');
+  return compact || 'unknown-agent';
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
