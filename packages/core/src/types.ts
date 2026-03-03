@@ -227,6 +227,7 @@ export interface ScenarioRunTraceRecord {
   type: 'scenario_run';
   trace_version: 3;
   run_index: number;
+  request_id?: string;
   scenario_id: string;
   agent: string;
   provider: string;
@@ -255,6 +256,7 @@ export type PersistedTraceRecord =
 
 export interface ScenarioRunResult {
   run_index: number;
+  request_id?: string;
   pass: boolean;
   failures: string[];
   tool_calls: string[];

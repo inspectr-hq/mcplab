@@ -84,6 +84,7 @@ export async function runAgentScenario(params: {
   scenario: ExecutableScenario;
   agent: AgentConfig;
   mcp: McpClientManager;
+  requestId?: string;
   maxTurns?: number;
   signal?: AbortSignal;
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
@@ -198,7 +199,9 @@ export async function runAgentScenario(params: {
         let ok = true;
         let result: any;
         try {
-          result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments);
+          result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments, {
+            requestHeaders: params.requestId ? { 'x-request-id': params.requestId } : undefined
+          });
         } catch (err: any) {
           ok = false;
           result = { error: String(err?.message ?? err) };
