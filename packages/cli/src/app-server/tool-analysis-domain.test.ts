@@ -47,15 +47,15 @@ describe('pickDefaultAssistantAgentName', () => {
   const agentNames = ['claude-sonnet-46', 'claude-opus-46'];
 
   it('returns the requested name when provided', () => {
-    expect(
-      pickDefaultAssistantAgentName({ requested: 'claude-opus-46', agentNames })
-    ).toBe('claude-opus-46');
+    expect(pickDefaultAssistantAgentName({ requested: 'claude-opus-46', agentNames })).toBe(
+      'claude-opus-46'
+    );
   });
 
   it('falls back to settingsDefault when no requested name', () => {
-    expect(
-      pickDefaultAssistantAgentName({ settingsDefault: 'claude-sonnet-46', agentNames })
-    ).toBe('claude-sonnet-46');
+    expect(pickDefaultAssistantAgentName({ settingsDefault: 'claude-sonnet-46', agentNames })).toBe(
+      'claude-sonnet-46'
+    );
   });
 
   it('falls back to the first agent name when no requested or default', () => {
@@ -71,8 +71,8 @@ describe('pickDefaultAssistantAgentName', () => {
     // validate against agentNames. If a display name like "Claude Sonnet 4.6"
     // is passed, it returns it unchanged — and the subsequent agent lookup will fail.
     // The fix must be in the caller (frontend) to always pass the key/id.
-    expect(
-      pickDefaultAssistantAgentName({ requested: 'Claude Sonnet 4.6', agentNames })
-    ).toBe('Claude Sonnet 4.6');
+    expect(pickDefaultAssistantAgentName({ requested: 'Claude Sonnet 4.6', agentNames })).toBe(
+      'Claude Sonnet 4.6'
+    );
   });
 });
