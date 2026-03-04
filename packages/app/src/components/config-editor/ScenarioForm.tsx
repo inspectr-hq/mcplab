@@ -185,10 +185,9 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     response_not_contains: "border-amber-300/60 bg-amber-500/10 text-amber-700",
   };
   const isToolRule = newRuleType === "required_tool" || newRuleType === "forbidden_tool";
-  const selectedServerNames = scenario.serverIds
-    .map((sid) => servers.find((srv) => srv.id === sid)?.name)
-    .filter((name): name is string => Boolean(name));
-  const canLoadToolNames = selectedServerNames.length > 0;
+  const selectedServerIds = scenario.serverIds
+    .filter((sid) => servers.some((srv) => srv.id === sid));
+  const canLoadToolNames = selectedServerIds.length > 0;
   const hasScenarioBaselineOverride = scenario.snapshotEval?.baselineSnapshotId !== undefined;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>("");
   const [consumedAutoOpenNonce, setConsumedAutoOpenNonce] = useState<number>(0);
@@ -224,8 +223,8 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     setToolNamesError(null);
     try {
       const discovered = new Set<string>();
-      for (const serverName of selectedServerNames) {
-        const res = await source.discoverToolsForAnalysis({ serverNames: [serverName] });
+      for (const serverId of selectedServerIds) {
+        const res = await source.discoverToolsForAnalysis({ serverNames: [serverId] });
         for (const server of res.servers) {
           for (const tool of server.tools) discovered.add(tool.name);
         }

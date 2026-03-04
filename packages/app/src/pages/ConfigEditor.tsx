@@ -605,12 +605,12 @@ const ConfigEditor = () => {
   });
   const scenarioViewAgents = Array.from(
     new Map(
-      [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.name || agent.id, agent] as const)
+      [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.id, agent] as const)
     ).values()
   );
   const scenarioViewServers = Array.from(
     new Map(
-      [...libServers, ...(config.servers ?? []), ...referencedServers].map((server) => [server.name || server.id, server] as const)
+      [...libServers, ...(config.servers ?? []), ...referencedServers].map((server) => [server.id, server] as const)
     ).values()
   );
   const missingServerRefs = referencedServerRefs.filter((ref) => !findLibraryServerByRef(ref));

@@ -509,13 +509,12 @@ const ToolAnalysisPage = () => {
                 <p className="text-sm text-muted-foreground">No library servers configured.</p>
               ) : (
                 servers.map((server) => {
-                  const name = server.name || server.id;
-                  const checked = selectedServerNames.includes(name);
+                  const checked = selectedServerNames.includes(server.id);
                   return (
                     <label key={server.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
-                      <Checkbox checked={checked} onCheckedChange={(value) => toggleServer(name, Boolean(value))} />
+                      <Checkbox checked={checked} onCheckedChange={(value) => toggleServer(server.id, Boolean(value))} />
                       <div className="min-w-0">
-                        <div className="font-medium">{name}</div>
+                        <div className="font-medium">{server.name || server.id}</div>
                         {server.url && <div className="truncate text-xs text-muted-foreground">{server.url}</div>}
                       </div>
                     </label>

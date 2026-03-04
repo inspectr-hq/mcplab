@@ -92,7 +92,7 @@ export function ScenarioAssistantDialog({
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
   const resolvedAssistantAgentName =
-    defaultAssistantAgentName || agents[0]?.name || agents[0]?.id || "";
+    defaultAssistantAgentName || agents[0]?.id || "";
 
   useEffect(() => {
     if (!open) return;

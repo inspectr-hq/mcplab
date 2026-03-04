@@ -116,7 +116,7 @@ const SettingsPage = () => {
               <SelectContent>
                 <SelectItem value="__none__">None (use first agent)</SelectItem>
                 {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.name || agent.id}>
+                  <SelectItem key={agent.id} value={agent.id}>
                     {(agent.name || agent.id)} · {agent.model}
                   </SelectItem>
                 ))}
