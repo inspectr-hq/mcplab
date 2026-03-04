@@ -83,7 +83,7 @@ const ServerDetail = () => {
     setShowConnectPanel(true);
     setConnectState({ status: "loading" });
     try {
-      const result = await source.discoverToolsForAnalysis({ serverNames: [displayName(form)] });
+      const result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
