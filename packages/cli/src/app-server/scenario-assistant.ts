@@ -9,6 +9,7 @@ import {
 } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
+import { flushDanglingToolCalls } from './assistant-common.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -210,6 +211,7 @@ export async function handleScenarioAssistantRoutes(params: {
       text: message,
       createdAt: new Date().toISOString()
     });
+    flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
     const output = await continueAssistantTurn(session);
     asJson(res, 200, output);

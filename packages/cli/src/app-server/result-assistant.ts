@@ -13,6 +13,7 @@ import {
   summarizeToolResultForResultAssistant,
   touchResultAssistantSession
 } from './result-assistant-domain.js';
+import { flushDanglingToolCalls } from './assistant-common.js';
 
 export type ResultAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -126,6 +127,7 @@ export async function handleResultAssistantRoutes(params: {
       output.response.pendingToolCall &&
       RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(output.response.pendingToolCall.tool)
     ) {
+      flushDanglingToolCalls(session.llmMessages);
       throw new Error('Result Assistant exceeded auto-approved tool-call chain limit');
     }
     return output;
@@ -236,6 +238,7 @@ export async function handleResultAssistantRoutes(params: {
       text: message,
       createdAt: new Date().toISOString()
     });
+    flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
     const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
