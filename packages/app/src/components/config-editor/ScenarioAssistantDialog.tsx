@@ -92,7 +92,7 @@ export function ScenarioAssistantDialog({
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
   const resolvedAssistantAgentName =
-    defaultAssistantAgentName || agents[0]?.name || agents[0]?.id || "";
+    defaultAssistantAgentName || agents[0]?.id || "";
 
   useEffect(() => {
     if (!open) return;
@@ -117,9 +117,7 @@ export function ScenarioAssistantDialog({
             id: scenario.id,
             name: scenario.name,
             prompt: scenario.prompt,
-            serverNames: scenario.serverIds
-              .map((id) => servers.find((server) => server.id === id)?.name || servers.find((server) => server.id === id)?.id)
-              .filter(Boolean) as string[],
+            serverNames: scenario.serverIds,
             evalRules: scenario.evalRules,
             extractRules: scenario.extractRules,
             snapshotEval: scenario.snapshotEval

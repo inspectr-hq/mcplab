@@ -173,7 +173,7 @@ export default function OAuthDebuggerPage() {
     return {
       profile: 'latest',
       target: {
-        serverName: selectedServer.name || selectedServer.id,
+        serverName: selectedServer.id,
         overrides: {
           authorizationServerMetadataUrl: authorizationServerMetadataUrl || undefined,
           authorizationEndpoint: authorizationEndpoint || undefined,
