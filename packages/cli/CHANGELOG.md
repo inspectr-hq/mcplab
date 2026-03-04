@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 0.6.0
+
+### Minor Changes
+
+- chore: Handle dangling tool calls in assistants
+- fix: Improve config sorting
+
 ## 0.5.0
 
 ### Minor Changes
