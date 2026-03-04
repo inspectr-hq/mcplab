@@ -88,5 +88,9 @@ export function listConfigs(evalsDir: string, bundleRoot?: string): ConfigRecord
     .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
     .map((name) => ensureInsideRoot(evalsDir, join(evalsDir, name)));
   const records = files.map((path) => readConfigRecordOrInvalid(path, evalsDir, bundleRoot));
-  return records.sort((a, b) => a.name.localeCompare(b.name));
+  return records.sort((a, b) => {
+    const nameA = (typeof a.config.name === 'string' && a.config.name.trim()) || a.name;
+    const nameB = (typeof b.config.name === 'string' && b.config.name.trim()) || b.name;
+    return nameA.localeCompare(nameB);
+  });
 }

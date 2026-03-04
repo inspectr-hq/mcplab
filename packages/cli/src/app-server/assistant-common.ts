@@ -68,6 +68,27 @@ export function newAssistantEntityId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
 }
 
+/**
+ * Inject synthetic tool_result messages for any dangling tool_use blocks
+ * at the end of llmMessages. This prevents the Anthropic API from rejecting
+ * the request when a user sends a new message without approving/denying
+ * a pending tool call.
+ */
+export function flushDanglingToolCalls(llmMessages: LlmMessage[]): void {
+  if (llmMessages.length === 0) return;
+  const last = llmMessages[llmMessages.length - 1];
+  if (last.role === 'assistant' && last.tool_calls && last.tool_calls.length > 0) {
+    for (const call of last.tool_calls) {
+      llmMessages.push({
+        role: 'tool',
+        content: JSON.stringify({ skipped: true, reason: 'User continued without approving or denying this tool call.' }),
+        tool_call_id: call.id ?? 'unknown',
+        name: call.name
+      });
+    }
+  }
+}
+
 export interface AssistantToolCallRequestEnvelope {
   type: 'tool_call_request';
   text: string;
