@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 0.6.2
+
+### Minor Changes
+
+- fix: simplify server name mapping in ScenarioAssistantDialog
+- fix: unify server and agent ID usage across components
+
 ## 0.6.1
 
 ### Patch Changes
