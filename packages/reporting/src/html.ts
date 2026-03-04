@@ -44,7 +44,9 @@ export function renderHtml(results: ResultsJson): string {
     .map((scenario) => {
       const sequenceRows = Object.entries(scenario.distinct_sequences)
         .map(([seq, count]) => {
-          return `<tr><td><code class="sequence-code">${escapeHtml(seq)}</code></td><td class="count-col">${count}</td></tr>`;
+          return `<tr><td><code class="sequence-code">${escapeHtml(
+            seq
+          )}</code></td><td class="count-col">${count}</td></tr>`;
         })
         .join('\n');
 
@@ -52,7 +54,9 @@ export function renderHtml(results: ResultsJson): string {
       const allowedRows = allowedSequences
         .map(
           (seq) =>
-            `<tr><td><code class="sequence-code">${escapeHtml(JSON.stringify(seq))}</code></td></tr>`
+            `<tr><td><code class="sequence-code">${escapeHtml(
+              JSON.stringify(seq)
+            )}</code></td></tr>`
         )
         .join('\n');
 

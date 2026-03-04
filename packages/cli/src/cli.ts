@@ -21,10 +21,7 @@ import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
-import {
-  promptAppOptionsInteractive,
-  selectRunDirInteractive
-} from './interactive-helpers.js';
+import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -546,15 +543,23 @@ program
           try {
             const raw = readFileSync(filePath, 'utf8');
             const parsed = parse(raw) as any;
-            if (!parsed || typeof parsed !== 'object') { tcSkipped += 1; continue; }
+            if (!parsed || typeof parsed !== 'object') {
+              tcSkipped += 1;
+              continue;
+            }
             const hasLegacyServers =
               Array.isArray(parsed.servers) &&
               parsed.servers.length > 0 &&
               typeof parsed.servers[0] === 'string' &&
               !parsed.mcp_servers;
-            if (!hasLegacyServers) { tcSkipped += 1; continue; }
+            if (!hasLegacyServers) {
+              tcSkipped += 1;
+              continue;
+            }
             if (options.dryRun) {
-              console.log(kleur.cyan(`[dry-run] test-case ${file}: would migrate servers to mcp_servers`));
+              console.log(
+                kleur.cyan(`[dry-run] test-case ${file}: would migrate servers to mcp_servers`)
+              );
               tcMigrated += 1;
               continue;
             }
@@ -568,12 +573,16 @@ program
             console.log(kleur.green(`Migrated test-case: ${file}`));
           } catch (error: any) {
             tcFailed += 1;
-            console.error(kleur.red(`Failed test-case: ${file} (${error?.message ?? String(error)})`));
+            console.error(
+              kleur.red(`Failed test-case: ${file} (${error?.message ?? String(error)})`)
+            );
           }
         }
         console.log(
           kleur.cyan(
-            `Test-cases migration${options.dryRun ? ' (dry-run)' : ''}: migrated=${tcMigrated}, skipped=${tcSkipped}, failed=${tcFailed}`
+            `Test-cases migration${
+              options.dryRun ? ' (dry-run)' : ''
+            }: migrated=${tcMigrated}, skipped=${tcSkipped}, failed=${tcFailed}`
           )
         );
       }
@@ -705,9 +714,15 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
     case 'mcp_connect_finished':
       return `Connected MCP servers (${event.serverCount}).`;
     case 'scenario_run_started':
-      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${event.scenarioId} [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
+        event.scenarioId
+      } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
     case 'scenario_run_finished':
-      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${event.toolCallCount} tool calls)`;
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
+        event.scenarioId
+      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+        event.toolCallCount
+      } tool calls)`;
     case 'run_finished':
       return `Run finished: ${event.runId}`;
     default:

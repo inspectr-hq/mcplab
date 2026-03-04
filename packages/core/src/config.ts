@@ -478,9 +478,12 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
         } else {
           const inlineEntry = entry as ServerInlineEntry;
           const id = String(inlineEntry.id ?? '').trim();
-          if (!id) throw new Error('Invalid config: inline mcp_servers entry is missing required id');
-          if (!inlineEntry.transport) throw new Error(`Invalid config: mcp_servers entry "${id}" is missing transport`);
-          if (!inlineEntry.url) throw new Error(`Invalid config: mcp_servers entry "${id}" is missing url`);
+          if (!id)
+            throw new Error('Invalid config: inline mcp_servers entry is missing required id');
+          if (!inlineEntry.transport)
+            throw new Error(`Invalid config: mcp_servers entry "${id}" is missing transport`);
+          if (!inlineEntry.url)
+            throw new Error(`Invalid config: mcp_servers entry "${id}" is missing url`);
           normalizedMcpServers.push({
             id,
             transport: inlineEntry.transport,

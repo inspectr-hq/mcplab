@@ -76,11 +76,7 @@ export async function promptAppOptionsInteractive(
     const port = await askValidPort(ask.question, current.port);
     const evalsDir = await askWithDefault(ask.question, 'Evals dir', current.evalsDir);
     const runsDir = await askWithDefault(ask.question, 'Runs dir', current.runsDir);
-    const snapshotsDir = await askWithDefault(
-      ask.question,
-      'Snapshots dir',
-      current.snapshotsDir
-    );
+    const snapshotsDir = await askWithDefault(ask.question, 'Snapshots dir', current.snapshotsDir);
     const toolAnalysisResultsDir = await askWithDefault(
       ask.question,
       'Tool analysis dir',
@@ -97,9 +93,9 @@ export async function promptAppOptionsInteractive(
     console.log(`tool-analysis-results-dir: ${toolAnalysisResultsDir}`);
     console.log(`libraries-dir: ${librariesDir}`);
 
-    const confirm = (
-      await ask.question('Start app with these settings? [Y/n]: ')
-    ).trim().toLowerCase();
+    const confirm = (await ask.question('Start app with these settings? [Y/n]: '))
+      .trim()
+      .toLowerCase();
     if (confirm === 'n' || confirm === 'no') {
       throw new Error(INTERACTIVE_ABORT_ERROR);
     }

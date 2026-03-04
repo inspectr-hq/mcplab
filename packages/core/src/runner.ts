@@ -147,7 +147,9 @@ export async function runAll(
             scenarioAgent: scenario.agent
           });
           console.debug(
-            `Failed to build scenario request ID for scenario '${scenario.id}': ${String(err?.message ?? err)}`
+            `Failed to build scenario request ID for scenario '${scenario.id}': ${String(
+              err?.message ?? err
+            )}`
           );
         }
         scenarioRunIndex += 1;

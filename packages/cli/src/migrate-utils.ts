@@ -31,9 +31,10 @@ export function migrateSourceConfig(sourceConfig: SourceEvalConfig): SourceEvalC
         const { servers: _legacyServers, ...rest } = scenario;
         return {
           ...rest,
-          mcp_servers: _legacyServers.map((id: string) =>
-            // Use the original entry (inline or ref) — fall back to ref only if unknown
-            serverEntryById.get(id) ?? { ref: id }
+          mcp_servers: _legacyServers.map(
+            (id: string) =>
+              // Use the original entry (inline or ref) — fall back to ref only if unknown
+              serverEntryById.get(id) ?? { ref: id }
           )
         };
       }

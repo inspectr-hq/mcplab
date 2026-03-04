@@ -160,10 +160,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                 serverIdByName.set(id, id);
                 const auth = entry.auth as Record<string, unknown> | undefined;
                 const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
-                  auth?.type === 'bearer' ? 'bearer'
-                  : auth?.type === 'oauth_client_credentials' ? 'api-key'
-                  : auth?.type === 'oauth_authorization_code' ? 'oauth2'
-                  : 'none';
+                  auth?.type === 'bearer'
+                    ? 'bearer'
+                    : auth?.type === 'oauth_client_credentials'
+                    ? 'api-key'
+                    : auth?.type === 'oauth_authorization_code'
+                    ? 'oauth2'
+                    : 'none';
                 servers.push({
                   id,
                   name: String(entry.name || id),
@@ -171,16 +174,39 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                   url: String(entry.url || ''),
                   authType,
                   authValue: auth?.type === 'bearer' ? String(auth.env || '') : undefined,
-                  oauthClientId: auth?.type === 'oauth_authorization_code' ? String(auth.client_id || '') : undefined,
-                  oauthClientSecret: auth?.type === 'oauth_authorization_code' ? String(auth.client_secret || '') : undefined,
-                  oauthRedirectUrl: auth?.type === 'oauth_authorization_code' ? String(auth.redirect_url || '') : undefined,
-                  oauthScope: auth?.type === 'oauth_authorization_code' || auth?.type === 'oauth_client_credentials'
-                    ? String((auth.scope as string) || '') || undefined
-                    : undefined,
-                  oauthTokenUrl: auth?.type === 'oauth_client_credentials' ? String(auth.token_url || '') : undefined,
-                  oauthClientIdEnv: auth?.type === 'oauth_client_credentials' ? String(auth.client_id_env || '') : undefined,
-                  oauthClientSecretEnv: auth?.type === 'oauth_client_credentials' ? String(auth.client_secret_env || '') : undefined,
-                  oauthAudience: auth?.type === 'oauth_client_credentials' ? String(auth.audience || '') || undefined : undefined,
+                  oauthClientId:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.client_id || '')
+                      : undefined,
+                  oauthClientSecret:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.client_secret || '')
+                      : undefined,
+                  oauthRedirectUrl:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.redirect_url || '')
+                      : undefined,
+                  oauthScope:
+                    auth?.type === 'oauth_authorization_code' ||
+                    auth?.type === 'oauth_client_credentials'
+                      ? String((auth.scope as string) || '') || undefined
+                      : undefined,
+                  oauthTokenUrl:
+                    auth?.type === 'oauth_client_credentials'
+                      ? String(auth.token_url || '')
+                      : undefined,
+                  oauthClientIdEnv:
+                    auth?.type === 'oauth_client_credentials'
+                      ? String(auth.client_id_env || '')
+                      : undefined,
+                  oauthClientSecretEnv:
+                    auth?.type === 'oauth_client_credentials'
+                      ? String(auth.client_secret_env || '')
+                      : undefined,
+                  oauthAudience:
+                    auth?.type === 'oauth_client_credentials'
+                      ? String(auth.audience || '') || undefined
+                      : undefined
                 });
                 mixedServerEntries.push({ kind: 'inline', server: servers[servers.length - 1] });
               }
@@ -385,13 +411,14 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     return {
       id: scenario.id,
       name: scenario.name || undefined,
-      mcp_servers: scenario.serverIds.length > 0
-        ? scenario.serverIds.map((id) => {
-            const resolvedId = serverNameById.get(id) ?? id;
-            const inline = inlineServerById.get(resolvedId);
-            return inline ?? { ref: resolvedId };
-          })
-        : undefined,
+      mcp_servers:
+        scenario.serverIds.length > 0
+          ? scenario.serverIds.map((id) => {
+              const resolvedId = serverNameById.get(id) ?? id;
+              const inline = inlineServerById.get(resolvedId);
+              return inline ?? { ref: resolvedId };
+            })
+          : undefined,
       prompt: scenario.prompt,
       ...(scenario.snapshotEval
         ? {
@@ -512,9 +539,8 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
     scenarios: input.scenarios.map((scenario) => ({
       id: scenario.id,
       name: scenario.name || undefined,
-      mcp_servers: scenario.serverIds.length > 0
-        ? scenario.serverIds.map((id) => ({ ref: id }))
-        : undefined,
+      mcp_servers:
+        scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined,
       prompt: scenario.prompt,
       snapshot_eval: scenario.snapshotEval
         ? {

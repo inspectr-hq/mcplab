@@ -81,7 +81,10 @@ export function flushDanglingToolCalls(llmMessages: LlmMessage[]): void {
     for (const call of last.tool_calls) {
       llmMessages.push({
         role: 'tool',
-        content: JSON.stringify({ skipped: true, reason: 'User continued without approving or denying this tool call.' }),
+        content: JSON.stringify({
+          skipped: true,
+          reason: 'User continued without approving or denying this tool call.'
+        }),
         tool_call_id: call.id ?? 'unknown',
         name: call.name
       });

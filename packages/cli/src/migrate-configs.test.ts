@@ -14,9 +14,7 @@ describe('migrateSourceConfig', () => {
   it('converts legacy scenario servers string[] to mcp_servers refs for library servers', () => {
     const source = baseConfig({
       servers: [{ ref: 'weather-mcp' }],
-      scenarios: [
-        { id: 'scn-1', servers: ['weather-mcp'], prompt: 'test' } as any
-      ]
+      scenarios: [{ id: 'scn-1', servers: ['weather-mcp'], prompt: 'test' } as any]
     });
 
     const result = migrateSourceConfig(source);
@@ -36,9 +34,7 @@ describe('migrateSourceConfig', () => {
           url: 'http://localhost:3001/mcp'
         }
       ] as any,
-      scenarios: [
-        { id: 'scn-1', servers: ['my-api'], prompt: 'test' } as any
-      ]
+      scenarios: [{ id: 'scn-1', servers: ['my-api'], prompt: 'test' } as any]
     });
 
     const result = migrateSourceConfig(source);
@@ -55,9 +51,7 @@ describe('migrateSourceConfig', () => {
         { ref: 'lib-server' },
         { id: 'inline-svc', transport: 'http', url: 'http://localhost:3002/mcp' }
       ] as any,
-      scenarios: [
-        { id: 'scn-1', servers: ['lib-server', 'inline-svc'], prompt: 'test' } as any
-      ]
+      scenarios: [{ id: 'scn-1', servers: ['lib-server', 'inline-svc'], prompt: 'test' } as any]
     });
 
     const result = migrateSourceConfig(source);
@@ -71,9 +65,7 @@ describe('migrateSourceConfig', () => {
   it('falls back to ref for unknown server IDs', () => {
     const source = baseConfig({
       servers: [],
-      scenarios: [
-        { id: 'scn-1', servers: ['unknown-server'], prompt: 'test' } as any
-      ]
+      scenarios: [{ id: 'scn-1', servers: ['unknown-server'], prompt: 'test' } as any]
     });
 
     const result = migrateSourceConfig(source);

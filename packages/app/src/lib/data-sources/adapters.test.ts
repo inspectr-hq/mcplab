@@ -445,7 +445,12 @@ describe('config adapters round-trip', () => {
             name: 'Inline Scenario',
             mcp_servers: [
               { ref: 'weather-mcp' },
-              { id: 'inline-mcp', name: 'Inline MCP', transport: 'http', url: 'http://localhost:3011/mcp' }
+              {
+                id: 'inline-mcp',
+                name: 'Inline MCP',
+                transport: 'http',
+                url: 'http://localhost:3011/mcp'
+              }
             ],
             prompt: 'Check latest weather alerts',
             eval: {
@@ -523,7 +528,10 @@ describe('config adapters round-trip', () => {
               }
             ],
             prompt: 'test',
-            eval: { tool_constraints: { required_tools: [], forbidden_tools: [] }, response_assertions: [] },
+            eval: {
+              tool_constraints: { required_tools: [], forbidden_tools: [] },
+              response_assertions: []
+            },
             extract: []
           }
         ]

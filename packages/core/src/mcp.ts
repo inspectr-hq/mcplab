@@ -40,7 +40,12 @@ export class McpClientManager {
         const authHeaders = await this.getAuthHeaders(name, server);
         this.authHeaders.set(name, authHeaders);
         const headers = mergeRequestHeaders(authHeaders, getStaticHeaders(server));
-        const client = await this.connectClientWithRetry(`mcp-eval-${name}`, server, headers, signal);
+        const client = await this.connectClientWithRetry(
+          `mcp-eval-${name}`,
+          server,
+          headers,
+          signal
+        );
         this.clients.set(name, client);
       } catch (err: any) {
         throw new Error(

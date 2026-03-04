@@ -211,7 +211,8 @@ async function promptForConfigPath(
   if (choices.length > 0) {
     console.log(kleur.cyan('\nSelect an evaluation config:'));
     choices.forEach((choice, index) => {
-      const suffix = choice.label === choice.fileName ? '' : ` ${kleur.gray(`(${choice.fileName})`)}`;
+      const suffix =
+        choice.label === choice.fileName ? '' : ` ${kleur.gray(`(${choice.fileName})`)}`;
       console.log(`${index + 1}. ${choice.label}${suffix}`);
     });
   } else {
@@ -219,10 +220,7 @@ async function promptForConfigPath(
   }
 
   while (true) {
-    const prompt =
-      choices.length > 0
-        ? 'Config number or path: '
-        : 'Config path: ';
+    const prompt = choices.length > 0 ? 'Config number or path: ' : 'Config path: ';
     const input = (await ask(prompt)).trim();
     if (!input) {
       console.log(kleur.yellow('Please enter a selection.'));

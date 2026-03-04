@@ -25,9 +25,7 @@ describe('parseNumberSelection', () => {
 
 describe('resolveRunOptions', () => {
   it('requires config in non-interactive mode', () => {
-    expect(() =>
-      resolveRunOptions({ interactive: false })
-    ).toThrow('config is required');
+    expect(() => resolveRunOptions({ interactive: false })).toThrow('config is required');
   });
 
   it('throws on conflicting --agents and --agents-all', () => {
