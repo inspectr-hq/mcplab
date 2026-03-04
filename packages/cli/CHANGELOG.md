@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 0.6.1
+
+### Patch Changes
+
+- fix: server name lookup in discoverToolsForAnalysis
+
 ## 0.6.0
 
 ### Minor Changes
