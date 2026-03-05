@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 0.7.0
+
+### Minor Changes
+
+- fix: adjust default maxTurns to 30
+  fix: refine component styling
+
 ## 0.6.0
 
 ### Minor Changes

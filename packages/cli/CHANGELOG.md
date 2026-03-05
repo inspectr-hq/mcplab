@@ -1,5 +1,19 @@
 # @inspectr/mcplab
 
+## 0.8.0
+
+### Minor Changes
+
+- fix: adjust default maxTurns to 30
+  fix: refine component styling
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@0.7.0
+  - @inspectr/mcplab-mcp-server@0.3.3
+  - @inspectr/mcplab-reporting@0.3.3
+
 ## 0.7.0
 
 ### Minor Changes
