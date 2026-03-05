@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 0.6.0
+
+### Minor Changes
+
+- fix: increase default maxTurns from 8 to 15
+
 ## 0.5.0
 
 ### Minor Changes
