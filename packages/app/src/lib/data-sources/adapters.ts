@@ -105,6 +105,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       model: entry.model,
       temperature: entry.temperature ?? 0,
       maxTokens: entry.max_tokens ?? 2048,
+      maxTurns: entry.max_turns,
       systemPrompt: entry.system
     };
     agents.push(mappedAgent);
@@ -297,6 +298,7 @@ export function fromCoreLibraries(libraries: {
         model: agent.model,
         temperature: agent.temperature,
         max_tokens: agent.max_tokens,
+        max_turns: agent.max_turns,
         system: agent.system
       })),
       scenarios: libraries.scenarios
@@ -378,6 +380,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       model: agent.model,
       temperature: agent.temperature,
       max_tokens: agent.maxTokens,
+      max_turns: agent.maxTurns,
       system: agent.systemPrompt
     } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
   };
@@ -528,6 +531,7 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
         model: agent.model,
         temperature: agent.temperature,
         max_tokens: agent.maxTokens,
+        max_turns: agent.maxTurns,
         system: agent.systemPrompt
       }
     ])

@@ -167,6 +167,7 @@ export async function runAll(
           agent,
           mcp,
           requestId,
+          maxTurns: agent.max_turns,
           signal: options.signal,
           onProgress: async (event) => {
             await emitProgress({

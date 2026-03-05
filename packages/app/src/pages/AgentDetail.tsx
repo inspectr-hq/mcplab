@@ -468,6 +468,27 @@ const AgentDetail = () => {
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Max Turns</Label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                value={form.maxTurns ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
+                }}
+                placeholder="15 (default)"
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Maximum number of LLM round-trips (tool calls + final answer) per eval run.
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>Temperature</Label>

@@ -625,6 +625,7 @@ export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig[
         model?: string;
         temperature?: number;
         max_tokens?: number;
+        max_turns?: number;
         system?: string;
       };
       const id = String(agent.id ?? agent.name ?? '').trim();
@@ -635,6 +636,7 @@ export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig[
         model: agent.model,
         temperature: agent.temperature,
         max_tokens: agent.max_tokens,
+        max_turns: agent.max_turns,
         system: agent.system
       };
     }
@@ -651,6 +653,7 @@ export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig[
       model: agent.model,
       temperature: agent.temperature,
       max_tokens: agent.max_tokens,
+      max_turns: agent.max_turns,
       system: agent.system
     };
   }

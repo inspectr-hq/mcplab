@@ -32,6 +32,7 @@ export interface AgentConfig {
   model: string;
   temperature: number;
   maxTokens: number;
+  maxTurns?: number;
   systemPrompt?: string;
 }
 
