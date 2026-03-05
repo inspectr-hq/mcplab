@@ -253,7 +253,7 @@ const Results = () => {
                 </TableHead>
                 <TableHead>
                   <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("avgToolCalls")}>
-                    Tool Calls
+                    Avg Tool Calls
                     {sortIcon("avgToolCalls")}
                   </button>
                 </TableHead>
