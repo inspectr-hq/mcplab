@@ -96,6 +96,7 @@ export interface AssistantToolCallRequestEnvelope {
   type: 'tool_call_request';
   text: string;
   toolCall: { name: string; arguments?: unknown };
+  toolCalls: Array<{ name: string; arguments?: unknown }>;
 }
 
 export async function chatWithJsonRetry<T>(params: {
@@ -111,19 +112,20 @@ export async function chatWithJsonRetry<T>(params: {
 
   const toToolCallRequest = (response: Awaited<ReturnType<typeof chatWithAgent>>) => {
     if (!response.tool_calls || response.tool_calls.length === 0) return null;
-    const [first, ...rest] = response.tool_calls;
-    const baseText = response.content?.trim() || params.toolCallFallbackText(first.name);
-    const text =
-      rest.length > 0
-        ? `${baseText}\n\nNote: I requested multiple tool calls, but this UI supports one tool call at a time. Please approve this one first, then I can request the next one if still needed.`
-        : baseText;
+    const first = response.tool_calls[0];
+    const text = response.content?.trim() || params.toolCallFallbackText(first.name);
+    const allCalls = response.tool_calls.map((tc) => ({
+      name: tc.name,
+      arguments: tc.arguments ?? {}
+    }));
     return {
       type: 'tool_call_request' as const,
       text,
       toolCall: {
         name: first.name,
         arguments: first.arguments ?? {}
-      }
+      },
+      toolCalls: allCalls
     };
   };
 

@@ -173,6 +173,7 @@ export interface ScenarioAssistantMessage {
   createdAt: string;
   suggestions?: ScenarioAssistantSuggestionBundle;
   pendingToolCallId?: string;
+  pendingToolCallIds?: string[];
   toolRequestServer?: string;
   toolRequestName?: string;
   toolRequestPublicName?: string;
@@ -205,10 +206,11 @@ export interface ScenarioAssistantSessionView {
 }
 
 export interface ScenarioAssistantTurnResponse {
-  type: 'assistant_message' | 'tool_call_request';
+  type: 'assistant_message' | 'tool_call_request' | 'tool_call_resolved';
   text: string;
   suggestions?: ScenarioAssistantSuggestionBundle;
   pendingToolCall?: ScenarioAssistantPendingToolCall;
+  pendingToolCalls?: ScenarioAssistantPendingToolCall[];
 }
 
 export interface ResultAssistantChatMessage {
@@ -678,6 +680,9 @@ export interface EvalDataSource {
   denyScenarioAssistantToolCall: (
     sessionId: string,
     callId: string
+  ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
+  approveAllScenarioAssistantToolCalls: (
+    sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
   discoverToolsForAnalysis: (params: {

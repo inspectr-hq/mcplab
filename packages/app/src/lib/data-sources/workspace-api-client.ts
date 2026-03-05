@@ -293,6 +293,14 @@ export const workspaceApiClient = {
         body: JSON.stringify({})
       }
     ),
+  approveAllScenarioAssistantToolCalls: (sessionId: string) =>
+    request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
+      `/api/scenario-assistant/sessions/${sessionId}/tool-calls/approve-all`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
   closeScenarioAssistantSession: (sessionId: string) =>
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'

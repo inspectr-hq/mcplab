@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
 import type {
   ScenarioAssistantSessionView,
-  ScenarioAssistantSuggestionBundle
+  ScenarioAssistantSuggestionBundle,
+  ScenarioAssistantPendingToolCall
 } from "@/lib/data-sources/types";
 
 const SCENARIO_ASSISTANT_SNIPPETS = [
@@ -319,6 +320,23 @@ export function ScenarioAssistantDialog({
     }
   };
 
+  const handleApproveAll = async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    try {
+      const resp = await source.approveAllScenarioAssistantToolCalls(sessionId);
+      setSession(resp.session);
+    } catch (error: unknown) {
+      toast({
+        title: "Could not approve all tool calls",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const applySuggestions = (
     messageId: string | undefined,
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
@@ -459,11 +477,15 @@ export function ScenarioAssistantDialog({
                   {session?.messages.map((message) => (
                     <Fragment key={message.id}>
                       {(() => {
-                        const linkedPendingToolCall = message.pendingToolCallId
-                          ? (session?.pendingToolCalls ?? []).find((call) => call.id === message.pendingToolCallId)
-                          : undefined;
+                        const toolCallIds = message.pendingToolCallIds ?? (message.pendingToolCallId ? [message.pendingToolCallId] : []);
+                        const linkedPendingToolCalls = toolCallIds
+                          .map((id) => (session?.pendingToolCalls ?? []).find((call) => call.id === id))
+                          .filter((call): call is ScenarioAssistantPendingToolCall => Boolean(call));
+                        const allToolCalls = toolCallIds
+                          .map((id) => session.pendingToolCalls.find((c) => c.id === id) ?? session.pendingToolCalls.find((c) => c.id === id))
+                          .filter(Boolean) as ScenarioAssistantPendingToolCall[];
                         const isAssistantToolRequest =
-                          message.role === "assistant" && Boolean(message.pendingToolCallId);
+                          message.role === "assistant" && toolCallIds.length > 0;
                         if (!isAssistantToolRequest) {
                           return (
                             <div className="space-y-2">
@@ -471,73 +493,96 @@ export function ScenarioAssistantDialog({
                             </div>
                           );
                         }
-                        const fallbackToolNameFromText =
-                          message.text.match(/I need to call ['"]([^'"]+)['"]/i)?.[1]?.replace(/^.*__/, "") ??
-                          undefined;
-                        const toolName =
-                          linkedPendingToolCall?.tool ?? message.toolRequestName ?? fallbackToolNameFromText;
-                        const publicToolName =
-                          linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
-                        const displayToolName = toolName ?? publicToolName ?? "unknown_tool";
+                        const pendingCount = linkedPendingToolCalls.length;
+                        const resolvedCount = allToolCalls.length - pendingCount;
                         return (
                           <div className="flex items-start gap-2">
                             <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
                               <Bot className="h-3 w-3" />
                             </div>
-                            <details
-                              open={Boolean(linkedPendingToolCall)}
-                              className="group w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
-                            >
-                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                    <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                                    <span
-                                      className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                        linkedPendingToolCall
-                                          ? "bg-amber-100 text-amber-900"
-                                          : "bg-muted text-muted-foreground"
-                                      }`}
-                                    >
-                                      {linkedPendingToolCall ? "Needs approval" : "Completed"}
-                                    </span>
-                                  </div>
-                                </div>
-                                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                              </summary>
-                              <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                            <div className="w-full max-w-[92%] space-y-2">
+                              <div className="rounded-md border border-border/60 bg-background px-3 py-2">
                                 <MarkdownContent text={message.text} variant="assistant" />
-                                {linkedPendingToolCall && (
-                                  <>
-                                    <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                                      <code>{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
-                                    </pre>
-                                    <div className="mt-2 flex justify-end gap-2">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-xs"
-                                        disabled={loading}
-                                        onClick={() => void handleDeny(linkedPendingToolCall.id)}
-                                      >
-                                        Deny
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        className="h-7 px-2 text-xs"
-                                        disabled={loading}
-                                        onClick={() => void handleApprove(linkedPendingToolCall.id)}
-                                      >
-                                        Approve
-                                      </Button>
-                                    </div>
-                                  </>
-                                )}
                               </div>
-                            </details>
+                              {allToolCalls.length > 1 && pendingCount > 0 && (
+                                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-1.5">
+                                  <span className="text-xs text-amber-900">
+                                    {resolvedCount} of {allToolCalls.length} tool calls resolved
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={loading}
+                                    onClick={() => void handleApproveAll()}
+                                  >
+                                    Approve All ({pendingCount})
+                                  </Button>
+                                </div>
+                              )}
+                              {allToolCalls.map((call) => {
+                                const isPending = call.status === "pending";
+                                const displayToolName = call.tool ?? call.publicToolName ?? "unknown_tool";
+                                return (
+                                  <details
+                                    key={call.id}
+                                    open={isPending}
+                                    className="group overflow-hidden rounded-md border border-border/60 bg-background"
+                                  >
+                                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                          <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
+                                          <span
+                                            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                              isPending
+                                                ? "bg-amber-100 text-amber-900"
+                                                : call.status === "error"
+                                                  ? "bg-red-100 text-red-900"
+                                                  : call.status === "denied"
+                                                    ? "bg-gray-100 text-gray-700"
+                                                    : "bg-muted text-muted-foreground"
+                                            }`}
+                                          >
+                                            {isPending ? "Needs approval" : call.status === "error" ? "Error" : call.status === "denied" ? "Denied" : "Approved"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                                    </summary>
+                                    <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                                      <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+                                        <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
+                                      </pre>
+                                      {isPending && (
+                                        <div className="mt-2 flex justify-end gap-2">
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 px-2 text-xs"
+                                            disabled={loading}
+                                            onClick={() => void handleDeny(call.id)}
+                                          >
+                                            Deny
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            disabled={loading}
+                                            onClick={() => void handleApprove(call.id)}
+                                          >
+                                            Approve
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </details>
+                                );
+                              })}
+                            </div>
                           </div>
                         );
                       })()}
@@ -607,7 +652,7 @@ export function ScenarioAssistantDialog({
                     </Fragment>
                   ))}
                   {(session?.pendingToolCalls ?? [])
-                    .filter((call) => !(session?.messages ?? []).some((m) => m.pendingToolCallId === call.id))
+                    .filter((call) => !(session?.messages ?? []).some((m) => m.pendingToolCallId === call.id || m.pendingToolCallIds?.includes(call.id)))
                     .map((call) => (
                     <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">

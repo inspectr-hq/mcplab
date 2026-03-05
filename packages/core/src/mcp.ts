@@ -67,25 +67,36 @@ export class McpClientManager {
     return client;
   }
 
-  async listTools(serverName: string): Promise<ToolDef[]> {
+  async listTools(serverName: string, signal?: AbortSignal): Promise<ToolDef[]> {
     const client = this.getClient(serverName);
-    try {
-      const result: any = await client.listTools();
-      const tools = Array.isArray(result?.tools)
-        ? result.tools
-        : Array.isArray(result)
-        ? result
-        : [];
-      return tools.map((tool: any) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input
-      }));
-    } catch (err: any) {
-      throw new Error(
-        formatMcpError(`Failed to list tools for server '${serverName}'`, undefined, err)
-      );
+    let lastError: any;
+    for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
+      try {
+        const result: any = await client.listTools();
+        const tools = Array.isArray(result?.tools)
+          ? result.tools
+          : Array.isArray(result)
+          ? result
+          : [];
+        return tools.map((tool: any) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input
+        }));
+      } catch (err: any) {
+        throwIfAborted(signal);
+        lastError = err;
+        if (attempt >= McpClientManager.MAX_CONNECT_RETRIES) break;
+        await sleep(250 * (attempt + 1), signal);
+      }
     }
+    throw new Error(
+      formatMcpError(
+        `Failed to list tools for server '${serverName}' after ${McpClientManager.MAX_CONNECT_RETRIES} retries`,
+        undefined,
+        lastError
+      )
+    );
   }
 
   async callTool(

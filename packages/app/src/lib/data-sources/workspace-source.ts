@@ -169,6 +169,9 @@ export const workspaceSource: EvalDataSource = {
   async denyScenarioAssistantToolCall(sessionId, callId) {
     return workspaceApiClient.denyScenarioAssistantToolCall(sessionId, callId);
   },
+  async approveAllScenarioAssistantToolCalls(sessionId) {
+    return workspaceApiClient.approveAllScenarioAssistantToolCalls(sessionId);
+  },
   async closeScenarioAssistantSession(sessionId) {
     await workspaceApiClient.closeScenarioAssistantSession(sessionId);
   },

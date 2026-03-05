@@ -237,6 +237,7 @@ export interface ScenarioRunTraceRecord {
   ts_start: string;
   ts_end: string;
   pass: boolean;
+  error?: string;
   messages: TraceMessage[];
   metrics?: {
     tool_call_count: number;
@@ -260,6 +261,7 @@ export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
   pass: boolean;
+  error?: string;
   failures: string[];
   tool_calls: string[];
   tool_call_count: number;

@@ -86,6 +86,7 @@ interface AssistantChatMessage {
   createdAt: string;
   suggestions?: ScenarioAssistantSuggestionBundle;
   pendingToolCallId?: string;
+  pendingToolCallIds?: string[];
   toolRequestServer?: string;
   toolRequestName?: string;
   toolRequestPublicName?: string;
@@ -296,6 +297,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
     text: string;
     suggestions?: ScenarioAssistantSuggestionBundle;
     pendingToolCall?: AssistantPendingToolCall;
+    pendingToolCalls?: AssistantPendingToolCall[];
   };
 }> {
   const pendingCountForTurn = session.pendingToolCalls.filter((c) => c.status === 'pending').length;
@@ -304,46 +306,57 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
   }
   const modelOutput = await assistantChatModel(session);
   if (modelOutput.type === 'tool_call_request') {
-    const requested = modelOutput.toolCall!;
-    const mapping = session.toolPublicMap.get(requested.name);
-    if (!mapping) {
-      throw new Error(
-        `Scenario Assistant requested unknown tool '${
-          requested.name
-        }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
-      );
+    const requestedCalls = 'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
+      ? modelOutput.toolCalls
+      : [modelOutput.toolCall!];
+
+    const pendingCalls: AssistantPendingToolCall[] = [];
+    const llmToolCalls: Array<{ id: string; name: string; arguments: unknown }> = [];
+
+    for (const requested of requestedCalls) {
+      const mapping = session.toolPublicMap.get(requested.name);
+      if (!mapping) {
+        throw new Error(
+          `Scenario Assistant requested unknown tool '${
+            requested.name
+          }'. Available tools: ${session.tools.map((t) => t.name).join(', ')}`
+        );
+      }
+      const pending: AssistantPendingToolCall = {
+        id: newAssistantEntityId('satc'),
+        server: mapping.server,
+        tool: mapping.tool,
+        publicToolName: requested.name,
+        arguments: requested.arguments ?? {},
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+      session.pendingToolCalls.push(pending);
+      pendingCalls.push(pending);
+      llmToolCalls.push({
+        id: pending.id,
+        name: pending.publicToolName,
+        arguments: pending.arguments
+      });
     }
-    const pending: AssistantPendingToolCall = {
-      id: newAssistantEntityId('satc'),
-      server: mapping.server,
-      tool: mapping.tool,
-      publicToolName: requested.name,
-      arguments: requested.arguments ?? {},
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    session.pendingToolCalls.push(pending);
+
+    const firstPending = pendingCalls[0];
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
       role: 'assistant',
       text: modelOutput.text,
       createdAt: new Date().toISOString(),
       suggestions: modelOutput.suggestions,
-      pendingToolCallId: pending.id,
-      toolRequestServer: pending.server,
-      toolRequestName: pending.tool,
-      toolRequestPublicName: pending.publicToolName
+      pendingToolCallId: firstPending.id,
+      pendingToolCallIds: pendingCalls.map((p) => p.id),
+      toolRequestServer: firstPending.server,
+      toolRequestName: firstPending.tool,
+      toolRequestPublicName: firstPending.publicToolName
     });
     session.llmMessages.push({
       role: 'assistant',
       content: modelOutput.text,
-      tool_calls: [
-        {
-          id: pending.id,
-          name: pending.publicToolName,
-          arguments: pending.arguments
-        }
-      ]
+      tool_calls: llmToolCalls
     });
     touchAssistantSession(session);
     return {
@@ -352,7 +365,8 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
         type: 'tool_call_request',
         text: modelOutput.text,
         suggestions: modelOutput.suggestions,
-        pendingToolCall: pending
+        pendingToolCall: firstPending,
+        pendingToolCalls: pendingCalls
       }
     };
   }

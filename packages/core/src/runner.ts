@@ -162,81 +162,135 @@ export async function runAll(
           runIndex,
           runsPerScenario: options.runsPerScenario
         });
-        const runResult = await runAgentScenario({
-          scenario,
-          agent,
-          mcp,
-          requestId,
-          maxTurns: agent.max_turns,
-          signal: options.signal,
-          onProgress: async (event) => {
-            await emitProgress({
-              type: 'agent_progress',
-              scenarioRunIndex,
-              totalScenarioRuns,
-              event
-            });
+        const tsStart = new Date().toISOString();
+        try {
+          const runResult = await runAgentScenario({
+            scenario,
+            agent,
+            mcp,
+            requestId,
+            maxTurns: agent.max_turns,
+            signal: options.signal,
+            onProgress: async (event) => {
+              await emitProgress({
+                type: 'agent_progress',
+                scenarioRunIndex,
+                totalScenarioRuns,
+                event
+              });
+            }
+          });
+          const evalResult = evaluateScenario(
+            runResult.finalText,
+            runResult.toolSequence,
+            scenario.eval
+          );
+          const extracted = extractValues(
+            runResult.finalText,
+            scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
+          );
+
+          const toolUsage: Record<string, number> = {};
+          for (const tool of runResult.toolSequence) {
+            toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
           }
-        });
-        const evalResult = evaluateScenario(
-          runResult.finalText,
-          runResult.toolSequence,
-          scenario.eval
-        );
-        const extracted = extractValues(
-          runResult.finalText,
-          scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
-        );
 
-        const toolUsage: Record<string, number> = {};
-        for (const tool of runResult.toolSequence) {
-          toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
-        }
-
-        const scenarioRun: ScenarioRunResult = {
-          run_index: runIndex,
-          request_id: requestId,
-          pass: evalResult.pass,
-          failures: evalResult.failures,
-          tool_calls: runResult.toolSequence,
-          tool_call_count: runResult.toolSequence.length,
-          tool_sequence: runResult.toolSequence,
-          tool_usage: toolUsage,
-          tool_durations_ms: runResult.toolDurationsMs,
-          final_text: runResult.finalText,
-          extracted
-        };
-        runs.push(scenarioRun);
-        const traceRecord: ScenarioRunTraceRecord = {
-          type: 'scenario_run',
-          trace_version: 3,
-          run_index: runIndex,
-          request_id: requestId,
-          scenario_id: scenario.id,
-          agent: scenario.agent,
-          provider: runResult.traceProvider,
-          model: runResult.traceModel,
-          ts_start: runResult.traceStartedAt,
-          ts_end: runResult.traceEndedAt,
-          pass: evalResult.pass,
-          messages: runResult.traceMessages,
-          metrics: {
+          const scenarioRun: ScenarioRunResult = {
+            run_index: runIndex,
+            request_id: requestId,
+            pass: evalResult.pass,
+            failures: evalResult.failures,
+            tool_calls: runResult.toolSequence,
             tool_call_count: runResult.toolSequence.length,
-            total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)
+            tool_sequence: runResult.toolSequence,
+            tool_usage: toolUsage,
+            tool_durations_ms: runResult.toolDurationsMs,
+            final_text: runResult.finalText,
+            extracted
+          };
+          runs.push(scenarioRun);
+          const traceRecord: ScenarioRunTraceRecord = {
+            type: 'scenario_run',
+            trace_version: 3,
+            run_index: runIndex,
+            request_id: requestId,
+            scenario_id: scenario.id,
+            agent: scenario.agent,
+            provider: runResult.traceProvider,
+            model: runResult.traceModel,
+            ts_start: runResult.traceStartedAt,
+            ts_end: runResult.traceEndedAt,
+            pass: evalResult.pass,
+            messages: runResult.traceMessages,
+            metrics: {
+              tool_call_count: runResult.toolSequence.length,
+              total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)
+            }
+          };
+          trace.write(traceRecord);
+          await emitProgress({
+            type: 'scenario_run_finished',
+            scenarioId: scenario.id,
+            agentName: scenario.agent,
+            scenarioRunIndex,
+            totalScenarioRuns,
+            runIndex,
+            runsPerScenario: options.runsPerScenario,
+            pass: evalResult.pass,
+            toolCallCount: runResult.toolSequence.length
+          });
+        } catch (scenarioErr: any) {
+          if (isAbortError(scenarioErr, options.signal)) {
+            throw scenarioErr;
           }
-        };
-        trace.write(traceRecord);
-        await emitProgress({
-          type: 'scenario_run_finished',
-          scenarioId: scenario.id,
-          agentName: scenario.agent,
-          scenarioRunIndex,
-          totalScenarioRuns,
-          runIndex,
-          runsPerScenario: options.runsPerScenario,
-          pass: evalResult.pass,
-          toolCallCount: runResult.toolSequence.length
-        });
+          const errorMessage = scenarioErr?.message ?? String(scenarioErr);
+          console.error(
+            `Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`
+          );
+          const tsEnd = new Date().toISOString();
+          const errorRun: ScenarioRunResult = {
+            run_index: runIndex,
+            request_id: requestId,
+            pass: false,
+            error: errorMessage,
+            failures: [`Scenario error: ${errorMessage}`],
+            tool_calls: [],
+            tool_call_count: 0,
+            tool_sequence: [],
+            tool_usage: {},
+            tool_durations_ms: [],
+            final_text: '',
+            extracted: {}
+          };
+          runs.push(errorRun);
+          const errorTrace: ScenarioRunTraceRecord = {
+            type: 'scenario_run',
+            trace_version: 3,
+            run_index: runIndex,
+            request_id: requestId,
+            scenario_id: scenario.id,
+            agent: scenario.agent,
+            provider: agent.provider,
+            model: agent.model,
+            ts_start: tsStart,
+            ts_end: tsEnd,
+            pass: false,
+            error: errorMessage,
+            messages: []
+          };
+          trace.write(errorTrace);
+          await emitProgress({
+            type: 'scenario_run_finished',
+            scenarioId: scenario.id,
+            agentName: scenario.agent,
+            scenarioRunIndex,
+            totalScenarioRuns,
+            runIndex,
+            runsPerScenario: options.runsPerScenario,
+            pass: false,
+            toolCallCount: 0
+          });
+        }
       }
 
       scenarioRuns.push({
@@ -353,4 +407,10 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error('Run aborted by user');
   }
+}
+
+function isAbortError(err: any, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  const message = err?.message ?? '';
+  return message === 'Run aborted by user' || err?.name === 'AbortError';
 }

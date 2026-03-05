@@ -218,6 +218,22 @@ export async function handleScenarioAssistantRoutes(params: {
     return true;
   }
 
+  // Helper: find sibling pending tool call IDs for a given call
+  const findSiblingCallIds = (session: ScenarioAssistantSession, callId: string): string[] => {
+    const msg = session.chatMessages.find(
+      (m) => m.pendingToolCallIds?.includes(callId) ?? m.pendingToolCallId === callId
+    );
+    return msg?.pendingToolCallIds ?? (msg?.pendingToolCallId ? [msg.pendingToolCallId] : [callId]);
+  };
+
+  const allSiblingsResolved = (session: ScenarioAssistantSession, callId: string): boolean => {
+    const siblingIds = findSiblingCallIds(session, callId);
+    return siblingIds.every((id) => {
+      const call = session.pendingToolCalls.find((c: SessionPendingCall) => c.id === id);
+      return call && call.status !== 'pending';
+    });
+  };
+
   if (
     pathname.startsWith('/api/scenario-assistant/sessions/') &&
     pathname.includes('/tool-calls/') &&
@@ -272,8 +288,16 @@ export async function handleScenarioAssistantRoutes(params: {
         createdAt: new Date().toISOString()
       });
     }
-    const output = await continueAssistantTurn(session);
-    asJson(res, 200, output);
+    if (allSiblingsResolved(session, callId)) {
+      const output = await continueAssistantTurn(session);
+      asJson(res, 200, output);
+    } else {
+      touchAssistantSession(session);
+      asJson(res, 200, {
+        session: assistantSessionView(session),
+        response: { type: 'tool_call_resolved', text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
+      });
+    }
     return true;
   }
 
@@ -313,6 +337,67 @@ export async function handleScenarioAssistantRoutes(params: {
       tool_call_id: pending.id,
       name: pending.publicToolName
     });
+    if (allSiblingsResolved(session, callId)) {
+      const output = await continueAssistantTurn(session);
+      asJson(res, 200, output);
+    } else {
+      touchAssistantSession(session);
+      asJson(res, 200, {
+        session: assistantSessionView(session),
+        response: { type: 'tool_call_resolved', text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
+      });
+    }
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/scenario-assistant/sessions/') &&
+    pathname.includes('/tool-calls/approve-all') &&
+    method === 'POST'
+  ) {
+    cleanupAssistantSessions(assistantSessions);
+    const parts = pathname.split('/');
+    const sessionId = parts[4];
+    const session = assistantSessions.get(sessionId);
+    if (!session) {
+      asJson(res, 404, { error: 'Scenario Assistant session not found' });
+      return true;
+    }
+    const pendingCalls = session.pendingToolCalls.filter(
+      (call: SessionPendingCall) => call.status === 'pending'
+    );
+    if (pendingCalls.length === 0) {
+      asJson(res, 409, { error: 'No pending tool calls to approve' });
+      return true;
+    }
+    for (const pending of pendingCalls) {
+      pending.status = 'approved';
+      try {
+        const toolResult = await executeAssistantToolCall(session, pending);
+        pending.resultPreview = summarizeToolResultForAssistant(toolResult);
+        session.llmMessages.push({
+          role: 'tool',
+          content: pending.resultPreview,
+          tool_call_id: pending.id,
+          name: pending.publicToolName
+        });
+      } catch (error: unknown) {
+        pending.status = 'error';
+        pending.error = errorMessage(error);
+        session.llmMessages.push({
+          role: 'tool',
+          content: JSON.stringify({ error: pending.error }),
+          tool_call_id: pending.id,
+          name: pending.publicToolName
+        });
+        session.chatMessages.push({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          role: 'tool',
+          text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
     const output = await continueAssistantTurn(session);
     asJson(res, 200, output);
     return true;
