@@ -480,7 +480,7 @@ const AgentDetail = () => {
                   const v = e.target.value.trim();
                   setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
                 }}
-                placeholder="15 (default)"
+                placeholder="30 (default)"
                 className="font-mono text-xs"
               />
               <p className="text-[11px] text-muted-foreground">

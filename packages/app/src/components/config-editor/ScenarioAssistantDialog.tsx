@@ -486,15 +486,15 @@ export function ScenarioAssistantDialog({
                             </div>
                             <details
                               open={Boolean(linkedPendingToolCall)}
-                              className="group w-full max-w-[92%] rounded-md border border-border/60 bg-background"
+                              className="group w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
                             >
                               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
-                                    <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span className="truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
+                                    <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                    <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
                                     <span
-                                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                      className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                                         linkedPendingToolCall
                                           ? "bg-amber-100 text-amber-900"
                                           : "bg-muted text-muted-foreground"

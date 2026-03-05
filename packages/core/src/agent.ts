@@ -120,7 +120,7 @@ export async function runAgentScenario(params: {
   const toolSequence: string[] = [];
   const toolDurationsMs: number[] = [];
   let finalText = '';
-  const maxTurns = params.maxTurns ?? 15;
+  const maxTurns = params.maxTurns ?? 30;
   const emitProgress = async (event: AgentRunProgressEvent): Promise<void> => {
     if (!params.onProgress) return;
     await params.onProgress(event);
