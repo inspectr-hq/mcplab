@@ -244,9 +244,7 @@ export async function runAll(
             throw scenarioErr;
           }
           const errorMessage = scenarioErr?.message ?? String(scenarioErr);
-          console.error(
-            `Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`
-          );
+          console.error(`Scenario '${scenario.id}' run ${runIndex} failed: ${errorMessage}`);
           const tsEnd = new Date().toISOString();
           const errorRun: ScenarioRunResult = {
             run_index: runIndex,

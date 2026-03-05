@@ -323,9 +323,10 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
   const modelOutput = await assistantChatModel(session);
   normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
   if (modelOutput.type === 'tool_call_request') {
-    const requestedCalls = 'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
-      ? modelOutput.toolCalls
-      : [modelOutput.toolCall!];
+    const requestedCalls =
+      'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
+        ? modelOutput.toolCalls
+        : [modelOutput.toolCall!];
 
     const pendingCalls: AssistantPendingToolCall[] = [];
     const llmToolCalls: Array<{ id: string; name: string; arguments: unknown }> = [];

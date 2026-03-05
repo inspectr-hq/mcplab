@@ -295,7 +295,10 @@ export async function handleScenarioAssistantRoutes(params: {
       touchAssistantSession(session);
       asJson(res, 200, {
         session: assistantSessionView(session),
-        response: { type: 'tool_call_resolved', text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
+        response: {
+          type: 'tool_call_resolved',
+          text: `Approved tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
+        }
       });
     }
     return true;
@@ -344,7 +347,10 @@ export async function handleScenarioAssistantRoutes(params: {
       touchAssistantSession(session);
       asJson(res, 200, {
         session: assistantSessionView(session),
-        response: { type: 'tool_call_resolved', text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.` }
+        response: {
+          type: 'tool_call_resolved',
+          text: `Denied tool call ${pending.publicToolName}. Waiting for remaining tool calls.`
+        }
       });
     }
     return true;
