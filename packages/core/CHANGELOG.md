@@ -1,5 +1,14 @@
 # @inspectr/mcplab-core
 
+## 0.8.0
+
+### Minor Changes
+
+- - feat: support batch tool call approvals
+  - feat: Improved error handling of eval runs
+  - feat: normalize tool names in eval rule suggestions
+  - fix: correct fallback display logic for user prompts
+
 ## 0.7.0
 
 ### Minor Changes
