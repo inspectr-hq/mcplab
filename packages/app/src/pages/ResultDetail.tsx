@@ -1924,7 +1924,7 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
     ? normalizeConversationText(fallbackUserPrompt, "user_prompt")
     : "";
   const displayText =
-    isUser && normalizedFallbackUserPrompt.length > normalizedItemText.length
+    isUser && !normalizedItemText && normalizedFallbackUserPrompt
       ? normalizedFallbackUserPrompt
       : normalizedItemText;
   const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Agent final" : "Agent";
