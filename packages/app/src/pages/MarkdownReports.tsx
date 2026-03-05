@@ -16,6 +16,11 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function detectRunIdFromPath(relativePath: string): string | null {
+  const match = relativePath.match(/(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i);
+  return match?.[1] ?? null;
+}
+
 export default function MarkdownReportsPage() {
   const { source } = useDataSource();
   const [items, setItems] = useState<MarkdownReportSummary[]>([]);
@@ -102,9 +107,9 @@ export default function MarkdownReportsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Report</TableHead>
+                  <TableHead>Result</TableHead>
                   <TableHead>Folder</TableHead>
                   <TableHead>Timestamp</TableHead>
-                  <TableHead>Size</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -125,6 +130,18 @@ export default function MarkdownReportsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">
+                      {(() => {
+                        const runId = detectRunIdFromPath(item.relativePath);
+                        return runId ? (
+                          <Link to={`/results/${encodeURIComponent(runId)}`} className="text-primary hover:underline">
+                            {runId}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground font-mono">
                       {item.relativePath.includes("/")
                         ? item.relativePath.slice(0, item.relativePath.lastIndexOf("/"))
                         : "."}
@@ -132,7 +149,6 @@ export default function MarkdownReportsPage() {
                     <TableCell className="text-xs text-muted-foreground">
                       <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(item.mtime).toLocaleString()}</div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{formatBytes(item.sizeBytes)}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
