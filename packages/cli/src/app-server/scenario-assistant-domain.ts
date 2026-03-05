@@ -168,6 +168,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'If you propose any edits to the scenario (prompt, Checks, Value Capture Rules, or snapshot settings), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
     'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains.',
+    'IMPORTANT: For required_tool and forbidden_tool eval rules, use the raw MCP tool name (the "tool=" value shown in the tool listing), NOT the prefixed public name. For example, use "value_based_search" not "trendminer__value_based_search".',
     'Ask clarifying questions if the scenario intent is unclear.',
     `Scenario context: ${JSON.stringify({
       id: scenario.id,
@@ -230,6 +231,21 @@ export async function preloadAssistantTools(
       }
     } catch (error: unknown) {
       session.warnings.push(formatAssistantMcpPreloadError(serverName, error));
+    }
+  }
+}
+
+function normalizeEvalRuleToolNames(
+  suggestions: ScenarioAssistantSuggestionBundle | undefined,
+  toolPublicMap: Map<string, { server: string; tool: string }>
+): void {
+  if (!suggestions?.evalRules?.replacement) return;
+  for (const rule of suggestions.evalRules.replacement) {
+    if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') {
+      const mapping = toolPublicMap.get(rule.value);
+      if (mapping) {
+        rule.value = mapping.tool;
+      }
     }
   }
 }
@@ -305,6 +321,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
     throw new Error('Scenario Assistant exceeded maximum pending tool calls for this turn');
   }
   const modelOutput = await assistantChatModel(session);
+  normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
   if (modelOutput.type === 'tool_call_request') {
     const requestedCalls = 'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)
       ? modelOutput.toolCalls
