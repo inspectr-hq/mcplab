@@ -1,8 +1,13 @@
 # MCPLab 🧪
 
-> **Lab for testing Model Context Protocol servers with LLMs**
+> **Test, debug and evaluate Model Context Protocol servers with LLMs**
 
 Test how well LLM agents use your MCP tools, compare different models, and track quality over time with automated testing and detailed reports.
+
+<p align="left">
+  <a href="https://www.npmjs.com/package/@inspectr/mcplab"><img src="https://img.shields.io/npm/v/@inspectr/mcplab" alt="Total Downloads"></a>
+  <a href="https://www.npmjs.com/package/@inspectr/mcplab"><img src="https://img.shields.io/npm/dw/@inspectr/mcplab" alt="Latest Stable Version"></a>
+</p>
 
 ---
 
