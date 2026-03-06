@@ -84,6 +84,12 @@ export const workspaceSource: EvalDataSource = {
   async stopRun(jobId) {
     await workspaceApiClient.stopRun(jobId);
   },
+  async getRunQueue() {
+    return workspaceApiClient.getRunQueue();
+  },
+  async removeQueuedRun(jobId) {
+    await workspaceApiClient.removeQueuedRun(jobId);
+  },
   subscribeRunJob(jobId, onEvent) {
     return workspaceApiClient.subscribeRunJob(jobId, onEvent);
   },

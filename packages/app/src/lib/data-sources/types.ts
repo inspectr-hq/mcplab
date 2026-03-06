@@ -125,9 +125,25 @@ export interface SnapshotComparison {
 }
 
 export interface RunJobEvent {
-  type: 'started' | 'log' | 'completed' | 'error';
+  type: 'started' | 'log' | 'completed' | 'error' | 'queued';
   ts: string;
   payload: Record<string, unknown>;
+}
+
+export interface QueueEntry {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
+  runParams: {
+    configPath: string;
+    runsPerScenario: number;
+    scenarioIds: string[] | null;
+    agents: string[] | null;
+  };
+}
+
+export interface QueueResponse {
+  active: QueueEntry | null;
+  queued: QueueEntry[];
 }
 
 export interface ProviderModelsResponse {
@@ -573,6 +589,8 @@ export interface EvalDataSource {
     applySnapshotEval?: boolean;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
+  getRunQueue: () => Promise<QueueResponse>;
+  removeQueuedRun: (jobId: string) => Promise<void>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
   listSnapshots: () => Promise<SnapshotRecord[]>;
   createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;
