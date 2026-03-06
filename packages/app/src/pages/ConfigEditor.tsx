@@ -389,6 +389,20 @@ const ConfigEditor = () => {
     setSelectedLibraryAgentId("");
   };
 
+  const addAllAgentReferences = () => {
+    const existing = new Set(
+      agentEntries
+        .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .map((entry) => entry.ref)
+    );
+    const newRefs = libAgents
+      .filter((agent) => !existing.has(agent.id))
+      .map((agent) => ({ kind: "referenced" as const, ref: agent.id }));
+    if (newRefs.length > 0) {
+      setAgentEntries([...agentEntries, ...newRefs]);
+    }
+  };
+
   const importAgentFromLibraryInline = () => {
     const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
     if (!template) return;
@@ -965,6 +979,9 @@ const ConfigEditor = () => {
                     </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibraryInline}>
                       Import Inline
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={libAgents.length === 0 || libAgents.every((a) => agentEntries.some((e) => e.kind === "referenced" && e.ref === a.id))} onClick={addAllAgentReferences}>
+                      Add All Refs
                     </Button>
                     <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineAgentEntry}>
                       Add agent
