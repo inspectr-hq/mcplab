@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Play, Square, CheckCircle2, RefreshCw } from "lucide-react";
+import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,31 +13,9 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import type { QueueEntry } from "@/lib/data-sources/types";
 
 const RUN_EVAL_ACTIVE_JOB_KEY = "mcplab.runEvaluation.activeJobId";
-
-const logMessages = [
-  "Initializing evaluation runner...",
-  "Loading configuration...",
-  "Connecting to MCP server...",
-  "Server connection established.",
-  "Starting scenario evaluation...",
-  "Sending prompt to agent...",
-  "Agent response received.",
-  "Evaluating tool calls...",
-  "Tool call validated: list_directory",
-  "Checking eval rules...",
-  "Scenario passed ✓",
-  "Moving to next scenario...",
-  "Sending prompt to agent...",
-  "Agent response received.",
-  "Evaluating tool calls...",
-  "Tool call validated: read_file",
-  "Checking eval rules...",
-  "Scenario passed ✓",
-  "All scenarios complete.",
-  "Generating results summary...",
-];
 
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
@@ -55,8 +33,9 @@ const RunEvaluation = () => {
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
   const [snapshotName, setSnapshotName] = useState("");
   const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
+  const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
@@ -127,28 +106,6 @@ const RunEvaluation = () => {
     setApplySnapshotEval(true);
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
-  const runDemo = () => {
-    setRunning(true);
-    setDone(false);
-    setStopped(false);
-    setRunId("");
-    setLogs([]);
-    setProgress(0);
-    let idx = 0;
-    intervalRef.current = setInterval(() => {
-      if (idx < logMessages.length) {
-        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${logMessages[idx]}`]);
-        setProgress(((idx + 1) / logMessages.length) * 100);
-        idx++;
-      } else {
-        clearInterval(intervalRef.current!);
-        setRunning(false);
-        setDone(true);
-        setRunId("run-a1b2c3");
-      }
-    }, 400);
-  };
-
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`]);
@@ -190,6 +147,7 @@ const RunEvaluation = () => {
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
       attachRunJob(jobId);
+      void refreshQueue();
     } catch (error: unknown) {
       const message = (error instanceof Error ? error.message : String(error));
       const extraHint = message.includes("Anthropic model not found")
@@ -207,7 +165,6 @@ const RunEvaluation = () => {
   };
 
   const stopRun = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
     if (activeJobId) {
       void source.stopRun(activeJobId);
     }
@@ -219,6 +176,7 @@ const RunEvaluation = () => {
     setDone(false);
     setStopped(true);
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
+    void refreshQueue();
   };
 
   const saveSnapshot = async () => {
@@ -249,7 +207,6 @@ const RunEvaluation = () => {
   }, [logs]);
 
   useEffect(() => () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
     unsubscribeRef.current?.();
   }, []);
 
@@ -280,13 +237,16 @@ const RunEvaluation = () => {
 
   useEffect(() => {
     void reload();
+    void refreshQueue();
     const handleFocus = () => {
       void reload();
+      void refreshQueue();
     };
     window.addEventListener("focus", handleFocus);
     return () => {
       window.removeEventListener("focus", handleFocus);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload]);
 
   const clearActiveRunJob = () => {
@@ -305,10 +265,53 @@ const RunEvaluation = () => {
     }
   };
 
+  const refreshQueue = async () => {
+    try {
+      const q = await source.getRunQueue();
+      setQueuedJobs(q.queued);
+      setActiveQueueEntry(q.active);
+    } catch {
+      // ignore fetch errors
+    }
+  };
+
+  const removeQueuedJob = async (jobId: string) => {
+    try {
+      await source.removeQueuedRun(jobId);
+      setQueuedJobs((prev) => prev.filter((j) => j.jobId !== jobId));
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Job may have auto-advanced to running — stop it instead
+      if (msg.includes("Use the /stop endpoint")) {
+        try {
+          await source.stopRun(jobId);
+        } catch {
+          // ignore
+        }
+      } else {
+        toast({
+          title: "Could not remove queued run",
+          description: msg,
+          variant: "destructive",
+        });
+      }
+    }
+    void refreshQueue();
+  };
+
   const attachRunJob = (jobId: string) => {
     unsubscribeRef.current?.();
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
+      if (event.type === "queued") {
+        setLogs((prev) => {
+          const position = event.payload.position ? ` (position ${event.payload.position})` : "";
+          const line = `[${ts}] Run queued${position}. Waiting for active run to finish...`;
+          return prev.includes(line) ? prev : [...prev, line];
+        });
+        setProgress(5);
+        return;
+      }
       if (event.type === "started") {
         setLogs((prev) => {
           const line = `[${ts}] Run started.`;
@@ -331,8 +334,15 @@ const RunEvaluation = () => {
             if (lower.startsWith("selected ")) return Math.max(prev, 30);
             if (lower.startsWith("using requested agents") || lower.startsWith("using resolved default agents")) return Math.max(prev, 35);
             if (lower.startsWith("expanded to ")) return Math.max(prev, 45);
-            if (lower.startsWith("running evaluation")) return Math.max(prev, 55);
-            if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 75);
+            if (lower.startsWith("running evaluation")) return Math.max(prev, 50);
+            // "Scenario 3/6 finished:" → interpolate between 50% and 75%
+            const scenarioMatch = lower.match(/^scenario (\d+)\/(\d+) finished:/);
+            if (scenarioMatch) {
+              const current = Number(scenarioMatch[1]);
+              const total = Number(scenarioMatch[2]);
+              return Math.max(prev, 50 + Math.round((current / total) * 25));
+            }
+            if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 78);
             if (lower.startsWith("applying snapshot evaluation policy")) return Math.max(prev, 82);
             if (lower.includes("snapshot evaluation applied") || lower.includes("snapshot evaluation enabled")) return Math.max(prev, 88);
             if (lower.startsWith("writing results to ")) return Math.max(prev, 94);
@@ -368,6 +378,7 @@ const RunEvaluation = () => {
         setActiveJobId(null);
         unsubscribeRef.current?.();
         unsubscribeRef.current = null;
+        void refreshQueue();
       }
       if (event.type === "error") {
         const message = String(event.payload.message ?? "Unknown error");
@@ -383,6 +394,7 @@ const RunEvaluation = () => {
         setActiveJobId(null);
         unsubscribeRef.current?.();
         unsubscribeRef.current = null;
+        void refreshQueue();
       }
     });
   };
@@ -437,13 +449,22 @@ const RunEvaluation = () => {
               )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
-                <button
-                  type="button"
-                  className="text-xs text-primary hover:underline"
-                  onClick={() => setSelectedAgentIds(availableAgents.map((agent) => agent.id))}
-                >
-                  Select all
-                </button>
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setSelectedAgentIds(availableAgents.map((agent) => agent.id))}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setSelectedAgentIds([])}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {availableAgents.map((agent) => {
@@ -529,13 +550,12 @@ const RunEvaluation = () => {
             <Button
               onClick={startRun}
               disabled={
-                running ||
                 !configId ||
                 (availableAgents.length > 0 && selectedAgentIds.length === 0) ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
               }
             >
-              <Play className="mr-2 h-4 w-4" />Run
+              <Play className="mr-2 h-4 w-4" />{activeQueueEntry ? "Queue Run" : "Run"}
             </Button>
             {running && (
               <Button variant="destructive" onClick={stopRun}>
@@ -566,6 +586,95 @@ const RunEvaluation = () => {
           </CardContent>
       </Card>
       )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="inline-flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4" />
+              Run Queue
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!activeQueueEntry && queuedJobs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active or queued runs. Start a run above.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeQueueEntry && (
+                <div
+                  className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${activeJobId === activeQueueEntry.jobId ? "ring-2 ring-primary/40" : ""}`}
+                  onClick={() => {
+                    if (activeJobId === activeQueueEntry.jobId) return;
+                    setActiveJobId(activeQueueEntry.jobId);
+                    setActiveRunJob(activeQueueEntry.jobId);
+                    setRunning(true);
+                    setDone(false);
+                    setStopped(false);
+                    setLogs([`[${new Date().toLocaleTimeString()}] Attached to running job ${activeQueueEntry.jobId}...`]);
+                    setProgress(10);
+                    attachRunJob(activeQueueEntry.jobId);
+                  }}
+                  title="Click to view progress"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Running</span>
+                    <span className="font-mono text-xs">{activeQueueEntry.runParams.configPath.split("/").pop() ?? activeQueueEntry.runParams.configPath}</span>
+                    {activeQueueEntry.runParams.agents && (
+                      <span className="text-xs text-muted-foreground">
+                        agents: {activeQueueEntry.runParams.agents.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (activeQueueEntry) {
+                        void source.stopRun(activeQueueEntry.jobId);
+                        void refreshQueue();
+                      }
+                    }}
+                    title="Stop running job"
+                  >
+                    <Square className="mr-1 h-3 w-3" />Stop
+                  </Button>
+                </div>
+              )}
+              {queuedJobs.map((entry, i) => {
+                const configName = entry.runParams.configPath.split("/").pop() ?? entry.runParams.configPath;
+                return (
+                  <div key={entry.jobId} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
+                      <span className="font-mono text-xs">{configName}</span>
+                      {entry.runParams.agents && (
+                        <span className="text-xs text-muted-foreground">
+                          agents: {entry.runParams.agents.join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => void removeQueuedJob(entry.jobId)}
+                      title="Remove from queue"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {stopped && !running && !done && (
         <Card className="border-amber-300/60 bg-amber-50/40">
@@ -605,7 +714,7 @@ const RunEvaluation = () => {
                 <p className="text-sm text-muted-foreground">All scenarios have been evaluated successfully.</p>
               </div>
               <Button asChild className="ml-auto">
-                <Link to={`/results/${runId || "run-a1b2c3"}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
+                <Link to={`/results/${runId}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
               </Button>
             </div>
             {snapshotsUiEnabled && runId && (

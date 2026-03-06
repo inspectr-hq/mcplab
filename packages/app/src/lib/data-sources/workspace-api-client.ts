@@ -6,6 +6,7 @@ import type {
   ScenarioAssistantSessionView,
   ScenarioAssistantTurnResponse,
   RunJobEvent,
+  QueueResponse,
   SnapshotComparison,
   SnapshotRecord,
   ProviderModelsResponse,
@@ -475,6 +476,11 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'
     }),
+  getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
+  removeQueuedRun: (jobId: string) =>
+    request<{ ok: boolean }>(`/api/runs/queue/${jobId}`, { method: 'DELETE' }).then(
+      () => undefined
+    ),
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {
     const source = new EventSource(`${BASE}/api/runs/jobs/${jobId}/events`);
     let closed = false;
@@ -496,6 +502,7 @@ export const workspaceApiClient = {
         // Ignore malformed or non-JSON SSE payloads.
       }
     };
+    source.addEventListener('queued', messageHandler);
     source.addEventListener('started', messageHandler);
     source.addEventListener('log', messageHandler);
     source.addEventListener('completed', messageHandler);

@@ -71,6 +71,11 @@ export interface ActiveJobState {
   set(value: string | null): void;
 }
 
+export interface RunQueueState {
+  activeJobId: string | null;
+  queue: string[]; // ordered jobIds waiting to run
+}
+
 export interface HttpDeps {
   parseBody: typeof parseBody;
   asJson: typeof asJson;

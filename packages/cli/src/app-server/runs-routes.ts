@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isAbsolute, join } from 'node:path';
@@ -11,7 +12,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
-import type { ActiveJobState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
+import type { RunQueueState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 export type RunsRouteDeps = Pick<
   AppRouteDeps,
@@ -36,12 +37,22 @@ export type RunsRouteDeps = Pick<
   | 'pkgVersion'
 >;
 
+type RunParams = {
+  configPath: string;
+  runsPerScenario: number;
+  scenarioId?: string;
+  scenarioIds?: string[];
+  requestedAgents?: string[];
+  applySnapshotEval: boolean;
+};
+
 type RunJob = {
   id: string;
-  status: 'running' | 'stopped' | 'completed' | 'error';
+  status: 'queued' | 'running' | 'stopped' | 'completed' | 'error';
   events: SseEvent[];
   clients: Set<ServerResponse>;
   abortController: AbortController;
+  runParams: RunParams;
 };
 
 type RunRequestBody = {
@@ -62,10 +73,10 @@ export async function handleRunsRoutes(params: {
   method: string;
   settings: AppRouteRequestContext['settings'];
   jobs: Map<string, RunJob>;
-  activeJobState: ActiveJobState;
+  runQueueState: RunQueueState;
   deps: RunsRouteDeps;
 }): Promise<boolean> {
-  const { req, res, pathname, method, settings, jobs, activeJobState, deps } = params;
+  const { req, res, pathname, method, settings, jobs, runQueueState, deps } = params;
   const {
     parseBody,
     asJson,
@@ -114,7 +125,7 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     for (const event of job.events) sendSseEvent(res, event);
-    if (job.status !== 'running') {
+    if (job.status !== 'running' && job.status !== 'queued') {
       res.end();
       return true;
     }
@@ -132,22 +143,97 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Job not found' });
       return true;
     }
+    if (job.status === 'queued') {
+      const idx = runQueueState.queue.indexOf(jobId);
+      if (idx !== -1) runQueueState.queue.splice(idx, 1);
+      job.status = 'stopped';
+      addJobEvent(job, {
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'Run stopped before it started' }
+      });
+      for (const client of job.clients) client.end();
+      job.clients.clear();
+      asJson(res, 200, { ok: true, status: 'stopped' });
+      return true;
+    }
     if (job.status !== 'running') {
       asJson(res, 200, { ok: true, status: job.status });
       return true;
     }
     job.abortController.abort();
     job.status = 'stopped';
-    activeJobState.set(null);
     asJson(res, 200, { ok: true, status: 'stopped' });
     return true;
   }
 
-  if (pathname === '/api/runs' && method === 'POST') {
-    if (activeJobState.get()) {
-      asJson(res, 409, { error: 'Another run is already active', jobId: activeJobState.get() });
+  if (pathname === '/api/runs/queue' && method === 'GET') {
+    const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
+    const queuedEntries = runQueueState.queue
+      .map((id) => jobs.get(id))
+      .filter((j): j is RunJob => !!j && j.status === 'queued')
+      .map((j) => ({
+        jobId: j.id,
+        status: j.status,
+        runParams: {
+          configPath: j.runParams.configPath,
+          runsPerScenario: j.runParams.runsPerScenario,
+          scenarioIds: j.runParams.scenarioIds ?? null,
+          agents: j.runParams.requestedAgents ?? null
+        }
+      }));
+    asJson(res, 200, {
+      active: activeJob
+        ? {
+            jobId: activeJob.id,
+            status: activeJob.status,
+            runParams: {
+              configPath: activeJob.runParams.configPath,
+              runsPerScenario: activeJob.runParams.runsPerScenario,
+              scenarioIds: activeJob.runParams.scenarioIds ?? null,
+              agents: activeJob.runParams.requestedAgents ?? null
+            }
+          }
+        : null,
+      queued: queuedEntries
+    });
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/runs/queue/') &&
+    method === 'DELETE' &&
+    pathname.split('/').length === 5
+  ) {
+    const jobId = pathname.split('/')[4];
+    const job = jobs.get(jobId);
+    if (!job) {
+      asJson(res, 404, { error: 'Job not found' });
       return true;
     }
+    if (job.status === 'running') {
+      asJson(res, 400, { error: 'Cannot remove a running job. Use the /stop endpoint instead.' });
+      return true;
+    }
+    if (job.status !== 'queued') {
+      asJson(res, 404, { error: 'Job is not queued' });
+      return true;
+    }
+    const idx = runQueueState.queue.indexOf(jobId);
+    if (idx !== -1) runQueueState.queue.splice(idx, 1);
+    job.status = 'stopped';
+    addJobEvent(job, {
+      type: 'error',
+      ts: new Date().toISOString(),
+      payload: { message: 'Removed from queue by user' }
+    });
+    for (const client of job.clients) client.end();
+    job.clients.clear();
+    asJson(res, 200, { ok: true, jobId, status: 'stopped' });
+    return true;
+  }
+
+  if (pathname === '/api/runs' && method === 'POST') {
     const body = (await parseBody(req)) as RunRequestBody;
     const configPathRaw = String(body.configPath ?? '');
     const runsPerScenario = Number(body.runsPerScenario ?? 1);
@@ -177,286 +263,59 @@ export async function handleRunsRoutes(params: {
       return true;
     }
 
-    const jobId = `${Date.now()}`;
+    const jobId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const runParamsObj: RunParams = {
+      configPath,
+      runsPerScenario,
+      scenarioId,
+      scenarioIds,
+      requestedAgents,
+      applySnapshotEval
+    };
     const job: RunJob = {
       id: jobId,
-      status: 'running',
+      status: 'queued',
       events: [],
       clients: new Set(),
-      abortController: new AbortController()
+      abortController: new AbortController(),
+      runParams: runParamsObj
     };
     jobs.set(jobId, job);
-    activeJobState.set(jobId);
 
-    addJobEvent(job, {
-      type: 'started',
-      ts: new Date().toISOString(),
-      payload: {
-        configPath,
-        runsPerScenario,
-        scenarioId: scenarioId ?? null,
-        scenarioIds: scenarioIds ?? null,
-        agents: requestedAgents ?? null
-      }
-    });
-
-    void (async () => {
-      try {
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: { message: `Loading MCP Evaluation config: ${configPath}` }
-        });
-        const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message: `Loaded config (${loaded.config.scenarios.length} scenario(s), ${
-              Object.keys(loaded.config.agents ?? {}).length
-            } agent(s), ${Object.keys(loaded.config.servers ?? {}).length} server(s))`
-          }
-        });
-        for (const warning of loaded.warnings ?? []) {
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: { message: warning }
-          });
+    if (!runQueueState.activeJobId) {
+      // No active job — start immediately
+      job.status = 'running';
+      runQueueState.activeJobId = jobId;
+      addJobEvent(job, {
+        type: 'started',
+        ts: new Date().toISOString(),
+        payload: {
+          configPath,
+          runsPerScenario,
+          scenarioId: scenarioId ?? null,
+          scenarioIds: scenarioIds ?? null,
+          agents: requestedAgents ?? null
         }
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message:
-              scenarioIds && scenarioIds.length > 0
-                ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
-                : scenarioId
-                ? `Selecting requested scenario: ${scenarioId}`
-                : 'Using all scenarios from config'
-          }
-        });
-        const selectedBaseScenarios = selectScenarioIds(
-          loaded.config,
-          scenarioIds && scenarioIds.length > 0
-            ? scenarioIds
-            : scenarioId
-            ? [scenarioId]
-            : undefined
-        );
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message: `Selected ${selectedBaseScenarios.scenarios.length} base scenario(s)`
-          }
-        });
-        const resolvedAgents = resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents);
-        const resolvedAgentList = Array.isArray(resolvedAgents) ? resolvedAgents : [];
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message:
-              requestedAgents && requestedAgents.length > 0
-                ? `Using requested agents: ${resolvedAgentList.join(', ')}`
-                : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
-          }
-        });
-        const expandedConfig = expandConfigForAgents(selectedBaseScenarios, resolvedAgents);
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
-          }
-        });
-        const cwdBefore = process.cwd();
-        process.chdir(settings.workspaceRoot);
-        try {
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
-            }
-          });
-          const { runDir, results } = await runAll(expandedConfig, {
-            runsPerScenario,
-            scenarioId,
-            configHash: loaded.hash,
-            cliVersion: pkgVersion,
-            runsDir: settings.runsDir,
-            signal: job.abortController.signal,
-            onProgress: async (event: RunProgressEvent) => {
-              const message = formatRunProgressMessage(event);
-              if (!message) return;
-              addJobEvent(job, {
-                type: 'log',
-                ts: new Date().toISOString(),
-                payload: { message }
-              });
-            }
-          });
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
-            }
-          });
-          if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
-            addJobEvent(job, {
-              type: 'log',
-              ts: new Date().toISOString(),
-              payload: { message: 'Applying snapshot evaluation policy ...' }
-            });
-            const policy = expandedConfig.snapshot_eval;
-            const enabledScenarioIds = new Set(
-              selectedBaseScenarios.scenarios
-                .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
-                .map((scenario: ConfigScenario) => scenario.id)
-            );
-            const scenarioBaselineMap = new Map<string, string>();
-            for (const scenario of selectedBaseScenarios.scenarios) {
-              if (scenario.snapshot_eval?.enabled === false) continue;
-              const baselineId =
-                scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id;
-              if (baselineId) scenarioBaselineMap.set(scenario.id, baselineId);
-            }
-            const scenariosWithoutBaseline = selectedBaseScenarios.scenarios
-              .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
-              .filter(
-                (scenario: ConfigScenario) =>
-                  !(scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id)
-              )
-              .map((scenario: ConfigScenario) => scenario.id);
-            if (scenariosWithoutBaseline.length > 0) {
-              addJobEvent(job, {
-                type: 'log',
-                ts: new Date().toISOString(),
-                payload: {
-                  message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(
-                    ', '
-                  )}`
-                }
-              });
-            }
-            const comparisons: ReturnType<RunsRouteDeps['compareRunToSnapshot']>[] = [];
-            const scenarioIdsByBaseline = new Map<string, string[]>();
-            for (const [scenarioIdItem, baselineId] of scenarioBaselineMap) {
-              const list = scenarioIdsByBaseline.get(baselineId) ?? [];
-              list.push(scenarioIdItem);
-              scenarioIdsByBaseline.set(baselineId, list);
-            }
-            for (const [baselineId, scenarioIdsForBaseline] of scenarioIdsByBaseline) {
-              addJobEvent(job, {
-                type: 'log',
-                ts: new Date().toISOString(),
-                payload: {
-                  message: `Comparing ${scenarioIdsForBaseline.length} scenario(s) to snapshot baseline '${baselineId}'`
-                }
-              });
-              const snapshot = loadSnapshot(baselineId, settings.snapshotsDir);
-              const fullComparison = compareRunToSnapshot(results, snapshot);
-              comparisons.push({
-                ...fullComparison,
-                scenario_results: fullComparison.scenario_results.filter((row) =>
-                  scenarioIdsForBaseline.includes(row.scenario_id)
-                )
-              });
-            }
-            if (comparisons.length > 0) {
-              applySnapshotPolicyToRunResult({ results, comparisons, policy, enabledScenarioIds });
-              addJobEvent(job, {
-                type: 'log',
-                ts: new Date().toISOString(),
-                payload: {
-                  message: `Snapshot evaluation applied (${comparisons.length} baseline comparison group(s))`
-                }
-              });
-            } else {
-              addJobEvent(job, {
-                type: 'log',
-                ts: new Date().toISOString(),
-                payload: {
-                  message: 'Snapshot evaluation enabled, but no baseline comparisons were applied'
-                }
-              });
-            }
-          } else if (applySnapshotEval) {
-            addJobEvent(job, {
-              type: 'log',
-              ts: new Date().toISOString(),
-              payload: {
-                message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled'
-              }
-            });
-          } else {
-            addJobEvent(job, {
-              type: 'log',
-              ts: new Date().toISOString(),
-              payload: {
-                message: 'Snapshot evaluation skipped for this run (disabled in run request)'
-              }
-            });
-          }
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: { message: `Writing results to ${runDir}` }
-          });
-          writeFileSync(
-            join(runDir, 'results.json'),
-            `${JSON.stringify(results, null, 2)}\n`,
-            'utf8'
-          );
-          writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
-                results.summary.pass_rate * 100
-              )}%`
-            }
-          });
-          addJobEvent(job, {
-            type: 'completed',
-            ts: new Date().toISOString(),
-            payload: {
-              runId: results.metadata.run_id,
-              runDir,
-              summary: results.summary,
-              snapshotEval: results.metadata.snapshot_eval ?? null
-            }
-          });
-          job.status = 'completed';
-        } finally {
-          process.chdir(cwdBefore);
+      });
+      void executeRunJob(job, settings, jobs, runQueueState, deps);
+      asJson(res, 202, { jobId });
+    } else {
+      // Queue this job
+      runQueueState.queue.push(jobId);
+      addJobEvent(job, {
+        type: 'queued',
+        ts: new Date().toISOString(),
+        payload: {
+          configPath,
+          runsPerScenario,
+          scenarioId: scenarioId ?? null,
+          scenarioIds: scenarioIds ?? null,
+          agents: requestedAgents ?? null,
+          position: runQueueState.queue.length
         }
-      } catch (error: unknown) {
-        const aborted = job.abortController.signal.aborted || job.status === 'stopped';
-        addJobEvent(job, {
-          type: 'error',
-          ts: new Date().toISOString(),
-          payload: {
-            message: aborted
-              ? 'Run aborted by user'
-              : error instanceof Error
-              ? error.message
-              : String(error)
-          }
-        });
-        job.status = aborted ? 'stopped' : 'error';
-      } finally {
-        activeJobState.set(null);
-        for (const client of job.clients) client.end();
-        job.clients.clear();
-      }
-    })();
-
-    asJson(res, 202, { jobId });
+      });
+      asJson(res, 202, { jobId, queued: true, position: runQueueState.queue.length });
+    }
     return true;
   }
 
@@ -635,6 +494,324 @@ export async function handleRunsRoutes(params: {
   }
 
   return false;
+}
+
+function advanceQueue(
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState,
+  settings: AppRouteRequestContext['settings'],
+  deps: RunsRouteDeps
+) {
+  if (runQueueState.activeJobId) return;
+  while (runQueueState.queue.length > 0) {
+    const nextId = runQueueState.queue.shift()!;
+    const nextJob = jobs.get(nextId);
+    if (!nextJob || nextJob.status !== 'queued') continue;
+    nextJob.status = 'running';
+    runQueueState.activeJobId = nextId;
+    deps.addJobEvent(nextJob, {
+      type: 'started',
+      ts: new Date().toISOString(),
+      payload: {
+        configPath: nextJob.runParams.configPath,
+        runsPerScenario: nextJob.runParams.runsPerScenario,
+        scenarioId: nextJob.runParams.scenarioId ?? null,
+        scenarioIds: nextJob.runParams.scenarioIds ?? null,
+        agents: nextJob.runParams.requestedAgents ?? null
+      }
+    });
+    void executeRunJob(nextJob, settings, jobs, runQueueState, deps);
+    return;
+  }
+}
+
+async function executeRunJob(
+  job: RunJob,
+  settings: AppRouteRequestContext['settings'],
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState,
+  deps: RunsRouteDeps
+) {
+  const {
+    addJobEvent,
+    selectScenarioIds,
+    expandConfigForAgents,
+    resolveRunSelectedAgents,
+    loadSnapshot,
+    compareRunToSnapshot,
+    applySnapshotPolicyToRunResult,
+    pkgVersion
+  } = deps;
+  const {
+    configPath,
+    runsPerScenario,
+    scenarioId,
+    scenarioIds,
+    requestedAgents,
+    applySnapshotEval
+  } = job.runParams;
+  try {
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: { message: `Loading MCP Evaluation config: ${configPath}` }
+    });
+    const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Loaded config (${loaded.config.scenarios.length} scenario(s), ${
+          Object.keys(loaded.config.agents ?? {}).length
+        } agent(s), ${Object.keys(loaded.config.servers ?? {}).length} server(s))`
+      }
+    });
+    for (const warning of loaded.warnings ?? []) {
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: { message: warning }
+      });
+    }
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message:
+          scenarioIds && scenarioIds.length > 0
+            ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
+            : scenarioId
+            ? `Selecting requested scenario: ${scenarioId}`
+            : 'Using all scenarios from config'
+      }
+    });
+    const selectedBaseScenarios = selectScenarioIds(
+      loaded.config,
+      scenarioIds && scenarioIds.length > 0 ? scenarioIds : scenarioId ? [scenarioId] : undefined
+    );
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Selected ${selectedBaseScenarios.scenarios.length} base scenario(s)`
+      }
+    });
+    const resolvedAgents = resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents);
+    const resolvedAgentList = Array.isArray(resolvedAgents) ? resolvedAgents : [];
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message:
+          requestedAgents && requestedAgents.length > 0
+            ? `Using requested agents: ${resolvedAgentList.join(', ')}`
+            : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
+      }
+    });
+    const expandedConfig = expandConfigForAgents(selectedBaseScenarios, resolvedAgents);
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
+      }
+    });
+    const cwdBefore = process.cwd();
+    process.chdir(settings.workspaceRoot);
+    try {
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
+        }
+      });
+      const { runDir, results } = await runAll(expandedConfig, {
+        runsPerScenario,
+        scenarioId,
+        configHash: loaded.hash,
+        cliVersion: pkgVersion,
+        runsDir: settings.runsDir,
+        signal: job.abortController.signal,
+        onProgress: async (event: RunProgressEvent) => {
+          const message = formatRunProgressMessage(event);
+          if (!message) return;
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: { message }
+          });
+        }
+      });
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
+        }
+      });
+      if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: { message: 'Applying snapshot evaluation policy ...' }
+        });
+        const policy = expandedConfig.snapshot_eval;
+        const enabledScenarioIds = new Set(
+          selectedBaseScenarios.scenarios
+            .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
+            .map((scenario: ConfigScenario) => scenario.id)
+        );
+        const scenarioBaselineMap = new Map<string, string>();
+        for (const scenario of selectedBaseScenarios.scenarios) {
+          if (scenario.snapshot_eval?.enabled === false) continue;
+          const baselineId =
+            scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id;
+          if (baselineId) scenarioBaselineMap.set(scenario.id, baselineId);
+        }
+        const scenariosWithoutBaseline = selectedBaseScenarios.scenarios
+          .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
+          .filter(
+            (scenario: ConfigScenario) =>
+              !(scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id)
+          )
+          .map((scenario: ConfigScenario) => scenario.id);
+        if (scenariosWithoutBaseline.length > 0) {
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(
+                ', '
+              )}`
+            }
+          });
+        }
+        const comparisons: ReturnType<RunsRouteDeps['compareRunToSnapshot']>[] = [];
+        const scenarioIdsByBaseline = new Map<string, string[]>();
+        for (const [scenarioIdItem, baselineId] of scenarioBaselineMap) {
+          const list = scenarioIdsByBaseline.get(baselineId) ?? [];
+          list.push(scenarioIdItem);
+          scenarioIdsByBaseline.set(baselineId, list);
+        }
+        for (const [baselineId, scenarioIdsForBaseline] of scenarioIdsByBaseline) {
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Comparing ${scenarioIdsForBaseline.length} scenario(s) to snapshot baseline '${baselineId}'`
+            }
+          });
+          const snapshot = loadSnapshot(baselineId, settings.snapshotsDir);
+          const fullComparison = compareRunToSnapshot(results, snapshot);
+          comparisons.push({
+            ...fullComparison,
+            scenario_results: fullComparison.scenario_results.filter((row) =>
+              scenarioIdsForBaseline.includes(row.scenario_id)
+            )
+          });
+        }
+        if (comparisons.length > 0) {
+          applySnapshotPolicyToRunResult({ results, comparisons, policy, enabledScenarioIds });
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `Snapshot evaluation applied (${comparisons.length} baseline comparison group(s))`
+            }
+          });
+        } else {
+          addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: 'Snapshot evaluation enabled, but no baseline comparisons were applied'
+            }
+          });
+        }
+      } else if (applySnapshotEval) {
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled'
+          }
+        });
+      } else {
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: {
+            message: 'Snapshot evaluation skipped for this run (disabled in run request)'
+          }
+        });
+      }
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: { message: `Writing results to ${runDir}` }
+      });
+      writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+      writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
+            results.summary.pass_rate * 100
+          )}%`
+        }
+      });
+      addJobEvent(job, {
+        type: 'completed',
+        ts: new Date().toISOString(),
+        payload: {
+          runId: results.metadata.run_id,
+          runDir,
+          summary: results.summary,
+          snapshotEval: results.metadata.snapshot_eval ?? null
+        }
+      });
+      job.status = 'completed';
+    } finally {
+      process.chdir(cwdBefore);
+    }
+  } catch (error: unknown) {
+    const aborted = job.abortController.signal.aborted || job.status === 'stopped';
+    addJobEvent(job, {
+      type: 'error',
+      ts: new Date().toISOString(),
+      payload: {
+        message: aborted
+          ? 'Run aborted by user'
+          : error instanceof Error
+          ? error.message
+          : String(error)
+      }
+    });
+    job.status = aborted ? 'stopped' : 'error';
+  } finally {
+    runQueueState.activeJobId = null;
+    for (const client of job.clients) client.end();
+    job.clients.clear();
+    advanceQueue(jobs, runQueueState, settings, deps);
+    pruneOldJobs(jobs, runQueueState);
+  }
+}
+
+function pruneOldJobs(jobs: Map<string, RunJob>, runQueueState: RunQueueState) {
+  const maxAgeMs = 30 * 60_000;
+  const now = Date.now();
+  const activeIds = new Set([runQueueState.activeJobId, ...runQueueState.queue].filter(Boolean));
+  for (const [id, job] of jobs) {
+    if (activeIds.has(id)) continue;
+    if (job.status !== 'completed' && job.status !== 'error' && job.status !== 'stopped') continue;
+    const lastEvent = job.events[job.events.length - 1];
+    if (!lastEvent) continue;
+    if (now - new Date(lastEvent.ts).getTime() > maxAgeMs) {
+      jobs.delete(id);
+    }
+  }
 }
 
 function formatRunProgressMessage(event: RunProgressEvent): string | null {

@@ -32,7 +32,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
-import type { AppRouteDeps } from './app-context.js';
+import type { AppRouteDeps, RunQueueState } from './app-context.js';
 import { asJson, asText, parseBody } from './http.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
@@ -100,17 +100,25 @@ const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.
   ?.version as string;
 
 interface JobEvent {
-  type: 'started' | 'log' | 'completed' | 'error';
+  type: 'queued' | 'started' | 'log' | 'completed' | 'error';
   ts: string;
   payload: Record<string, unknown>;
 }
 
 interface RunJob {
   id: string;
-  status: 'running' | 'completed' | 'error' | 'stopped';
+  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
   events: JobEvent[];
   clients: Set<ServerResponse>;
   abortController: AbortController;
+  runParams: {
+    configPath: string;
+    runsPerScenario: number;
+    scenarioId?: string;
+    scenarioIds?: string[];
+    requestedAgents?: string[];
+    applySnapshotEval: boolean;
+  };
 }
 
 function resolveRunSelectedAgents(
@@ -172,7 +180,7 @@ export async function startAppServer(options: AppServerOptions) {
   const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
-  let activeJobId: string | null = null;
+  const runQueueState: RunQueueState = { activeJobId: null, queue: [] };
   const routeDeps: AppRouteDeps = {
     parseBody,
     asJson,
@@ -435,12 +443,7 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           jobs,
-          activeJobState: {
-            get: () => activeJobId,
-            set: (value) => {
-              activeJobId = value;
-            }
-          },
+          runQueueState,
           deps: routeDeps
         })
       ) {

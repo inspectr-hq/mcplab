@@ -1302,7 +1302,7 @@ const ConfigEditor = () => {
                       <SelectValue placeholder="Select scenario from library" />
                     </SelectTrigger>
                     <SelectContent>
-                      {libScenarios.map((item) => (
+                      {[...libScenarios].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)).map((item) => (
                         <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
                       ))}
                     </SelectContent>
