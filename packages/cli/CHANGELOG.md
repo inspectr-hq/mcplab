@@ -1,5 +1,22 @@
 # @inspectr/mcplab
 
+## 1.0.0
+
+### Major Changes
+
+- Release 1.0.0
+- feat: introduce run queuing system for job management
+- feat: add "Add All Refs" button to import all library agent references
+- feat: add run ID detection and link in MarkdownReports table
+- fix: Ordering of test cases in scenario form
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.0.0
+  - @inspectr/mcplab-mcp-server@1.0.0
+  - @inspectr/mcplab-reporting@1.0.0
+
 ## 0.9.0
 
 ### Minor Changes
