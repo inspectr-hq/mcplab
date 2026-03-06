@@ -24,7 +24,7 @@ const Hero = () => {
           </div>
 
           <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-            🧪 Lab for Testing{" "}
+            🧪 Test and evaluate {" "}
             <span className="text-primary glow-text">MCP Servers</span>{" "}
             with LLMs
           </h1>
