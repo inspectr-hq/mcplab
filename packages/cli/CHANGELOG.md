@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.0.1
+
+### Patch Changes
+
+- fix: increase auto-approved tool-call loop limit and remove redundant error check
+
 ## 1.0.0
 
 ### Major Changes
