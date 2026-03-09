@@ -7,6 +7,7 @@ export interface RunSummary {
   runId: string;
   path: string;
   timestamp: string;
+  runNote?: string;
   configHash: string;
   totalScenarios: number;
   totalRuns: number;
@@ -30,6 +31,7 @@ export function listRuns(runsDir: string): RunSummary[] {
         runId: results.metadata.run_id,
         path: dir,
         timestamp: results.metadata.timestamp,
+        runNote: results.metadata.run_note,
         configHash: results.metadata.config_hash,
         totalScenarios: results.summary.total_scenarios,
         totalRuns: results.summary.total_runs,

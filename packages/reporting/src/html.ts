@@ -313,6 +313,11 @@ export function renderHtml(results: ResultsJson): string {
         <div class="meta">
           Run ID: ${escapeHtml(results.metadata.run_id)}<br />
           Timestamp: ${escapeHtml(results.metadata.timestamp)}<br />
+          ${
+            results.metadata.run_note
+              ? `Run note: ${escapeHtml(results.metadata.run_note)}<br />`
+              : ''
+          }
           Config hash: ${escapeHtml(results.metadata.config_hash)}<br />
           CLI version: ${escapeHtml(results.metadata.cli_version)}
           ${

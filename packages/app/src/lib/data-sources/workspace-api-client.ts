@@ -116,6 +116,11 @@ export const workspaceApiClient = {
     request<{ runId: string; results: CoreResultsJson }>(`/api/runs/${runId}`),
   deleteRun: (runId: string) =>
     request<{ ok: boolean }>(`/api/runs/${runId}`, { method: 'DELETE' }),
+  updateRunNote: (runId: string, runNote?: string) =>
+    request<{ ok: boolean }>(`/api/runs/${encodeURIComponent(runId)}/note`, {
+      method: 'PATCH',
+      body: JSON.stringify({ runNote: runNote ?? '' })
+    }).then(() => undefined),
   getRunTrace: (runId: string) =>
     request<{ runId: string; records: ScenarioRunTraceRecord[] }>(`/api/runs/${runId}/trace`),
   listSnapshots: () => request<SnapshotRecord[]>('/api/snapshots'),
@@ -243,6 +248,7 @@ export const workspaceApiClient = {
     scenarioIds?: string[];
     agents?: string[];
     applySnapshotEval?: boolean;
+    runNote?: string;
   }) =>
     request<{ jobId: string }>('/api/runs', {
       method: 'POST',

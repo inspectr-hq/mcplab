@@ -17,6 +17,7 @@ import { aggregateResults, renderSummaryMarkdown } from './results.js';
 export interface RunOptions {
   runsPerScenario: number;
   scenarioId?: string;
+  runNote?: string;
   configHash: string;
   gitCommit?: string;
   cliVersion: string;
@@ -303,6 +304,7 @@ export async function runAll(
     const results = aggregateResults({
       runId,
       timestamp: new Date().toISOString(),
+      runNote: options.runNote,
       gitCommit: options.gitCommit,
       configHash: options.configHash,
       cliVersion: options.cliVersion,

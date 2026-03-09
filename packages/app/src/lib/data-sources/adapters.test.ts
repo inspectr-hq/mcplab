@@ -172,6 +172,13 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(runs[1].conversation[0].text).toContain('second question');
   });
 
+  it('maps run note from core results metadata', () => {
+    const results = baseResults();
+    results.metadata.run_note = 'mcp-server v1.8.2 #staging';
+    const mapped = fromCoreResultsJson(results, []);
+    expect((mapped as { runNote?: string }).runNote).toBe('mcp-server v1.8.2 #staging');
+  });
+
   it('handles missing record for a run without crashing', () => {
     const run0Record = makeRecord(0, [
       {

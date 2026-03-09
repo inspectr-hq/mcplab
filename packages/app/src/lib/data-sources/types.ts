@@ -49,6 +49,7 @@ export interface WorkspaceRunSummary {
   runId: string;
   path: string;
   timestamp: string;
+  runNote?: string;
   configHash: string;
   totalScenarios: number;
   totalRuns: number;
@@ -138,6 +139,7 @@ export interface QueueEntry {
     runsPerScenario: number;
     scenarioIds: string[] | null;
     agents: string[] | null;
+    runNote: string | null;
   };
 }
 
@@ -580,6 +582,7 @@ export interface EvalDataSource {
   listResults: () => Promise<EvalResult[]>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
+  updateRunNote: (runId: string, runNote?: string) => Promise<void>;
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;
@@ -587,6 +590,7 @@ export interface EvalDataSource {
     scenarioIds?: string[];
     agents?: string[];
     applySnapshotEval?: boolean;
+    runNote?: string;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;

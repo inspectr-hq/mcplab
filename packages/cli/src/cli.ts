@@ -8,6 +8,7 @@ import {
   loadConfig,
   selectScenarios,
   runAll,
+  renderSummaryMarkdown,
   expandConfigForAgents,
   type EvalConfig,
   type SourceEvalConfig,
@@ -55,6 +56,7 @@ program
   .option('--interactive', 'Prompt for required inputs')
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
+  .option('--run-note <text>', 'Optional note attached to the run metadata (max 500 chars)')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .action(async (options) => {
@@ -114,9 +116,12 @@ program
       if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
         throw new Error('Runs must be a positive number');
       }
+      const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
+      const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
       const { runDir, results } = await runAll(selected, {
         runsPerScenario,
         scenarioId: options.scenario,
+        runNote,
         configHash: hash,
         gitCommit: getGitCommit(),
         cliVersion: pkgVersion,
@@ -173,8 +178,10 @@ program
 
       const reportPath = join(runDir, 'report.html');
       const resultsPath = join(runDir, 'results.json');
+      const summaryPath = join(runDir, 'summary.md');
       writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
       writeFileSync(reportPath, renderReport(results), 'utf8');
+      writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
       console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
 
       if (options.compareSnapshot) {

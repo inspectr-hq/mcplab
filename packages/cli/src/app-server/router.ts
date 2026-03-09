@@ -234,7 +234,7 @@ export async function startAppServer(options: AppServerOptions) {
   const server = createServer(async (req, res) => {
     try {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader(
         'Access-Control-Allow-Headers',
         'Content-Type, MCP-Session-Id, Last-Event-ID, Accept'

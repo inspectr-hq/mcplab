@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link, useSearchParams } from "react-router-dom";
@@ -31,6 +32,7 @@ const RunEvaluation = () => {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
+  const [runNote, setRunNote] = useState("");
   const [snapshotName, setSnapshotName] = useState("");
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
@@ -133,7 +135,7 @@ const RunEvaluation = () => {
         : "single-file/inline";
     setLogs([
       `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
-      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}`
+      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}${runNote.trim() ? ` note=${runNote.trim()}` : ""}`
     ]);
     setProgress(10);
     try {
@@ -143,6 +145,7 @@ const RunEvaluation = () => {
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
+        runNote: runNote.trim() ? runNote.trim() : undefined,
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -439,6 +442,19 @@ const RunEvaluation = () => {
               <Input type="number" min="1" max="10" value={varianceRuns} onChange={(e) => setVarianceRuns(e.target.value)} />
             </div>
           </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="run-note">Run Note</Label>
+              <span className="text-xs text-muted-foreground">{runNote.length}/500</span>
+            </div>
+            <Textarea
+              id="run-note"
+              value={runNote}
+              onChange={(e) => setRunNote(e.target.value.slice(0, 500))}
+              placeholder="Optional context for this run (for example: mcp-server v1.8.2 #staging)"
+              rows={2}
+            />
+          </div>
           {selectedConfig && (
             <div className="space-y-2">
               {snapshotsUiEnabled && selectedConfig.snapshotEval?.enabled && (
@@ -628,6 +644,11 @@ const RunEvaluation = () => {
                         agents: {activeQueueEntry.runParams.agents.join(", ")}
                       </span>
                     )}
+                    {activeQueueEntry.runParams.runNote && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        note: {activeQueueEntry.runParams.runNote}
+                      </span>
+                    )}
                   </div>
                   <Button
                     variant="ghost"
@@ -656,6 +677,11 @@ const RunEvaluation = () => {
                       {entry.runParams.agents && (
                         <span className="text-xs text-muted-foreground">
                           agents: {entry.runParams.agents.join(", ")}
+                        </span>
+                      )}
+                      {entry.runParams.runNote && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          note: {entry.runParams.runNote}
                         </span>
                       )}
                     </div>

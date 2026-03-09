@@ -3,6 +3,7 @@ import type { EvalRules, ResultsJson, ScenarioAggregate, ScenarioRunResult } fro
 export function aggregateResults(params: {
   runId: string;
   timestamp: string;
+  runNote?: string;
   gitCommit?: string;
   configHash: string;
   cliVersion: string;
@@ -99,6 +100,7 @@ export function aggregateResults(params: {
     metadata: {
       run_id: params.runId,
       timestamp: params.timestamp,
+      run_note: params.runNote,
       git_commit: params.gitCommit,
       config_hash: params.configHash,
       cli_version: params.cliVersion
@@ -120,6 +122,9 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   lines.push('');
   lines.push(`Run ID: ${results.metadata.run_id}`);
   lines.push(`Timestamp: ${results.metadata.timestamp}`);
+  if (results.metadata.run_note) {
+    lines.push(`Run note: ${results.metadata.run_note}`);
+  }
   if (results.metadata.git_commit) {
     lines.push(`Git commit: ${results.metadata.git_commit}`);
   }

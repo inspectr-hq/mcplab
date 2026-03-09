@@ -275,6 +275,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     `Run result context: ${JSON.stringify({
       run_id: session.resultSummary.metadata.run_id,
       timestamp: session.resultSummary.metadata.timestamp,
+      run_note: session.resultSummary.metadata.run_note ?? null,
       config_hash: session.resultSummary.metadata.config_hash,
       summary: session.resultSummary.summary,
       snapshot_eval: session.resultSummary.metadata.snapshot_eval ?? null,

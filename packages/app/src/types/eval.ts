@@ -147,6 +147,7 @@ export interface EvalResult {
   configId: string;
   configHash: string;
   timestamp: string;
+  runNote?: string;
   scenarios: ScenarioResult[];
   overallPassRate: number;
   totalScenarios: number;

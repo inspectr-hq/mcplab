@@ -9,9 +9,10 @@ const { getResultMock, sourceMock } = vi.hoisted(() => {
   const listSnapshots = vi.fn().mockResolvedValue([]);
   const compareSnapshot = vi.fn();
   const listMarkdownReports = vi.fn().mockResolvedValue([]);
+  const updateRunNote = vi.fn().mockResolvedValue(undefined);
   return {
     getResultMock: getResult,
-    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports }
+    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports, updateRunNote }
   };
 });
 
@@ -98,6 +99,25 @@ function makeResult(): EvalResult {
 }
 
 describe('ResultDetail conversation toggle', () => {
+  it('shows run note placeholder for historical runs without note', async () => {
+    getResultMock.mockResolvedValue(makeResult());
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Run Note' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Note' }));
+    expect(screen.getByText(/Run note:/)).toBeInTheDocument();
+    expect(screen.getByText('none')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
+  });
+
   it('is hidden by default and reveals chat timeline without hiding final answer', async () => {
     getResultMock.mockResolvedValue(makeResult());
 

@@ -267,6 +267,7 @@ const Results = () => {
                     <div className="space-y-1">
                       <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">{r.id}</Link>
                       {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
+                      {r.runNote ? <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div> : null}
                     </div>
                   </TableCell>
                   <TableCell className="text-[11px] text-muted-foreground">

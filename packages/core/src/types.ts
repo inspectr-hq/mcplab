@@ -293,6 +293,7 @@ export interface ResultsJson {
   metadata: {
     run_id: string;
     timestamp: string;
+    run_note?: string;
     git_commit?: string;
     config_hash: string;
     cli_version: string;

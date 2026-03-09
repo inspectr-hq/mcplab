@@ -6,6 +6,7 @@ import {
   McpClientManager,
   loadConfig,
   runAll,
+  renderSummaryMarkdown,
   type EvalConfig,
   type LlmMessage,
   type RunProgressEvent
@@ -44,6 +45,7 @@ type RunParams = {
   scenarioIds?: string[];
   requestedAgents?: string[];
   applySnapshotEval: boolean;
+  runNote?: string;
 };
 
 type RunJob = {
@@ -62,6 +64,7 @@ type RunRequestBody = {
   scenarioIds?: unknown;
   agents?: unknown;
   applySnapshotEval?: unknown;
+  runNote?: unknown;
 };
 
 type ConfigScenario = EvalConfig['scenarios'][number];
@@ -179,7 +182,8 @@ export async function handleRunsRoutes(params: {
           configPath: j.runParams.configPath,
           runsPerScenario: j.runParams.runsPerScenario,
           scenarioIds: j.runParams.scenarioIds ?? null,
-          agents: j.runParams.requestedAgents ?? null
+          agents: j.runParams.requestedAgents ?? null,
+          runNote: j.runParams.runNote ?? null
         }
       }));
     asJson(res, 200, {
@@ -191,7 +195,8 @@ export async function handleRunsRoutes(params: {
               configPath: activeJob.runParams.configPath,
               runsPerScenario: activeJob.runParams.runsPerScenario,
               scenarioIds: activeJob.runParams.scenarioIds ?? null,
-              agents: activeJob.runParams.requestedAgents ?? null
+              agents: activeJob.runParams.requestedAgents ?? null,
+              runNote: activeJob.runParams.runNote ?? null
             }
           }
         : null,
@@ -245,6 +250,8 @@ export async function handleRunsRoutes(params: {
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
     const applySnapshotEval = body.applySnapshotEval !== false;
+    const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
+    const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
 
     if (!configPathRaw) {
       asJson(res, 400, { error: 'configPath is required' });
@@ -270,7 +277,8 @@ export async function handleRunsRoutes(params: {
       scenarioId,
       scenarioIds,
       requestedAgents,
-      applySnapshotEval
+      applySnapshotEval,
+      runNote
     };
     const job: RunJob = {
       id: jobId,
@@ -294,7 +302,8 @@ export async function handleRunsRoutes(params: {
           runsPerScenario,
           scenarioId: scenarioId ?? null,
           scenarioIds: scenarioIds ?? null,
-          agents: requestedAgents ?? null
+          agents: requestedAgents ?? null,
+          runNote: runNote ?? null
         }
       });
       void executeRunJob(job, settings, jobs, runQueueState, deps);
@@ -311,6 +320,7 @@ export async function handleRunsRoutes(params: {
           scenarioId: scenarioId ?? null,
           scenarioIds: scenarioIds ?? null,
           agents: requestedAgents ?? null,
+          runNote: runNote ?? null,
           position: runQueueState.queue.length
         }
       });
@@ -380,6 +390,7 @@ export async function handleRunsRoutes(params: {
       `Run result context: ${JSON.stringify({
         run_id: results.metadata.run_id,
         timestamp: results.metadata.timestamp,
+        run_note: results.metadata.run_note ?? null,
         config_hash: results.metadata.config_hash,
         summary: results.summary,
         snapshot_eval: results.metadata.snapshot_eval ?? null,
@@ -477,6 +488,33 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
+  if (pathname.startsWith('/api/runs/') && pathname.endsWith('/note') && method === 'PATCH') {
+    const runId = pathname.replace('/api/runs/', '').replace('/note', '');
+    if (!runId || runId.includes('/')) {
+      asJson(res, 400, { error: 'Invalid run id' });
+      return true;
+    }
+    const body = (await parseBody(req)) as { runNote?: unknown };
+    const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
+    const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+    const runDir = ensureInsideRoot(settings.runsDir, join(settings.runsDir, runId));
+    if (!existsSync(runDir)) {
+      asJson(res, 404, { error: 'Run not found' });
+      return true;
+    }
+    const results = getRunResults(runId, settings.runsDir);
+    if (runNote) {
+      results.metadata.run_note = runNote;
+    } else {
+      delete results.metadata.run_note;
+    }
+    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
+    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    asJson(res, 200, { ok: true, runId, runNote: runNote ?? null });
+    return true;
+  }
+
   if (pathname.startsWith('/api/runs/') && method === 'DELETE') {
     const runId = pathname.replace('/api/runs/', '');
     if (!runId || runId.includes('/')) {
@@ -517,7 +555,8 @@ function advanceQueue(
         runsPerScenario: nextJob.runParams.runsPerScenario,
         scenarioId: nextJob.runParams.scenarioId ?? null,
         scenarioIds: nextJob.runParams.scenarioIds ?? null,
-        agents: nextJob.runParams.requestedAgents ?? null
+        agents: nextJob.runParams.requestedAgents ?? null,
+        runNote: nextJob.runParams.runNote ?? null
       }
     });
     void executeRunJob(nextJob, settings, jobs, runQueueState, deps);
@@ -548,7 +587,8 @@ async function executeRunJob(
     scenarioId,
     scenarioIds,
     requestedAgents,
-    applySnapshotEval
+    applySnapshotEval,
+    runNote
   } = job.runParams;
   try {
     addJobEvent(job, {
@@ -626,9 +666,17 @@ async function executeRunJob(
           message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
         }
       });
+      if (runNote) {
+        addJobEvent(job, {
+          type: 'log',
+          ts: new Date().toISOString(),
+          payload: { message: `Run note: ${runNote}` }
+        });
+      }
       const { runDir, results } = await runAll(expandedConfig, {
         runsPerScenario,
         scenarioId,
+        runNote,
         configHash: loaded.hash,
         cliVersion: pkgVersion,
         runsDir: settings.runsDir,
@@ -753,6 +801,7 @@ async function executeRunJob(
       });
       writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
       writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
+      writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),

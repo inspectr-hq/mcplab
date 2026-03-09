@@ -103,11 +103,21 @@ describe('aggregateResults', () => {
     expect(result.metadata.config_hash).toBe('abc123');
     expect(result.metadata.cli_version).toBe('1.0.0');
     expect(result.metadata.git_commit).toBeUndefined();
+    expect(result.metadata.run_note).toBeUndefined();
   });
 
   it('includes git_commit when provided', () => {
     const result = aggregateResults({ ...BASE, gitCommit: 'deadbeef', scenarioRuns: [] });
     expect(result.metadata.git_commit).toBe('deadbeef');
+  });
+
+  it('includes run_note when provided', () => {
+    const result = aggregateResults({
+      ...BASE,
+      runNote: 'mcp-server v1.8.2 #staging',
+      scenarioRuns: []
+    });
+    expect(result.metadata.run_note).toBe('mcp-server v1.8.2 #staging');
   });
 
   it('computes avg_tool_calls_per_run', () => {
@@ -182,6 +192,15 @@ describe('renderSummaryMarkdown', () => {
   it('includes the Git commit line when a commit hash is present', () => {
     const results = aggregateResults({ ...BASE, gitCommit: 'deadbeef', scenarioRuns: [] });
     expect(renderSummaryMarkdown(results)).toContain('Git commit: deadbeef');
+  });
+
+  it('includes the Run note line when a run note is present', () => {
+    const results = aggregateResults({
+      ...BASE,
+      runNote: 'mcp-server v1.8.2 #staging',
+      scenarioRuns: []
+    });
+    expect(renderSummaryMarkdown(results)).toContain('Run note: mcp-server v1.8.2 #staging');
   });
 
   it('omits the Git commit line when no commit hash is provided', () => {

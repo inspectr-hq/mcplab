@@ -82,6 +82,9 @@ const ResultDetail = () => {
   const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [editingRunNote, setEditingRunNote] = useState(false);
+  const [runNoteDraft, setRunNoteDraft] = useState("");
+  const [savingRunNote, setSavingRunNote] = useState(false);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
@@ -98,7 +101,9 @@ const ResultDetail = () => {
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
-  const [contextPanelTab, setContextPanelTab] = useState<"assistant" | "reports">("assistant");
+  const [contextPanelTab, setContextPanelTab] = useState<"assistant" | "reports" | "note">(
+    "assistant"
+  );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
   const [assistantMeta, setAssistantMeta] = useState<{
     assistantAgentName: string;
@@ -169,6 +174,8 @@ const ResultDetail = () => {
     source.getResult(id).then((next) => {
       if (active) {
         setResult(next);
+        setRunNoteDraft(next?.runNote ?? "");
+        setEditingRunNote(false);
         setLoading(false);
       }
     });
@@ -565,6 +572,11 @@ const ResultDetail = () => {
     setAssistantOpen(true);
   };
 
+  const openRunNotePanel = () => {
+    setContextPanelTab("note");
+    setAssistantOpen(true);
+  };
+
   const sendToScenarioAssistant = (assistantReply: string) => {
     if (!result) return;
     if (!assistantContextScenarioId) {
@@ -691,6 +703,27 @@ const ResultDetail = () => {
     }
   };
 
+  const saveRunNote = async () => {
+    if (!result) return;
+    setSavingRunNote(true);
+    try {
+      const trimmed = runNoteDraft.trim();
+      await source.updateRunNote(result.id, trimmed || undefined);
+      setResult((prev) => (prev ? { ...prev, runNote: trimmed || undefined } : prev));
+      setRunNoteDraft(trimmed);
+      setEditingRunNote(false);
+      toast({ title: "Run note saved" });
+    } catch (error: unknown) {
+      toast({
+        title: "Could not save run note",
+        description: (error instanceof Error ? error.message : String(error)),
+        variant: "destructive"
+      });
+    } finally {
+      setSavingRunNote(false);
+    }
+  };
+
   return (
     <div
       className={`${
@@ -759,6 +792,16 @@ const ResultDetail = () => {
               {referenceReportsLoading
                 ? "Reference Reports..."
                 : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openRunNotePanel()}
+            >
+              <NotepadText className="h-3.5 w-3.5" />
+              Run Note
             </Button>
             <Button
               type="button"
@@ -1353,7 +1396,7 @@ const ResultDetail = () => {
         <div className="min-w-0 space-y-0 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
           <Tabs
             value={contextPanelTab}
-            onValueChange={(v) => setContextPanelTab(v as "assistant" | "reports")}
+            onValueChange={(v) => setContextPanelTab(v as "assistant" | "reports" | "note")}
             className="min-w-0 -mb-px px-3 pt-1"
           >
             <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
@@ -1368,6 +1411,12 @@ const ResultDetail = () => {
                 className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
               >
                 Reports
+              </TabsTrigger>
+              <TabsTrigger
+                value="note"
+                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+              >
+                Note
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1722,7 +1771,7 @@ const ResultDetail = () => {
             </div>
           </CardContent>
         </Card>
-      ) : (
+      ) : contextPanelTab === "reports" ? (
         <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
           <CardHeader className="border-b px-4 py-3">
             <div className="space-y-1">
@@ -1825,8 +1874,99 @@ const ResultDetail = () => {
             </ScrollArea>
           </CardContent>
         </Card>
+      ) : (
+        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+          <CardHeader className="border-b px-4 py-3">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <NotepadText className="h-4 w-4 text-muted-foreground" />
+                  Run Note
+                </CardTitle>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs"
+                    onClick={() => setAssistantExpanded((prev) => !prev)}
+                  >
+                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                    {assistantExpanded ? "Compact" : "Expand"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setAssistantOpen(false)}
+                  >
+                    Hide
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add context for this run, such as server version or environment details.
+              </p>
+            </div>
+          </CardHeader>
+          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-4 xl:h-auto xl:min-h-0 xl:flex-1">
+            {editingRunNote ? (
+              <div className="w-full max-w-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium">Run note</p>
+                  <span className="text-xs text-muted-foreground">{runNoteDraft.length}/500</span>
+                </div>
+                <Textarea
+                  value={runNoteDraft}
+                  onChange={(e) => setRunNoteDraft(e.target.value.slice(0, 500))}
+                  placeholder="Optional context for this run"
+                  rows={3}
+                  className="min-h-20 resize"
+                />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={() => void saveRunNote()} disabled={savingRunNote}>
+                    {savingRunNote ? "Saving..." : "Save note"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setRunNoteDraft(result.runNote ?? "");
+                      setEditingRunNote(false);
+                    }}
+                    disabled={savingRunNote}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full max-w-3xl items-center gap-2 rounded-md border bg-muted/20 px-2 py-1 text-xs">
+                <div className="min-w-0 flex items-center gap-2">
+                  <span className="text-muted-foreground">Run note:</span>
+                  <span
+                    className={`break-words ${
+                      result.runNote ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {result.runNote || "none"}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-6 px-2 text-xs"
+                  onClick={() => setEditingRunNote(true)}
+                >
+                  {result.runNote ? "Edit" : "Add note"}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
-        </div>
+      </div>
       )}
       <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
         <AlertDialogContent className="max-w-2xl">

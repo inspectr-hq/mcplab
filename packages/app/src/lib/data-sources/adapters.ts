@@ -856,6 +856,7 @@ export function fromCoreResultsJson(
     configId: '',
     configHash: results.metadata.config_hash,
     timestamp: results.metadata.timestamp,
+    runNote: results.metadata.run_note,
     scenarios,
     overallPassRate: results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
