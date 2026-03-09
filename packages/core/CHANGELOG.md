@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.1.0
+
+### Minor Changes
+
+- feat: Add eval run notes
+
 ## 1.0.0
 
 ### Major Changes
