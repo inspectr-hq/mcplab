@@ -113,7 +113,7 @@ export async function handleResultAssistantRoutes(params: {
 
   const continueWithAutoApprovedReads = async (session: ResultAssistantSession) => {
     let output = await continueResultAssistantTurn(session);
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 25; i += 1) {
       const pending = output.response.pendingToolCall;
       if (output.response.type !== 'tool_call_request' || !pending) break;
       if (!RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)) break;
@@ -121,14 +121,6 @@ export async function handleResultAssistantRoutes(params: {
         emitApprovalChatMessage: false
       });
       output = await continueResultAssistantTurn(session);
-    }
-    if (
-      output.response.type === 'tool_call_request' &&
-      output.response.pendingToolCall &&
-      RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(output.response.pendingToolCall.tool)
-    ) {
-      flushDanglingToolCalls(session.llmMessages);
-      throw new Error('Result Assistant exceeded auto-approved tool-call chain limit');
     }
     return output;
   };
