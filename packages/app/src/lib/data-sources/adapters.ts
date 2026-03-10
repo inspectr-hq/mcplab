@@ -335,14 +335,26 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 
   const mapInlineServer = (server: EvalConfig['servers'][number]) => {
     const sourceId = server.id;
+    const trimmedAuthValue = server.authValue?.trim() ?? '';
+    const trimmedApiKeyHeaderName = server.apiKeyHeaderName?.trim() ?? '';
     const auth =
       server.authType === 'bearer'
-        ? { type: 'bearer' as const, token: server.authValue || '' }
+        ? (() => {
+            if (!trimmedAuthValue) {
+              throw new Error(`Server '${sourceId}' is missing bearer token value`);
+            }
+            return { type: 'bearer' as const, token: trimmedAuthValue };
+          })()
         : server.authType === 'api-key' && !server.oauthTokenUrl
         ? {
             type: 'api_key' as const,
-            ...(server.apiKeyHeaderName ? { header_name: server.apiKeyHeaderName } : {}),
-            value: server.authValue || ''
+            ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
+            value: (() => {
+              if (!trimmedAuthValue) {
+                throw new Error(`Server '${sourceId}' is missing API key value`);
+              }
+              return trimmedAuthValue;
+            })()
           }
         : server.authType === 'api-key'
         ? {
@@ -512,18 +524,31 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
       server.id,
-      {
+      (() => {
+        const trimmedAuthValue = server.authValue?.trim() ?? '';
+        const trimmedApiKeyHeaderName = server.apiKeyHeaderName?.trim() ?? '';
+        return {
         ...(server.name && server.name !== server.id ? { name: server.name } : {}),
         transport: 'http' as const,
         url: server.url || 'http://localhost:3000/mcp',
         auth:
           server.authType === 'bearer'
-            ? { type: 'bearer' as const, token: server.authValue || '' }
+            ? (() => {
+                if (!trimmedAuthValue) {
+                  throw new Error(`Server '${server.id}' is missing bearer token value`);
+                }
+                return { type: 'bearer' as const, token: trimmedAuthValue };
+              })()
             : server.authType === 'api-key' && !server.oauthTokenUrl
             ? {
                 type: 'api_key' as const,
-                ...(server.apiKeyHeaderName ? { header_name: server.apiKeyHeaderName } : {}),
-                value: server.authValue || ''
+                ...(trimmedApiKeyHeaderName ? { header_name: trimmedApiKeyHeaderName } : {}),
+                value: (() => {
+                  if (!trimmedAuthValue) {
+                    throw new Error(`Server '${server.id}' is missing API key value`);
+                  }
+                  return trimmedAuthValue;
+                })()
               }
             : server.authType === 'api-key'
             ? {
@@ -543,7 +568,8 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
                 scope: server.oauthScope || undefined
               }
             : undefined
-      }
+      };
+      })()
     ])
   ) as CoreEvalConfig['servers'];
 

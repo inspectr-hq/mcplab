@@ -19,6 +19,7 @@ import {
 import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
+import { validateServerAuthConfig } from "@/lib/server-auth-validation";
 import type { ServerConfig } from "@/types/eval";
 
 type ConnectState =
@@ -120,18 +121,28 @@ const ServerDetail = () => {
       toast({ title: "Name is required", variant: "destructive" });
       return;
     }
+    const authValidationError = validateServerAuthConfig(form);
+    if (authValidationError) {
+      toast({ title: "Validation Error", description: authValidationError, variant: "destructive" });
+      return;
+    }
+    const normalizedForm: ServerConfig = {
+      ...form,
+      authValue: form.authValue?.trim(),
+      apiKeyHeaderName: form.apiKeyHeaderName?.trim() || undefined
+    };
     setSaving(true);
     try {
       if (isNew) {
-        await setServers([...servers, form]);
+        await setServers([...servers, normalizedForm]);
         toast({ title: "Server created" });
-        navigate(`/libraries/servers/${encodeURIComponent(form.id)}`);
+        navigate(`/libraries/servers/${encodeURIComponent(normalizedForm.id)}`);
       } else {
-        const next = servers.map((s) => (s.id === existingServer?.id ? form : s));
+        const next = servers.map((s) => (s.id === existingServer?.id ? normalizedForm : s));
         await setServers(next);
         toast({ title: "Server saved" });
-        if (form.id !== decodedParam) {
-          navigate(`/libraries/servers/${encodeURIComponent(form.id)}`, { replace: true });
+        if (normalizedForm.id !== decodedParam) {
+          navigate(`/libraries/servers/${encodeURIComponent(normalizedForm.id)}`, { replace: true });
         }
       }
     } finally {
