@@ -9,12 +9,14 @@ export interface ServerConfig {
   args?: string[];
   authType?: 'none' | 'bearer' | 'api-key' | 'oauth2';
   authValue?: string;
+  // api-key fields
+  apiKeyHeaderName?: string;
   // oauth2 (authorization code) fields
   oauthClientId?: string;
   oauthClientSecret?: string;
   oauthRedirectUrl?: string;
   oauthScope?: string;
-  // api-key (oauth_client_credentials) fields
+  // oauth_client_credentials fields (used by libraries/YAML, not exposed in UI dropdown)
   oauthTokenUrl?: string;
   oauthClientIdEnv?: string;
   oauthClientSecretEnv?: string;
