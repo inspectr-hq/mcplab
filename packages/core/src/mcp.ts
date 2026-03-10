@@ -247,6 +247,31 @@ export class McpClientManager {
     return connectPromise;
   }
 
+  /**
+   * Resolve a config value that may contain a ${VAR} env-var reference.
+   * - `${FOO}` → reads process.env.FOO
+   * - plain string → returned as-is
+   * - treatPlainAsEnvVar: legacy mode where plain strings are treated as env var names
+   */
+  private resolveValue(value: string, label: string, treatPlainAsEnvVar = false): string {
+    const envMatch = value.match(/^\$\{(.+)\}$/);
+    if (envMatch) {
+      const resolved = process.env[envMatch[1]];
+      if (!resolved) {
+        throw new Error(`Missing env var '${envMatch[1]}' for ${label}`);
+      }
+      return resolved;
+    }
+    if (treatPlainAsEnvVar) {
+      const resolved = process.env[value];
+      if (!resolved) {
+        throw new Error(`Missing env var '${value}' for ${label}`);
+      }
+      return resolved;
+    }
+    return value;
+  }
+
   private async getAuthHeaders(
     serverName: string,
     server: ServerConfig
@@ -255,11 +280,20 @@ export class McpClientManager {
     if (!server.auth) return headers;
 
     if (server.auth.type === 'bearer') {
-      const token = process.env[server.auth.env];
-      if (!token) {
-        throw new Error(`Missing bearer token env var: ${server.auth.env}`);
+      let resolved: string | undefined;
+      if (server.auth.token) {
+        resolved = this.resolveValue(server.auth.token, 'bearer token');
+      } else if (server.auth.env) {
+        // Legacy: env field is always an env var name
+        resolved = process.env[server.auth.env];
+        if (!resolved) {
+          throw new Error(`Missing bearer token env var: ${server.auth.env}`);
+        }
       }
-      headers['Authorization'] = `Bearer ${token}`;
+      if (!resolved) {
+        throw new Error('No bearer token or env var configured');
+      }
+      headers['Authorization'] = `Bearer ${resolved}`;
       return headers;
     }
 
@@ -287,14 +321,8 @@ export class McpClientManager {
     if (!server.auth || server.auth.type !== 'oauth_client_credentials') {
       throw new Error(`OAuth auth not configured for server '${serverName}'`);
     }
-    const clientId = process.env[server.auth.client_id_env];
-    const clientSecret = process.env[server.auth.client_secret_env];
-    if (!clientId) {
-      throw new Error(`Missing OAuth client id env var: ${server.auth.client_id_env}`);
-    }
-    if (!clientSecret) {
-      throw new Error(`Missing OAuth client secret env var: ${server.auth.client_secret_env}`);
-    }
+    const clientId = this.resolveValue(server.auth.client_id_env, 'OAuth client_id', true);
+    const clientSecret = this.resolveValue(server.auth.client_secret_env, 'OAuth client_secret', true);
 
     const params = new URLSearchParams();
     params.set('grant_type', 'client_credentials');

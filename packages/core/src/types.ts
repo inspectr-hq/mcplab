@@ -2,7 +2,8 @@ export type TransportType = 'http';
 
 export interface ServerAuthBearer {
   type: 'bearer';
-  env: string;
+  env?: string;
+  token?: string;
 }
 
 export interface ServerAuthOauthClientCredentials {
