@@ -156,7 +156,9 @@ function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
 }
 
 export async function startAppServer(options: AppServerOptions) {
-  McpClientManager.onBeforeConnect = () => dotenv.config({ override: true });
+  // Re-read .env before each connection so new/changed vars are picked up,
+  // but do NOT override vars already set by the environment (CI, runtime, etc.)
+  McpClientManager.onBeforeConnect = () => dotenv.config();
   const workspaceRoot = process.cwd();
   const settings: AppSettings = {
     workspaceRoot,
