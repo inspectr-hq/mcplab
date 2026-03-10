@@ -198,4 +198,56 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
   });
+
+  it('filters displayed scenarios and metrics when agent query param is set', async () => {
+    const result = makeResult();
+    result.scenarios.push({
+      scenarioId: 'scn-2',
+      scenarioName: 'Scenario 2',
+      agentId: 'agent-2',
+      agentName: 'Agent 2',
+      passRate: 0,
+      avgToolCalls: 2,
+      avgDuration: 250,
+      runs: [
+        {
+          runIndex: 0,
+          passed: false,
+          toolCalls: [
+            {
+              name: 'search_tags',
+              arguments: { q: 'TM5-BP2' },
+              duration: 100,
+              timestamp: '2026-02-08T10:00:02.000Z'
+            }
+          ],
+          finalAnswer: 'failed',
+          conversation: [],
+          duration: 250,
+          extractedValues: {},
+          failureReasons: ['not found']
+        }
+      ]
+    });
+    result.totalScenarios = 2;
+    result.totalRuns = 2;
+    result.overallPassRate = 0.5;
+    result.avgToolCalls = 1.5;
+    result.avgLatency = 185;
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1?agent=agent-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText(/Agent: agent-1/)).toBeInTheDocument();
+    expect(screen.getAllByText(/100%/).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Agent 2')).not.toBeInTheDocument();
+    expect(screen.queryByText('Scenario 2')).not.toBeInTheDocument();
+  });
 });

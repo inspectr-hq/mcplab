@@ -258,6 +258,7 @@ const ResultDetail = () => {
   }, [assistantOpen, contextPanelTab, selectedReferenceReportPath, source]);
 
   const requestedConfigId = searchParams.get("configId") ?? "";
+  const requestedAgentId = (searchParams.get("agent") ?? "").trim();
   const activeConfig = useMemo(() => {
     const byRequested = requestedConfigId ? configs.find((c) => c.id === requestedConfigId) : undefined;
     if (byRequested) return byRequested;
@@ -336,12 +337,32 @@ const ResultDetail = () => {
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
+  const filteredScenarios = requestedAgentId
+    ? result.scenarios.filter((scenario) => scenario.agentId === requestedAgentId || scenario.agentName === requestedAgentId)
+    : result.scenarios;
+  const filteredTotalRuns = filteredScenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+  const filteredPassCount = filteredScenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
+    0
+  );
+  const filteredTotalToolCalls = filteredScenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
+    0
+  );
+  const filteredTotalDuration = filteredScenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.reduce((runsSum, run) => runsSum + run.duration, 0),
+    0
+  );
+  const displayPassRate = filteredTotalRuns === 0 ? 0 : filteredPassCount / filteredTotalRuns;
+  const displayAvgToolCalls = filteredTotalRuns === 0 ? 0 : filteredTotalToolCalls / filteredTotalRuns;
+  const displayAvgLatency = filteredTotalRuns === 0 ? 0 : Math.round(filteredTotalDuration / filteredTotalRuns);
+
   const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
   const mcpVersionSummary = mcpServerVersionEntries
     .map(([serverId, version]) => `${serverId}: ${version ?? "unknown"}`)
     .join(", ");
-  const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
-  const failCount = result.totalRuns - passCount;
+  const passCount = filteredPassCount;
+  const failCount = Math.max(0, filteredTotalRuns - passCount);
   const pieData = [
     { name: "Pass", value: passCount, color: "hsl(152, 69%, 40%)" },
     { name: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
@@ -349,7 +370,7 @@ const ResultDetail = () => {
 
   // Tool frequency
   const toolFreq: Record<string, number> = {};
-  result.scenarios.forEach((sc) => sc.runs.forEach((r) => r.toolCalls.forEach((tc) => {
+  filteredScenarios.forEach((sc) => sc.runs.forEach((r) => r.toolCalls.forEach((tc) => {
     toolFreq[tc.name] = (toolFreq[tc.name] || 0) + 1;
   })));
   const toolData = Object.entries(toolFreq).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
@@ -741,7 +762,7 @@ const ResultDetail = () => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
-                <PassRateBadge rate={result.overallPassRate} />
+                <PassRateBadge rate={displayPassRate} />
                 {snapshotsUiEnabled && result.snapshotEval?.applied && (
                   <Badge variant="outline" className="text-xs">
                     Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
@@ -750,7 +771,7 @@ const ResultDetail = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 {new Date(result.timestamp).toLocaleString()}
-                {" "}· Config hash: <span className="font-mono">{result.configHash}</span>
+                {" "}·{requestedAgentId ? ` Agent: ${requestedAgentId} ·` : ""} Config hash: <span className="font-mono">{result.configHash}</span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
@@ -907,13 +928,13 @@ const ResultDetail = () => {
                   size="sm"
                   className="h-8"
                   onClick={() => void acceptAsNewBaseline()}
-                  disabled={acceptingBaseline || result.overallPassRate !== 1}
+                  disabled={acceptingBaseline || displayPassRate !== 1}
                 >
                   {acceptingBaseline ? "Accepting..." : "Accept as New Baseline"}
                 </Button>
               </div>
             </div>
-            {result.overallPassRate !== 1 && (
+            {displayPassRate !== 1 && (
               <p className="text-xs text-muted-foreground">
                 Baseline updates require a fully passing run (same rule as snapshot creation).
               </p>
@@ -923,11 +944,11 @@ const ResultDetail = () => {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard title="Scenarios" value={result.totalScenarios} icon={Layers} />
-        <StatCard title="Total Runs" value={result.totalRuns} icon={Activity} />
-        <StatCard title="Pass Rate" value={`${Math.round(result.overallPassRate * 100)}%`} icon={BarChart3} />
-        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(result.avgToolCalls)} icon={CheckCircle2} />
-        <StatCard title="Avg Latency" value={`${result.avgLatency}ms`} icon={Timer} />
+        <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
+        <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
+        <StatCard title="Pass Rate" value={`${Math.round(displayPassRate * 100)}%`} icon={BarChart3} />
+        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(displayAvgToolCalls)} icon={CheckCircle2} />
+        <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -1029,7 +1050,7 @@ const ResultDetail = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.scenarios.map((sc) => {
+              {filteredScenarios.map((sc) => {
                 const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                 const scenarioLabel = sc.scenarioName || sc.scenarioId;
                 return (
