@@ -46,7 +46,7 @@ export function ServerForm({
         : {}),
       ...(nextType !== "api-key"
         ? { apiKeyHeaderName: undefined }
-        : {}),
+        : { apiKeyHeaderName: current.apiKeyHeaderName || "X-API-Key" }),
       ...(nextType !== "oauth2"
         ? {
             oauthClientId: undefined,

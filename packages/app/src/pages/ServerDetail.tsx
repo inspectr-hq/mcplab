@@ -72,7 +72,7 @@ const ServerDetail = () => {
         : {}),
       ...(nextType !== "api-key"
         ? { apiKeyHeaderName: undefined }
-        : {}),
+        : { apiKeyHeaderName: f.apiKeyHeaderName || "X-API-Key" }),
       ...(nextType !== "oauth2"
         ? {
             oauthClientId: undefined,
