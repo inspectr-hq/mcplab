@@ -339,7 +339,11 @@ export class McpClientManager {
       throw new Error(`OAuth auth not configured for server '${serverName}'`);
     }
     const clientId = this.resolveValue(server.auth.client_id_env, 'OAuth client_id', true);
-    const clientSecret = this.resolveValue(server.auth.client_secret_env, 'OAuth client_secret', true);
+    const clientSecret = this.resolveValue(
+      server.auth.client_secret_env,
+      'OAuth client_secret',
+      true
+    );
 
     const params = new URLSearchParams();
     params.set('grant_type', 'client_credentials');

@@ -1433,8 +1433,7 @@ function buildServerEntry(input: {
     return { transport, url: input.url };
   }
   if (authType === 'bearer') {
-    const token = input.bearer_token
-      ?? (input.bearer_env ? `\${${input.bearer_env}}` : undefined);
+    const token = input.bearer_token ?? (input.bearer_env ? `\${${input.bearer_env}}` : undefined);
     if (!token) {
       throw new Error('bearer_token or bearer_env is required when auth_type=bearer');
     }

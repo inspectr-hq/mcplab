@@ -742,23 +742,23 @@ describe('config adapters round-trip', () => {
       name: 'cfg-trim',
       description: '',
       servers: [
-      {
-        id: 'bearer-server',
-        name: 'Bearer',
-        transport: 'streamable-http',
-        url: 'http://localhost:3000/mcp',
-        authType: 'bearer',
-        authValue: '  ${TOKEN}  '
-      },
-      {
-        id: 'api-server',
-        name: 'API',
-        transport: 'streamable-http',
-        url: 'http://localhost:3001/mcp',
-        authType: 'api-key',
-        authValue: '  key-value  ',
-        apiKeyHeaderName: '  X-Api-Key  '
-      }
+        {
+          id: 'bearer-server',
+          name: 'Bearer',
+          transport: 'streamable-http',
+          url: 'http://localhost:3000/mcp',
+          authType: 'bearer',
+          authValue: '  ${TOKEN}  '
+        },
+        {
+          id: 'api-server',
+          name: 'API',
+          transport: 'streamable-http',
+          url: 'http://localhost:3001/mcp',
+          authType: 'api-key',
+          authValue: '  key-value  ',
+          apiKeyHeaderName: '  X-Api-Key  '
+        }
       ],
       agents: [],
       scenarios: [],
@@ -780,14 +780,14 @@ describe('config adapters round-trip', () => {
       name: 'cfg-empty',
       description: '',
       servers: [
-      {
-        id: 'bearer-server',
-        name: 'Bearer',
-        transport: 'streamable-http',
-        url: 'http://localhost:3000/mcp',
-        authType: 'bearer',
-        authValue: '   '
-      }
+        {
+          id: 'bearer-server',
+          name: 'Bearer',
+          transport: 'streamable-http',
+          url: 'http://localhost:3000/mcp',
+          authType: 'bearer',
+          authValue: '   '
+        }
       ],
       agents: [],
       scenarios: [],
