@@ -1,5 +1,24 @@
 # @inspectr/mcplab
 
+## 1.2.0
+
+### Minor Changes
+
+- feat: persist MCP server versions in run results
+- feat: refresh .env before each MCP server connection
+- feat: add apiKeyHeaderName to app ServerConfig type
+- feat: adapter support for bearer token field and api_key auth type
+- docs: update auth examples for token field and api_key type
+- fix: Toggle select all/clear for agent selection
+- fix: List all configurations in the Eval run dropdown
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.2.0
+  - @inspectr/mcplab-mcp-server@1.1.0
+  - @inspectr/mcplab-reporting@1.1.1
+
 ## 1.1.0
 
 ### Minor Changes
