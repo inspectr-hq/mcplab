@@ -88,7 +88,11 @@ const RunEvaluation = () => {
     setConfigId(requestedConfigId);
   }, [requestedConfigId, configs]);
 
+  const prevConfigKeyRef = useRef("");
   useEffect(() => {
+    const configKey = selectedConfig ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ""}` : "";
+    if (configKey === prevConfigKeyRef.current) return;
+    prevConfigKeyRef.current = configKey;
     if (!selectedConfig) {
       setSelectedAgentIds([]);
       setSelectedScenarioIds([]);
