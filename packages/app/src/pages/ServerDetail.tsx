@@ -66,6 +66,13 @@ const ServerDetail = () => {
     setForm((f) => ({
       ...f,
       authType: nextType,
+      // Clear fields not relevant to the new type
+      ...(nextType !== "bearer" && nextType !== "api-key"
+        ? { authValue: undefined }
+        : {}),
+      ...(nextType !== "api-key"
+        ? { apiKeyHeaderName: undefined }
+        : {}),
       ...(nextType !== "oauth2"
         ? {
             oauthClientId: undefined,
@@ -345,19 +352,53 @@ const ServerDetail = () => {
                 </SelectContent>
               </Select>
             </div>
-            {form.authType && form.authType !== "none" && form.authType !== "oauth2" && (
+            {form.authType === "bearer" && (
               <div className="space-y-1.5">
-                <Label>{form.authType === "bearer" ? "Token" : "API Key"}</Label>
+                <Label>Token</Label>
                 <Input
-                  type="password"
                   value={form.authValue || ""}
                   onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
-                  placeholder="••••••••"
+                  placeholder="${DATABRICKS_TOKEN}"
                   className="font-mono text-xs"
                 />
               </div>
             )}
           </div>
+
+          {form.authType === "bearer" && (
+            <p className="text-xs text-muted-foreground -mt-1">
+              Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a token directly.
+            </p>
+          )}
+
+          {form.authType === "api-key" && (
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="text-xs font-medium text-muted-foreground">API Key</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Header Name</Label>
+                  <Input
+                    value={form.apiKeyHeaderName || "X-API-Key"}
+                    onChange={(e) => setForm((f) => ({ ...f, apiKeyHeaderName: e.target.value }))}
+                    placeholder="X-API-Key"
+                    className="font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Value</Label>
+                  <Input
+                    value={form.authValue || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
+                    placeholder="${MY_API_KEY}"
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a value directly.
+              </p>
+            </div>
+          )}
 
           {form.authType === "oauth2" && (
             <div className="space-y-3 rounded-md border p-3">
