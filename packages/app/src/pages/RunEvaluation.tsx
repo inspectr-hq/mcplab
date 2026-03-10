@@ -43,6 +43,10 @@ const RunEvaluation = () => {
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const { agents: libraryAgents, scenarios: libraryScenarios, reload: reloadLibraries } = useLibraries();
+  const normalizedRunId = runId.trim();
+  const resultsHref = normalizedRunId
+    ? `/results/${encodeURIComponent(normalizedRunId)}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`
+    : "/results";
   const selectedConfig = configs.find((item) => item.id === configId);
   const requestedConfigId = searchParams.get("configId");
   const availableAgents = useMemo(() => {
@@ -364,7 +368,7 @@ const RunEvaluation = () => {
         }
       }
       if (event.type === "completed") {
-        const nextRunId = String(event.payload.runId ?? "");
+        const nextRunId = String(event.payload.runId ?? "").trim();
         setLogs((prev) => {
           const line = `[${ts}] Run completed.`;
           return prev.includes(line) ? prev : [...prev, line];
@@ -749,10 +753,10 @@ const RunEvaluation = () => {
                 <p className="text-sm text-muted-foreground">All scenarios have been evaluated successfully.</p>
               </div>
               <Button asChild className="ml-auto">
-                <Link to={`/results/${runId}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`}>View Results</Link>
+                <Link to={resultsHref}>{normalizedRunId ? "View Results" : "View Runs"}</Link>
               </Button>
             </div>
-            {snapshotsUiEnabled && runId && (
+            {snapshotsUiEnabled && normalizedRunId && (
               <div className="mt-4 flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Snapshot name (optional)</Label>

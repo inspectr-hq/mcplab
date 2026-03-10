@@ -165,7 +165,7 @@ describe('ResultDetail conversation toggle', () => {
     });
   });
 
-  it('renders MCP server versions block when present and shows unknown for null', async () => {
+  it('renders MCP server versions inline metadata when present and shows unknown for null', async () => {
     const result = makeResult();
     result.mcpServerVersions = { api: '1.2.3', docs: null };
     getResultMock.mockResolvedValue(result);
@@ -179,14 +179,12 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.getByText('MCP server versions')).toBeInTheDocument();
-    expect(screen.getByText('api')).toBeInTheDocument();
-    expect(screen.getByText('1.2.3')).toBeInTheDocument();
-    expect(screen.getByText('docs')).toBeInTheDocument();
-    expect(screen.getByText('unknown')).toBeInTheDocument();
+    expect(screen.getByText(/MCP:/)).toBeInTheDocument();
+    expect(screen.getByText(/api: 1\.2\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/docs: unknown/)).toBeInTheDocument();
   });
 
-  it('hides MCP server versions block for historical runs without versions', async () => {
+  it('hides MCP inline metadata for historical runs without versions', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
@@ -198,6 +196,6 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.queryByText('MCP server versions')).not.toBeInTheDocument();
+    expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
   });
 });

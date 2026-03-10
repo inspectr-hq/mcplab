@@ -337,6 +337,9 @@ const ResultDetail = () => {
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
   const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
+  const mcpVersionSummary = mcpServerVersionEntries
+    .map(([serverId, version]) => `${serverId}: ${version ?? "unknown"}`)
+    .join(", ");
   const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
   const failCount = result.totalRuns - passCount;
   const pieData = [
@@ -746,29 +749,23 @@ const ResultDetail = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(result.timestamp).toLocaleString()} · Config hash: <span className="font-mono">{result.configHash}</span>
+                {new Date(result.timestamp).toLocaleString()}
+                {" "}· Config hash: <span className="font-mono">{result.configHash}</span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
                   Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
                 </p>
               )}
-              {mcpServerVersionEntries.length > 0 && (
-                <div className="mt-2 rounded-md border bg-muted/30 p-2 text-xs">
-                  <p className="font-medium text-foreground">MCP server versions</p>
-                  <div className="mt-1 space-y-0.5 text-muted-foreground">
-                    {mcpServerVersionEntries.map(([serverId, version]) => (
-                      <p key={serverId}>
-                        <span className="font-mono text-foreground">{serverId}</span>:{" "}
-                        <span>{version ?? "unknown"}</span>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {mcpVersionSummary ? (
+              <span className="inline-flex items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
+                <span className="font-medium">MCP:</span>
+                <span className="ml-1 font-mono">{mcpVersionSummary}</span>
+              </span>
+            ) : null}
             {snapshotsUiEnabled && result.snapshotEval?.applied && (
               <Button
                 type="button"
