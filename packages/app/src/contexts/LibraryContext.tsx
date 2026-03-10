@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AgentConfig, Scenario, ServerConfig } from "@/types/eval";
 import { useDataSource } from "@/contexts/DataSourceContext";
 
@@ -23,7 +23,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LibraryState>({ servers: [], agents: [], scenarios: [] });
   const [loading, setLoading] = useState(true);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     try {
       const libraries = await source.getLibraries();
@@ -31,7 +31,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [source]);
 
   useEffect(() => {
     void reload();
@@ -47,10 +47,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     };
   }, [source]);
 
-  const save = async (next: LibraryState) => {
+  const save = useCallback(async (next: LibraryState) => {
     setState(next);
     await source.saveLibraries(next);
-  };
+  }, [source]);
 
   const value = useMemo<LibraryContextValue>(
     () => ({
@@ -61,7 +61,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setScenarios: async (scenarios) => save({ ...state, scenarios }),
       reload
     }),
-    [state, loading]
+    [state, loading, reload, save]
   );
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
