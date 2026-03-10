@@ -2,7 +2,14 @@ export type TransportType = 'http';
 
 export interface ServerAuthBearer {
   type: 'bearer';
-  env: string;
+  env?: string;
+  token?: string;
+}
+
+export interface ServerAuthApiKey {
+  type: 'api_key';
+  header_name?: string;
+  value: string;
 }
 
 export interface ServerAuthOauthClientCredentials {
@@ -25,6 +32,7 @@ export interface ServerAuthOauthAuthorizationCode {
 
 export type ServerAuth =
   | ServerAuthBearer
+  | ServerAuthApiKey
   | ServerAuthOauthClientCredentials
   | ServerAuthOauthAuthorizationCode;
 
@@ -297,6 +305,7 @@ export interface ResultsJson {
     git_commit?: string;
     config_hash: string;
     cli_version: string;
+    mcp_server_versions: Record<string, string | null>;
     snapshot_eval?: {
       applied: boolean;
       mode: 'warn' | 'fail_on_drift';

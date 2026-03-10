@@ -363,13 +363,25 @@ export function registerTools(server: McpServer): void {
         url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
         transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).'),
         auth_type: z
-          .enum(['none', 'bearer', 'oauth_client_credentials'])
+          .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
           .optional()
           .describe('Authentication mode.'),
+        bearer_token: z
+          .string()
+          .optional()
+          .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
         bearer_env: z
           .string()
           .optional()
           .describe('Env var for bearer token when auth_type=bearer.'),
+        api_key_header_name: z
+          .string()
+          .optional()
+          .describe('Header name for API key auth (default: X-API-Key).'),
+        api_key_value: z
+          .string()
+          .optional()
+          .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
         oauth_token_url: z
           .string()
           .optional()
@@ -1404,8 +1416,11 @@ function buildServerEntry(input: {
   id: string;
   url: string;
   transport?: 'http';
-  auth_type?: 'none' | 'bearer' | 'oauth_client_credentials';
+  auth_type?: 'none' | 'bearer' | 'api_key' | 'oauth_client_credentials';
+  bearer_token?: string;
   bearer_env?: string;
+  api_key_header_name?: string;
+  api_key_value?: string;
   oauth_token_url?: string;
   oauth_client_id_env?: string;
   oauth_client_secret_env?: string;
@@ -1418,16 +1433,28 @@ function buildServerEntry(input: {
     return { transport, url: input.url };
   }
   if (authType === 'bearer') {
-    if (!input.bearer_env) {
-      throw new Error('bearer_env is required when auth_type=bearer');
+    const token = input.bearer_token ?? (input.bearer_env ? `\${${input.bearer_env}}` : undefined);
+    if (!token) {
+      throw new Error('bearer_token or bearer_env is required when auth_type=bearer');
     }
     return {
       transport,
       url: input.url,
-      auth: {
-        type: 'bearer',
-        env: input.bearer_env
-      }
+      auth: { type: 'bearer', token }
+    };
+  }
+  if (authType === 'api_key') {
+    if (!input.api_key_value) {
+      throw new Error('api_key_value is required when auth_type=api_key');
+    }
+    return {
+      transport,
+      url: input.url,
+      auth: removeUndefined({
+        type: 'api_key',
+        header_name: input.api_key_header_name,
+        value: input.api_key_value
+      }) as EvalConfig['servers'][string]['auth']
     };
   }
   if (!input.oauth_token_url || !input.oauth_client_id_env || !input.oauth_client_secret_env) {

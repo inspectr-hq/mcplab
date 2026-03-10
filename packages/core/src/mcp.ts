@@ -13,11 +13,13 @@ export interface McpCallToolOptions {
 }
 
 export class McpClientManager {
+  static onBeforeConnect: (() => void) | undefined;
   private clients = new Map<string, Client>();
   private scopedClients = new Map<string, Client>();
   private scopedClientConnectPromises = new Map<string, Promise<Client>>();
   private servers = new Map<string, ServerConfig>();
   private authHeaders = new Map<string, Record<string, string>>();
+  private serverVersions = new Map<string, string | null>();
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
   private static readonly MAX_CONNECT_RETRIES = 3;
   private static readonly MAX_SCOPED_CLIENTS = 100;
@@ -29,8 +31,10 @@ export class McpClientManager {
   }
 
   async connectAll(servers: Record<string, ServerConfig>, signal?: AbortSignal): Promise<void> {
+    McpClientManager.onBeforeConnect?.();
     throwIfAborted(signal);
     this.servers = new Map(Object.entries(servers));
+    this.serverVersions.clear();
     for (const [name, server] of Object.entries(servers)) {
       throwIfAborted(signal);
       if (server.transport !== 'http') {
@@ -47,6 +51,7 @@ export class McpClientManager {
           signal
         );
         this.clients.set(name, client);
+        this.serverVersions.set(name, client.getServerVersion()?.version ?? null);
       } catch (err: any) {
         throw new Error(
           formatMcpError(
@@ -139,6 +144,7 @@ export class McpClientManager {
     this.scopedClientConnectPromises.clear();
     this.servers.clear();
     this.authHeaders.clear();
+    this.serverVersions.clear();
     await Promise.all(
       clients.map(async (client) => {
         try {
@@ -151,6 +157,10 @@ export class McpClientManager {
         }
       })
     );
+  }
+
+  getServerVersions(): Record<string, string | null> {
+    return Object.fromEntries(this.serverVersions.entries());
   }
 
   private async connectClient(
@@ -247,6 +257,31 @@ export class McpClientManager {
     return connectPromise;
   }
 
+  /**
+   * Resolve a config value that may contain a ${VAR} env-var reference.
+   * - `${FOO}` → reads process.env.FOO
+   * - plain string → returned as-is
+   * - treatPlainAsEnvVar: legacy mode where plain strings are treated as env var names
+   */
+  private resolveValue(value: string, label: string, treatPlainAsEnvVar = false): string {
+    const envMatch = value.match(/^\$\{(.+)\}$/);
+    if (envMatch) {
+      const resolved = process.env[envMatch[1]];
+      if (!resolved) {
+        throw new Error(`Missing env var '${envMatch[1]}' for ${label}`);
+      }
+      return resolved;
+    }
+    if (treatPlainAsEnvVar) {
+      const resolved = process.env[value];
+      if (!resolved) {
+        throw new Error(`Missing env var '${value}' for ${label}`);
+      }
+      return resolved;
+    }
+    return value;
+  }
+
   private async getAuthHeaders(
     serverName: string,
     server: ServerConfig
@@ -255,11 +290,27 @@ export class McpClientManager {
     if (!server.auth) return headers;
 
     if (server.auth.type === 'bearer') {
-      const token = process.env[server.auth.env];
-      if (!token) {
-        throw new Error(`Missing bearer token env var: ${server.auth.env}`);
+      let resolved: string | undefined;
+      if (server.auth.token) {
+        resolved = this.resolveValue(server.auth.token, 'bearer token');
+      } else if (server.auth.env) {
+        // Legacy: env field is always an env var name
+        resolved = process.env[server.auth.env];
+        if (!resolved) {
+          throw new Error(`Missing bearer token env var: ${server.auth.env}`);
+        }
       }
-      headers['Authorization'] = `Bearer ${token}`;
+      if (!resolved) {
+        throw new Error('No bearer token or env var configured');
+      }
+      headers['Authorization'] = `Bearer ${resolved}`;
+      return headers;
+    }
+
+    if (server.auth.type === 'api_key') {
+      const headerName = server.auth.header_name || 'X-API-Key';
+      const resolved = this.resolveValue(server.auth.value, 'API key');
+      headers[headerName] = resolved;
       return headers;
     }
 
@@ -287,14 +338,12 @@ export class McpClientManager {
     if (!server.auth || server.auth.type !== 'oauth_client_credentials') {
       throw new Error(`OAuth auth not configured for server '${serverName}'`);
     }
-    const clientId = process.env[server.auth.client_id_env];
-    const clientSecret = process.env[server.auth.client_secret_env];
-    if (!clientId) {
-      throw new Error(`Missing OAuth client id env var: ${server.auth.client_id_env}`);
-    }
-    if (!clientSecret) {
-      throw new Error(`Missing OAuth client secret env var: ${server.auth.client_secret_env}`);
-    }
+    const clientId = this.resolveValue(server.auth.client_id_env, 'OAuth client_id', true);
+    const clientSecret = this.resolveValue(
+      server.auth.client_secret_env,
+      'OAuth client_secret',
+      true
+    );
 
     const params = new URLSearchParams();
     params.set('grant_type', 'client_credentials');

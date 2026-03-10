@@ -147,7 +147,21 @@ servers:
     url: "https://api.example.com/mcp"
     auth:
       type: "bearer"
-      env: "MCP_TOKEN"
+      token: ${MCP_TOKEN}        # env var reference
+      # token: my-secret-token   # or direct value
+```
+
+### API Key
+
+```yaml
+servers:
+  my-server:
+    transport: "http"
+    url: "https://api.example.com/mcp"
+    auth:
+      type: "api_key"
+      header_name: "X-API-Key"     # optional, defaults to X-API-Key
+      value: ${MY_API_KEY}
 ```
 
 ### OAuth Client Credentials

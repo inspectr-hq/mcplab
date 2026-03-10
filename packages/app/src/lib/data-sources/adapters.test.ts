@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { fromCoreConfigYaml, fromCoreResultsJson, toCoreConfigYaml } from './adapters';
 import type { CoreResultsJson, ScenarioRunTraceRecord, WorkspaceConfigRecord } from './types';
+import type { EvalConfig } from '@/types/eval';
 
 function baseResults(): CoreResultsJson {
   return {
     metadata: {
       run_id: 'run-1',
       timestamp: '2026-02-08T10:00:00.000Z',
-      config_hash: 'abc123'
+      config_hash: 'abc123',
+      mcp_server_versions: {}
     },
     summary: {
       total_scenarios: 1,
@@ -177,6 +179,25 @@ describe('fromCoreResultsJson conversation mapping', () => {
     results.metadata.run_note = 'mcp-server v1.8.2 #staging';
     const mapped = fromCoreResultsJson(results, []);
     expect((mapped as { runNote?: string }).runNote).toBe('mcp-server v1.8.2 #staging');
+  });
+
+  it('maps MCP server versions from core results metadata', () => {
+    const results = baseResults();
+    results.metadata.mcp_server_versions = {
+      'weather-mcp': '1.8.2',
+      'inventory-mcp': null
+    };
+    const mapped = fromCoreResultsJson(results, []);
+    expect(mapped.mcpServerVersions).toEqual({
+      'weather-mcp': '1.8.2',
+      'inventory-mcp': null
+    });
+  });
+
+  it('maps historical runs without MCP server versions to an empty object', () => {
+    const results = baseResults();
+    const mapped = fromCoreResultsJson(results, []);
+    expect(mapped.mcpServerVersions).toEqual({});
   });
 
   it('handles missing record for a run without crashing', () => {
@@ -584,5 +605,207 @@ describe('config adapters round-trip', () => {
       client_id_env: 'SCOPED_CLIENT_ID',
       client_secret_env: 'SCOPED_CLIENT_SECRET'
     });
+  });
+
+  it('round-trips bearer token with direct value', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-direct',
+      name: 'bearer-direct-test',
+      path: '/tmp/bearer-direct.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-bd',
+      config: {
+        servers: [
+          {
+            id: 'my-server',
+            name: 'My Server',
+            transport: 'http',
+            url: 'http://localhost:3000/mcp',
+            auth: { type: 'bearer', token: 'my-secret-token-123' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'my-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('my-secret-token-123');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: 'my-secret-token-123' });
+  });
+
+  it('round-trips bearer token with ${VAR} env reference', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-env',
+      name: 'bearer-env-test',
+      path: '/tmp/bearer-env.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-be',
+      config: {
+        servers: [
+          {
+            id: 'env-server',
+            name: 'Env Server',
+            transport: 'http',
+            url: 'http://localhost:3001/mcp',
+            auth: { type: 'bearer', token: '${MY_TOKEN}' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'env-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('${MY_TOKEN}');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'env-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: '${MY_TOKEN}' });
+  });
+
+  it('converts legacy bearer env field to ${VAR} syntax and writes back as token', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-legacy',
+      name: 'bearer-legacy-test',
+      path: '/tmp/bearer-legacy.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-bl',
+      config: {
+        servers: [
+          {
+            id: 'legacy-server',
+            name: 'Legacy Server',
+            transport: 'http',
+            url: 'http://localhost:3002/mcp',
+            auth: { type: 'bearer', env: 'LEGACY_TOKEN' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'legacy-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('${LEGACY_TOKEN}');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'legacy-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: '${LEGACY_TOKEN}' });
+  });
+
+  it('round-trips api_key auth type', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-apikey',
+      name: 'apikey-test',
+      path: '/tmp/apikey.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-ak',
+      config: {
+        servers: [
+          {
+            id: 'apikey-server',
+            name: 'API Key Server',
+            transport: 'http',
+            url: 'http://localhost:3003/mcp',
+            auth: { type: 'api_key', header_name: 'X-Custom-Key', value: '${SECRET_KEY}' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'apikey-server');
+    expect(srv?.authType).toBe('api-key');
+    expect(srv?.authValue).toBe('${SECRET_KEY}');
+    expect(srv?.apiKeyHeaderName).toBe('X-Custom-Key');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'apikey-server');
+    expect(written?.auth).toEqual({
+      type: 'api_key',
+      header_name: 'X-Custom-Key',
+      value: '${SECRET_KEY}'
+    });
+  });
+
+  it('trims bearer and api_key values during serialization', () => {
+    const config: EvalConfig = {
+      id: 'cfg-trim',
+      name: 'cfg-trim',
+      description: '',
+      servers: [
+        {
+          id: 'bearer-server',
+          name: 'Bearer',
+          transport: 'streamable-http',
+          url: 'http://localhost:3000/mcp',
+          authType: 'bearer',
+          authValue: '  ${TOKEN}  '
+        },
+        {
+          id: 'api-server',
+          name: 'API',
+          transport: 'streamable-http',
+          url: 'http://localhost:3001/mcp',
+          authType: 'api-key',
+          authValue: '  key-value  ',
+          apiKeyHeaderName: '  X-Api-Key  '
+        }
+      ],
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-03-10T10:00:00.000Z',
+      updatedAt: '2026-03-10T10:00:00.000Z'
+    };
+
+    const roundTripped = toCoreConfigYaml(config);
+    const bearer = (roundTripped.servers as any[]).find((s: any) => s.id === 'bearer-server');
+    const api = (roundTripped.servers as any[]).find((s: any) => s.id === 'api-server');
+
+    expect(bearer?.auth).toEqual({ type: 'bearer', token: '${TOKEN}' });
+    expect(api?.auth).toEqual({ type: 'api_key', header_name: 'X-Api-Key', value: 'key-value' });
+  });
+
+  it('throws when bearer/api_key values are empty after trim', () => {
+    const config: EvalConfig = {
+      id: 'cfg-empty',
+      name: 'cfg-empty',
+      description: '',
+      servers: [
+        {
+          id: 'bearer-server',
+          name: 'Bearer',
+          transport: 'streamable-http',
+          url: 'http://localhost:3000/mcp',
+          authType: 'bearer',
+          authValue: '   '
+        }
+      ],
+      agents: [],
+      scenarios: [],
+      createdAt: '2026-03-10T10:00:00.000Z',
+      updatedAt: '2026-03-10T10:00:00.000Z'
+    };
+    expect(() => toCoreConfigYaml(config)).toThrow(/missing bearer token value/i);
+
+    config.servers = [
+      {
+        id: 'api-server',
+        name: 'API',
+        transport: 'streamable-http',
+        url: 'http://localhost:3001/mcp',
+        authType: 'api-key',
+        authValue: '   '
+      }
+    ];
+    expect(() => toCoreConfigYaml(config)).toThrow(/missing API key value/i);
   });
 });

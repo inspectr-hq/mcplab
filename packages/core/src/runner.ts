@@ -107,6 +107,7 @@ export async function runAll(
       type: 'mcp_connect_finished',
       serverCount: Object.keys(config.servers).length
     });
+    const mcpServerVersions = mcp.getServerVersions();
 
     const scenarioRuns: Array<{
       scenario_id: string;
@@ -308,6 +309,7 @@ export async function runAll(
       gitCommit: options.gitCommit,
       configHash: options.configHash,
       cliVersion: options.cliVersion,
+      mcpServerVersions,
       scenarioRuns
     });
 

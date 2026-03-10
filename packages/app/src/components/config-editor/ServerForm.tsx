@@ -41,6 +41,12 @@ export function ServerForm({
     if (!current) return;
     update(index, {
       authType: nextType,
+      ...(nextType !== "bearer" && nextType !== "api-key"
+        ? { authValue: undefined }
+        : {}),
+      ...(nextType !== "api-key"
+        ? { apiKeyHeaderName: undefined }
+        : { apiKeyHeaderName: current.apiKeyHeaderName || "X-API-Key" }),
       ...(nextType !== "oauth2"
         ? {
             oauthClientId: undefined,
@@ -127,13 +133,54 @@ export function ServerForm({
                   </SelectContent>
                 </Select>
               </div>
-              {srv.authType && srv.authType !== "none" && srv.authType !== "oauth2" && (
+              {srv.authType === "bearer" && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">{srv.authType === "bearer" ? "Token" : "API Key"}</Label>
-                  <Input type="password" value={srv.authValue || ""} onChange={(e) => update(i, { authValue: e.target.value })} disabled={readOnly} placeholder="••••••••" className="font-mono text-xs" />
+                  <Label className="text-xs">Token</Label>
+                  <Input
+                    value={srv.authValue || ""}
+                    onChange={(e) => update(i, { authValue: e.target.value })}
+                    disabled={readOnly}
+                    placeholder="${DATABRICKS_TOKEN}"
+                    className="font-mono text-xs"
+                  />
                 </div>
               )}
             </div>
+            {srv.authType === "bearer" && (
+              <p className="text-xs text-muted-foreground -mt-1">
+                Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a token directly.
+              </p>
+            )}
+            {srv.authType === "api-key" && (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="text-xs font-medium text-muted-foreground">API Key</div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Header Name</Label>
+                    <Input
+                      value={srv.apiKeyHeaderName || "X-API-Key"}
+                      onChange={(e) => update(i, { apiKeyHeaderName: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="X-API-Key"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Value</Label>
+                    <Input
+                      value={srv.authValue || ""}
+                      onChange={(e) => update(i, { authValue: e.target.value })}
+                      disabled={readOnly}
+                      placeholder="${MY_API_KEY}"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a value directly.
+                </p>
+              </div>
+            )}
             {srv.authType === "oauth2" && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>

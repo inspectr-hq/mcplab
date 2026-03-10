@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';

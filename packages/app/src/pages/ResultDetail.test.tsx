@@ -59,6 +59,7 @@ function makeResult(): EvalResult {
     totalRuns: 1,
     avgToolCalls: 1,
     avgLatency: 120,
+    mcpServerVersions: {},
     scenarios: [
       {
         scenarioId: 'scn-1',
@@ -162,5 +163,39 @@ describe('ResultDetail conversation toggle', () => {
     await waitFor(() => {
       expect(screen.getByText('No tool calls captured for this run.')).toBeInTheDocument();
     });
+  });
+
+  it('renders MCP server versions inline metadata when present and shows unknown for null', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = { api: '1.2.3', docs: null };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText(/MCP:/)).toBeInTheDocument();
+    expect(screen.getByText(/api: 1\.2\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/docs: unknown/)).toBeInTheDocument();
+  });
+
+  it('hides MCP inline metadata for historical runs without versions', async () => {
+    getResultMock.mockResolvedValue(makeResult());
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
   });
 });

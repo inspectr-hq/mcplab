@@ -17,6 +17,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import { validateServerAuthConfig } from "@/lib/server-auth-validation";
 import type { AgentConfig, AgentEntry, EvalConfig, Scenario, ScenarioEntry, ServerConfig, ServerEntry } from "@/types/eval";
 import type { SnapshotRecord } from "@/lib/data-sources/types";
 
@@ -251,6 +252,18 @@ const ConfigEditor = () => {
       }
       return entry;
     });
+    const invalidInlineServer = normalizedServerEntries
+      .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+      .map((entry) => ({ server: entry.server, error: validateServerAuthConfig(entry.server) }))
+      .find((entry) => Boolean(entry.error));
+    if (invalidInlineServer?.error) {
+      toast({
+        title: "Validation Error",
+        description: invalidInlineServer.error,
+        variant: "destructive"
+      });
+      return;
+    }
     const unnamedInline = normalizedScenarioEntries
       .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
       .some((entry) => !entry.scenario.name?.trim());
