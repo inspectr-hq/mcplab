@@ -150,6 +150,7 @@ export interface EvalResult {
   configHash: string;
   timestamp: string;
   runNote?: string;
+  mcpServerVersions: Record<string, string | null>;
   scenarios: ScenarioResult[];
   overallPassRate: number;
   totalScenarios: number;

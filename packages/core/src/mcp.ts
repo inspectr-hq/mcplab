@@ -19,6 +19,7 @@ export class McpClientManager {
   private scopedClientConnectPromises = new Map<string, Promise<Client>>();
   private servers = new Map<string, ServerConfig>();
   private authHeaders = new Map<string, Record<string, string>>();
+  private serverVersions = new Map<string, string | null>();
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
   private static readonly MAX_CONNECT_RETRIES = 3;
   private static readonly MAX_SCOPED_CLIENTS = 100;
@@ -33,6 +34,7 @@ export class McpClientManager {
     McpClientManager.onBeforeConnect?.();
     throwIfAborted(signal);
     this.servers = new Map(Object.entries(servers));
+    this.serverVersions.clear();
     for (const [name, server] of Object.entries(servers)) {
       throwIfAborted(signal);
       if (server.transport !== 'http') {
@@ -49,6 +51,7 @@ export class McpClientManager {
           signal
         );
         this.clients.set(name, client);
+        this.serverVersions.set(name, client.getServerVersion()?.version ?? null);
       } catch (err: any) {
         throw new Error(
           formatMcpError(
@@ -141,6 +144,7 @@ export class McpClientManager {
     this.scopedClientConnectPromises.clear();
     this.servers.clear();
     this.authHeaders.clear();
+    this.serverVersions.clear();
     await Promise.all(
       clients.map(async (client) => {
         try {
@@ -153,6 +157,10 @@ export class McpClientManager {
         }
       })
     );
+  }
+
+  getServerVersions(): Record<string, string | null> {
+    return Object.fromEntries(this.serverVersions.entries());
   }
 
   private async connectClient(

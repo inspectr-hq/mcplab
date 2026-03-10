@@ -305,6 +305,7 @@ export interface ResultsJson {
     git_commit?: string;
     config_hash: string;
     cli_version: string;
+    mcp_server_versions: Record<string, string | null>;
     snapshot_eval?: {
       applied: boolean;
       mode: 'warn' | 'fail_on_drift';

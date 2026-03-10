@@ -42,7 +42,7 @@ const RunEvaluation = () => {
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
-  const { agents: libraryAgents, scenarios: libraryScenarios } = useLibraries();
+  const { agents: libraryAgents, scenarios: libraryScenarios, reload: reloadLibraries } = useLibraries();
   const selectedConfig = configs.find((item) => item.id === configId);
   const requestedConfigId = searchParams.get("configId");
   const availableAgents = useMemo(() => {
@@ -238,20 +238,6 @@ const RunEvaluation = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId, done]);
 
-  useEffect(() => {
-    void reload();
-    void refreshQueue();
-    const handleFocus = () => {
-      void reload();
-      void refreshQueue();
-    };
-    window.addEventListener("focus", handleFocus);
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reload]);
-
   const clearActiveRunJob = () => {
     try {
       sessionStorage.removeItem(RUN_EVAL_ACTIVE_JOB_KEY);
@@ -277,6 +263,25 @@ const RunEvaluation = () => {
       // ignore fetch errors
     }
   };
+
+  const refreshConfigAndLibraries = () => {
+    void reload();
+    void reloadLibraries();
+  };
+
+  useEffect(() => {
+    refreshConfigAndLibraries();
+    void refreshQueue();
+    const handleFocus = () => {
+      refreshConfigAndLibraries();
+      void refreshQueue();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reload, reloadLibraries]);
 
   const removeQueuedJob = async (jobId: string) => {
     try {
@@ -429,7 +434,7 @@ const RunEvaluation = () => {
                   variant="outline"
                   size="icon"
                   className="h-10 w-10 shrink-0"
-                  onClick={() => void reload()}
+                  onClick={refreshConfigAndLibraries}
                   aria-label="Refresh configs"
                   title="Refresh configs"
                 >

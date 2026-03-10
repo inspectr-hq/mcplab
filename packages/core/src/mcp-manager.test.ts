@@ -40,6 +40,10 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
     async close(): Promise<void> {
       closeEvents.push(this.name);
     }
+
+    getServerVersion(): { name: string; version: string } {
+      return { name: this.name, version: 'test-version' };
+    }
   }
 }));
 

@@ -336,6 +336,7 @@ const ResultDetail = () => {
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
+  const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
   const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
   const failCount = result.totalRuns - passCount;
   const pieData = [
@@ -751,6 +752,19 @@ const ResultDetail = () => {
                 <p className="text-xs text-muted-foreground">
                   Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
                 </p>
+              )}
+              {mcpServerVersionEntries.length > 0 && (
+                <div className="mt-2 rounded-md border bg-muted/30 p-2 text-xs">
+                  <p className="font-medium text-foreground">MCP server versions</p>
+                  <div className="mt-1 space-y-0.5 text-muted-foreground">
+                    {mcpServerVersionEntries.map(([serverId, version]) => (
+                      <p key={serverId}>
+                        <span className="font-mono text-foreground">{serverId}</span>:{" "}
+                        <span>{version ?? "unknown"}</span>
+                      </p>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>

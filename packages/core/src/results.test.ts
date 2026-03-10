@@ -102,6 +102,7 @@ describe('aggregateResults', () => {
     expect(result.metadata.run_id).toBe('run-001');
     expect(result.metadata.config_hash).toBe('abc123');
     expect(result.metadata.cli_version).toBe('1.0.0');
+    expect(result.metadata.mcp_server_versions).toEqual({});
     expect(result.metadata.git_commit).toBeUndefined();
     expect(result.metadata.run_note).toBeUndefined();
   });
@@ -118,6 +119,15 @@ describe('aggregateResults', () => {
       scenarioRuns: []
     });
     expect(result.metadata.run_note).toBe('mcp-server v1.8.2 #staging');
+  });
+
+  it('includes mcp_server_versions when provided', () => {
+    const result = aggregateResults({
+      ...BASE,
+      mcpServerVersions: { api: '1.2.3', docs: null },
+      scenarioRuns: []
+    });
+    expect(result.metadata.mcp_server_versions).toEqual({ api: '1.2.3', docs: null });
   });
 
   it('computes avg_tool_calls_per_run', () => {
@@ -206,5 +216,20 @@ describe('renderSummaryMarkdown', () => {
   it('omits the Git commit line when no commit hash is provided', () => {
     const results = aggregateResults({ ...BASE, scenarioRuns: [] });
     expect(renderSummaryMarkdown(results)).not.toContain('Git commit');
+  });
+
+  it('includes MCP server versions section only when versions exist', () => {
+    const withVersions = aggregateResults({
+      ...BASE,
+      mcpServerVersions: { api: '1.2.3', docs: null },
+      scenarioRuns: []
+    });
+    const withoutVersions = aggregateResults({ ...BASE, scenarioRuns: [] });
+
+    const withVersionsMd = renderSummaryMarkdown(withVersions);
+    expect(withVersionsMd).toContain('MCP server versions:');
+    expect(withVersionsMd).toContain('- api: 1.2.3');
+    expect(withVersionsMd).toContain('- docs: unknown');
+    expect(renderSummaryMarkdown(withoutVersions)).not.toContain('MCP server versions:');
   });
 });

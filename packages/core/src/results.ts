@@ -7,6 +7,7 @@ export function aggregateResults(params: {
   gitCommit?: string;
   configHash: string;
   cliVersion: string;
+  mcpServerVersions?: Record<string, string | null>;
   scenarioRuns: Array<{
     scenario_id: string;
     scenario_name?: string;
@@ -103,7 +104,8 @@ export function aggregateResults(params: {
       run_note: params.runNote,
       git_commit: params.gitCommit,
       config_hash: params.configHash,
-      cli_version: params.cliVersion
+      cli_version: params.cliVersion,
+      mcp_server_versions: params.mcpServerVersions ?? {}
     },
     summary: {
       total_scenarios: totalScenarios,
@@ -130,6 +132,13 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   }
   lines.push(`Config hash: ${results.metadata.config_hash}`);
   lines.push(`CLI version: ${results.metadata.cli_version}`);
+  const mcpServerVersionEntries = Object.entries(results.metadata.mcp_server_versions ?? {});
+  if (mcpServerVersionEntries.length > 0) {
+    lines.push(`MCP server versions:`);
+    for (const [serverId, version] of mcpServerVersionEntries) {
+      lines.push(`- ${serverId}: ${version ?? 'unknown'}`);
+    }
+  }
   lines.push('');
   lines.push(`Total scenarios: ${results.summary.total_scenarios}`);
   lines.push(`Total runs: ${results.summary.total_runs}`);

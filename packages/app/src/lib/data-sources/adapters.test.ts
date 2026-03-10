@@ -7,7 +7,8 @@ function baseResults(): CoreResultsJson {
     metadata: {
       run_id: 'run-1',
       timestamp: '2026-02-08T10:00:00.000Z',
-      config_hash: 'abc123'
+      config_hash: 'abc123',
+      mcp_server_versions: {}
     },
     summary: {
       total_scenarios: 1,
@@ -177,6 +178,25 @@ describe('fromCoreResultsJson conversation mapping', () => {
     results.metadata.run_note = 'mcp-server v1.8.2 #staging';
     const mapped = fromCoreResultsJson(results, []);
     expect((mapped as { runNote?: string }).runNote).toBe('mcp-server v1.8.2 #staging');
+  });
+
+  it('maps MCP server versions from core results metadata', () => {
+    const results = baseResults();
+    results.metadata.mcp_server_versions = {
+      'weather-mcp': '1.8.2',
+      'inventory-mcp': null
+    };
+    const mapped = fromCoreResultsJson(results, []);
+    expect(mapped.mcpServerVersions).toEqual({
+      'weather-mcp': '1.8.2',
+      'inventory-mcp': null
+    });
+  });
+
+  it('maps historical runs without MCP server versions to an empty object', () => {
+    const results = baseResults();
+    const mapped = fromCoreResultsJson(results, []);
+    expect(mapped.mcpServerVersions).toEqual({});
   });
 
   it('handles missing record for a run without crashing', () => {

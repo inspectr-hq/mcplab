@@ -887,6 +887,7 @@ export function fromCoreResultsJson(
     configHash: results.metadata.config_hash,
     timestamp: results.metadata.timestamp,
     runNote: results.metadata.run_note,
+    mcpServerVersions: results.metadata.mcp_server_versions ?? {},
     scenarios,
     overallPassRate: results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
