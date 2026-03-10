@@ -13,6 +13,7 @@ export interface McpCallToolOptions {
 }
 
 export class McpClientManager {
+  static onBeforeConnect: (() => void) | undefined;
   private clients = new Map<string, Client>();
   private scopedClients = new Map<string, Client>();
   private scopedClientConnectPromises = new Map<string, Promise<Client>>();
@@ -29,6 +30,7 @@ export class McpClientManager {
   }
 
   async connectAll(servers: Record<string, ServerConfig>, signal?: AbortSignal): Promise<void> {
+    McpClientManager.onBeforeConnect?.();
     throwIfAborted(signal);
     this.servers = new Map(Object.entries(servers));
     for (const [name, server] of Object.entries(servers)) {

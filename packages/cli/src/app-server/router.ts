@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config();
 import {
   existsSync,
   mkdirSync,
@@ -155,6 +156,7 @@ function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
 }
 
 export async function startAppServer(options: AppServerOptions) {
+  McpClientManager.onBeforeConnect = () => dotenv.config({ override: true });
   const workspaceRoot = process.cwd();
   const settings: AppSettings = {
     workspaceRoot,
