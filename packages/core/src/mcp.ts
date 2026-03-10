@@ -297,6 +297,13 @@ export class McpClientManager {
       return headers;
     }
 
+    if (server.auth.type === 'api_key') {
+      const headerName = server.auth.header_name || 'X-API-Key';
+      const resolved = this.resolveValue(server.auth.value, 'API key');
+      headers[headerName] = resolved;
+      return headers;
+    }
+
     if (server.auth.type === 'oauth_client_credentials') {
       const cached = this.oauthCache.get(serverName);
       if (cached && cached.expiresAt > Date.now() + 30_000) {

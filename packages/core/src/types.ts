@@ -6,6 +6,12 @@ export interface ServerAuthBearer {
   token?: string;
 }
 
+export interface ServerAuthApiKey {
+  type: 'api_key';
+  header_name?: string;
+  value: string;
+}
+
 export interface ServerAuthOauthClientCredentials {
   type: 'oauth_client_credentials';
   token_url: string;
@@ -26,6 +32,7 @@ export interface ServerAuthOauthAuthorizationCode {
 
 export type ServerAuth =
   | ServerAuthBearer
+  | ServerAuthApiKey
   | ServerAuthOauthClientCredentials
   | ServerAuthOauthAuthorizationCode;
 
