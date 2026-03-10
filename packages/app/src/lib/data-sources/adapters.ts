@@ -48,6 +48,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
       entry.auth?.type === 'bearer'
         ? 'bearer'
+        : entry.auth?.type === 'api_key'
+        ? 'api-key'
         : entry.auth?.type === 'oauth_client_credentials'
         ? 'api-key'
         : entry.auth?.type === 'oauth_authorization_code'
@@ -59,7 +61,14 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       transport: 'streamable-http' as const,
       url: entry.url,
       authType,
-      authValue: entry.auth?.type === 'bearer' ? entry.auth.env : undefined,
+      authValue:
+        entry.auth?.type === 'bearer'
+          ? (entry.auth.token ?? (entry.auth.env ? `\${${entry.auth.env}}` : undefined))
+          : entry.auth?.type === 'api_key'
+          ? entry.auth.value
+          : undefined,
+      apiKeyHeaderName:
+        entry.auth?.type === 'api_key' ? entry.auth.header_name : undefined,
       oauthClientId:
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.client_id : undefined,
       oauthClientSecret:
@@ -163,6 +172,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                 const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
                   auth?.type === 'bearer'
                     ? 'bearer'
+                    : auth?.type === 'api_key'
+                    ? 'api-key'
                     : auth?.type === 'oauth_client_credentials'
                     ? 'api-key'
                     : auth?.type === 'oauth_authorization_code'
@@ -174,7 +185,14 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                   transport: 'streamable-http' as const,
                   url: String(entry.url || ''),
                   authType,
-                  authValue: auth?.type === 'bearer' ? String(auth.env || '') : undefined,
+                  authValue:
+                    auth?.type === 'bearer'
+                      ? (String(auth.token || '') || (auth.env ? `\${${auth.env}}` : undefined))
+                      : auth?.type === 'api_key'
+                      ? String(auth.value || '')
+                      : undefined,
+                  apiKeyHeaderName:
+                    auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
                   oauthClientId:
                     auth?.type === 'oauth_authorization_code'
                       ? String(auth.client_id || '')
@@ -319,7 +337,13 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
     const sourceId = server.id;
     const auth =
       server.authType === 'bearer'
-        ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+        ? { type: 'bearer' as const, token: server.authValue || '' }
+        : server.authType === 'api-key' && !server.oauthTokenUrl
+        ? {
+            type: 'api_key' as const,
+            ...(server.apiKeyHeaderName ? { header_name: server.apiKeyHeaderName } : {}),
+            value: server.authValue || ''
+          }
         : server.authType === 'api-key'
         ? {
             type: 'oauth_client_credentials' as const,
@@ -494,7 +518,13 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
         url: server.url || 'http://localhost:3000/mcp',
         auth:
           server.authType === 'bearer'
-            ? { type: 'bearer' as const, env: server.authValue || 'MCP_TOKEN' }
+            ? { type: 'bearer' as const, token: server.authValue || '' }
+            : server.authType === 'api-key' && !server.oauthTokenUrl
+            ? {
+                type: 'api_key' as const,
+                ...(server.apiKeyHeaderName ? { header_name: server.apiKeyHeaderName } : {}),
+                value: server.authValue || ''
+              }
             : server.authType === 'api-key'
             ? {
                 type: 'oauth_client_credentials' as const,

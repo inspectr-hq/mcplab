@@ -585,4 +585,133 @@ describe('config adapters round-trip', () => {
       client_secret_env: 'SCOPED_CLIENT_SECRET'
     });
   });
+
+  it('round-trips bearer token with direct value', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-direct',
+      name: 'bearer-direct-test',
+      path: '/tmp/bearer-direct.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-bd',
+      config: {
+        servers: [
+          {
+            id: 'my-server',
+            name: 'My Server',
+            transport: 'http',
+            url: 'http://localhost:3000/mcp',
+            auth: { type: 'bearer', token: 'my-secret-token-123' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'my-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('my-secret-token-123');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: 'my-secret-token-123' });
+  });
+
+  it('round-trips bearer token with ${VAR} env reference', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-env',
+      name: 'bearer-env-test',
+      path: '/tmp/bearer-env.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-be',
+      config: {
+        servers: [
+          {
+            id: 'env-server',
+            name: 'Env Server',
+            transport: 'http',
+            url: 'http://localhost:3001/mcp',
+            auth: { type: 'bearer', token: '${MY_TOKEN}' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'env-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('${MY_TOKEN}');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'env-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: '${MY_TOKEN}' });
+  });
+
+  it('converts legacy bearer env field to ${VAR} syntax and writes back as token', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-bearer-legacy',
+      name: 'bearer-legacy-test',
+      path: '/tmp/bearer-legacy.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-bl',
+      config: {
+        servers: [
+          {
+            id: 'legacy-server',
+            name: 'Legacy Server',
+            transport: 'http',
+            url: 'http://localhost:3002/mcp',
+            auth: { type: 'bearer', env: 'LEGACY_TOKEN' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'legacy-server');
+    expect(srv?.authType).toBe('bearer');
+    expect(srv?.authValue).toBe('${LEGACY_TOKEN}');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'legacy-server');
+    expect(written?.auth).toEqual({ type: 'bearer', token: '${LEGACY_TOKEN}' });
+  });
+
+  it('round-trips api_key auth type', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-apikey',
+      name: 'apikey-test',
+      path: '/tmp/apikey.yaml',
+      mtime: '2026-03-10T10:00:00.000Z',
+      hash: 'hash-ak',
+      config: {
+        servers: [
+          {
+            id: 'apikey-server',
+            name: 'API Key Server',
+            transport: 'http',
+            url: 'http://localhost:3003/mcp',
+            auth: { type: 'api_key', header_name: 'X-Custom-Key', value: '${SECRET_KEY}' }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const srv = uiConfig.servers.find((s) => s.id === 'apikey-server');
+    expect(srv?.authType).toBe('api-key');
+    expect(srv?.authValue).toBe('${SECRET_KEY}');
+    expect(srv?.apiKeyHeaderName).toBe('X-Custom-Key');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'apikey-server');
+    expect(written?.auth).toEqual({
+      type: 'api_key',
+      header_name: 'X-Custom-Key',
+      value: '${SECRET_KEY}'
+    });
+  });
 });
