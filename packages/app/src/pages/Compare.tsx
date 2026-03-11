@@ -150,7 +150,10 @@ const Compare = () => {
     return next;
   }, [filteredResults, sortBy, sortDir]);
 
-  const selectedRuns = sortedResults.filter((r) => selected.has(r.id));
+  const selectedRuns = useMemo(
+    () => sortedResults.filter((r) => selected.has(r.id)),
+    [sortedResults, selected]
+  );
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
@@ -158,15 +161,23 @@ const Compare = () => {
 
   const runScopeSummary = (r: EvalResult) => {
     const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
-    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
+    const agentIds = Array.from(new Set(r.scenarios.map((s) => s.agentId).filter(Boolean)));
     const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
     const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
     return {
       scenarioCount: scenarioIds.length,
-      agentCount: agentNames.length,
+      agentCount: agentIds.length,
       scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
     };
   };
+
+  const runScopesById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof runScopeSummary>>();
+    for (const run of sortedResults) {
+      map.set(run.id, runScopeSummary(run));
+    }
+    return map;
+  }, [sortedResults]);
 
   const defaultAgentsForRun = (run: EvalResult): string[] => {
     const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
@@ -180,7 +191,10 @@ const Compare = () => {
     setWithinRunScenarioFilter("all");
   };
 
-  const allScenarioIds = [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))];
+  const allScenarioIds = useMemo(
+    () => [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))],
+    [selectedRuns]
+  );
 
   const withinRun = useMemo(
     () => results.find((result) => result.id === withinRunId),
@@ -210,6 +224,11 @@ const Compare = () => {
     return Array.from(labels).sort((a, b) => a.localeCompare(b));
   }, [withinRun]);
 
+  const withinRunAgentIdsKey = useMemo(
+    () => withinRunAgentIds.join(","),
+    [withinRunAgentIds]
+  );
+
   useEffect(() => {
     if (mode !== "within-run") return;
     if (results.length === 0) return;
@@ -228,7 +247,11 @@ const Compare = () => {
       return Array.from(map.keys());
     })();
     const validAgentSet = new Set(nextAgentOptions);
-    let nextAgents = withinRunAgentIds.filter((id) => validAgentSet.has(id));
+    let nextAgents = withinRunAgentIdsKey
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id): id is string => Boolean(id))
+      .filter((id) => validAgentSet.has(id));
     if (nextAgents.length === 0 && nextAgentOptions.length > 0) {
       nextAgents = nextAgentOptions.slice(0, Math.min(2, nextAgentOptions.length));
     }
@@ -249,9 +272,9 @@ const Compare = () => {
         : withinRunScenarioFilter;
 
     if (nextRunId !== withinRunId) setWithinRunId(nextRunId);
-    if (nextAgents.join(",") !== withinRunAgentIds.join(",")) setWithinRunAgentIds(nextAgents);
+    if (nextAgents.join(",") !== withinRunAgentIdsKey) setWithinRunAgentIds(nextAgents);
     if (nextScenarioFilter !== withinRunScenarioFilter) setWithinRunScenarioFilter(nextScenarioFilter);
-  }, [mode, results, withinRunId, withinRunAgentIds, withinRunScenarioFilter]);
+  }, [mode, results, withinRunId, withinRunAgentIdsKey, withinRunScenarioFilter]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -274,7 +297,7 @@ const Compare = () => {
     if (currentString !== nextString) {
       setSearchParams(next, { replace: true });
     }
-  }, [mode, withinRunId, withinRunAgentIds, withinRunScenarioFilter, searchParams, setSearchParams]);
+  }, [mode, withinRunId, withinRunAgentIds, withinRunScenarioFilter, setSearchParams]);
 
   const withinRunScenarioRows = useMemo<WithinRunScenarioRow[]>(() => {
     if (!withinRun) return [];
@@ -535,7 +558,7 @@ const Compare = () => {
                     <TableCell className="font-mono text-xs">{r.id}</TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
                       {(() => {
-                        const scope = runScopeSummary(r);
+                        const scope = runScopesById.get(r.id)!;
                         return (
                           <div className="space-y-0.5">
                             <div>
@@ -550,10 +573,10 @@ const Compare = () => {
                     <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">
-                      {runScopeSummary(r).agentCount}
+                      {runScopesById.get(r.id)?.agentCount ?? 0}
                     </TableCell>
                     <TableCell className="text-right">
-                      {runScopeSummary(r).agentCount > 1 ? (
+                      {(runScopesById.get(r.id)?.agentCount ?? 0) > 1 ? (
                         <Button
                           type="button"
                           size="sm"

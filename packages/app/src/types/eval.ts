@@ -122,10 +122,19 @@ export interface ConversationItem {
   timestamp?: string;
 }
 
+export interface TokenUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}
+
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
   toolCalls: ToolCall[];
+  assistantTokenUsage?: TokenUsage | null;
+  toolTokenUsage?: TokenUsage | null;
+  toolTokenUsageByTool?: Record<string, TokenUsage>;
   finalAnswer: string;
   conversation: ConversationItem[];
   duration: number;
@@ -142,6 +151,9 @@ export interface ScenarioResult {
   passRate: number;
   avgToolCalls: number;
   avgDuration: number;
+  assistantTokenUsage?: TokenUsage | null;
+  toolTokenUsage?: TokenUsage | null;
+  toolTokenUsageByTool?: Record<string, TokenUsage>;
 }
 
 export interface EvalResult {
@@ -152,6 +164,8 @@ export interface EvalResult {
   runNote?: string;
   mcpServerVersions: Record<string, string | null>;
   scenarios: ScenarioResult[];
+  assistantTokenUsage?: TokenUsage | null;
+  toolTokenUsage?: TokenUsage | null;
   overallPassRate: number;
   totalScenarios: number;
   totalRuns: number;

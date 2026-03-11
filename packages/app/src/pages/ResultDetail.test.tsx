@@ -199,6 +199,32 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.queryByText(/MCP:/)).not.toBeInTheDocument();
   });
 
+  it('renders tool token totals and per-tool estimated breakdown', async () => {
+    const result = makeResult();
+    result.toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
+    result.scenarios[0].toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
+    result.scenarios[0].runs[0].toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
+    result.scenarios[0].runs[0].toolTokenUsageByTool = {
+      search_tags: { inputTokens: 10, outputTokens: 6, totalTokens: 16 }
+    };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getAllByText('Tool Tokens').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText('Tool token estimate')).toBeInTheDocument();
+    expect(screen.getByText('estimated')).toBeInTheDocument();
+    expect(screen.getAllByText('search_tags').length).toBeGreaterThan(0);
+  });
+
   it('filters displayed scenarios and metrics when agent query param is set', async () => {
     const result = makeResult();
     result.scenarios.push({
