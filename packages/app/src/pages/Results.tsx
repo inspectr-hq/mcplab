@@ -21,6 +21,35 @@ import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type RunScopeSummary = {
+  scenarioCount: number;
+  agentCount: number;
+  scenarioPreview: string;
+};
+
+function runScopeSummary(run: EvalResult): RunScopeSummary {
+  const scenarioLabels = Array.from(
+    new Map(
+      run.scenarios
+        .map((scenario) => {
+          const id = String(scenario.scenarioId ?? "").trim();
+          const name = String(scenario.scenarioName ?? "").trim();
+          if (!id && !name) return null;
+          return [id || name, name || id] as const;
+        })
+        .filter((entry): entry is readonly [string, string] => Boolean(entry))
+    ).values()
+  );
+  const agentNames = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentName).filter(Boolean)));
+  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
+  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
+  return {
+    scenarioCount: scenarioLabels.length,
+    agentCount: agentNames.length,
+    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+  };
+}
+
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
@@ -136,31 +165,8 @@ const Results = () => {
     return typeof total === "number" ? total.toLocaleString() : "n/a";
   };
 
-  const runScopeSummary = (r: EvalResult) => {
-    const scenarioLabels = Array.from(
-      new Map(
-        r.scenarios
-          .map((s) => {
-            const id = String(s.scenarioId ?? "").trim();
-            const name = String(s.scenarioName ?? "").trim();
-            if (!id && !name) return null;
-            return [id || name, name || id] as const;
-          })
-          .filter((entry): entry is readonly [string, string] => Boolean(entry))
-      ).values()
-    );
-    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
-    const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
-    const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
-    return {
-      scenarioCount: scenarioLabels.length,
-      agentCount: agentNames.length,
-      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
-    };
-  };
-
   const runScopesById = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof runScopeSummary>>();
+    const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
       map.set(run.id, runScopeSummary(run));
     }

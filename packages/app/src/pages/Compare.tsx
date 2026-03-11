@@ -32,6 +32,24 @@ type WithinRunScenarioRow = {
   byAgent: Record<string, ScenarioResult | undefined>;
 };
 
+type RunScopeSummary = {
+  scenarioCount: number;
+  agentCount: number;
+  scenarioPreview: string;
+};
+
+function runScopeSummary(run: EvalResult): RunScopeSummary {
+  const scenarioIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.scenarioId).filter(Boolean)));
+  const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
+  const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
+  const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+  return {
+    scenarioCount: scenarioIds.length,
+    agentCount: agentIds.length,
+    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+  };
+}
+
 const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -159,20 +177,8 @@ const Compare = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
-  const runScopeSummary = (r: EvalResult) => {
-    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
-    const agentIds = Array.from(new Set(r.scenarios.map((s) => s.agentId).filter(Boolean)));
-    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
-    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
-    return {
-      scenarioCount: scenarioIds.length,
-      agentCount: agentIds.length,
-      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
-    };
-  };
-
   const runScopesById = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof runScopeSummary>>();
+    const map = new Map<string, RunScopeSummary>();
     for (const run of sortedResults) {
       map.set(run.id, runScopeSummary(run));
     }
