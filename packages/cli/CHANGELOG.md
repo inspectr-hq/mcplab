@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 1.3.0
+
+### Minor Changes
+
+- feat: add within-run side-by-side agent comparison mode
+- feat: Show token consumption in results
+
 ## 1.2.0
 
 ### Minor Changes

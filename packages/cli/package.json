@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "MCPLab - Test and evaluate MCP servers with LLMs — run evals, compare agents and launch the MCPLab web app",
   "license": "MIT",
   "homepage": "https://mcplab.inspectr.dev",
