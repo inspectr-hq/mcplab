@@ -21,13 +21,42 @@ import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type RunScopeSummary = {
+  scenarioCount: number;
+  agentCount: number;
+  scenarioPreview: string;
+};
+
+function runScopeSummary(run: EvalResult): RunScopeSummary {
+  const scenarioLabels = Array.from(
+    new Map(
+      run.scenarios
+        .map((scenario) => {
+          const id = String(scenario.scenarioId ?? "").trim();
+          const name = String(scenario.scenarioName ?? "").trim();
+          if (!id && !name) return null;
+          return [id || name, name || id] as const;
+        })
+        .filter((entry): entry is readonly [string, string] => Boolean(entry))
+    ).values()
+  );
+  const agentNames = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentName).filter(Boolean)));
+  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
+  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
+  return {
+    scenarioCount: scenarioLabels.length,
+    agentCount: agentNames.length,
+    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+  };
+}
+
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const [deletingRun, setDeletingRun] = useState(false);
-  const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls">("timestamp");
+  const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls" | "toolTokens">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [scenarioFilter, setScenarioFilter] = useState("all");
 
@@ -105,7 +134,16 @@ const Results = () => {
   }, [results, scenarioFilter]);
 
   const sorted = useMemo(() => {
+    const compareNullableNumbers = (left: number | null, right: number | null) => {
+      if (left === null && right === null) return 0;
+      if (left === null) return 1;
+      if (right === null) return -1;
+      return sortDir === "asc" ? left - right : right - left;
+    };
     const next = [...filteredResults].sort((a, b) => {
+      if (sortBy === "toolTokens") {
+        return compareNullableNumbers(a.toolTokenUsage?.totalTokens ?? null, b.toolTokenUsage?.totalTokens ?? null);
+      }
       let cmp = 0;
       if (sortBy === "id") cmp = a.id.localeCompare(b.id);
       if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -122,28 +160,18 @@ const Results = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
-  const runScopeSummary = (r: EvalResult) => {
-    const scenarioLabels = Array.from(
-      new Map(
-        r.scenarios
-          .map((s) => {
-            const id = String(s.scenarioId ?? "").trim();
-            const name = String(s.scenarioName ?? "").trim();
-            if (!id && !name) return null;
-            return [id || name, name || id] as const;
-          })
-          .filter((entry): entry is readonly [string, string] => Boolean(entry))
-      ).values()
-    );
-    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
-    const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
-    const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
-    return {
-      scenarioCount: scenarioLabels.length,
-      agentCount: agentNames.length,
-      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
-    };
+  const formatToolTokenTotal = (result: EvalResult) => {
+    const total = result.toolTokenUsage?.totalTokens;
+    return typeof total === "number" ? total.toLocaleString() : "n/a";
   };
+
+  const runScopesById = useMemo(() => {
+    const map = new Map<string, RunScopeSummary>();
+    for (const run of sorted) {
+      map.set(run.id, runScopeSummary(run));
+    }
+    return map;
+  }, [sorted]);
 
   const handleDeleteRun = async (runId: string) => {
     setDeletingRun(true);
@@ -257,6 +285,12 @@ const Results = () => {
                     {sortIcon("avgToolCalls")}
                   </button>
                 </TableHead>
+                <TableHead>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("toolTokens")}>
+                    Tool Tokens
+                    {sortIcon("toolTokens")}
+                  </button>
+                </TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -272,7 +306,7 @@ const Results = () => {
                   </TableCell>
                   <TableCell className="text-[11px] text-muted-foreground">
                     {(() => {
-                      const scope = runScopeSummary(r);
+                      const scope = runScopesById.get(r.id)!;
                       return (
                         <div className="space-y-0.5">
                           <div>
@@ -291,6 +325,7 @@ const Results = () => {
                   <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                   <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                   <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
+                  <TableCell className="font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

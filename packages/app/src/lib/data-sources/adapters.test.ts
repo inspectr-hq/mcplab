@@ -200,6 +200,107 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect(mapped.mcpServerVersions).toEqual({});
   });
 
+  it('aggregates assistant and tool-attributed token usage from trace usage', () => {
+    const run0Record = makeRecord(0, [
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        usage: { input_tokens: 10, output_tokens: 6, total_tokens: 16 },
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: { q: 'TM5-BP2' },
+            server: 'my-server'
+          }
+        ]
+      },
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:04.000Z',
+        usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+        content: [{ type: 'text', text: 'Final answer one' }]
+      }
+    ]);
+    const run1Record = makeRecord(1, [
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:01:01.000Z',
+        usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-2',
+            name: 'search_tags',
+            input: { q: 'TM5-BP3' },
+            server: 'my-server'
+          }
+        ]
+      }
+    ]);
+
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record, run1Record]);
+    expect(mapped.toolTokenUsage).toEqual({ inputTokens: 18, outputTokens: 10, totalTokens: 28 });
+    expect(mapped.assistantTokenUsage).toEqual({
+      inputTokens: 21,
+      outputTokens: 12,
+      totalTokens: 33
+    });
+    expect(mapped.scenarios[0].toolTokenUsage).toEqual({
+      inputTokens: 18,
+      outputTokens: 10,
+      totalTokens: 28
+    });
+    expect(mapped.scenarios[0].runs[0].toolTokenUsage).toEqual({
+      inputTokens: 10,
+      outputTokens: 6,
+      totalTokens: 16
+    });
+    expect(mapped.scenarios[0].runs[0].toolTokenUsageByTool).toEqual({
+      search_tags: { inputTokens: 10, outputTokens: 6, totalTokens: 16 }
+    });
+  });
+
+  it('splits tool-attributed token usage deterministically across tool calls in order', () => {
+    const run0Record = makeRecord(0, [
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        usage: { input_tokens: 11, output_tokens: 5, total_tokens: 16 },
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: { q: 'alpha' },
+            server: 'my-server'
+          },
+          {
+            type: 'tool_use',
+            id: 'tu-2',
+            name: 'fetch_docs',
+            input: { id: 'beta' },
+            server: 'my-server'
+          }
+        ]
+      }
+    ]);
+
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
+    expect(mapped.scenarios[0].runs[0].toolTokenUsage).toEqual({
+      inputTokens: 11,
+      outputTokens: 5,
+      totalTokens: 16
+    });
+    expect(mapped.scenarios[0].runs[0].toolTokenUsageByTool).toEqual({
+      fetch_docs: { inputTokens: 5, outputTokens: 2, totalTokens: 8 },
+      search_tags: { inputTokens: 6, outputTokens: 3, totalTokens: 8 }
+    });
+    expect(mapped.scenarios[0].runs[1].toolTokenUsage).toBeNull();
+    expect(mapped.scenarios[0].runs[1].toolTokenUsageByTool).toEqual({});
+  });
+
   it('handles missing record for a run without crashing', () => {
     const run0Record = makeRecord(0, [
       {

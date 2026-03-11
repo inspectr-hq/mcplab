@@ -3,11 +3,20 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const resultUrl = (runId: string, configId?: string | null) => {
+const resultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
   const params = new URLSearchParams();
   if (configId) params.set("configId", configId);
+  if (agentId) params.set("agent", agentId);
   params.set("embed", "1");
   return `/results/${encodeURIComponent(runId)}?${params.toString()}`;
+};
+
+const openResultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
+  const params = new URLSearchParams();
+  if (configId) params.set("configId", configId);
+  if (agentId) params.set("agent", agentId);
+  const query = params.toString();
+  return `/results/${encodeURIComponent(runId)}${query ? `?${query}` : ""}`;
 };
 
 const CompareResultDetails = () => {
@@ -16,6 +25,11 @@ const CompareResultDetails = () => {
   const right = searchParams.get("right") ?? "";
   const leftConfig = searchParams.get("leftConfig");
   const rightConfig = searchParams.get("rightConfig");
+  const leftAgent = searchParams.get("leftAgent");
+  const rightAgent = searchParams.get("rightAgent");
+
+  const leftLabel = leftAgent ? `${left} · ${leftAgent}` : left;
+  const rightLabel = rightAgent ? `${right} · ${rightAgent}` : right;
 
   if (!left || !right) {
     return (
@@ -41,7 +55,9 @@ const CompareResultDetails = () => {
         <div>
           <h1 className="text-2xl font-bold">Full Result Compare</h1>
           <p className="text-sm text-muted-foreground">
-            Side-by-side Result Detail views for deep inspection.
+            {leftAgent || rightAgent
+              ? "Side-by-side Result Detail views for deep inspection, filtered by selected agents."
+              : "Side-by-side Result Detail views for deep inspection."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -52,13 +68,13 @@ const CompareResultDetails = () => {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href={`/results/${encodeURIComponent(left)}${leftConfig ? `?configId=${encodeURIComponent(leftConfig)}` : ""}`} target="_blank" rel="noreferrer">
+            <a href={openResultUrl(left, leftConfig, leftAgent)} target="_blank" rel="noreferrer">
               Open Left
               <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href={`/results/${encodeURIComponent(right)}${rightConfig ? `?configId=${encodeURIComponent(rightConfig)}` : ""}`} target="_blank" rel="noreferrer">
+            <a href={openResultUrl(right, rightConfig, rightAgent)} target="_blank" rel="noreferrer">
               Open Right
               <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
             </a>
@@ -69,12 +85,12 @@ const CompareResultDetails = () => {
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="py-3">
-            <CardTitle className="text-sm font-mono">{left}</CardTitle>
+            <CardTitle className="text-sm font-mono">{leftLabel}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <iframe
-              title={`Result ${left}`}
-              src={resultUrl(left, leftConfig)}
+              title={`Result ${leftLabel}`}
+              src={resultUrl(left, leftConfig, leftAgent)}
               className="h-[calc(100vh-15rem)] w-full border-0"
             />
           </CardContent>
@@ -82,12 +98,12 @@ const CompareResultDetails = () => {
 
         <Card className="overflow-hidden">
           <CardHeader className="py-3">
-            <CardTitle className="text-sm font-mono">{right}</CardTitle>
+            <CardTitle className="text-sm font-mono">{rightLabel}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <iframe
-              title={`Result ${right}`}
-              src={resultUrl(right, rightConfig)}
+              title={`Result ${rightLabel}`}
+              src={resultUrl(right, rightConfig, rightAgent)}
               className="h-[calc(100vh-15rem)] w-full border-0"
             />
           </CardContent>

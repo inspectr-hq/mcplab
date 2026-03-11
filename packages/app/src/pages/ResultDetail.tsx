@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
+import { sumTokenUsages } from "@/lib/token-usage";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -70,6 +71,10 @@ function defaultResultAssistantReportPath(runId: string): string {
 function formatCompactOneDecimal(value: number): string {
   const fixed = value.toFixed(1);
   return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+}
+
+function formatTokenCount(value: number | null | undefined): string {
+  return typeof value === "number" ? value.toLocaleString() : "n/a";
 }
 
 const ResultDetail = () => {
@@ -258,6 +263,7 @@ const ResultDetail = () => {
   }, [assistantOpen, contextPanelTab, selectedReferenceReportPath, source]);
 
   const requestedConfigId = searchParams.get("configId") ?? "";
+  const requestedAgentId = (searchParams.get("agent") ?? "").trim();
   const activeConfig = useMemo(() => {
     const byRequested = requestedConfigId ? configs.find((c) => c.id === requestedConfigId) : undefined;
     if (byRequested) return byRequested;
@@ -333,6 +339,71 @@ const ResultDetail = () => {
     el.style.height = `${Math.max(40, next)}px`;
   }, [assistantInput, assistantOpen]);
 
+  const {
+    filteredScenarios,
+    filteredTotalRuns,
+    filteredPassCount,
+    displayPassRate,
+    displayAvgToolCalls,
+    displayAvgLatency,
+    displayToolTokenUsage
+  } = useMemo(() => {
+    if (!result) {
+      return {
+        filteredScenarios: [] as EvalResult["scenarios"],
+        filteredTotalRuns: 0,
+        filteredPassCount: 0,
+        displayPassRate: 0,
+        displayAvgToolCalls: 0,
+        displayAvgLatency: 0,
+        displayToolTokenUsage: null
+      };
+    }
+    const scenarios = requestedAgentId
+      ? result.scenarios.filter(
+          (scenario) =>
+            scenario.agentId === requestedAgentId || scenario.agentName === requestedAgentId
+        )
+      : result.scenarios;
+    const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+    const passCount = scenarios.reduce(
+      (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
+      0
+    );
+    const totalToolCalls = scenarios.reduce(
+      (sum, scenario) =>
+        sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
+      0
+    );
+    const totalDuration = scenarios.reduce(
+      (sum, scenario) => sum + scenario.runs.reduce((runsSum, run) => runsSum + run.duration, 0),
+      0
+    );
+    return {
+      filteredScenarios: scenarios,
+      filteredTotalRuns: totalRuns,
+      filteredPassCount: passCount,
+      displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+      displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
+      displayAvgLatency: totalRuns === 0 ? 0 : Math.round(totalDuration / totalRuns),
+      displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
+    };
+  }, [result, requestedAgentId]);
+
+  const toolData = useMemo(() => {
+    const toolFreq: Record<string, number> = {};
+    filteredScenarios.forEach((sc) =>
+      sc.runs.forEach((r) =>
+        r.toolCalls.forEach((tc) => {
+          toolFreq[tc.name] = (toolFreq[tc.name] || 0) + 1;
+        })
+      )
+    );
+    return Object.entries(toolFreq)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredScenarios]);
+
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
@@ -340,19 +411,12 @@ const ResultDetail = () => {
   const mcpVersionSummary = mcpServerVersionEntries
     .map(([serverId, version]) => `${serverId}: ${version ?? "unknown"}`)
     .join(", ");
-  const passCount = result.scenarios.reduce((s, sc) => s + sc.runs.filter((r) => r.passed).length, 0);
-  const failCount = result.totalRuns - passCount;
+  const passCount = filteredPassCount;
+  const failCount = Math.max(0, filteredTotalRuns - passCount);
   const pieData = [
     { name: "Pass", value: passCount, color: "hsl(152, 69%, 40%)" },
     { name: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
   ];
-
-  // Tool frequency
-  const toolFreq: Record<string, number> = {};
-  result.scenarios.forEach((sc) => sc.runs.forEach((r) => r.toolCalls.forEach((tc) => {
-    toolFreq[tc.name] = (toolFreq[tc.name] || 0) + 1;
-  })));
-  const toolData = Object.entries(toolFreq).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -741,7 +805,7 @@ const ResultDetail = () => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
-                <PassRateBadge rate={result.overallPassRate} />
+                <PassRateBadge rate={displayPassRate} />
                 {snapshotsUiEnabled && result.snapshotEval?.applied && (
                   <Badge variant="outline" className="text-xs">
                     Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
@@ -750,7 +814,7 @@ const ResultDetail = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 {new Date(result.timestamp).toLocaleString()}
-                {" "}· Config hash: <span className="font-mono">{result.configHash}</span>
+                {" "}·{requestedAgentId ? ` Agent: ${requestedAgentId} ·` : ""} Config hash: <span className="font-mono">{result.configHash}</span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
@@ -907,13 +971,13 @@ const ResultDetail = () => {
                   size="sm"
                   className="h-8"
                   onClick={() => void acceptAsNewBaseline()}
-                  disabled={acceptingBaseline || result.overallPassRate !== 1}
+                  disabled={acceptingBaseline || displayPassRate !== 1}
                 >
                   {acceptingBaseline ? "Accepting..." : "Accept as New Baseline"}
                 </Button>
               </div>
             </div>
-            {result.overallPassRate !== 1 && (
+            {displayPassRate !== 1 && (
               <p className="text-xs text-muted-foreground">
                 Baseline updates require a fully passing run (same rule as snapshot creation).
               </p>
@@ -922,12 +986,13 @@ const ResultDetail = () => {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard title="Scenarios" value={result.totalScenarios} icon={Layers} />
-        <StatCard title="Total Runs" value={result.totalRuns} icon={Activity} />
-        <StatCard title="Pass Rate" value={`${Math.round(result.overallPassRate * 100)}%`} icon={BarChart3} />
-        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(result.avgToolCalls)} icon={CheckCircle2} />
-        <StatCard title="Avg Latency" value={`${result.avgLatency}ms`} icon={Timer} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
+        <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
+        <StatCard title="Pass Rate" value={`${Math.round(displayPassRate * 100)}%`} icon={BarChart3} />
+        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(displayAvgToolCalls)} icon={CheckCircle2} />
+        <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
+        <StatCard title="Tool Tokens" value={formatTokenCount(displayToolTokenUsage?.totalTokens)} icon={Wrench} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -1025,11 +1090,12 @@ const ResultDetail = () => {
                 <TableHead>Runs</TableHead>
                 <TableHead>Pass Rate</TableHead>
                 <TableHead>Tool Calls</TableHead>
+                <TableHead>Tool Tokens</TableHead>
                 <TableHead>Snapshot</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.scenarios.map((sc) => {
+              {filteredScenarios.map((sc) => {
                 const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                 const scenarioLabel = sc.scenarioName || sc.scenarioId;
                 return (
@@ -1043,6 +1109,7 @@ const ResultDetail = () => {
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                         <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
                         <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
+                        <TableCell className="font-mono text-sm">{formatTokenCount(sc.toolTokenUsage?.totalTokens)}</TableCell>
                         <TableCell>
                           {(() => {
                             const row = comparisonByScenario.get(sc.scenarioId);
@@ -1064,13 +1131,13 @@ const ResultDetail = () => {
                     </CollapsibleTrigger>
                     <CollapsibleContent asChild>
                       <tr>
-                        <td colSpan={7} className="p-0">
+                        <td colSpan={8} className="p-0">
                           <div className="bg-muted/30 p-4 space-y-2">
                             <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold">Scenario details</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {scenarioLabel} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate
+                                  {scenarioLabel} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate · {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool tokens
                                 </p>
                               </div>
                               <Button
@@ -1122,6 +1189,8 @@ const ResultDetail = () => {
                                     <span className="font-mono text-xs text-muted-foreground">Run #{run.runIndex + 1}</span>
                                     <span className="text-xs text-muted-foreground">·</span>
                                     <span className="text-xs text-muted-foreground">{run.duration}ms</span>
+                                    <span className="text-xs text-muted-foreground">·</span>
+                                    <span className="text-xs text-muted-foreground">{formatTokenCount(run.toolTokenUsage?.totalTokens)} tool tokens</span>
                                     {!run.passed && (
                                       <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
                                         Failed
@@ -1287,14 +1356,40 @@ const ResultDetail = () => {
                                         {run.toolCalls.length === 0 ? (
                                           <p className="text-xs text-muted-foreground">No tool calls captured for this run.</p>
                                         ) : (
-                                          <div className="flex flex-wrap gap-1">
-                                            {run.toolCalls.map((tc, i) => (
-                                              <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
-                                                <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                                {tc.name}
-                                                <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
-                                              </Badge>
-                                            ))}
+                                          <div className="space-y-2">
+                                            <div className="flex flex-wrap gap-1">
+                                              {run.toolCalls.map((tc, i) => (
+                                                <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
+                                                  <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                                  {tc.name}
+                                                  <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                            <div className="rounded-md border bg-background p-2">
+                                              <div className="mb-1.5 flex items-center justify-between gap-2">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  Tool token estimate
+                                                </p>
+                                                <Badge variant="outline" className="h-5 text-[10px]">
+                                                  estimated
+                                                </Badge>
+                                              </div>
+                                              {Object.keys(run.toolTokenUsageByTool ?? {}).length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">n/a</p>
+                                              ) : (
+                                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                                  {Object.entries(run.toolTokenUsageByTool ?? {}).map(([toolName, usage]) => (
+                                                    <div key={toolName} className="rounded border bg-muted/30 px-2 py-1.5 text-xs">
+                                                      <div className="font-mono text-[11px]">{toolName}</div>
+                                                      <div className="text-muted-foreground">
+                                                        total: {formatTokenCount(usage.totalTokens)} · in: {formatTokenCount(usage.inputTokens)} · out: {formatTokenCount(usage.outputTokens)}
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
                                         )}
                                       </CollapsibleContent>

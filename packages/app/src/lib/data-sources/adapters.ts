@@ -7,8 +7,10 @@ import type {
   ServerEntry,
   ScenarioEntry,
   ScenarioRun,
+  TokenUsage,
   ToolCall
 } from '@/types/eval';
+import { addTokenUsage, createTokenAccumulator, toTokenUsage, type TokenAccumulator } from '@/lib/token-usage';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -851,6 +853,97 @@ function stringifySafe(value: unknown): string {
   }
 }
 
+function addTraceUsage(
+  accumulator: TokenAccumulator,
+  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number }
+): void {
+  if (!usage) return;
+  if (typeof usage.input_tokens === 'number') {
+    accumulator.input += usage.input_tokens;
+    accumulator.hasInput = true;
+  }
+  if (typeof usage.output_tokens === 'number') {
+    accumulator.output += usage.output_tokens;
+    accumulator.hasOutput = true;
+  }
+  if (typeof usage.total_tokens === 'number') {
+    accumulator.total += usage.total_tokens;
+    accumulator.hasTotal = true;
+  }
+}
+
+function splitInteger(value: number | undefined, parts: number): Array<number | undefined> {
+  if (typeof value !== 'number' || parts <= 0) return new Array(parts).fill(undefined);
+  const base = Math.floor(value / parts);
+  const remainder = value % parts;
+  return Array.from({ length: parts }, (_, index) => base + (index < remainder ? 1 : 0));
+}
+
+function estimateRunTokenUsage(record?: ScenarioRunTraceRecord): {
+  assistant: TokenUsage | null;
+  tool: TokenUsage | null;
+  perTool: Record<string, TokenUsage>;
+} {
+  const assistantAcc = createTokenAccumulator();
+  const toolAcc = createTokenAccumulator();
+  const perToolAcc = new Map<string, TokenAccumulator>();
+
+  if (!record) {
+    return { assistant: null, tool: null, perTool: {} };
+  }
+
+  for (const message of record.messages ?? []) {
+    if (message.role !== 'assistant') continue;
+    addTraceUsage(assistantAcc, message.usage);
+    const toolUses = message.content.filter(
+      (block): block is Extract<TraceMessageContentBlock, { type: 'tool_use' }> =>
+        block.type === 'tool_use'
+    );
+    if (toolUses.length === 0) continue;
+
+    addTraceUsage(toolAcc, message.usage);
+
+    const inputShares = splitInteger(message.usage?.input_tokens, toolUses.length);
+    const outputShares = splitInteger(message.usage?.output_tokens, toolUses.length);
+    const totalShares = splitInteger(message.usage?.total_tokens, toolUses.length);
+
+    for (let index = 0; index < toolUses.length; index += 1) {
+      const toolName = toolUses[index]!.name;
+      const entry = perToolAcc.get(toolName) ?? createTokenAccumulator();
+      const input = inputShares[index];
+      const output = outputShares[index];
+      const total = totalShares[index];
+      if (typeof input === 'number') {
+        entry.input += input;
+        entry.hasInput = true;
+      }
+      if (typeof output === 'number') {
+        entry.output += output;
+        entry.hasOutput = true;
+      }
+      if (typeof total === 'number') {
+        entry.total += total;
+        entry.hasTotal = true;
+      }
+      perToolAcc.set(toolName, entry);
+    }
+  }
+
+  const perTool: Record<string, TokenUsage> = {};
+  for (const [toolName, usage] of Array.from(perToolAcc.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )) {
+    const normalized = toTokenUsage(usage);
+    if (normalized) perTool[toolName] = normalized;
+  }
+
+  return {
+    assistant: toTokenUsage(assistantAcc),
+    tool: toTokenUsage(toolAcc),
+    perTool
+  };
+}
+
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceRecords: ScenarioRunTraceRecord[] = []
@@ -871,10 +964,14 @@ export function fromCoreResultsJson(
     }
     const runs: ScenarioRun[] = scenario.runs.map((run, index) => {
       const record = runRecordByIndex.get(run.run_index) ?? runRecords[index];
+      const tokenUsage = estimateRunTokenUsage(record);
       return {
         runIndex: run.run_index,
         passed: run.pass,
         toolCalls: toToolCallsFromRecord(run, record),
+        assistantTokenUsage: tokenUsage.assistant,
+        toolTokenUsage: tokenUsage.tool,
+        toolTokenUsageByTool: tokenUsage.perTool,
         finalAnswer: run.final_text,
         conversation: toConversationItemsFromRecord(record),
         duration: run.tool_durations_ms.reduce((sum, value) => sum + value, 0),
@@ -884,6 +981,26 @@ export function fromCoreResultsJson(
         failureReasons: run.failures
       };
     });
+
+    const scenarioAssistantUsageAcc = createTokenAccumulator();
+    const scenarioToolUsageAcc = createTokenAccumulator();
+    const scenarioPerToolUsageAcc = new Map<string, TokenAccumulator>();
+    for (const run of runs) {
+      addTokenUsage(scenarioAssistantUsageAcc, run.assistantTokenUsage);
+      addTokenUsage(scenarioToolUsageAcc, run.toolTokenUsage);
+      for (const [toolName, usage] of Object.entries(run.toolTokenUsageByTool ?? {})) {
+        const entry = scenarioPerToolUsageAcc.get(toolName) ?? createTokenAccumulator();
+        addTokenUsage(entry, usage);
+        scenarioPerToolUsageAcc.set(toolName, entry);
+      }
+    }
+    const scenarioPerToolUsage: Record<string, TokenUsage> = {};
+    for (const [toolName, usage] of Array.from(scenarioPerToolUsageAcc.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    )) {
+      const normalized = toTokenUsage(usage);
+      if (normalized) scenarioPerToolUsage[toolName] = normalized;
+    }
 
     const avgDuration =
       runs.length === 0
@@ -902,9 +1019,19 @@ export function fromCoreResultsJson(
       runs,
       passRate: scenario.pass_rate,
       avgToolCalls,
-      avgDuration
+      avgDuration,
+      assistantTokenUsage: toTokenUsage(scenarioAssistantUsageAcc),
+      toolTokenUsage: toTokenUsage(scenarioToolUsageAcc),
+      toolTokenUsageByTool: scenarioPerToolUsage
     };
   });
+
+  const runAssistantUsageAcc = createTokenAccumulator();
+  const runToolUsageAcc = createTokenAccumulator();
+  for (const scenario of scenarios) {
+    addTokenUsage(runAssistantUsageAcc, scenario.assistantTokenUsage);
+    addTokenUsage(runToolUsageAcc, scenario.toolTokenUsage);
+  }
 
   return {
     id: results.metadata.run_id,
@@ -914,6 +1041,8 @@ export function fromCoreResultsJson(
     runNote: results.metadata.run_note,
     mcpServerVersions: results.metadata.mcp_server_versions ?? {},
     scenarios,
+    assistantTokenUsage: toTokenUsage(runAssistantUsageAcc),
+    toolTokenUsage: toTokenUsage(runToolUsageAcc),
     overallPassRate: results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
