@@ -7,6 +7,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   loadConfig,
+  hashConfig,
   selectScenarios,
   runAll,
   renderSummaryMarkdown,
@@ -21,6 +22,7 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
+import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
@@ -72,7 +74,12 @@ program
               defaultEvalsDir: 'mcplab/evals',
               cwd: process.cwd(),
               promptAgentSelection: needsAgentPrompt,
-              loadConfigForValidation: (path: string) => loadConfig(path)
+              loadConfigForValidation: (path: string) => {
+                const loaded = loadConfig(path);
+                const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
+                loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
+                return loaded;
+              }
             })
           : undefined;
 
@@ -84,7 +91,11 @@ program
         interactiveSelection
       });
 
-      let { config, hash, warnings } = loadConfig(resolve(resolvedOptions.config));
+      const loaded = loadConfig(resolve(resolvedOptions.config));
+      const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
+      loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
+      loaded.hash = hashConfig(loaded.config);
+      let { config, hash, warnings } = loaded;
       for (const warning of warnings) {
         console.log(kleur.yellow(`⚠ ${warning}`));
       }
