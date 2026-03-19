@@ -73,6 +73,7 @@ const Navbar = () => {
               key={link.label}
               href={link.href}
               target={link.external ? "_blank" : undefined}
+              rel={link.external ? "noopener noreferrer" : undefined}
               className="block py-3 text-sm text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
             >
