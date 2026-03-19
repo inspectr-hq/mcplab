@@ -41,9 +41,11 @@ import '../index.css';
       src="https://cdn.inspectr.dev/script.js"
     ></script>
     <script is:inline>
-      const theme = localStorage.getItem('theme') ??
-        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      document.documentElement.classList.toggle('dark', theme === 'dark');
+      const stored = localStorage.getItem('theme') ?? 'system';
+      const isDark =
+        stored === 'dark' ||
+        (stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', isDark);
     </script>
   </head>
   <body class="bg-background text-foreground">
