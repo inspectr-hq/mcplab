@@ -117,26 +117,16 @@ const ProductPreview = () => {
   return (
     <section id="product" className="section-preview py-20 border-t border-border/50">
       <div className="container mx-auto px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-14"
-        >
+        <div className="animate-fade-in-up text-center mb-14">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
             See It in <span className="text-primary">Action</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
             Rich visual reports, detailed traces, and interactive dashboards.
           </p>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="max-w-5xl mx-auto"
-        >
+        <div className="animate-fade-in-up-slow max-w-5xl mx-auto">
           {/* Carousel */}
           <div
             className="relative"
@@ -213,17 +203,15 @@ const ProductPreview = () => {
               />
             ))}
           </div>
-        </motion.div>
+        </div>
 
         {/* Capabilities */}
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-20">
           {capabilities.map((cap, i) => (
-            <motion.div
+            <div
               key={cap.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
+              className="animate-fade-in-up"
+              style={{ animationDelay: `${i * 0.1}s` }}
             >
               <h3 className="font-display font-semibold text-lg mb-4 text-primary">{cap.title}</h3>
               <ul className="space-y-2.5">
@@ -234,7 +222,7 @@ const ProductPreview = () => {
                   </li>
                 ))}
               </ul>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>

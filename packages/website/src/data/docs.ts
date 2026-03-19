@@ -229,34 +229,6 @@ scenarios:
       },
     ],
   },
-  {
-    slug: 'development',
-    label: 'Development',
-    href: '/docs/development',
-    description: 'Work on MCPLab locally.',
-    keywords: ['development', 'build', 'tests', 'workspace'],
-    seoTitle: 'Development',
-    sections: [
-      {
-        id: 'workspace',
-        title: 'Workspace Layout',
-        bullets: [
-          'packages/cli contains the command-line entrypoint.',
-          'packages/core contains the evaluation engine and configuration parsing.',
-          'packages/website contains this static Astro site.',
-        ],
-      },
-      {
-        id: 'local-dev',
-        title: 'Run Locally',
-        codeBlocks: [
-          { title: 'website', language: 'bash', code: 'npm run dev -w @inspectr/mcplab-website' },
-          { title: 'build', language: 'bash', code: 'npm run build -w @inspectr/mcplab-website' },
-          { title: 'tests', language: 'bash', code: 'npm run test -w @inspectr/mcplab-website' },
-        ],
-      },
-    ],
-  },
 ] satisfies DocPage[];
 
 export const docsPages = pageIndex;
@@ -268,7 +240,7 @@ export const docsNavSections = [
   },
   {
     title: 'Guides',
-    items: [pageIndex[4], pageIndex[5], pageIndex[6]],
+    items: [pageIndex[4], pageIndex[5]],
   },
 ] as const;
 

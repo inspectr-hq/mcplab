@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Copy, Check, FlaskConical, BarChart3, Microscope, Sparkles } from "lucide-react";
 
 const CopyButton = ({ text }: { text: string }) => {
@@ -49,11 +48,7 @@ const QuickStart = () => {
       <div className="container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
           {/* Quick Start */}
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-          >
+          <div className="animate-fade-in-left">
             <h2 className="font-display text-3xl font-bold mb-2">
               <span className="text-primary">Quick</span> Start
             </h2>
@@ -87,14 +82,10 @@ const QuickStart = () => {
                 <span className="text-foreground">npx @inspectr/mcplab run -c eval.yaml</span>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* AI-Powered Tools */}
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-          >
+          <div className="animate-fade-in-right">
             <h2 className="font-display text-3xl font-bold mb-2 flex items-center gap-2">
               <Sparkles className="w-7 h-7 text-secondary" />
               <span><span className="text-secondary">AI-Powered</span> Tools</span>
@@ -135,7 +126,7 @@ const QuickStart = () => {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

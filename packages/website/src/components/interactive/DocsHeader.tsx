@@ -3,6 +3,7 @@ import { Menu, X, Search, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DocsSearch from '@/components/docs/DocsSearch';
 import type { DocNavItem } from '@/data/docs';
+import SiteBrand from '@/components/shared/SiteBrand';
 
 interface DocsHeaderProps {
   pages: DocNavItem[];
@@ -32,9 +33,7 @@ const DocsHeader = ({ pages }: DocsHeaderProps) => {
             <Button variant='ghost' size='icon' className='lg:hidden' onClick={toggleSidebar} aria-label='Toggle sidebar'>
               {sidebarOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
             </Button>
-            <a href='/' className='flex items-center gap-2 text-lg font-semibold tracking-tight'>
-              <span>MCPLab</span>
-            </a>
+            <SiteBrand href='/' compact showInspectr={false} />
             <span className='hidden sm:inline text-sm text-muted-foreground'>/ docs</span>
           </div>
 

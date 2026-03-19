@@ -139,3 +139,64 @@
 .glow-text {
   text-shadow: 0 0 40px hsl(25 95% 53% / 0.5);
 }
+
+/* Prism syntax highlighting */
+code[class*='language-'],
+pre[class*='language-'] {
+  color: hsl(var(--foreground));
+  text-shadow: none;
+  background: transparent;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.75rem;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: hsl(215 18% 58%);
+}
+
+.token.punctuation {
+  color: hsl(215 20% 62%);
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+  color: hsl(210 92% 73%);
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin {
+  color: hsl(140 58% 63%);
+}
+
+.token.operator,
+.token.entity,
+.token.url {
+  color: hsl(30 92% 68%);
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: hsl(280 76% 72%);
+}
+
+.token.function,
+.token.class-name {
+  color: hsl(340 84% 72%);
+}
+
+.token.important,
+.token.bold {
+  font-weight: 700;
+}

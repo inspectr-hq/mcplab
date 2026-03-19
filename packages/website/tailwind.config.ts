@@ -90,6 +90,14 @@ export default {
         'fade-in-up': {
           from: { opacity: '0', transform: 'translateY(24px)' },
           to: { opacity: '1', transform: 'translateY(0)' }
+        },
+        'fade-in-left': {
+          from: { opacity: '0', transform: 'translateX(-30px)' },
+          to: { opacity: '1', transform: 'translateX(0)' }
+        },
+        'fade-in-right': {
+          from: { opacity: '0', transform: 'translateX(30px)' },
+          to: { opacity: '1', transform: 'translateX(0)' }
         }
       },
       animation: {
@@ -97,7 +105,9 @@ export default {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
         'fade-in-up': 'fade-in-up 0.6s ease-out forwards',
-        'fade-in-up-slow': 'fade-in-up 0.8s ease-out 0.3s both'
+        'fade-in-up-slow': 'fade-in-up 0.8s ease-out 0.3s both',
+        'fade-in-left': 'fade-in-left 0.6s ease-out forwards',
+        'fade-in-right': 'fade-in-right 0.6s ease-out forwards'
       }
     }
   },

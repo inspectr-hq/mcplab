@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Github } from "lucide-react";
-import IconInspectr from "@/components/ui/IconInspectr";
+import SiteBrand from "@/components/shared/SiteBrand";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -25,10 +25,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto w-full flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <div className="flex items-center gap-1.5">
-          <a href="#" className="flex items-center gap-2.5">
-            <IconInspectr width={28} height={28} from="#7c2d12" to="#f97316" />
-            <span className="font-display text-xl font-bold text-primary">MCPLab</span>
-          </a>
+          <SiteBrand href="#" compact showInspectr={false} />
           <span
             className="text-muted-foreground text-[10px] transition-all duration-300"
             style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}

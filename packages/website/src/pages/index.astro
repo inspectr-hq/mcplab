@@ -1,11 +1,11 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Navbar from '@/components/landing/Navbar';
-import Hero from '@/components/landing/Hero';
+import Hero from '@/components/landing/Hero.astro';
 import ProblemSection from '@/components/landing/ProblemSection';
 import FeaturesSection from '@/components/landing/FeaturesSection';
-import ProductPreview from '@/components/landing/ProductPreview';
-import QuickStart from '@/components/landing/QuickStart';
+import ProductPreview from '@/components/landing/ProductPreview.astro';
+import QuickStart from '@/components/landing/QuickStart.astro';
 import DocsOverview from '@/components/landing/DocsOverview.astro';
 import Footer from '@/components/landing/Footer';
 ---
@@ -16,8 +16,8 @@ import Footer from '@/components/landing/Footer';
     <Hero />
     <ProblemSection />
     <FeaturesSection />
-    <ProductPreview client:visible />
-    <QuickStart client:visible />
+    <ProductPreview />
+    <QuickStart />
     <DocsOverview />
     <Footer />
   </div>
