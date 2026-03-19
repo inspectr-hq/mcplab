@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import DocsSearch from '@/components/docs/DocsSearch';
 import type { DocNavItem } from '@/data/docs';
 import SiteBrand from '@/components/shared/SiteBrand';
+import ThemeToggle from '@/components/landing/ThemeToggle';
 
 interface DocsHeaderProps {
   pages: DocNavItem[];
@@ -53,6 +54,7 @@ const DocsHeader = ({ pages }: DocsHeaderProps) => {
             <Button variant='ghost' size='icon' className='sm:hidden' onClick={() => setSearchOpen(true)} aria-label='Search docs'>
               <Search className='h-4 w-4' />
             </Button>
+            <ThemeToggle />
             <a href='https://github.com/inspectr-hq/mcplab' target='_blank' rel='noreferrer noopener'>
               <Button variant='ghost' size='icon' aria-label='GitHub'>
                 <Github className='h-4 w-4' />
