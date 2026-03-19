@@ -2,8 +2,6 @@
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Navbar from '@/components/landing/Navbar';
 import Hero from '@/components/landing/Hero.astro';
-import ProblemSection from '@/components/landing/ProblemSection';
-import FeaturesSection from '@/components/landing/FeaturesSection';
 import ProductPreview from '@/components/landing/ProductPreview.astro';
 import QuickStart from '@/components/landing/QuickStart.astro';
 import DocsOverview from '@/components/landing/DocsOverview.astro';
@@ -14,8 +12,6 @@ import Footer from '@/components/landing/Footer';
   <div class="min-h-screen bg-background text-foreground scroll-smooth">
     <Navbar client:load />
     <Hero />
-    <ProblemSection />
-    <FeaturesSection />
     <ProductPreview />
     <QuickStart />
     <DocsOverview />

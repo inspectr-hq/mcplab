@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import type { CarouselApi } from "@/components/ui/carousel";
 
@@ -12,7 +13,8 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogIndex, setDialogIndex] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -33,12 +35,20 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
   const scrollPrev = useCallback(() => api?.scrollPrev(), [api]);
   const scrollNext = useCallback(() => api?.scrollNext(), [api]);
 
-  useEffect(() => {
-    if (!lightbox) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setLightbox(null); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [lightbox]);
+  const openDialog = useCallback((index: number) => {
+    setDialogIndex(index);
+    setDialogOpen(true);
+  }, []);
+
+  const showPreviousDialogSlide = useCallback(() => {
+    setDialogIndex((currentIndex) => (currentIndex - 1 + slides.length) % slides.length);
+  }, [slides.length]);
+
+  const showNextDialogSlide = useCallback(() => {
+    setDialogIndex((currentIndex) => (currentIndex + 1) % slides.length);
+  }, [slides.length]);
+
+  const activeDialogSlide = slides[dialogIndex];
 
   return (
     <>
@@ -49,11 +59,11 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
       >
         <Carousel setApi={setApi} opts={{ loop: true, align: "center" }} className="w-full">
           <CarouselContent>
-            {slides.map((slide) => (
+            {slides.map((slide, index) => (
               <CarouselItem key={slide.src}>
                 <div
                   className="rounded-xl border border-border bg-card overflow-hidden glow-primary cursor-zoom-in"
-                  onClick={() => setLightbox(slide.src)}
+                  onClick={() => openDialog(index)}
                 >
                   <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border">
                     <div className="flex gap-1.5">
@@ -114,39 +124,52 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
         ))}
       </div>
 
-      <AnimatePresence>
-        {lightbox && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-            onClick={() => setLightbox(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.92, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="relative max-w-6xl w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setLightbox(null)}
-                className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors"
-                aria-label="Close"
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="w-[min(96vw,1400px)] max-w-[1400px] border-none bg-background p-4 shadow-[0_30px_100px_rgba(0,0,0,0.45)] sm:rounded-2xl md:p-6">
+          <DialogTitle className="pr-10 text-left text-lg md:text-xl">
+            {activeDialogSlide.label}
+          </DialogTitle>
+          <DialogDescription className="text-left text-sm leading-6 md:text-base">
+            {activeDialogSlide.caption}
+          </DialogDescription>
+
+          <div className="mt-2 overflow-hidden rounded-2xl border bg-muted/20">
+            <img
+              src={activeDialogSlide.src}
+              alt={activeDialogSlide.label}
+              className="max-h-[75vh] w-full object-contain"
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm text-muted-foreground">
+              {dialogIndex + 1} / {slides.length}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={showPreviousDialogSlide}
+                aria-label="Show previous screenshot"
               >
-                <X className="h-6 w-6" />
-              </button>
-              <img
-                src={lightbox}
-                alt="Full size screenshot"
-                className="w-full rounded-xl shadow-2xl"
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={showNextDialogSlide}
+                aria-label="Show next screenshot"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
