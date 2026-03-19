@@ -2,7 +2,7 @@
 
 ## Goal
 
-Restructure the MCPLab public website documentation from 6 loosely organized pages into a 14-page two-track structure that serves both new users discovering the tool and power users returning for reference. CLI and App UI are treated as equal first-class paths.
+Restructure the MCPLab public website documentation from 6 loosely organized pages into a 15-page two-track structure that serves both new users discovering the tool and power users returning for reference. CLI and App UI are treated as equal first-class paths.
 
 ## Audience
 
@@ -23,8 +23,9 @@ All existing content from the 6 current pages is redistributed into the new stru
 
 ### Added (currently undocumented features)
 - `mcplab report` command
-- Compare agents (App UI page)
-- Markdown reports (App UI page, covered under Reading Results)
+- `--interactive` flag on `mcplab run` — interactive scenario/run selection
+- Compare agents (section within App / Reading Results, not a standalone page)
+- Markdown reports (section within App / Reading Results, not a standalone page)
 - Bearer token auth — direct value and env var reference
 - Library management (App UI)
 - Complete Configuration Schema reference page
@@ -112,6 +113,7 @@ Reference
 - Variance runs: `-n <count>`
 - Annotating runs: `--run-note "text"`
 - Custom output directory: `--runs-dir`
+- Interactive mode: `--interactive` — prompts for scenario and run selection at the terminal
 - Exit codes (0 = all pass, non-zero = failures — relevant for CI)
 
 **Source:** Current Usage page (run section). Expands `--agents` and `--agents-all` options which are currently underdocumented.
@@ -127,8 +129,8 @@ Reference
 - `agents` block: `provider`, `model`, `temperature`; supported providers (anthropic, openai, azure)
 - `scenarios` block: `id`, `agent`, `servers`, `prompt`, `eval` (tool_constraints, response_assertions)
 - Assertion types: `required_tools`, `forbidden_tools`, regex assertions, contains assertions
-- Reusable refs: `$ref` syntax for servers and agents
-- Library files: `agents.yaml`, `servers.yaml` — how they're loaded and referenced
+- Reusable refs: `$ref` syntax for inline server/agent definitions within the same config file
+- Library refs: referencing agents and servers defined in the library files (`$ref` to library items); links to App / Library for managing library content via the UI
 
 **Source:** Current Configuration page, extended with bearer token auth and library refs.
 
@@ -168,6 +170,7 @@ Reference
 **Content:**
 - `mcplab app` command
 - Key options: `--port`, `--open`, `--evals-dir`, `--runs-dir`, `--libraries-dir`
+- Default directory behaviour when flags are omitted (current working directory for evals, `~/.mcplab/runs` for runs)
 - What opens in the browser (dashboard overview)
 - Brief tour of the sidebar navigation
 
@@ -231,11 +234,10 @@ Reference
 **Purpose:** Explain the reusable library system for agents, servers, and scenarios.
 
 **Content:**
-- What the library is: shared `agents.yaml` and `servers.yaml` files loaded at startup
-- `--libraries-dir` option on `mcplab app`
+- What the library is: shared `agents.yaml` and `servers.yaml` files loaded at startup via `--libraries-dir`
 - How library agents and servers appear in the App (available in Run Evaluation agent picker)
-- How to reference library items in eval configs (`$ref`)
 - Managing library files via the App UI
+- Note: the `$ref` YAML syntax for referencing library items in eval configs is documented in CLI / Configuration; this page covers UI-based management only
 
 **Source:** Currently undocumented.
 
@@ -246,7 +248,7 @@ Reference
 
 **Content:**
 - Full schema table: field name, type, required/optional, description, example
-- Covers: `servers.*`, `agents.*`, `scenarios.*`, all assertion types, auth options
+- Covers: `servers.*` (including `transport`, `url`, `token` for bearer auth — direct value and env var), `agents.*` (provider, model, temperature), `scenarios.*`, all assertion types (`required_tools`, `forbidden_tools`, regex, contains)
 - Cross-links to the Configuration guide for narrative context
 
 **Source:** Synthesized from CLI source and existing Configuration page.
@@ -274,5 +276,30 @@ Pages are written in Astro SSG with a `docs.ts` data file that drives sidebar na
 ### README deduplication
 `packages/cli/README.md` is currently identical to the root `README.md` (830 lines). After the website docs are updated, `packages/cli/README.md` should be trimmed to a short npm-focused summary with a link to the website docs. This is out of scope for this restructure but should follow as a cleanup task.
 
-### Existing URL preservation
-Current doc URLs (`/docs`, `/docs/installation`, `/docs/quick-start`, `/docs/configuration`, `/docs/usage`, `/docs/app-mode`) should either be kept or redirected to avoid broken external links. The new structure reuses `/docs/installation` and `/docs/quick-start` unchanged. The others need redirects or slug remapping.
+### URL slugs
+
+| Page | Slug |
+|------|------|
+| Getting Started / Overview | `/docs` |
+| Getting Started / Installation | `/docs/installation` *(unchanged)* |
+| Getting Started / Quick Start | `/docs/quick-start` *(unchanged)* |
+| CLI / Running Evaluations | `/docs/cli/running-evaluations` |
+| CLI / Configuration | `/docs/cli/configuration` |
+| CLI / Reports & Output | `/docs/cli/reports-output` |
+| CLI / CI/CD | `/docs/cli/ci-cd` |
+| App / Starting the App | `/docs/app/getting-started` |
+| App / Running Evaluations | `/docs/app/running-evaluations` |
+| App / Reading Results | `/docs/app/reading-results` |
+| App / AI Assistants | `/docs/app/ai-assistants` |
+| App / Tool Analysis | `/docs/app/tool-analysis` |
+| App / Library | `/docs/app/library` |
+| Reference / Configuration Schema | `/docs/reference/configuration` |
+| Reference / Environment Variables | `/docs/reference/environment-variables` |
+
+**Redirects required** for old URLs that are moving:
+
+| Old URL | Redirects to |
+|---------|-------------|
+| `/docs/configuration` | `/docs/cli/configuration` |
+| `/docs/usage` | `/docs/cli/running-evaluations` |
+| `/docs/app-mode` | `/docs/app/getting-started` |
