@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Github } from "lucide-react";
 import SiteBrand from "@/components/shared/SiteBrand";
+import ThemeToggle from "@/components/landing/ThemeToggle";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -52,6 +53,7 @@ const Navbar = () => {
               {link.label}
             </a>
           ))}
+          <ThemeToggle />
           <Button size="sm" className="font-semibold" asChild>
             <a href="#quickstart">Get Started</a>
           </Button>
@@ -77,6 +79,10 @@ const Navbar = () => {
               {link.label}
             </a>
           ))}
+          <div className="flex items-center justify-between py-3 border-t border-border/50 mt-1">
+            <span className="text-sm text-muted-foreground">Appearance</span>
+            <ThemeToggle />
+          </div>
           <Button size="sm" className="w-full mt-2 font-semibold" asChild>
             <a href="#quickstart">Get Started</a>
           </Button>
