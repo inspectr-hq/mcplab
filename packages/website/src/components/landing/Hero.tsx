@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Github, ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
 import screenshotDashboard from "@/assets/screenshot-dashboard.png";
 import IconInspectr from "@/components/ui/IconInspectr";
 
@@ -11,12 +10,7 @@ const Hero = () => {
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="container mx-auto px-4 relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center max-w-4xl mx-auto"
-        >
+        <div className="animate-fade-in-up text-center max-w-4xl mx-auto">
           <div className="flex items-center justify-center gap-3 mb-8">
             <IconInspectr width={44} height={44} from="#7c2d12" to="#f97316" />
             <span className="font-display text-3xl font-bold text-primary">MCPLab</span>
@@ -43,15 +37,10 @@ const Hero = () => {
               </a>
             </Button>
           </div>
-        </motion.div>
+        </div>
 
         {/* Screenshot in browser frame */}
-        <motion.div
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-          className="mt-16 max-w-5xl mx-auto"
-        >
+        <div className="animate-fade-in-up-slow mt-16 max-w-5xl mx-auto">
           <div className="rounded-xl border border-border bg-card overflow-hidden glow-primary">
             {/* Browser chrome */}
             <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b border-border">
@@ -73,7 +62,7 @@ const Hero = () => {
               loading="lazy"
             />
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

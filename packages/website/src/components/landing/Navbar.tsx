@@ -16,6 +16,7 @@ const Navbar = () => {
   const links = [
     { label: "Features", href: "#features" },
     { label: "Quick Start", href: "#quickstart" },
+    { label: "Docs", href: "/docs" },
     { label: "GitHub", href: "https://github.com/inspectr-hq/mcplab", external: true },
   ];
 

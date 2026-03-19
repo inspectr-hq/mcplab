@@ -1,0 +1,29 @@
+---
+import CodeBlock from '@/components/docs/CodeBlock';
+import type { DocSection } from '@/data/docs';
+
+interface Props {
+  sections: DocSection[];
+}
+
+const { sections } = Astro.props;
+---
+
+{sections.map((section) => (
+  <section id={section.id} class="scroll-mt-24">
+    <h2 class="mt-10 mb-4 text-2xl font-semibold tracking-tight">{section.title}</h2>
+    {section.paragraphs?.map((paragraph) => (
+      <p class="mb-4 text-muted-foreground leading-7">{paragraph}</p>
+    ))}
+    {section.bullets ? (
+      <ul class="mb-6 space-y-2 pl-5 text-muted-foreground">
+        {section.bullets.map((bullet) => (
+          <li class="list-disc leading-7">{bullet}</li>
+        ))}
+      </ul>
+    ) : null}
+    {section.codeBlocks?.map((block) => (
+      <CodeBlock client:idle code={block.code} title={block.title} language={block.language} />
+    ))}
+  </section>
+))}

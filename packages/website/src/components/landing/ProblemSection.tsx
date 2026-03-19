@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { AlertTriangle, GitCompare, TrendingDown } from "lucide-react";
 
 const problems = [
@@ -23,36 +22,28 @@ const ProblemSection = () => {
   return (
     <section className="section-problem py-20 border-t border-border/50">
       <div className="container mx-auto px-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-14"
-        >
+        <div className="animate-fade-in-up text-center mb-14">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-4">
             Why Test Your MCP Servers?
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
             Building MCP tools is only half the battle. Ensuring they work reliably with LLMs is the real challenge.
           </p>
-        </motion.div>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {problems.map((p, i) => (
-            <motion.div
+            <div
               key={p.question}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="rounded-xl border border-border bg-card p-6 hover:border-primary/30 transition-colors"
+              className="animate-fade-in-up rounded-xl border border-border bg-card p-6 hover:border-primary/30 transition-colors"
+              style={{ animationDelay: `${i * 0.1}s` }}
             >
               <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center mb-4">
                 <p.icon className="w-5 h-5 text-secondary" />
               </div>
               <h3 className="font-display text-lg font-semibold mb-2">{p.question}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{p.description}</p>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>

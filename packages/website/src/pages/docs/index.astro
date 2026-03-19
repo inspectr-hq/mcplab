@@ -1,0 +1,20 @@
+---
+import DocsLayout from '@/layouts/DocsLayout.astro';
+import { docsPages } from '@/data/docs';
+---
+
+<DocsLayout title='Documentation' description='Browse the MCPLab documentation.' currentPath='/docs'>
+  <h1 class="font-display text-4xl font-bold tracking-tight">Documentation</h1>
+  <p class="mt-4 text-lg text-muted-foreground">
+    Start with installation and the quick start guide, then move into configuration, usage, and app mode.
+  </p>
+
+  <div class="mt-10 grid gap-4 sm:grid-cols-2">
+    {docsPages.filter((page) => page.slug !== 'overview').map((page) => (
+      <a href={page.href} class="rounded-xl border border-border bg-card p-5 transition-colors hover:bg-accent/40">
+        <div class="text-sm font-semibold text-primary">{page.label}</div>
+        <div class="mt-2 text-sm text-muted-foreground">{page.description}</div>
+      </a>
+    ))}
+  </div>
+</DocsLayout>

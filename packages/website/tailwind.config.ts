@@ -1,12 +1,13 @@
 import type { Config } from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 export default {
   darkMode: ['class'],
   content: [
-    './pages/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-    './app/**/*.{ts,tsx}',
-    './src/**/*.{ts,tsx}'
+    './pages/**/*.{astro,ts,tsx}',
+    './components/**/*.{astro,ts,tsx}',
+    './app/**/*.{astro,ts,tsx}',
+    './src/**/*.{astro,ts,tsx,md,mdx}'
   ],
   prefix: '',
   theme: {
@@ -85,14 +86,20 @@ export default {
         'pulse-glow': {
           '0%, 100%': { opacity: '0.4' },
           '50%': { opacity: '1' }
+        },
+        'fade-in-up': {
+          from: { opacity: '0', transform: 'translateY(24px)' },
+          to: { opacity: '1', transform: 'translateY(0)' }
         }
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        'pulse-glow': 'pulse-glow 3s ease-in-out infinite'
+        'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+        'fade-in-up': 'fade-in-up 0.6s ease-out forwards',
+        'fade-in-up-slow': 'fade-in-up 0.8s ease-out 0.3s both'
       }
     }
   },
-  plugins: [require('tailwindcss-animate')]
+  plugins: [tailwindcssAnimate]
 } satisfies Config;
