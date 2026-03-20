@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path';
 import {
   McpClientManager,
   loadConfig,
+  hashConfig,
   runAll,
   renderSummaryMarkdown,
   type EvalConfig,
@@ -56,6 +57,21 @@ type RunJob = {
   abortController: AbortController;
   runParams: RunParams;
 };
+
+export function mergeLibraryAgentsIntoConfig(
+  config: EvalConfig,
+  libraryAgents: EvalConfig['agents']
+): EvalConfig {
+  return { ...config, agents: { ...libraryAgents, ...config.agents } };
+}
+
+export function applyLibraryAgents(
+  loaded: { config: EvalConfig; hash: string },
+  libraryAgents: EvalConfig['agents']
+): void {
+  loaded.config = mergeLibraryAgentsIntoConfig(loaded.config, libraryAgents);
+  loaded.hash = hashConfig(loaded.config);
+}
 
 type RunRequestBody = {
   configPath?: unknown;
@@ -579,6 +595,7 @@ async function executeRunJob(
     loadSnapshot,
     compareRunToSnapshot,
     applySnapshotPolicyToRunResult,
+    readLibraries,
     pkgVersion
   } = deps;
   const {
@@ -597,6 +614,8 @@ async function executeRunJob(
       payload: { message: `Loading MCP Evaluation config: ${configPath}` }
     });
     const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+    const { agents: libraryAgents } = readLibraries(settings.librariesDir);
+    applyLibraryAgents(loaded, libraryAgents);
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),

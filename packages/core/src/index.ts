@@ -1,6 +1,7 @@
 export * from './types.js';
 export {
   loadConfig,
+  hashConfig,
   selectScenarios,
   expandConfigForAgents,
   normalizeSourceConfig,

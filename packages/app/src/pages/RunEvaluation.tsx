@@ -67,6 +67,9 @@ const RunEvaluation = () => {
         byName.set(fromLibrary.id, fromLibrary);
       }
     }
+    for (const agent of libraryAgents) {
+      if (!byName.has(agent.id)) byName.set(agent.id, agent);
+    }
     return Array.from(byName.values());
   }, [selectedConfig, libraryAgents]);
   const availableScenarios = useMemo(() => {
@@ -516,7 +519,7 @@ const RunEvaluation = () => {
               </div>
               {availableAgents.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No agents available in this config. Add inline agents or agent references.
+                  No agents available. Add agents to your workspace library, or define inline agents in this config.
                 </p>
               )}
             </div>

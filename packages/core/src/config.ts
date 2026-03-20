@@ -28,6 +28,7 @@ export function loadConfig(
   sourceConfig: SourceEvalConfig;
   hash: string;
   raw: string;
+  bundleRoot: string;
   warnings: string[];
 } {
   const raw = readFileSync(path, 'utf8');
@@ -38,6 +39,7 @@ export function loadConfig(
   }
   const { config: normalizedSource, warnings: normalizeWarnings } =
     normalizeSourceConfig(sourceConfig);
+  const bundleRoot = options?.bundleRoot ? resolve(options.bundleRoot) : detectBundleRoot(path);
   const { config, warnings: resolveWarnings } = resolveReferences(
     normalizedSource,
     path,
@@ -49,6 +51,7 @@ export function loadConfig(
     sourceConfig: normalizedSource,
     hash,
     raw,
+    bundleRoot,
     warnings: [...normalizeWarnings, ...resolveWarnings]
   };
 }
@@ -707,6 +710,10 @@ function detectBundleRoot(configPath: string): string {
 
 function stableStringify(value: unknown): string {
   return JSON.stringify(sortDeep(value));
+}
+
+export function hashConfig(config: EvalConfig): string {
+  return createHash('sha256').update(stableStringify(config)).digest('hex');
 }
 
 function sortDeep<T>(value: T): T {
