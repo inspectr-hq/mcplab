@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.4.0
+
+### Minor Changes
+
+- feat: allow eval runs to select all workspace agents
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.3.0
+  - @inspectr/mcplab-mcp-server@1.1.1
+  - @inspectr/mcplab-reporting@1.1.2
+
 ## 1.3.0
 
 ### Minor Changes

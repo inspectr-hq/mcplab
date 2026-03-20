@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab-core",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Core evaluation engine for MCPLab — agent adapters, MCP client, scenario runner, and result types",
   "license": "MIT",
   "repository": {
