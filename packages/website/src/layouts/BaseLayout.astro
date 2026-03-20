@@ -1,0 +1,54 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'MCPLab | Evaluate MCP Servers with Confidence',
+  description = 'Test how well LLM agents use your MCP tools, compare different models, and track quality over time.',
+} = Astro.props;
+
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+import '../index.css';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="author" content="Inspectr" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href={canonicalURL} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MCPLab" />
+    <meta property="og:image" content="/screenshots/dashboard.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="/screenshots/dashboard.png" />
+    <script
+      async
+      defer
+      data-domain="mcplab.inspectr.dev"
+      src="https://cdn.inspectr.dev/script.js"
+    ></script>
+    <script is:inline>
+      const stored = localStorage.getItem('theme') ?? 'system';
+      const isDark =
+        stored === 'dark' ||
+        (stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', isDark);
+    </script>
+  </head>
+  <body class="bg-background text-foreground">
+    <slot />
+  </body>
+</html>

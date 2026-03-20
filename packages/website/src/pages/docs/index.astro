@@ -1,0 +1,34 @@
+---
+import DocsLayout from '@/layouts/DocsLayout.astro';
+import { docsNavSections } from '@/data/docs';
+---
+
+<DocsLayout title='Documentation' description='Browse the MCPLab documentation.' currentPath='/docs'>
+  <h1 class="font-display text-4xl font-bold tracking-tight">Documentation</h1>
+  <p class="mt-4 text-lg text-muted-foreground">
+    Start with Getting Started, then follow the CLI track for terminal-based workflows or the App track for the web UI.
+  </p>
+
+  <section id="what-it-does" class="mt-8 rounded-xl border border-border bg-card p-6">
+    <h2 class="text-base font-semibold">What MCPLab Does</h2>
+    <p class="mt-2 text-sm text-muted-foreground leading-7">
+      MCPLab is a testing and evaluation framework for MCP servers. Write scenarios that describe tasks an LLM agent should complete using your MCP tools, run them against one or more models, and assert on the results — which tools were called, in what order, and what the response contained.
+    </p>
+  </section>
+
+  <div class="mt-10 space-y-10">
+    {docsNavSections.map((section) => (
+      <div>
+        <h2 id={section.title.toLowerCase().replace(/\s+/g, '-')} class="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">{section.title}</h2>
+        <div class="grid gap-3 sm:grid-cols-2">
+          {section.items.map((item) => (
+            <a href={item.href} class="rounded-xl border border-border bg-card p-5 transition-colors hover:bg-accent/40">
+              <div class="text-sm font-semibold text-primary">{item.label}</div>
+              <div class="mt-1.5 text-sm text-muted-foreground">{item.description}</div>
+            </a>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+</DocsLayout>

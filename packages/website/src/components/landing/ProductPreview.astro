@@ -1,0 +1,62 @@
+---
+import ScreenshotCarousel from './ScreenshotCarousel';
+
+const slides = [
+  { src: "/screenshots/dashboard.png", label: "Dashboard", caption: "Track pass rates, latency trends and recent runs at a glance." },
+  { src: "/screenshots/run-evaluation-config.png", label: "Run Evaluation", caption: "Select scenarios, agents and variance runs — then hit Run." },
+  { src: "/screenshots/evaluation-results-overview.png", label: "Evaluation Results", caption: "See pass rates, tool usage and per-agent breakdowns in one view." },
+  { src: "/screenshots/evaluation-results-run-detail.png", label: "Run Detail", caption: "Inspect every check, extracted value, tool sequence and final answer." },
+  { src: "/screenshots/mcp-analysis-results-list.png", label: "MCP Analysis", caption: "Browse persisted tool-quality reports with severity breakdowns." },
+  { src: "/screenshots/analyze-mcp-tools-complete.png", label: "Tool Analysis", caption: "AI-powered review of your MCP tools for quality and LLM-readiness." },
+  { src: "/screenshots/evaluation-results-reference-reports.png", label: "Reference Reports", caption: "Compare runs side-by-side with AI-generated analysis and rankings." },
+  { src: "/screenshots/evaluation-results-assistance.png", label: "AI Assistant", caption: "Ask the AI assistant to explain results, spot patterns and suggest improvements." },
+];
+
+const capabilities = [
+  {
+    title: "Core Capabilities",
+    items: ["HTTP SSE Transport for MCP servers", "Multi-LLM support (OpenAI, Claude, Azure)", "Rich assertions & variance testing", "Detailed JSONL trace logs"],
+  },
+  {
+    title: "Analysis & Reporting",
+    items: ["Trend analysis & LLM comparison", "HTML, JSON, Markdown outputs", "Custom metrics & KPI tracking", "Markdown reports for each run"],
+  },
+  {
+    title: "Developer Experience",
+    items: ["CI-friendly CLI for scheduled runs", "Snapshot regression detection", "Interactive HTML reports", "Multi-agent testing via CLI"],
+  },
+];
+---
+
+<section id="product" class="section-preview py-20 border-t border-border/50">
+  <div class="container mx-auto px-4">
+    <div class="animate-fade-in-up text-center mb-14">
+      <h2 class="font-display text-3xl sm:text-4xl font-bold mb-4">
+        See It in <span class="text-primary">Action</span>
+      </h2>
+      <p class="text-muted-foreground max-w-xl mx-auto">
+        Rich visual reports, detailed traces, and interactive dashboards.
+      </p>
+    </div>
+
+    <div class="animate-fade-in-up-slow max-w-5xl mx-auto">
+      <ScreenshotCarousel slides={slides} client:load />
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-20">
+      {capabilities.map((cap, i) => (
+        <div class="animate-fade-in-up" style={`animation-delay: ${i * 0.1}s`}>
+          <h3 class="font-display font-semibold text-lg mb-4 text-primary">{cap.title}</h3>
+          <ul class="space-y-2.5">
+            {cap.items.map((item) => (
+              <li class="flex items-start gap-2 text-sm text-muted-foreground">
+                <span class="text-primary mt-1 shrink-0">•</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

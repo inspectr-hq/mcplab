@@ -1,0 +1,71 @@
+---
+import { Image } from 'astro:assets';
+import screenshotDashboard from '@/assets/screenshot-dashboard.png';
+import { Github, ArrowRight } from 'lucide-react';
+import IconInspectr from '@/components/ui/IconInspectr';
+---
+
+<section class="section-hero relative overflow-hidden pb-20 pt-32">
+  <div class="pointer-events-none absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full bg-primary/5 blur-[120px]" />
+
+  <div class="container mx-auto px-4 relative z-10">
+    <div class="animate-fade-in-up mx-auto max-w-4xl text-center">
+      <div class="mb-8 flex items-center justify-center gap-3">
+        <IconInspectr width={44} height={44} from="#7c2d12" to="#f97316" />
+        <span class="font-display text-3xl font-bold text-primary">MCPLab</span>
+        <span class="text-sm text-muted-foreground">
+          by <a href="https://inspectr.dev" target="_blank" rel="noopener noreferrer" class="link-brand">Inspectr</a>
+        </span>
+      </div>
+
+      <h1 class="mb-6 font-display text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+        🧪 Test and evaluate <span class="text-primary glow-text">MCP Servers</span> with LLMs
+      </h1>
+      <p class="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground sm:text-xl">
+        Test how well LLM agents use your MCP tools, compare different models, and track quality over time with automated testing and detailed reports.
+      </p>
+      <div class="flex flex-col items-center justify-center gap-5 sm:flex-row">
+        <a
+          href="#quickstart"
+          class="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] border-0 bg-[#f97415] px-8 text-[16px] font-semibold leading-6 text-slate-950 shadow-none transition-colors duration-150 hover:bg-[#ff8a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto whitespace-nowrap"
+          style="font-family: Inter, 'Space Grotesk', sans-serif; font-feature-settings: normal; font-variation-settings: normal; font-weight: 600; border-color: rgb(31, 37, 51); border-style: solid; border-width: 0px; border-top-left-radius: 10px; border-top-right-radius: 10px; border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;"
+        >
+          Get Started <ArrowRight className="h-6 w-6" />
+        </a>
+        <a
+          href="https://github.com/inspectr-hq/mcplab"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] border border-[#1f2533] bg-[#021c23] px-8 text-[16px] font-semibold leading-6 text-slate-100 shadow-none transition-colors duration-150 hover:bg-[#03252f] hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-auto whitespace-nowrap"
+          style="font-family: Inter, 'Space Grotesk', sans-serif; font-feature-settings: normal; font-variation-settings: normal; font-weight: 600;"
+        >
+          <Github className="h-5 w-5" /> View on GitHub
+        </a>
+      </div>
+    </div>
+
+    <div class="animate-fade-in-up-slow mx-auto mt-16 max-w-5xl">
+      <div class="glow-primary overflow-hidden rounded-xl border border-border bg-card">
+        <div class="flex items-center gap-2 border-b border-border bg-muted/50 px-4 py-3">
+          <div class="flex gap-1.5">
+            <div class="h-3 w-3 rounded-full bg-destructive/60" />
+            <div class="h-3 w-3 rounded-full bg-secondary/60" />
+            <div class="h-3 w-3 rounded-full bg-green-500/60" />
+          </div>
+          <div class="mx-4 flex-1">
+            <div class="rounded-md bg-background/50 px-3 py-1 text-center font-mono text-xs text-muted-foreground">
+              localhost:5173
+            </div>
+          </div>
+        </div>
+        <Image
+          src={screenshotDashboard}
+          alt="MCPLab dashboard showing evaluation results and test scenarios"
+          class="w-full"
+          loading="eager"
+          format="png"
+        />
+      </div>
+    </div>
+  </div>
+</section>

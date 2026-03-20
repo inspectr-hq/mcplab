@@ -1,0 +1,115 @@
+---
+import CopyButton from './CopyButton';
+import { FlaskConical, BarChart3, Microscope, Sparkles } from 'lucide-react';
+
+const installCmd = "npx @inspectr/mcplab --help";
+const runCmd = "npx @inspectr/mcplab run -c eval.yaml";
+
+const yamlConfig = `servers:
+  my-server:
+    transport: "http"
+    url: "http://localhost:3000/mcp"
+
+agents:
+  claude:
+    provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+    temperature: 0
+
+scenarios:
+  - id: "basic-test"
+    agent: "claude"
+    servers: ["my-server"]
+    prompt: "Use the tools to complete this task..."
+    eval:
+      tool_constraints:
+        required_tools: ["my_tool"]
+      response_assertions:
+        - type: "regex"
+          pattern: "success|completed"`;
+
+const aiTools = [
+  {
+    Icon: FlaskConical,
+    title: "Scenario Assistant",
+    description: "AI chat to help design and refine evaluation scenarios. Describe what you want to test and get ready-to-use YAML configurations.",
+  },
+  {
+    Icon: BarChart3,
+    title: "Result Assistant",
+    description: "AI chat to analyze and explain completed run results. Understand failures, spot patterns, and get actionable improvement suggestions.",
+  },
+  {
+    Icon: Microscope,
+    title: "MCP Tool Analysis",
+    description: "Automated review of your MCP tool definitions for quality, safety, and LLM-friendliness. Get recommendations before testing.",
+  },
+];
+---
+
+<section id="quickstart" class="section-quickstart py-20 border-t border-border/50">
+  <div class="container mx-auto px-4">
+    <div class="grid lg:grid-cols-2 gap-12 max-w-6xl mx-auto">
+
+      <!-- Quick Start -->
+      <div class="animate-fade-in-left">
+        <h2 class="font-display text-3xl font-bold mb-2">
+          <span class="text-primary">Quick</span> Start
+        </h2>
+        <p class="text-muted-foreground mb-8">Up and running in under a minute.</p>
+
+        <div class="mb-4">
+          <p class="text-xs text-muted-foreground mb-2 font-mono">1. Install</p>
+          <div class="relative rounded-lg bg-muted/50 border border-border p-4 font-mono text-sm">
+            <CopyButton text={installCmd} client:load />
+            <span class="text-muted-foreground">$</span>{" "}
+            <span class="text-foreground">{installCmd}</span>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <p class="text-xs text-muted-foreground mb-2 font-mono">2. Create eval config</p>
+          <div class="relative rounded-lg bg-muted/50 border border-border p-4 font-mono text-xs leading-relaxed overflow-x-auto max-h-64 overflow-y-auto">
+            <CopyButton text={yamlConfig} client:load />
+            <pre class="text-foreground/90">{yamlConfig}</pre>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs text-muted-foreground mb-2 font-mono">3. Run evaluation</p>
+          <div class="relative rounded-lg bg-muted/50 border border-border p-4 font-mono text-sm">
+            <CopyButton text={runCmd} client:load />
+            <span class="text-muted-foreground">$</span>{" "}
+            <span class="text-foreground">{runCmd}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI-Powered Tools -->
+      <div class="animate-fade-in-right">
+        <h2 class="font-display text-3xl font-bold mb-2 flex items-center gap-2">
+          <Sparkles className="w-7 h-7 text-secondary" />
+          <span><span class="text-secondary">AI-Powered</span> Tools</span>
+        </h2>
+        <p class="text-muted-foreground mb-8">Built-in AI assistants to supercharge your workflow.</p>
+
+        <div class="space-y-5">
+          {aiTools.map(({ Icon, title, description }) => (
+            <div class="rounded-xl border border-border bg-card p-5 hover:border-secondary/30 transition-colors">
+              <div class="flex items-start gap-3">
+                <div class="w-9 h-9 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5 text-secondary" />
+                </div>
+                <div>
+                  <h3 class="font-display font-semibold mb-1">{title}</h3>
+                  <p class="text-sm text-muted-foreground leading-relaxed">{description}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>

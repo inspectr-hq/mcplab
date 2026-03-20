@@ -1,0 +1,35 @@
+---
+import { docsPages } from '@/data/docs';
+---
+
+<section id="docs" class="border-t border-border/50 bg-muted/20 py-20">
+  <div class="container mx-auto px-4">
+    <div class="mx-auto mb-10 max-w-2xl text-center">
+      <p class="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        Documentation
+      </p>
+      <h2 class="font-display text-3xl font-bold sm:text-4xl">
+        Everything you need to go from setup to deeper analysis
+      </h2>
+      <p class="mt-4 text-muted-foreground">
+        The docs are split into focused pages so you can jump straight to installation, config, usage,
+        or the app workflow.
+      </p>
+    </div>
+
+    <div class="mx-auto grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {docsPages.map((page) => (
+        <a
+          href={page.href}
+          class="group rounded-xl border border-border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/30"
+        >
+          <div class="text-sm font-semibold text-primary">{page.label}</div>
+          <div class="mt-2 text-sm text-muted-foreground">{page.description}</div>
+          <div class="mt-4 text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+            Open docs
+          </div>
+        </a>
+      ))}
+    </div>
+  </div>
+</section>

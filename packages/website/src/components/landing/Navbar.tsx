@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Github } from "lucide-react";
-import IconInspectr from "@/components/ui/IconInspectr";
+import SiteBrand from "@/components/shared/SiteBrand";
+import ThemeToggle from "@/components/landing/ThemeToggle";
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -16,6 +17,7 @@ const Navbar = () => {
   const links = [
     { label: "Features", href: "#features" },
     { label: "Quick Start", href: "#quickstart" },
+    { label: "Docs", href: "/docs" },
     { label: "GitHub", href: "https://github.com/inspectr-hq/mcplab", external: true },
   ];
 
@@ -24,10 +26,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto w-full flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <div className="flex items-center gap-1.5">
-          <a href="#" className="flex items-center gap-2.5">
-            <IconInspectr width={28} height={28} from="#7c2d12" to="#f97316" />
-            <span className="font-display text-xl font-bold text-primary">MCPLab</span>
-          </a>
+          <SiteBrand href="#" compact showInspectr={false} />
           <span
             className="text-muted-foreground text-[10px] transition-all duration-300"
             style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}
@@ -54,6 +53,7 @@ const Navbar = () => {
               {link.label}
             </a>
           ))}
+          <ThemeToggle />
           <Button size="sm" className="font-semibold" asChild>
             <a href="#quickstart">Get Started</a>
           </Button>
@@ -73,12 +73,17 @@ const Navbar = () => {
               key={link.label}
               href={link.href}
               target={link.external ? "_blank" : undefined}
+              rel={link.external ? "noopener noreferrer" : undefined}
               className="block py-3 text-sm text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
             >
               {link.label}
             </a>
           ))}
+          <div className="flex items-center justify-between py-3 border-t border-border/50 mt-1">
+            <span className="text-sm text-muted-foreground">Appearance</span>
+            <ThemeToggle />
+          </div>
           <Button size="sm" className="w-full mt-2 font-semibold" asChild>
             <a href="#quickstart">Get Started</a>
           </Button>
