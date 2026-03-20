@@ -1,4 +1,4 @@
-import type { TokenUsage } from "@/types/eval";
+import type { TokenUsage } from '@/types/eval';
 
 export type TokenAccumulator = {
   input: number;
@@ -20,20 +20,17 @@ export function createTokenAccumulator(): TokenAccumulator {
   };
 }
 
-export function addTokenUsage(
-  accumulator: TokenAccumulator,
-  usage?: TokenUsage | null
-): void {
+export function addTokenUsage(accumulator: TokenAccumulator, usage?: TokenUsage | null): void {
   if (!usage) return;
-  if (typeof usage.inputTokens === "number") {
+  if (typeof usage.inputTokens === 'number') {
     accumulator.input += usage.inputTokens;
     accumulator.hasInput = true;
   }
-  if (typeof usage.outputTokens === "number") {
+  if (typeof usage.outputTokens === 'number') {
     accumulator.output += usage.outputTokens;
     accumulator.hasOutput = true;
   }
-  if (typeof usage.totalTokens === "number") {
+  if (typeof usage.totalTokens === 'number') {
     accumulator.total += usage.totalTokens;
     accumulator.hasTotal = true;
   }
@@ -48,9 +45,7 @@ export function toTokenUsage(accumulator: TokenAccumulator): TokenUsage | null {
   };
 }
 
-export function sumTokenUsages(
-  usages: Array<TokenUsage | null | undefined>
-): TokenUsage | null {
+export function sumTokenUsages(usages: Array<TokenUsage | null | undefined>): TokenUsage | null {
   const accumulator = createTokenAccumulator();
   for (const usage of usages) addTokenUsage(accumulator, usage);
   return toTokenUsage(accumulator);

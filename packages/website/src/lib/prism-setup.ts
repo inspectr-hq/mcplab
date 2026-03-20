@@ -7,8 +7,16 @@ import 'prismjs/components/prism-yaml';
 const bashGrammar = Prism.languages.bash;
 const maybeFunction = bashGrammar?.function;
 
-if (maybeFunction && !Array.isArray(maybeFunction) && 'pattern' in maybeFunction && maybeFunction.pattern instanceof RegExp) {
-  maybeFunction.pattern = new RegExp(maybeFunction.pattern.source.replace('|npm|', '|npm|npx|'), maybeFunction.pattern.flags);
+if (
+  maybeFunction &&
+  !Array.isArray(maybeFunction) &&
+  'pattern' in maybeFunction &&
+  maybeFunction.pattern instanceof RegExp
+) {
+  maybeFunction.pattern = new RegExp(
+    maybeFunction.pattern.source.replace('|npm|', '|npm|npx|'),
+    maybeFunction.pattern.flags
+  );
 }
 
 export default Prism;

@@ -10,7 +10,12 @@ import type {
   TokenUsage,
   ToolCall
 } from '@/types/eval';
-import { addTokenUsage, createTokenAccumulator, toTokenUsage, type TokenAccumulator } from '@/lib/token-usage';
+import {
+  addTokenUsage,
+  createTokenAccumulator,
+  toTokenUsage,
+  type TokenAccumulator
+} from '@/lib/token-usage';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
