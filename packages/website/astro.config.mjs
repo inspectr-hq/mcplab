@@ -7,6 +7,11 @@ import path from 'path';
 export default defineConfig({
   site: 'https://mcplab.inspectr.dev',
   output: 'static',
+  redirects: {
+    '/docs/configuration': '/docs/cli/configuration',
+    '/docs/usage': '/docs/cli/running-evaluations',
+    '/docs/app-mode': '/docs/app/getting-started',
+  },
   integrations: [react(), tailwind(), sitemap()],
   server: {
     host: '::',
