@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import DocsHeader from '@/components/interactive/DocsHeader';
+import ImageLightbox from '@/components/docs/ImageLightbox';
 import { docsNavSections, docsSearchItems, docsPages } from '@/data/docs';
 
 interface Props {
@@ -17,12 +18,23 @@ const previousPage = currentIndex > 0 ? allPages[currentIndex - 1] : null;
 const nextPage = currentIndex >= 0 && currentIndex < allPages.length - 1 ? allPages[currentIndex + 1] : null;
 
 const currentPage = docsPages.find((p) => p.href === currentPath);
-const tocSections = currentPage?.sections ?? [];
+
+const tocSections: { id: string; title: string }[] =
+  currentPath === '/docs'
+    ? [
+        { id: 'what-it-does', title: 'What MCPLab Does' },
+        ...docsNavSections.map((s) => ({
+          id: s.title.toLowerCase().replace(/\s+/g, '-'),
+          title: s.title,
+        })),
+      ]
+    : (currentPage?.sections ?? []);
 ---
 
 <BaseLayout title={`${title} | MCPLab Docs`} description={description}>
   <div class="h-screen flex flex-col bg-background text-foreground overflow-hidden">
     <DocsHeader client:load pages={docsSearchItems} />
+    <ImageLightbox client:load />
     <div class="mx-auto flex w-full max-w-7xl flex-1 overflow-hidden">
       <aside class="hidden lg:flex lg:flex-col w-72 shrink-0 border-r border-border/60 overflow-y-auto scrollbar-hidden px-6 pt-8 pb-6">
         <nav class="space-y-6">

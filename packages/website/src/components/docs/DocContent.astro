@@ -25,5 +25,16 @@ const { sections } = Astro.props;
     {section.codeBlocks?.map((block) => (
       <CodeBlock client:idle code={block.code} title={block.title} language={block.language} />
     ))}
+    {section.screenshot && (
+      <div class="my-6">
+        <img
+          src={section.screenshot}
+          alt={section.title}
+          class="w-full cursor-zoom-in rounded-xl border border-border shadow-sm transition-opacity hover:opacity-90"
+          loading="lazy"
+          onclick={`document.dispatchEvent(new CustomEvent('open-lightbox', { detail: { src: '${section.screenshot}', alt: '${section.title}' } }))`}
+        />
+      </div>
+    )}
   </section>
 ))}

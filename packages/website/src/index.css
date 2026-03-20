@@ -270,3 +270,11 @@ pre[class*='language-'] {
 .token.bold {
   font-weight: 700;
 }
+
+/* MCPLab CLI — same palette, higher contrast */
+.language-mcplab .token.function  { color: hsl(210 100% 75%); } /* binary: bright cyan-blue  */
+.language-mcplab .token.keyword   { color: hsl(195  90% 60%); } /* subcommand: teal          */
+.language-mcplab .token.operator  { color: hsl(220  70% 72%); } /* flags: periwinkle         */
+.language-mcplab .token.string    { color: hsl(175  65% 58%); } /* paths: cyan-green         */
+.language-mcplab .token.number    { color: hsl(210  85% 68%); } /* numbers: sky blue         */
+.language-mcplab .token.comment   { color: hsl(215  20% 55%); } /* comments: dim             */

@@ -15,6 +15,7 @@ export type DocSection = {
     language?: string;
     code: string;
   }[];
+  screenshot?: string;
 };
 
 export type DocPage = DocNavItem & {
@@ -672,10 +673,11 @@ const appGettingStarted: DocPage = {
         'Dashboard — recent runs and pass rate trends at a glance.',
         'Run Evaluation — select a config and launch an eval.',
         'Results — browse completed runs and drill into detail.',
-        'Tool Analysis — review MCP tool definitions for quality.',
+        'MCP Tool Analysis — review MCP tool definitions for quality.',
         'Library — manage reusable agents and servers.',
         'Settings — configure API keys and preferences.'
-      ]
+      ],
+      screenshot: '/screenshots/dashboard.png'
     }
   ]
 };
@@ -694,7 +696,8 @@ const appRunning: DocPage = {
       title: 'Select a Config',
       paragraphs: [
         'Open Run Evaluation from the sidebar. The page lists all eval configs found in the evals directory. Pick one to load its scenarios and agents.'
-      ]
+      ],
+      screenshot: '/screenshots/run-evaluation-config.png'
     },
     {
       id: 'choose-agents',
@@ -715,18 +718,19 @@ const appRunning: DocPage = {
       title: 'Launch and Monitor',
       paragraphs: [
         'Hit Run to start the evaluation. The page shows live progress as scenarios complete. When all scenarios finish, the results are saved and you can navigate to the Result Detail.'
-      ]
+      ],
+      screenshot: '/screenshots/run-evaluation-progress.png'
     }
   ]
 };
 
 const appResults: DocPage = {
   slug: 'app-reading-results',
-  label: 'Reading Results',
+  label: 'Analysing Results',
   href: '/docs/app/reading-results',
   description: 'Understand run output, compare agents, and browse markdown reports.',
   keywords: ['results', 'detail', 'compare', 'agents', 'trace', 'markdown reports'],
-  seoTitle: 'App — Reading Results',
+  seoTitle: 'App — Analysing Results',
   track: 'app',
   sections: [
     {
@@ -734,7 +738,8 @@ const appResults: DocPage = {
       title: 'The Results List',
       paragraphs: [
         'The Results page lists every completed run in reverse chronological order. Each entry shows the config name, run note, number of scenarios, and overall pass rate.'
-      ]
+      ],
+      screenshot: '/screenshots/evaluation-results-overview.png'
     },
     {
       id: 'result-detail',
@@ -742,7 +747,8 @@ const appResults: DocPage = {
       paragraphs: [
         "Click a run to open the Result Detail. The detail view shows per-scenario pass/fail, the tool calls the agent made, which assertions passed, and the agent's final response.",
         'Expand a scenario to inspect the full tool call trace — every LLM message and tool invocation in sequence.'
-      ]
+      ],
+      screenshot: '/screenshots/evaluation-results-run-detail.png'
     },
     {
       id: 'compare-agents',
@@ -758,7 +764,8 @@ const appResults: DocPage = {
       paragraphs: [
         'MCPLab generates a summary.md for every run. The Markdown Reports section in the App lets you browse these files alongside any custom markdown reports you place in the runs directory.',
         'Useful for sharing a human-readable summary with teammates or attaching to a pull request.'
-      ]
+      ],
+      screenshot: '/screenshots/evaluation-results-reference-reports.png'
     }
   ]
 };
@@ -796,23 +803,24 @@ const appAssistants: DocPage = {
         'Ask: "Which scenarios failed and why?"',
         'Ask: "Did the agent call the correct tools in the right order?"',
         'Ask: "Suggest improvements to make the failing scenarios pass."'
-      ]
+      ],
+      screenshot: '/screenshots/evaluation-results-assistance.png'
     }
   ]
 };
 
 const appToolAnalysis: DocPage = {
   slug: 'app-tool-analysis',
-  label: 'Tool Analysis',
+  label: 'MCP Tool Analysis',
   href: '/docs/app/tool-analysis',
   description: 'Review MCP tool definitions for quality and LLM-readiness.',
   keywords: ['tool analysis', 'quality', 'mcp tools', 'review', 'llm-friendly'],
-  seoTitle: 'App — Tool Analysis',
+  seoTitle: 'App — MCP Tool Analysis',
   track: 'app',
   sections: [
     {
       id: 'what-it-checks',
-      title: 'What Tool Analysis Checks',
+      title: 'What MCP Tool Analysis Checks',
       paragraphs: [
         'MCPLab can analyse the tool definitions your MCP server exposes and report on their quality from an LLM perspective. Poor tool descriptions lead to agents calling the wrong tool or passing incorrect parameters.'
       ],
@@ -828,7 +836,8 @@ const appToolAnalysis: DocPage = {
       title: 'Running an Analysis',
       paragraphs: [
         'Open Tool Analysis from the sidebar and connect to an MCP server. MCPLab fetches the tool list and sends it to the AI reviewer. The analysis takes a few seconds.'
-      ]
+      ],
+      screenshot: '/screenshots/analyze-mcp-tools-progress.png'
     },
     {
       id: 'reading-results',
@@ -836,14 +845,16 @@ const appToolAnalysis: DocPage = {
       paragraphs: [
         'Results are grouped by severity: critical issues that will likely cause incorrect agent behaviour, warnings that reduce reliability, and informational suggestions.',
         'Each finding includes the affected tool, a description of the issue, and a concrete recommendation.'
-      ]
+      ],
+      screenshot: '/screenshots/mcp-analysis-result-detail.png'
     },
     {
       id: 'persisted-reports',
       title: 'Persisted Reports',
       paragraphs: [
         'Completed analyses are saved and appear in the Analysis Reports list. Browse past reports to track quality improvements over time as you update your tool definitions.'
-      ]
+      ],
+      screenshot: '/screenshots/mcp-analysis-results-list.png'
     }
   ]
 };
@@ -885,7 +896,8 @@ const appLibrary: DocPage = {
       paragraphs: [
         'Library agents appear in the agent picker on the Run Evaluation page alongside agents defined in the selected config. Library servers appear in the server list when editing a config.',
         'The Library section in the sidebar shows all loaded agents and servers with their full definitions.'
-      ]
+      ],
+      screenshot: '/screenshots/agents-library.png'
     },
     {
       id: 'managing-files',
@@ -986,6 +998,25 @@ const refEnvVars: DocPage = {
         'AZURE_OPENAI_API_KEY — required when using provider: azure.',
         'AZURE_OPENAI_ENDPOINT — required when using provider: azure. Full resource URL.',
         'AZURE_OPENAI_DEPLOYMENT — required when using provider: azure. Deployment name.'
+      ],
+      codeBlocks: [
+        {
+          title: 'Anthropic .env',
+          language: 'bash',
+          code: `ANTHROPIC_API_KEY=sk-ant-api03-...`
+        },
+        {
+          title: 'OpenAI .env',
+          language: 'bash',
+          code: `OPENAI_API_KEY=sk-proj-...`
+        },
+        {
+          title: 'Azure OpenAI .env',
+          language: 'bash',
+          code: `AZURE_OPENAI_API_KEY=your-azure-key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name`
+        }
       ]
     },
     {

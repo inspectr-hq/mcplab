@@ -44,9 +44,14 @@ const CodeBlock = ({ code, language, title }: CodeBlockProps) => {
     ts: 'typescript',
   };
 
-  const resolvedLanguage = language
+  const baseLanguage = language
     ? (langMap[language.toLowerCase()] ?? language.toLowerCase())
     : inferLanguage(title, code);
+
+  const resolvedLanguage =
+    baseLanguage === 'bash' && (code.includes('mcplab ') || code.includes('@inspectr/mcplab'))
+      ? 'mcplab'
+      : baseLanguage;
 
   useEffect(() => {
     if (codeRef.current) {
