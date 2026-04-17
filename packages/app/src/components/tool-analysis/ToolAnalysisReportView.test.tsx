@@ -89,4 +89,25 @@ describe('ToolAnalysisReportView', () => {
     expect(screen.getByText('Output schema')).toBeInTheDocument();
     expect(screen.getByText(/"name": \{/)).toBeInTheDocument();
   });
+
+  it('does not throw when rendering a tool with a circular schema', () => {
+    const circular: Record<string, unknown> = { type: 'object' };
+    circular['self'] = circular;
+    const circularReport: ToolAnalysisReport = {
+      ...report,
+      servers: [
+        {
+          ...report.servers[0],
+          tools: [{ ...report.servers[0].tools[0], inputSchema: circular, outputSchema: circular }]
+        }
+      ]
+    };
+    expect(() =>
+      render(
+        <MemoryRouter>
+          <ToolAnalysisReportView report={circularReport} />
+        </MemoryRouter>
+      )
+    ).not.toThrow();
+  });
 });

@@ -1,4 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
+import { useDataSource } from "@/contexts/DataSourceContext";
+import { useLibraries } from "@/contexts/LibraryContext";
+import { toast } from "@/hooks/use-toast";
+import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
+import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
+import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -27,22 +44,6 @@ export function parseAnalysisProgressFromEvents(events: ProgressEvent[]): {
     totalTools > 0 ? Math.max(0, Math.min(100, Math.round((finished.size / totalTools) * 100))) : 0;
   return { totalTools, startedTools: started.size, finishedTools: finished.size, percent };
 }
-import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { toast } from "@/hooks/use-toast";
-import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = "mcplab.toolAnalysis.activeJobId";
 
@@ -609,11 +610,7 @@ const ToolAnalysisPage = () => {
                       )}
                       <div className="grid gap-2">
                         {server.tools.map((tool) => {
-                          const reason = tool.classificationReason.toLowerCase();
-                          const isWriteDelete =
-                            reason.includes("side-effectful prefix") ||
-                            reason.includes("destructive behavior") ||
-                            reason.includes("destructivehint");
+                          const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
                           const safetyLabel =
                             tool.safetyClassification === "read_like"
                               ? "read-like"

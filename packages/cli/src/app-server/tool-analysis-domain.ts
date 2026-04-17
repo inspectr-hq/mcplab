@@ -205,6 +205,13 @@ interface ToolAnalysisExecutionReviewPayload {
   outputSchema: unknown;
 }
 
+const TOOL_ANALYSIS_JSON_RESPONSE_TOOL = {
+  name: 'submit_tool_analysis_json',
+  description:
+    'Submit the final analysis response as JSON object. Use this instead of returning free-form text.',
+  inputSchema: { type: 'object', additionalProperties: true }
+} satisfies ToolDef;
+
 const TOOL_ANALYSIS_READ_PREFIXES = [
   'get',
   'list',
@@ -390,6 +397,16 @@ export function parseJsonFromAssistantText<T = unknown>(text: string): T {
   }
 }
 
+function parseJsonFromToolCalls(response: { tool_calls?: Array<{ name: string; arguments: unknown }> }): unknown {
+  if (!Array.isArray(response.tool_calls) || response.tool_calls.length === 0) return undefined;
+  const preferred =
+    response.tool_calls.find((c) => c.name === TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name) ??
+    response.tool_calls[0];
+  const args = preferred?.arguments;
+  if (typeof args === 'string') return parseJsonFromAssistantText(args);
+  return args;
+}
+
 async function chatJsonWithAgent(
   agent: AgentConfig,
   system: string,
@@ -398,23 +415,39 @@ async function chatJsonWithAgent(
   const first = await chatWithAgent({
     agent,
     system,
-    messages: [{ role: 'user', content: userPrompt }]
+    tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
+    messages: [
+      {
+        role: 'user',
+        content: `${userPrompt}\n\nReturn your answer by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' with the JSON object.`
+      }
+    ]
   });
+  const firstToolJson = parseJsonFromToolCalls(first);
+  if (firstToolJson && typeof firstToolJson === 'object') return firstToolJson;
   try {
     return parseJsonFromAssistantText(first.content ?? '');
   } catch {
     const retry = await chatWithAgent({
       agent,
       system,
+      tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
       messages: [
-        { role: 'user', content: userPrompt },
+        {
+          role: 'user',
+          content: `${userPrompt}\n\nReturn your answer by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' with the JSON object.`
+        },
         { role: 'assistant', content: first.content ?? '' },
         {
           role: 'user',
-          content: 'Reply again with valid JSON only. No prose, no markdown fences.'
+          content:
+            `Reply again by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' only. ` +
+            'No prose, no markdown fences, no explanation text.'
         }
       ]
     });
+    const retryToolJson = parseJsonFromToolCalls(retry);
+    if (retryToolJson && typeof retryToolJson === 'object') return retryToolJson;
     return parseJsonFromAssistantText(retry.content ?? '');
   }
 }

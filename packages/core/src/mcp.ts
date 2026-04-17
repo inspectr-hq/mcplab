@@ -8,12 +8,7 @@ export interface McpToolInfo {
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
-  annotations?: {
-    readOnlyHint?: boolean;
-    idempotentHint?: boolean;
-    destructiveHint?: boolean;
-    [key: string]: unknown;
-  };
+  annotations?: ToolDef['annotations'];
 }
 
 export interface McpCallToolOptions {

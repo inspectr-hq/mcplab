@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronDown, Lightbulb } from "lucide-react";
 import type { ToolAnalysisReport } from "@/lib/data-sources/types";
+import { isWriteDeleteClassification, safeJsonStringify } from "@/lib/tool-analysis-utils";
 
 const ALL_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -515,11 +516,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                   )}
                   {filteredTools.map((tool) => {
                     const toolDisplayName = tool.publicToolName.split("::").pop() ?? tool.publicToolName;
-                    const reason = tool.classificationReason.toLowerCase();
-                    const isWriteDelete =
-                      reason.includes("side-effectful prefix") ||
-                      reason.includes("destructive behavior") ||
-                      reason.includes("destructivehint");
+                    const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
                     const safetyLabel =
                       tool.safetyClassification === "read_like"
                         ? "read-like"
@@ -572,7 +569,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                                     Input schema
                                   </div>
                                   <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
-                                    {JSON.stringify(tool.inputSchema, null, 2)}
+                                    {safeJsonStringify(tool.inputSchema)}
                                   </pre>
                                 </div>
                               )}
@@ -582,7 +579,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                                     Output schema
                                   </div>
                                   <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
-                                    {JSON.stringify(tool.outputSchema, null, 2)}
+                                    {safeJsonStringify(tool.outputSchema)}
                                   </pre>
                                 </div>
                               )}
