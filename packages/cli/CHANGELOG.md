@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.5.1
+
+### Patch Changes
+
+- fix: use platform-specific path separator in ensureInsideRoot function (fixes #15)
+
 ## 1.5.0
 
 ### Minor Changes
