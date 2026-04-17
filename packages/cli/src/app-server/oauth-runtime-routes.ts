@@ -1,8 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type {
-  AppRouteRequestContext,
-  OAuthDebuggerSessionsMap
-} from './app-context.js';
+import type { AppRouteRequestContext, OAuthDebuggerSessionsMap } from './app-context.js';
 import type { OAuthRuntimeSessionsMap } from './oauth-runtime-domain.js';
 import {
   cleanupOAuthRuntimeSessions,

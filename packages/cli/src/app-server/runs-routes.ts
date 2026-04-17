@@ -938,14 +938,7 @@ async function executeRunJob(
     runQueueState.activeJobId = null;
     for (const client of job.clients) client.end();
     job.clients.clear();
-    advanceQueue(
-      jobs,
-      runQueueState,
-      settings,
-      oauthRuntimeSessions,
-      oauthDebuggerSessions,
-      deps
-    );
+    advanceQueue(jobs, runQueueState, settings, oauthRuntimeSessions, oauthDebuggerSessions, deps);
     pruneOldJobs(jobs, runQueueState);
   }
 }

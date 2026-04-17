@@ -790,9 +790,7 @@ export interface EvalDataSource {
   createOAuthRuntimeSession: (params: {
     serverName: string;
   }) => Promise<{ session: OAuthRuntimeSessionView }>;
-  getOAuthRuntimeSession: (
-    sessionId: string
-  ) => Promise<{ session: OAuthRuntimeSessionView }>;
+  getOAuthRuntimeSession: (sessionId: string) => Promise<{ session: OAuthRuntimeSessionView }>;
   submitOAuthRuntimeCallback: (
     sessionId: string,
     payload: { redirectUrl?: string; code?: string; state?: string }

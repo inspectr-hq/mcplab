@@ -1,5 +1,8 @@
 import type { EvalConfig } from '@inspectr/mcplab-core';
-import type { OAuthDebuggerSession, OAuthDebuggerSessionConfigInput } from './oauth-debugger-domain.js';
+import type {
+  OAuthDebuggerSession,
+  OAuthDebuggerSessionConfigInput
+} from './oauth-debugger-domain.js';
 import type { OAuthDebuggerSessionsMap } from './app-context.js';
 import { readLibraries } from './libraries-store.js';
 import {
@@ -60,7 +63,9 @@ function splitScopes(scope: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function toRuntimeStatus(debuggerStatus: OAuthDebuggerSession['status']): OAuthRuntimeSessionStatus {
+function toRuntimeStatus(
+  debuggerStatus: OAuthDebuggerSession['status']
+): OAuthRuntimeSessionStatus {
   if (debuggerStatus === 'running') return 'configuring';
   return debuggerStatus;
 }
@@ -136,7 +141,9 @@ export async function createOAuthRuntimeSession(params: {
   oauthDebuggerSessions: OAuthDebuggerSessionsMap;
 }): Promise<OAuthRuntimeSessionView> {
   const libraries = readLibraries(params.librariesDir);
-  const serverConfig = libraries.servers[params.serverName] as EvalConfig['servers'][string] | undefined;
+  const serverConfig = libraries.servers[params.serverName] as
+    | EvalConfig['servers'][string]
+    | undefined;
   if (!serverConfig) {
     throw new Error(`Server '${params.serverName}' not found in libraries`);
   }
@@ -202,7 +209,9 @@ export async function submitOAuthRuntimeCallback(params: {
   state?: string;
   hostHeader?: string;
 }): Promise<void> {
-  const debuggerSession = params.oauthDebuggerSessions.get(params.runtimeSession.oauthDebuggerSessionId);
+  const debuggerSession = params.oauthDebuggerSessions.get(
+    params.runtimeSession.oauthDebuggerSessionId
+  );
   if (!debuggerSession) {
     throw new Error('Associated OAuth debugger session not found');
   }
@@ -222,7 +231,9 @@ export function stopOAuthRuntimeSession(params: {
   runtimeSession: OAuthRuntimeSession;
   oauthDebuggerSessions: OAuthDebuggerSessionsMap;
 }): void {
-  const debuggerSession = params.oauthDebuggerSessions.get(params.runtimeSession.oauthDebuggerSessionId);
+  const debuggerSession = params.oauthDebuggerSessions.get(
+    params.runtimeSession.oauthDebuggerSessionId
+  );
   if (debuggerSession) {
     stopOAuthDebuggerSession(debuggerSession);
   }
