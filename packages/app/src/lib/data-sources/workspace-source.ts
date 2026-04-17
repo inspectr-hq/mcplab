@@ -228,5 +228,17 @@ export const workspaceSource: EvalDataSource = {
   },
   async exportOAuthDebuggerSession(sessionId, format) {
     return workspaceApiClient.exportOAuthDebuggerSession(sessionId, format);
+  },
+  async createOAuthRuntimeSession(params) {
+    return workspaceApiClient.createOAuthRuntimeSession(params);
+  },
+  async getOAuthRuntimeSession(sessionId) {
+    return workspaceApiClient.getOAuthRuntimeSession(sessionId);
+  },
+  async submitOAuthRuntimeCallback(sessionId, payload) {
+    return workspaceApiClient.submitOAuthRuntimeCallback(sessionId, payload);
+  },
+  async cancelOAuthRuntimeSession(sessionId) {
+    return workspaceApiClient.cancelOAuthRuntimeSession(sessionId);
   }
 };

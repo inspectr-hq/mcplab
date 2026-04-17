@@ -5,6 +5,8 @@ import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
 import { truncateJson } from './assistant-common.js';
+import type { OAuthRuntimeSessionsMap, OAuthDebuggerSessionsMap } from './app-context.js';
+import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
 import {
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromLibraries
@@ -354,7 +356,10 @@ function toolAnalysisExecutionReviewSystemPrompt(): string {
 
 export async function discoverMcpToolsForServers(
   serversByName: EvalConfig['servers'],
-  serverNames: string[]
+  serverNames: string[],
+  options?: {
+    serverAuthHeaders?: Record<string, Record<string, string>>;
+  }
 ): Promise<{
   mcp: McpClientManager;
   servers: Array<{
@@ -378,7 +383,9 @@ export async function discoverMcpToolsForServers(
       continue;
     }
     try {
-      await mcp.connectAll({ [serverName]: server });
+      await mcp.connectAll({ [serverName]: server }, undefined, {
+        serverAuthHeaders: options?.serverAuthHeaders
+      });
       const tools = await mcp.listTools(serverName);
       entry.tools = tools.map((tool) => {
         const safety = classifyToolSafety(tool.name, tool.inputSchema);
@@ -421,6 +428,9 @@ export async function runToolAnalysisJob(params: {
   settings: AppSettings;
   requestedAssistantAgentName?: string;
   serverNames: string[];
+  oauthRuntimeSessionsByServer?: Record<string, string>;
+  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
   selectedToolsByServer?: Record<string, string[]>;
   modes: { metadataReview: boolean; deeperAnalysis: boolean };
   deeper: {
@@ -452,9 +462,23 @@ export async function runToolAnalysisJob(params: {
     }
   });
 
+  const oauthServers = serverNames.filter(
+    (serverName) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
+  );
+  const serverAuthHeaders =
+    oauthServers.length > 0
+      ? resolveRuntimeOAuthAuthHeaders({
+          requiredServerNames: oauthServers,
+          oauthRuntimeSessionsByServer: params.oauthRuntimeSessionsByServer,
+          runtimeSessions: params.oauthRuntimeSessions,
+          oauthDebuggerSessions: params.oauthDebuggerSessions
+        })
+      : undefined;
+
   const { mcp, servers: discoveredServers } = await discoverMcpToolsForServers(
     libraries.servers,
-    serverNames
+    serverNames,
+    { serverAuthHeaders }
   );
   try {
     const serverReports: ToolAnalysisServerReport[] = [];

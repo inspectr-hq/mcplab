@@ -1,7 +1,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
-import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
+import type {
+  AppRouteDeps,
+  AppRouteRequestContext,
+  ToolAnalysisJobsMap,
+  OAuthRuntimeSessionsMap,
+  OAuthDebuggerSessionsMap
+} from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
+import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
 import {
   createToolAnalysisReportId,
   deleteToolAnalysisReportRecord,
@@ -47,9 +54,21 @@ export async function handleToolAnalysisRoutes(params: {
   method: string;
   settings: AppRouteRequestContext['settings'];
   toolAnalysisJobs: ToolAnalysisJobsMap;
+  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
   deps: ToolAnalysisRouteDeps;
 }): Promise<boolean> {
-  const { req, res, pathname, method, settings, toolAnalysisJobs, deps } = params;
+  const {
+    req,
+    res,
+    pathname,
+    method,
+    settings,
+    toolAnalysisJobs,
+    oauthRuntimeSessions,
+    oauthDebuggerSessions,
+    deps
+  } = params;
   const {
     parseBody,
     asJson,
@@ -72,7 +91,25 @@ export async function handleToolAnalysisRoutes(params: {
       return true;
     }
     const libraries = readLibraries(settings.librariesDir);
-    const { servers } = await discoverMcpToolsForServers(libraries.servers, serverNames);
+    const oauthRuntimeSessionsByServer =
+      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
+        ? (body.oauthRuntimeSessions as Record<string, string>)
+        : undefined;
+    const oauthServers = serverNames.filter(
+      (serverName) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
+    );
+    const serverAuthHeaders =
+      oauthServers.length > 0
+        ? resolveRuntimeOAuthAuthHeaders({
+            requiredServerNames: oauthServers,
+            oauthRuntimeSessionsByServer,
+            runtimeSessions: oauthRuntimeSessions,
+            oauthDebuggerSessions
+          })
+        : undefined;
+    const { servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
+      serverAuthHeaders
+    });
     asJson(res, 200, {
       servers: servers.map((entry) => ({
         serverName: entry.serverName,
@@ -110,6 +147,10 @@ export async function handleToolAnalysisRoutes(params: {
       body.selectedToolsByServer && typeof body.selectedToolsByServer === 'object'
         ? (body.selectedToolsByServer as Record<string, string[]>)
         : undefined;
+    const oauthRuntimeSessionsByServer =
+      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
+        ? (body.oauthRuntimeSessions as Record<string, string>)
+        : undefined;
     const deeperOptions = body.deeperAnalysisOptions ?? {};
     const maxParallelTools = Math.max(
       1,
@@ -143,6 +184,9 @@ export async function handleToolAnalysisRoutes(params: {
             ? String(body.assistantAgentName)
             : undefined,
           serverNames,
+          oauthRuntimeSessionsByServer,
+          oauthRuntimeSessions,
+          oauthDebuggerSessions,
           selectedToolsByServer,
           modes,
           deeper: {

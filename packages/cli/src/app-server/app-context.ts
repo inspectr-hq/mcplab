@@ -20,6 +20,7 @@ import type {
   oauthDebuggerExportRawTrace,
   OAuthDebuggerSession
 } from './oauth-debugger-domain.js';
+import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import type {
   cleanupAssistantSessions,
   touchAssistantSession,
@@ -175,6 +176,7 @@ export interface AppRouteDeps
 
 export type ToolAnalysisJobsMap = Map<string, ToolAnalysisJob>;
 export type OAuthDebuggerSessionsMap = Map<string, OAuthDebuggerSession>;
+export type OAuthRuntimeSessionsMap = Map<string, OAuthRuntimeSession>;
 export type AssistantSessionsMap = Map<string, ScenarioAssistantSession>;
 export type RunsResults = ResultsJson;
 export type RunsList = RunSummary[];

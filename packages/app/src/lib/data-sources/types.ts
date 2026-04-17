@@ -574,6 +574,28 @@ export interface OAuthDebuggerSessionEvent {
   payload: Record<string, unknown>;
 }
 
+export type OAuthRuntimeSessionStatus =
+  | 'configuring'
+  | 'waiting_for_user'
+  | 'waiting_for_browser_callback'
+  | 'completed'
+  | 'error'
+  | 'stopped';
+
+export interface OAuthRuntimeSessionView {
+  id: string;
+  serverName: string;
+  status: OAuthRuntimeSessionStatus;
+  createdAt: string;
+  updatedAt: string;
+  oauthDebuggerSessionId: string;
+  authorizationUrl?: string;
+  authorizeLaunchUrl?: string;
+  callbackUrl?: string;
+  hasAccessToken: boolean;
+  lastError?: string;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -591,6 +613,7 @@ export interface EvalDataSource {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
+    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
@@ -709,10 +732,12 @@ export interface EvalDataSource {
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
   discoverToolsForAnalysis: (params: {
     serverNames: string[];
+    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<ToolAnalysisDiscoverResponse>;
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];
+    oauthRuntimeSessions?: Record<string, string>;
     selectedToolsByServer?: Record<string, string[]>;
     maxParallelTools?: number;
     modes: {
@@ -758,4 +783,15 @@ export interface EvalDataSource {
     sessionId: string,
     format: 'json' | 'markdown' | 'raw'
   ) => Promise<string | { session: OAuthDebuggerSessionView; raw: unknown }>;
+  createOAuthRuntimeSession: (params: {
+    serverName: string;
+  }) => Promise<{ session: OAuthRuntimeSessionView }>;
+  getOAuthRuntimeSession: (
+    sessionId: string
+  ) => Promise<{ session: OAuthRuntimeSessionView }>;
+  submitOAuthRuntimeCallback: (
+    sessionId: string,
+    payload: { redirectUrl?: string; code?: string; state?: string }
+  ) => Promise<{ session: OAuthRuntimeSessionView }>;
+  cancelOAuthRuntimeSession: (sessionId: string) => Promise<{ session: OAuthRuntimeSessionView }>;
 }

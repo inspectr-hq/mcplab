@@ -22,6 +22,7 @@ export interface RunOptions {
   gitCommit?: string;
   cliVersion: string;
   runsDir?: string;
+  mcpServerAuthHeaders?: Record<string, Record<string, string>>;
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
 }
@@ -102,7 +103,9 @@ export async function runAll(
       type: 'mcp_connect_started',
       serverCount: Object.keys(config.servers).length
     });
-    await mcp.connectAll(config.servers, options.signal);
+    await mcp.connectAll(config.servers, options.signal, {
+      serverAuthHeaders: options.mcpServerAuthHeaders
+    });
     await emitProgress({
       type: 'mcp_connect_finished',
       serverCount: Object.keys(config.servers).length

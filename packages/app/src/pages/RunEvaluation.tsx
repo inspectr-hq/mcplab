@@ -37,12 +37,21 @@ const RunEvaluation = () => {
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
+  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<
+    Record<string, string>
+  >({});
+  const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
-  const { agents: libraryAgents, scenarios: libraryScenarios, reload: reloadLibraries } = useLibraries();
+  const {
+    agents: libraryAgents,
+    scenarios: libraryScenarios,
+    servers: libraryServers,
+    reload: reloadLibraries
+  } = useLibraries();
   const normalizedRunId = runId.trim();
   const resultsHref = normalizedRunId
     ? `/results/${encodeURIComponent(normalizedRunId)}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`
@@ -134,6 +143,95 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one test.`]);
       return;
     }
+    const waitForOAuthRuntimeSession = async (sessionId: string, serverName: string) => {
+      const timeoutAt = Date.now() + 5 * 60_000;
+      while (Date.now() < timeoutAt) {
+        const { session } = await source.getOAuthRuntimeSession(sessionId);
+        if (session.status === "completed" && session.hasAccessToken) return;
+        if (session.status === "error" || session.status === "stopped") {
+          throw new Error(
+            `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      throw new Error(`OAuth login timed out for '${serverName}'.`);
+    };
+
+    const ensureOAuthRuntimeSessions = async (serverNames: string[]) => {
+      const mapping: Record<string, string> = {};
+      for (const serverName of serverNames) {
+        let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
+        if (runtimeSessionId) {
+          try {
+            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
+            if (session.status === "completed" && session.hasAccessToken) {
+              mapping[serverName] = runtimeSessionId;
+              continue;
+            }
+          } catch {
+            runtimeSessionId = undefined;
+          }
+        }
+
+        const created = await source.createOAuthRuntimeSession({ serverName });
+        runtimeSessionId = created.session.id;
+        mapping[serverName] = runtimeSessionId;
+        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
+        const launchUrl =
+          created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
+        if (launchUrl) {
+          const absoluteUrl = launchUrl.startsWith("http")
+            ? launchUrl
+            : `${window.location.origin}${launchUrl}`;
+          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+        }
+        setLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
+        ]);
+        await waitForOAuthRuntimeSession(runtimeSessionId, serverName);
+        setLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] OAuth login completed for '${serverName}'.`,
+        ]);
+      }
+      setOauthRuntimeSessionsByServer((prev) => ({ ...prev, ...mapping }));
+      return mapping;
+    };
+
+    const oauthServerNames = Array.from(
+      new Set(
+        selectedScenarios
+          .flatMap((scenario) => scenario.serverIds || [])
+          .filter((serverName) => {
+            const fromConfig = (selectedConfig.servers ?? []).find(
+              (server) => server.id === serverName
+            );
+            const fromLibrary = libraryServers.find((server) => server.id === serverName);
+            return (fromConfig || fromLibrary)?.authType === "oauth2";
+          })
+      )
+    );
+
+    let oauthSessionsByServer: Record<string, string> | undefined;
+    try {
+      if (oauthServerNames.length > 0) {
+        setOauthAuthInProgress(true);
+        oauthSessionsByServer = await ensureOAuthRuntimeSessions(oauthServerNames);
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] OAuth error: ${message}`,
+      ]);
+      setOauthAuthInProgress(false);
+      return;
+    } finally {
+      setOauthAuthInProgress(false);
+    }
+
     setRunning(true);
     setDone(false);
     setStopped(false);
@@ -157,6 +255,7 @@ const RunEvaluation = () => {
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
         runNote: runNote.trim() ? runNote.trim() : undefined,
+        oauthRuntimeSessions: oauthSessionsByServer,
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -171,6 +270,7 @@ const RunEvaluation = () => {
       setRunning(false);
       setProgress(0);
       setActiveJobId(null);
+      setOauthAuthInProgress(false);
     }
   };
 
@@ -583,6 +683,7 @@ const RunEvaluation = () => {
               onClick={startRun}
               disabled={
                 !configId ||
+                oauthAuthInProgress ||
                 (availableAgents.length > 0 && selectedAgentIds.length === 0) ||
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
               }
