@@ -191,7 +191,11 @@ const cliRunning: DocPage = {
       title: 'Basic Run',
       paragraphs: ['Point mcplab at your eval config to run all scenarios.'],
       codeBlocks: [
-        { title: 'run all scenarios', language: 'bash', code: 'mcplab run -c eval.yaml' }
+        {
+          title: 'run all scenarios',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml'
+        }
       ]
     },
     {
@@ -204,12 +208,12 @@ const cliRunning: DocPage = {
         {
           title: 'single scenario',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml -s basic-test'
+          code: 'npx @inspectr/mcplab run -c eval.yaml -s basic-test'
         },
         {
           title: 'multiple scenarios',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml -s test-one -s test-two'
+          code: 'npx @inspectr/mcplab run -c eval.yaml -s test-one -s test-two'
         }
       ]
     },
@@ -223,12 +227,12 @@ const cliRunning: DocPage = {
         {
           title: 'specific agents',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml --agents claude,gpt4o'
+          code: 'npx @inspectr/mcplab run -c eval.yaml --agents claude,gpt4o'
         },
         {
           title: 'all agents (config + library)',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml --agents-all'
+          code: 'npx @inspectr/mcplab run -c eval.yaml --agents-all'
         }
       ]
     },
@@ -239,7 +243,11 @@ const cliRunning: DocPage = {
         'Run each scenario multiple times to measure consistency. The -n flag sets the number of runs per scenario. Results include a pass rate across all runs.'
       ],
       codeBlocks: [
-        { title: '5 runs per scenario', language: 'bash', code: 'mcplab run -c eval.yaml -n 5' }
+        {
+          title: '5 runs per scenario',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml -n 5'
+        }
       ]
     },
     {
@@ -248,7 +256,13 @@ const cliRunning: DocPage = {
       paragraphs: [
         'Interactive mode prompts you to pick a config and scenarios at the terminal instead of specifying them as flags. Useful for ad-hoc runs during development.'
       ],
-      codeBlocks: [{ title: 'interactive', language: 'bash', code: 'mcplab run --interactive' }]
+      codeBlocks: [
+        {
+          title: 'interactive',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run --interactive'
+        }
+      ]
     },
     {
       id: 'annotate-runs',
@@ -260,12 +274,12 @@ const cliRunning: DocPage = {
         {
           title: 'annotated run',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml --run-note "after refactor"'
+          code: 'npx @inspectr/mcplab run -c eval.yaml --run-note "after refactor"'
         },
         {
           title: 'custom output dir',
           language: 'bash',
-          code: 'mcplab run -c eval.yaml --runs-dir ./my-runs'
+          code: 'npx @inspectr/mcplab run -c eval.yaml --runs-dir ./my-runs'
         }
       ]
     },
@@ -535,12 +549,12 @@ const cliReports: DocPage = {
         {
           title: 'from a specific run directory',
           language: 'bash',
-          code: 'mcplab report --input ./runs/2026-03-01T12-00-00'
+          code: 'npx @inspectr/mcplab report --input ./runs/2026-03-01T12-00-00'
         },
         {
           title: 'interactive — pick a run from a list',
           language: 'bash',
-          code: 'mcplab report --interactive'
+          code: 'npx @inspectr/mcplab report --interactive'
         }
       ]
     }
@@ -640,11 +654,11 @@ const appGettingStarted: DocPage = {
         'The mcplab app command starts a local web server and opens the UI in your browser.'
       ],
       codeBlocks: [
-        { title: 'basic launch', language: 'bash', code: 'mcplab app' },
+        { title: 'basic launch', language: 'bash', code: 'npx @inspectr/mcplab app' },
         {
           title: 'with options',
           language: 'bash',
-          code: `mcplab app \\
+          code: `npx @inspectr/mcplab app \\
   --evals-dir ./evals \\
   --runs-dir ./runs \\
   --libraries-dir ./libraries \\
@@ -886,7 +900,7 @@ const appLibrary: DocPage = {
         {
           title: 'start app with library',
           language: 'bash',
-          code: 'mcplab app --libraries-dir ./libraries'
+          code: 'npx @inspectr/mcplab app --libraries-dir ./libraries'
         }
       ]
     },
