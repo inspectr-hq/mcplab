@@ -103,6 +103,7 @@ const ToolAnalysisPage = () => {
       warnings: string[];
       tools: Array<{
         name: string;
+        title?: string;
         description?: string;
         inputSchema?: unknown;
         outputSchema?: unknown;
@@ -630,6 +631,9 @@ const ToolAnalysisPage = () => {
                             <div className="min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-xs">{tool.name}</span>
+                                {tool.title && (
+                                  <span className="text-xs text-muted-foreground">{tool.title}</span>
+                                )}
                                 <Badge
                                   variant="outline"
                                   className={`text-[10px] ${

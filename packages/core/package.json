@@ -39,11 +39,11 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
-    "@anthropic-ai/sdk": "^0.78.0",
-    "jsonpath-plus": "^10.3.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@anthropic-ai/sdk": "^0.90.0",
+    "jsonpath-plus": "^10.4.0",
     "openai": "^6.25.0",
-    "yaml": "^2.8.2",
+    "yaml": "^2.8.3",
     "zod": "^3.25.76"
   }
 }

@@ -99,6 +99,7 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
     }
     for (const tool of server.tools) {
       lines.push(`### ${tool.publicToolName}`);
+      if (tool.title) lines.push(`- Title: ${tool.title}`);
       lines.push(`- Safety: ${tool.safetyClassification} (${tool.classificationReason})`);
       if (tool.inputSchema !== undefined) renderSchemaBlock('Input schema', tool.inputSchema);
       if (tool.outputSchema !== undefined) renderSchemaBlock('Output schema', tool.outputSchema);
@@ -551,15 +552,18 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                             </div>
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </div>
+                          {tool.title && (
+                            <p className="text-sm text-foreground/85">{tool.title}</p>
+                          )}
                           {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
                         </div>
                       </summary>
                       <div className="mt-3 space-y-2">
                         {(tool.inputSchema !== undefined || tool.outputSchema !== undefined) && (
-                          <details className="group rounded border bg-muted/10 p-2">
+                          <details className="group/schema rounded border bg-muted/10 p-2">
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium">
                               <span>Schemas</span>
-                              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+                              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/schema:rotate-180" />
                             </summary>
                             <div className="mt-2 space-y-2">
                               {tool.inputSchema !== undefined && (

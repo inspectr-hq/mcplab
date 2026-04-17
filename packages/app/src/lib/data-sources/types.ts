@@ -306,6 +306,7 @@ export interface ToolAnalysisToolReport {
   serverName: string;
   toolName: string;
   publicToolName: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -409,6 +410,7 @@ export interface ToolAnalysisResultSummary {
 
 export interface ToolAnalysisDiscoveredTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;

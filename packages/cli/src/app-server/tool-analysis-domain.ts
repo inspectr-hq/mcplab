@@ -43,6 +43,7 @@ interface ToolAnalysisToolReport {
   serverName: string;
   toolName: string;
   publicToolName: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -119,6 +120,7 @@ export interface ToolAnalysisReport {
 
 interface ToolAnalysisDiscoveredTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -175,6 +177,7 @@ interface ExecutionReviewJson {
 interface ToolAnalysisMetadataPayload {
   serverName: string;
   toolName: string;
+  title: string;
   description: string;
   inputSchema: unknown;
   outputSchema: unknown;
@@ -184,6 +187,7 @@ interface ToolAnalysisMetadataPayload {
 interface ToolAnalysisSamplePlanPayload {
   serverName: string;
   toolName: string;
+  title: string;
   description: string;
   inputSchema: unknown;
   outputSchema: unknown;
@@ -193,6 +197,7 @@ interface ToolAnalysisSamplePlanPayload {
 interface ToolAnalysisExecutionReviewPayload {
   serverName: string;
   toolName: string;
+  title: string;
   arguments: unknown;
   resultPreview: string;
   description: string;
@@ -450,6 +455,7 @@ function toolAnalysisExecutionReviewSystemPrompt(): string {
 export function buildToolAnalysisMetadataPayload(params: {
   serverName: string;
   toolName: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -457,6 +463,7 @@ export function buildToolAnalysisMetadataPayload(params: {
   return {
     serverName: params.serverName,
     toolName: params.toolName,
+    title: params.title ?? '',
     description: params.description ?? '',
     inputSchema: params.inputSchema ?? null,
     outputSchema: params.outputSchema ?? null,
@@ -467,6 +474,7 @@ export function buildToolAnalysisMetadataPayload(params: {
 export function buildToolAnalysisSamplePlanPayload(params: {
   serverName: string;
   toolName: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
@@ -475,6 +483,7 @@ export function buildToolAnalysisSamplePlanPayload(params: {
   return {
     serverName: params.serverName,
     toolName: params.toolName,
+    title: params.title ?? '',
     description: params.description ?? '',
     inputSchema: params.inputSchema ?? null,
     outputSchema: params.outputSchema ?? null,
@@ -485,6 +494,7 @@ export function buildToolAnalysisSamplePlanPayload(params: {
 export function buildToolAnalysisExecutionReviewPayload(params: {
   serverName: string;
   toolName: string;
+  title?: string;
   arguments: unknown;
   resultPreview: string;
   description?: string;
@@ -494,6 +504,7 @@ export function buildToolAnalysisExecutionReviewPayload(params: {
   return {
     serverName: params.serverName,
     toolName: params.toolName,
+    title: params.title ?? '',
     arguments: params.arguments,
     resultPreview: params.resultPreview,
     description: params.description ?? '',
@@ -651,6 +662,7 @@ export async function runToolAnalysisJob(params: {
           serverName: discovered.serverName,
           toolName: toolCtx.tool.name,
           publicToolName: `${discovered.serverName}::${toolCtx.tool.name}`,
+          title: toolCtx.tool.title,
           description: toolCtx.tool.description,
           inputSchema: toolCtx.tool.inputSchema,
           outputSchema: toolCtx.tool.outputSchema,
@@ -673,6 +685,7 @@ export async function runToolAnalysisJob(params: {
                 buildToolAnalysisMetadataPayload({
                   serverName: discovered.serverName,
                   toolName: toolCtx.tool.name,
+                  title: toolCtx.tool.title,
                   description: toolCtx.tool.description,
                   inputSchema: toolCtx.tool.inputSchema,
                   outputSchema: toolCtx.tool.outputSchema
@@ -778,6 +791,7 @@ export async function runToolAnalysisJob(params: {
                   buildToolAnalysisSamplePlanPayload({
                     serverName: discovered.serverName,
                     toolName: toolCtx.tool.name,
+                    title: toolCtx.tool.title,
                     description: toolCtx.tool.description,
                     inputSchema: toolCtx.tool.inputSchema,
                     outputSchema: toolCtx.tool.outputSchema,
@@ -808,6 +822,7 @@ export async function runToolAnalysisJob(params: {
                         buildToolAnalysisExecutionReviewPayload({
                           serverName: discovered.serverName,
                           toolName: toolCtx.tool.name,
+                          title: toolCtx.tool.title,
                           arguments: suggestedArgs,
                           resultPreview: truncateJson(result, 4000),
                           description: toolCtx.tool.description,

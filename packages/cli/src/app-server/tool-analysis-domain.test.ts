@@ -98,9 +98,11 @@ describe('tool-analysis payload builders', () => {
     const payload = buildToolAnalysisMetadataPayload({
       serverName: 'demo',
       toolName: 'get_user_profile',
+      title: 'Get User Profile',
       description: 'Get user profile',
       ...schemas
     });
+    expect(payload.title).toBe('Get User Profile');
     expect(payload.inputSchema).toEqual(schemas.inputSchema);
     expect(payload.outputSchema).toEqual(schemas.outputSchema);
   });
@@ -109,10 +111,12 @@ describe('tool-analysis payload builders', () => {
     const payload = buildToolAnalysisSamplePlanPayload({
       serverName: 'demo',
       toolName: 'get_user_profile',
+      title: 'Get User Profile',
       description: 'Get user profile',
       maxCalls: 2,
       ...schemas
     });
+    expect(payload.title).toBe('Get User Profile');
     expect(payload.inputSchema).toEqual(schemas.inputSchema);
     expect(payload.outputSchema).toEqual(schemas.outputSchema);
     expect(payload.maxCalls).toBe(2);
@@ -122,11 +126,13 @@ describe('tool-analysis payload builders', () => {
     const payload = buildToolAnalysisExecutionReviewPayload({
       serverName: 'demo',
       toolName: 'get_user_profile',
+      title: 'Get User Profile',
       description: 'Get user profile',
       arguments: { userId: 'u-1' },
       resultPreview: '{"name":"Alice"}',
       ...schemas
     });
+    expect(payload.title).toBe('Get User Profile');
     expect(payload.inputSchema).toEqual(schemas.inputSchema);
     expect(payload.outputSchema).toEqual(schemas.outputSchema);
     expect(payload.resultPreview).toContain('Alice');

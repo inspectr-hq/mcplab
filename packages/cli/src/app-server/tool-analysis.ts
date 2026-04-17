@@ -79,6 +79,7 @@ export async function handleToolAnalysisRoutes(params: {
         warnings: entry.warnings,
         tools: entry.tools.map((tool) => ({
           name: tool.tool.name,
+          title: tool.tool.title,
           description: tool.tool.description,
           inputSchema: tool.tool.inputSchema,
           outputSchema: tool.tool.outputSchema,
