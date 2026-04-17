@@ -112,13 +112,13 @@ const ServerDetail = () => {
           throw new Error(`OAuth login timed out for '${serverName}'.`);
         };
 
-        let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
+        let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServer[serverName];
         if (runtimeSessionId) {
           try {
             const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
             if (session.status === "completed" && session.hasAccessToken) return runtimeSessionId;
           } catch {
-            runtimeSessionId = undefined as unknown as string;
+            runtimeSessionId = undefined;
           }
         }
 
