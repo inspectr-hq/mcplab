@@ -664,6 +664,36 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
     });
   }
 
+  // OIDC fallback: many providers serve endpoints at /.well-known/openid-configuration
+  // instead of /.well-known/oauth-authorization-server (RFC 8414). Try it when the
+  // authorization_endpoint hasn't been resolved yet and no manual override is set.
+  if (
+    !session.context.authServerMetadata?.authorization_endpoint &&
+    !session.config.target.overrides?.authorizationEndpoint
+  ) {
+    const baseUrl = session.config.target.overrides?.resourceBaseUrl || server.url;
+    const oidcUrl = new URL(
+      '/.well-known/openid-configuration',
+      new URL(baseUrl).origin
+    ).toString();
+    try {
+      const { response, responseJson } = await fetchWithTrace({
+        session,
+        stepId,
+        label: 'OIDC Discovery (fallback)',
+        url: oidcUrl
+      });
+      if (response.ok && responseJson?.authorization_endpoint) {
+        session.context.authServerMetadata = {
+          ...(session.context.authServerMetadata ?? {}),
+          ...responseJson
+        };
+      }
+    } catch {
+      // best-effort — ignore errors, manual overrides can be used instead
+    }
+  }
+
   if (session.config.target.overrides?.authorizationEndpoint) {
     session.context.authServerMetadata = {
       ...(session.context.authServerMetadata ?? {}),
