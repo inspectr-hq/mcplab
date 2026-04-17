@@ -77,7 +77,10 @@ program
               loadConfigForValidation: (path: string) => {
                 const loaded = loadConfig(path);
                 const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
-                loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
+                loaded.config = {
+                  ...loaded.config,
+                  agents: { ...libraryAgents, ...loaded.config.agents }
+                };
                 return loaded;
               }
             })
