@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRequestHeaders, sanitizeMcpTransportErrorMessage } from './mcp.js';
+import {
+  mergeRequestHeaders,
+  normalizeListedTool,
+  sanitizeMcpTransportErrorMessage
+} from './mcp.js';
 
 describe('sanitizeMcpTransportErrorMessage', () => {
   it('condenses HTML upstream failures into a short summary', () => {
@@ -43,5 +47,53 @@ describe('mergeRequestHeaders', () => {
       { AUTHORIZATION: 'Bearer runtime' }
     );
     expect(merged).toEqual({ authorization: 'Bearer runtime' });
+  });
+});
+
+describe('normalizeListedTool', () => {
+  it('maps outputSchema and snake_case schema fields from MCP listTools payload', () => {
+    const normalized = normalizeListedTool({
+      name: 'get_user_profile',
+      title: 'Get User Profile',
+      description: 'Get user profile',
+      input_schema: {
+        type: 'object',
+        properties: { userId: { type: 'string' } }
+      },
+      output_schema: {
+        type: 'object',
+        properties: { name: { type: 'string' } }
+      }
+    });
+
+    expect(normalized).toEqual({
+      name: 'get_user_profile',
+      title: 'Get User Profile',
+      description: 'Get user profile',
+      inputSchema: {
+        type: 'object',
+        properties: { userId: { type: 'string' } }
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { name: { type: 'string' } }
+      }
+    });
+  });
+
+  it('maps a valid annotations object', () => {
+    const normalized = normalizeListedTool({
+      name: 'get_data',
+      annotations: { readOnlyHint: true, destructiveHint: false }
+    });
+    expect(normalized.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
+  });
+
+  it('treats array annotations as absent — array passes typeof object but is not a valid annotations object', () => {
+    const normalized = normalizeListedTool({
+      name: 'get_data',
+      annotations: []
+    });
+    expect(normalized.annotations).toBeUndefined();
   });
 });

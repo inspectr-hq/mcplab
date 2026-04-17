@@ -4,12 +4,34 @@ import type { ServerConfig, ToolDef } from './types.js';
 
 export interface McpToolInfo {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
+  annotations?: {
+    readOnlyHint?: boolean;
+    idempotentHint?: boolean;
+    destructiveHint?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export interface McpCallToolOptions {
   requestHeaders?: Record<string, string>;
+}
+
+export function normalizeListedTool(tool: any): ToolDef {
+  return {
+    name: tool.name,
+    title: typeof tool.title === 'string' ? tool.title : undefined,
+    description: tool.description,
+    inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input,
+    outputSchema: tool.outputSchema ?? tool.output_schema,
+    annotations:
+      tool.annotations && typeof tool.annotations === 'object' && !Array.isArray(tool.annotations)
+        ? (tool.annotations as ToolDef['annotations'])
+        : undefined
+  };
 }
 
 export class McpClientManager {
@@ -83,11 +105,7 @@ export class McpClientManager {
           : Array.isArray(result)
           ? result
           : [];
-        return tools.map((tool: any) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input
-        }));
+        return tools.map(normalizeListedTool);
       } catch (err: any) {
         throwIfAborted(signal);
         lastError = err;

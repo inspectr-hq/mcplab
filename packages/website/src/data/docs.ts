@@ -841,6 +841,7 @@ const appToolAnalysis: DocPage = {
       bullets: [
         'Description quality — is the tool description clear and specific enough for an LLM to know when to use it?',
         'Parameter documentation — are all parameters described with types and examples?',
+        'Output schema contract — does structured output align with the tool output schema for reliable agent parsing?',
         'Naming — does the tool name clearly indicate its purpose?',
         'Safety — does the tool expose operations that could be misused?'
       ]

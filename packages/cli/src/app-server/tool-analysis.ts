@@ -81,6 +81,7 @@ export async function handleToolAnalysisRoutes(params: {
           name: tool.tool.name,
           description: tool.tool.description,
           inputSchema: tool.tool.inputSchema,
+          outputSchema: tool.tool.outputSchema,
           safetyClassification: tool.safetyClassification,
           classificationReason: tool.classificationReason
         }))

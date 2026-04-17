@@ -308,6 +308,7 @@ export interface ToolAnalysisToolReport {
   publicToolName: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   safetyClassification: 'read_like' | 'unsafe_or_unknown';
   classificationReason: string;
   metadataReview?: {
@@ -410,6 +411,7 @@ export interface ToolAnalysisDiscoveredTool {
   name: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   safetyClassification: 'read_like' | 'unsafe_or_unknown';
   classificationReason: string;
 }
