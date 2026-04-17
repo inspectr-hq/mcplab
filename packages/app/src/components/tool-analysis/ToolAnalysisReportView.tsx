@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronDown, Lightbulb } from "lucide-react";
 import type { ToolAnalysisReport } from "@/lib/data-sources/types";
+import { isWriteDeleteClassification, safeJsonStringify } from "@/lib/tool-analysis-utils";
 
 const ALL_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -68,6 +69,16 @@ function SuggestionCallout({ text }: { text: string }) {
 
 export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string {
   const lines: string[] = [];
+  const renderSchemaBlock = (title: string, schema: unknown) => {
+    lines.push(`#### ${title}`);
+    lines.push('```json');
+    try {
+      lines.push(JSON.stringify(schema, null, 2));
+    } catch {
+      lines.push('"[schema not serializable]"');
+    }
+    lines.push('```');
+  };
   lines.push(`# MCP Tool Analysis Report`, "");
   lines.push(`- Created: ${report.createdAt}`);
   lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
@@ -89,7 +100,10 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
     }
     for (const tool of server.tools) {
       lines.push(`### ${tool.publicToolName}`);
+      if (tool.title) lines.push(`- Title: ${tool.title}`);
       lines.push(`- Safety: ${tool.safetyClassification} (${tool.classificationReason})`);
+      if (tool.inputSchema !== undefined) renderSchemaBlock('Input schema', tool.inputSchema);
+      if (tool.outputSchema !== undefined) renderSchemaBlock('Output schema', tool.outputSchema);
       if (tool.metadataReview?.issues.length) {
         lines.push(`#### Metadata issues`);
         for (const issue of tool.metadataReview.issues) {
@@ -502,6 +516,13 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                   )}
                   {filteredTools.map((tool) => {
                     const toolDisplayName = tool.publicToolName.split("::").pop() ?? tool.publicToolName;
+                    const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
+                    const safetyLabel =
+                      tool.safetyClassification === "read_like"
+                        ? "read-like"
+                        : isWriteDelete
+                          ? "write/delete"
+                          : "unsafe/unknown";
                     return (
                     <details
                       key={tool.publicToolName}
@@ -509,20 +530,62 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                       className="group rounded-md border p-3"
                     >
                       <summary className="cursor-pointer list-none">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-mono text-sm" title={tool.publicToolName}>{toolDisplayName}</div>
-                            {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
+                        <div className="space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <div className="min-w-0 truncate font-mono text-sm" title={tool.publicToolName}>{toolDisplayName}</div>
+                              <Badge
+                                variant="outline"
+                                className={`shrink-0 whitespace-nowrap ${
+                                  tool.safetyClassification === "read_like"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : isWriteDelete
+                                      ? "border-amber-300 bg-amber-50 text-amber-800"
+                                      : "border-slate-300 bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {safetyLabel}
+                              </Badge>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={tool.safetyClassification === "read_like" ? "secondary" : "outline"}>
-                              {tool.safetyClassification}
-                            </Badge>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-                          </div>
+                          {tool.title && (
+                            <p className="text-sm text-foreground/85">{tool.title}</p>
+                          )}
+                          {tool.description && <p className="text-xs text-muted-foreground">{tool.description}</p>}
                         </div>
                       </summary>
                       <div className="mt-3 space-y-2">
+                        {(tool.inputSchema !== undefined || tool.outputSchema !== undefined) && (
+                          <details className="group/schema rounded border bg-muted/10 p-2">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium">
+                              <span>Schemas</span>
+                              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/schema:rotate-180" />
+                            </summary>
+                            <div className="mt-2 space-y-2">
+                              {tool.inputSchema !== undefined && (
+                                <div className="space-y-1">
+                                  <div className="text-[11px] font-medium text-muted-foreground">
+                                    Input schema
+                                  </div>
+                                  <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
+                                    {safeJsonStringify(tool.inputSchema)}
+                                  </pre>
+                                </div>
+                              )}
+                              {tool.outputSchema !== undefined && (
+                                <div className="space-y-1">
+                                  <div className="text-[11px] font-medium text-muted-foreground">
+                                    Output schema
+                                  </div>
+                                  <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
+                                    {safeJsonStringify(tool.outputSchema)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
                         {tool.metadataReview && (
                           <div className="space-y-1">
                             <div className="text-xs font-medium">Metadata review</div>

@@ -14,7 +14,36 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
+import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
 import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
+
+type ProgressEvent = { payload?: { message?: unknown } };
+
+export function parseAnalysisProgressFromEvents(events: ProgressEvent[]): {
+  totalTools: number;
+  startedTools: number;
+  finishedTools: number;
+  percent: number;
+} {
+  let totalTools = 0;
+  const started = new Set<string>();
+  const finished = new Set<string>();
+  for (const event of events) {
+    const message = typeof event.payload?.message === 'string' ? event.payload.message : '';
+    if (!message) continue;
+    const totalMatch = message.match(/\((\d+)\s+selected\s+of\s+\d+\s+discovered\)/i);
+    if (totalMatch) {
+      totalTools = Math.max(totalTools, Number(totalMatch[1]) || 0);
+    }
+    const startedMatch = message.match(/^Started\s+(.+)$/);
+    if (startedMatch) started.add(startedMatch[1]);
+    const finishedMatch = message.match(/^Finished\s+(.+)$/);
+    if (finishedMatch) finished.add(finishedMatch[1]);
+  }
+  const percent =
+    totalTools > 0 ? Math.max(0, Math.min(100, Math.round((finished.size / totalTools) * 100))) : 0;
+  return { totalTools, startedTools: started.size, finishedTools: finished.size, percent };
+}
 
 const TOOL_ANALYSIS_ACTIVE_JOB_KEY = "mcplab.toolAnalysis.activeJobId";
 
@@ -70,7 +99,19 @@ const ToolAnalysisPage = () => {
   const [selectedServerNames, setSelectedServerNames] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<
-    { serverName: string; warnings: string[]; tools: Array<{ name: string; description?: string; inputSchema?: unknown; safetyClassification: "read_like" | "unsafe_or_unknown"; classificationReason: string }> }[]
+    {
+      serverName: string;
+      warnings: string[];
+      tools: Array<{
+        name: string;
+        title?: string;
+        description?: string;
+        inputSchema?: unknown;
+        outputSchema?: unknown;
+        safetyClassification: "read_like" | "unsafe_or_unknown";
+        classificationReason: string;
+      }>;
+    }[]
   >([]);
   const [selectedToolsByServer, setSelectedToolsByServer] = useState<Record<string, string[]>>({});
   const [toolQuery, setToolQuery] = useState("");
@@ -91,34 +132,10 @@ const ToolAnalysisPage = () => {
   >({});
   const [authInProgress, setAuthInProgress] = useState(false);
   const cleanupRef = useRef<null | (() => void)>(null);
+  const eventsContainerRef = useRef<HTMLDivElement | null>(null);
 
   const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || "";
-  const analysisProgress = useMemo(() => {
-    let totalTools = 0;
-    const started = new Set<string>();
-    const finished = new Set<string>();
-    for (const event of events) {
-      const message =
-        typeof event.payload?.message === "string" ? event.payload.message : "";
-      if (!message) continue;
-      const totalMatch = message.match(/\((\d+)\s+tools?\)/i);
-      if (totalMatch) {
-        totalTools = Math.max(totalTools, Number(totalMatch[1]) || 0);
-      }
-      const startedMatch = message.match(/^Started\s+(.+)$/);
-      if (startedMatch) started.add(startedMatch[1]);
-      const finishedMatch = message.match(/^Finished\s+(.+)$/);
-      if (finishedMatch) finished.add(finishedMatch[1]);
-    }
-    const percent =
-      totalTools > 0 ? Math.max(0, Math.min(100, Math.round((finished.size / totalTools) * 100))) : 0;
-    return {
-      totalTools,
-      startedTools: started.size,
-      finishedTools: finished.size,
-      percent
-    };
-  }, [events]);
+  const analysisProgress = useMemo(() => parseAnalysisProgressFromEvents(events), [events]);
 
   useEffect(() => {
     let active = true;
@@ -141,6 +158,14 @@ const ToolAnalysisPage = () => {
       cleanupRef.current?.();
     };
   }, []);
+
+  useEffect(() => {
+    const el = eventsContainerRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [events.length]);
 
   const clearActiveToolAnalysisJob = () => {
     try {
@@ -674,7 +699,15 @@ const ToolAnalysisPage = () => {
                         </div>
                       )}
                       <div className="grid gap-2">
-                        {server.tools.map((tool) => (
+                        {server.tools.map((tool) => {
+                          const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
+                          const safetyLabel =
+                            tool.safetyClassification === "read_like"
+                              ? "read-like"
+                              : isWriteDelete
+                                ? "write/delete"
+                                : "unsafe/unknown";
+                          return (
                           <label key={`${server.serverName}-${tool.name}`} className="flex items-start gap-2 rounded border p-2">
                             <Checkbox
                               checked={selected.has(tool.name)}
@@ -685,9 +718,31 @@ const ToolAnalysisPage = () => {
                             <div className="min-w-0 space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-mono text-xs">{tool.name}</span>
-                                <Badge variant={tool.safetyClassification === "read_like" ? "secondary" : "outline"} className="text-[10px]">
-                                  {tool.safetyClassification === "read_like" ? "read-like" : "unsafe/unknown"}
+                                {tool.title && (
+                                  <span className="text-xs text-muted-foreground">{tool.title}</span>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] ${
+                                    tool.safetyClassification === "read_like"
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      : isWriteDelete
+                                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                                        : "border-slate-300 bg-slate-100 text-slate-700"
+                                  }`}
+                                >
+                                  {safetyLabel}
                                 </Badge>
+                                {tool.inputSchema && (
+                                  <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">
+                                    schema: input
+                                  </Badge>
+                                )}
+                                {tool.outputSchema && (
+                                  <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">
+                                    schema: output
+                                  </Badge>
+                                )}
                               </div>
                               {tool.description && (
                                 <p className="text-xs text-muted-foreground line-clamp-2">{tool.description}</p>
@@ -695,7 +750,8 @@ const ToolAnalysisPage = () => {
                               <p className="text-[11px] text-muted-foreground">{tool.classificationReason}</p>
                             </div>
                           </label>
-                        ))}
+                        );
+                      })}
                       </div>
                     </div>
                   );
@@ -842,7 +898,7 @@ const ToolAnalysisPage = () => {
                 {activeJobId ? "Starting analysis..." : "No progress events captured."}
               </p>
             ) : (
-              <div className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
+              <div ref={eventsContainerRef} className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
                 {events.map((event, index) => (
                   <div key={`${event.ts}-${index}`} className="text-xs">
                     <span className="mr-2 font-mono text-muted-foreground">{new Date(event.ts).toLocaleTimeString()}</span>

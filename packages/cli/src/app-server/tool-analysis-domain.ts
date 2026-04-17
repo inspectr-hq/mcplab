@@ -45,8 +45,10 @@ interface ToolAnalysisToolReport {
   serverName: string;
   toolName: string;
   publicToolName: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   safetyClassification: 'read_like' | 'unsafe_or_unknown';
   classificationReason: string;
   metadataReview?: {
@@ -120,8 +122,10 @@ export interface ToolAnalysisReport {
 
 interface ToolAnalysisDiscoveredTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   safetyClassification: 'read_like' | 'unsafe_or_unknown';
   classificationReason: string;
 }
@@ -172,6 +176,44 @@ interface ExecutionReviewJson {
   recommendations?: unknown;
 }
 
+interface ToolAnalysisMetadataPayload {
+  serverName: string;
+  toolName: string;
+  title: string;
+  description: string;
+  inputSchema: unknown;
+  outputSchema: unknown;
+  projectGoal: string;
+}
+
+interface ToolAnalysisSamplePlanPayload {
+  serverName: string;
+  toolName: string;
+  title: string;
+  description: string;
+  inputSchema: unknown;
+  outputSchema: unknown;
+  maxCalls: number;
+}
+
+interface ToolAnalysisExecutionReviewPayload {
+  serverName: string;
+  toolName: string;
+  title: string;
+  arguments: unknown;
+  resultPreview: string;
+  description: string;
+  inputSchema: unknown;
+  outputSchema: unknown;
+}
+
+const TOOL_ANALYSIS_JSON_RESPONSE_TOOL = {
+  name: 'submit_tool_analysis_json',
+  description:
+    'Submit the final analysis response as JSON object. Use this instead of returning free-form text.',
+  inputSchema: { type: 'object', additionalProperties: true }
+} satisfies ToolDef;
+
 const TOOL_ANALYSIS_READ_PREFIXES = [
   'get',
   'list',
@@ -190,6 +232,14 @@ const TOOL_ANALYSIS_UNSAFE_PREFIXES = [
   'update',
   'delete',
   'remove',
+  'cleanup',
+  'clean',
+  'clear',
+  'drop',
+  'purge',
+  'destroy',
+  'erase',
+  'truncate',
   'write',
   'set',
   'patch',
@@ -200,13 +250,30 @@ const TOOL_ANALYSIS_UNSAFE_PREFIXES = [
   'trigger'
 ];
 
-function classifyToolSafety(
+export function classifyToolSafety(
   toolName: string,
-  inputSchema?: unknown
+  inputSchema?: unknown,
+  annotations?: ToolDef['annotations']
 ): {
   safetyClassification: 'read_like' | 'unsafe_or_unknown';
   classificationReason: string;
 } {
+  const hasDestructiveHint = annotations?.destructiveHint === true;
+  const hasReadOnlyHint = annotations?.readOnlyHint === true;
+  if (hasDestructiveHint) {
+    return {
+      safetyClassification: 'unsafe_or_unknown',
+      classificationReason:
+        "MCP annotations indicate destructive behavior ('destructiveHint: true')."
+    };
+  }
+  if (hasReadOnlyHint) {
+    return {
+      safetyClassification: 'read_like',
+      classificationReason: "MCP annotations indicate read-only behavior ('readOnlyHint: true')."
+    };
+  }
+
   const lower = toolName.toLowerCase();
   const read = TOOL_ANALYSIS_READ_PREFIXES.find((p) => lower.startsWith(p));
   const unsafe = TOOL_ANALYSIS_UNSAFE_PREFIXES.find((p) => lower.startsWith(p));
@@ -280,16 +347,69 @@ function clampStringArray(value: unknown, fallback: string[] = []): string[] {
   return Array.isArray(value) ? value.map((v) => String(v)).filter(Boolean) : fallback;
 }
 
-function parseJsonFromAssistantText<T = unknown>(text: string): T {
+function extractFirstBalancedJsonCandidate(text: string): string | null {
+  const starts: Array<{ idx: number; open: '{' | '['; close: '}' | ']' }> = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '{') starts.push({ idx: i, open: '{', close: '}' });
+    if (ch === '[') starts.push({ idx: i, open: '[', close: ']' });
+  }
+  for (const start of starts) {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start.idx; i < text.length; i += 1) {
+      const ch = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === start.open) depth += 1;
+      if (ch === start.close) {
+        depth -= 1;
+        if (depth === 0) return text.slice(start.idx, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+export function parseJsonFromAssistantText<T = unknown>(text: string): T {
   const cleaned = text.trim();
   try {
     return JSON.parse(cleaned) as T;
   } catch {
     const fenced =
       cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) return JSON.parse(fenced[1]) as T;
+    if (fenced) return JSON.parse(fenced[1].trim()) as T;
+    const candidate = extractFirstBalancedJsonCandidate(cleaned);
+    if (candidate) return JSON.parse(candidate) as T;
     throw new Error('Assistant returned invalid JSON');
   }
+}
+
+function parseJsonFromToolCalls(response: {
+  tool_calls?: Array<{ name: string; arguments: unknown }>;
+}): unknown {
+  if (!Array.isArray(response.tool_calls) || response.tool_calls.length === 0) return undefined;
+  const preferred =
+    response.tool_calls.find((c) => c.name === TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name) ??
+    response.tool_calls[0];
+  const args = preferred?.arguments;
+  if (typeof args === 'string') return parseJsonFromAssistantText(args);
+  return args;
 }
 
 async function chatJsonWithAgent(
@@ -300,23 +420,39 @@ async function chatJsonWithAgent(
   const first = await chatWithAgent({
     agent,
     system,
-    messages: [{ role: 'user', content: userPrompt }]
+    tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
+    messages: [
+      {
+        role: 'user',
+        content: `${userPrompt}\n\nReturn your answer by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' with the JSON object.`
+      }
+    ]
   });
+  const firstToolJson = parseJsonFromToolCalls(first);
+  if (firstToolJson && typeof firstToolJson === 'object') return firstToolJson;
   try {
     return parseJsonFromAssistantText(first.content ?? '');
   } catch {
     const retry = await chatWithAgent({
       agent,
       system,
+      tools: [TOOL_ANALYSIS_JSON_RESPONSE_TOOL],
       messages: [
-        { role: 'user', content: userPrompt },
+        {
+          role: 'user',
+          content: `${userPrompt}\n\nReturn your answer by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' with the JSON object.`
+        },
         { role: 'assistant', content: first.content ?? '' },
         {
           role: 'user',
-          content: 'Reply again with valid JSON only. No prose, no markdown fences.'
+          content:
+            `Reply again by calling '${TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name}' only. ` +
+            'No prose, no markdown fences, no explanation text.'
         }
       ]
     });
+    const retryToolJson = parseJsonFromToolCalls(retry);
+    if (retryToolJson && typeof retryToolJson === 'object') return retryToolJson;
     return parseJsonFromAssistantText(retry.content ?? '');
   }
 }
@@ -354,6 +490,67 @@ function toolAnalysisExecutionReviewSystemPrompt(): string {
   ].join('\n');
 }
 
+export function buildToolAnalysisMetadataPayload(params: {
+  serverName: string;
+  toolName: string;
+  title?: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+}): ToolAnalysisMetadataPayload {
+  return {
+    serverName: params.serverName,
+    toolName: params.toolName,
+    title: params.title ?? '',
+    description: params.description ?? '',
+    inputSchema: params.inputSchema ?? null,
+    outputSchema: params.outputSchema ?? null,
+    projectGoal: 'MCP agent/workflow evaluation friendliness'
+  };
+}
+
+export function buildToolAnalysisSamplePlanPayload(params: {
+  serverName: string;
+  toolName: string;
+  title?: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  maxCalls: number;
+}): ToolAnalysisSamplePlanPayload {
+  return {
+    serverName: params.serverName,
+    toolName: params.toolName,
+    title: params.title ?? '',
+    description: params.description ?? '',
+    inputSchema: params.inputSchema ?? null,
+    outputSchema: params.outputSchema ?? null,
+    maxCalls: params.maxCalls
+  };
+}
+
+export function buildToolAnalysisExecutionReviewPayload(params: {
+  serverName: string;
+  toolName: string;
+  title?: string;
+  arguments: unknown;
+  resultPreview: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+}): ToolAnalysisExecutionReviewPayload {
+  return {
+    serverName: params.serverName,
+    toolName: params.toolName,
+    title: params.title ?? '',
+    arguments: params.arguments,
+    resultPreview: params.resultPreview,
+    description: params.description ?? '',
+    inputSchema: params.inputSchema ?? null,
+    outputSchema: params.outputSchema ?? null
+  };
+}
+
 export async function discoverMcpToolsForServers(
   serversByName: EvalConfig['servers'],
   serverNames: string[],
@@ -388,7 +585,7 @@ export async function discoverMcpToolsForServers(
       });
       const tools = await mcp.listTools(serverName);
       entry.tools = tools.map((tool) => {
-        const safety = classifyToolSafety(tool.name, tool.inputSchema);
+        const safety = classifyToolSafety(tool.name, tool.inputSchema, tool.annotations);
         return {
           serverName,
           tool,
@@ -488,13 +685,6 @@ export async function runToolAnalysisJob(params: {
 
     for (const discovered of discoveredServers) {
       if (job.abortController.signal.aborted) throw new Error('Tool analysis aborted by user');
-      addJobEvent(job, {
-        type: 'log',
-        ts: new Date().toISOString(),
-        payload: {
-          message: `Analyzing server ${discovered.serverName} (${discovered.tools.length} tools)`
-        }
-      });
       const requestedToolNames = selectedToolsByServer?.[discovered.serverName];
       const requestedSet = requestedToolNames ? new Set(requestedToolNames) : null;
       const selectedTools = requestedSet
@@ -503,6 +693,13 @@ export async function runToolAnalysisJob(params: {
       const missingRequested = requestedSet
         ? requestedToolNames!.filter((name) => !discovered.tools.some((t) => t.tool.name === name))
         : [];
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `Analyzing server ${discovered.serverName} (${selectedTools.length} selected of ${discovered.tools.length} discovered)`
+        }
+      });
 
       const toolReports: ToolAnalysisToolReport[] = new Array(selectedTools.length);
       const perToolFindings: ToolAnalysisFinding[][] = new Array(selectedTools.length);
@@ -525,8 +722,10 @@ export async function runToolAnalysisJob(params: {
           serverName: discovered.serverName,
           toolName: toolCtx.tool.name,
           publicToolName: `${discovered.serverName}::${toolCtx.tool.name}`,
+          title: toolCtx.tool.title,
           description: toolCtx.tool.description,
           inputSchema: toolCtx.tool.inputSchema,
+          outputSchema: toolCtx.tool.outputSchema,
           safetyClassification: toolCtx.safetyClassification,
           classificationReason: toolCtx.classificationReason,
           overallRecommendations: []
@@ -542,13 +741,16 @@ export async function runToolAnalysisJob(params: {
             const metaJson = (await chatJsonWithAgent(
               agentConfig,
               toolAnalysisMetadataSystemPrompt(),
-              JSON.stringify({
-                serverName: discovered.serverName,
-                toolName: toolCtx.tool.name,
-                description: toolCtx.tool.description ?? '',
-                inputSchema: toolCtx.tool.inputSchema ?? null,
-                projectGoal: 'MCP agent/workflow evaluation friendliness'
-              })
+              JSON.stringify(
+                buildToolAnalysisMetadataPayload({
+                  serverName: discovered.serverName,
+                  toolName: toolCtx.tool.name,
+                  title: toolCtx.tool.title,
+                  description: toolCtx.tool.description,
+                  inputSchema: toolCtx.tool.inputSchema,
+                  outputSchema: toolCtx.tool.outputSchema
+                })
+              )
             )) as MetadataReviewJson;
             const issues = Array.isArray(metaJson.issues)
               ? metaJson.issues.map((item: unknown, idx: number) =>
@@ -645,13 +847,17 @@ export async function runToolAnalysisJob(params: {
               const samplePlan = (await chatJsonWithAgent(
                 agentConfig,
                 toolAnalysisSampleArgsSystemPrompt(deeper.sampleCallsPerTool),
-                JSON.stringify({
-                  serverName: discovered.serverName,
-                  toolName: toolCtx.tool.name,
-                  description: toolCtx.tool.description ?? '',
-                  inputSchema: toolCtx.tool.inputSchema ?? null,
-                  maxCalls: deeper.sampleCallsPerTool
-                })
+                JSON.stringify(
+                  buildToolAnalysisSamplePlanPayload({
+                    serverName: discovered.serverName,
+                    toolName: toolCtx.tool.name,
+                    title: toolCtx.tool.title,
+                    description: toolCtx.tool.description,
+                    inputSchema: toolCtx.tool.inputSchema,
+                    outputSchema: toolCtx.tool.outputSchema,
+                    maxCalls: deeper.sampleCallsPerTool
+                  })
+                )
               )) as SamplePlanJson;
               const suggestedSamples = Array.isArray(samplePlan.sampleCalls)
                 ? samplePlan.sampleCalls.slice(0, deeper.sampleCallsPerTool)
@@ -672,14 +878,18 @@ export async function runToolAnalysisJob(params: {
                     execReview = (await chatJsonWithAgent(
                       agentConfig,
                       toolAnalysisExecutionReviewSystemPrompt(),
-                      JSON.stringify({
-                        serverName: discovered.serverName,
-                        toolName: toolCtx.tool.name,
-                        arguments: suggestedArgs,
-                        resultPreview: truncateJson(result, 4000),
-                        description: toolCtx.tool.description ?? '',
-                        inputSchema: toolCtx.tool.inputSchema ?? null
-                      })
+                      JSON.stringify(
+                        buildToolAnalysisExecutionReviewPayload({
+                          serverName: discovered.serverName,
+                          toolName: toolCtx.tool.name,
+                          title: toolCtx.tool.title,
+                          arguments: suggestedArgs,
+                          resultPreview: truncateJson(result, 4000),
+                          description: toolCtx.tool.description,
+                          inputSchema: toolCtx.tool.inputSchema,
+                          outputSchema: toolCtx.tool.outputSchema
+                        })
+                      )
                     )) as ExecutionReviewJson;
                   } catch (error: unknown) {
                     execReview = {
