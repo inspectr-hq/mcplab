@@ -1,5 +1,14 @@
 # @inspectr/mcplab-core
 
+## 1.4.0
+
+### Minor Changes
+
+- feat: add analysis of title, outputSchema in tool analysis
+  ux: Show tool annotations in tool analysis
+  ux: Add "Run" button on Evalutations overview
+  fix: Improved safety classification mechanism
+
 ## 1.3.0
 
 ### Minor Changes
