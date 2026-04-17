@@ -58,6 +58,8 @@ const ServerDetail = () => {
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: "idle" });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
+  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
+  const [authInProgress, setAuthInProgress] = useState(false);
 
   useEffect(() => {
     if (existingServer) setForm(existingServer);
@@ -90,8 +92,72 @@ const ServerDetail = () => {
   const handleConnect = async () => {
     setShowConnectPanel(true);
     setConnectState({ status: "loading" });
+
+    let oauthSessions: Record<string, string> | undefined;
+
+    if (form.authType === "oauth2") {
+      const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
+        const waitForSession = async (sessionId: string) => {
+          const timeoutAt = Date.now() + 5 * 60_000;
+          while (Date.now() < timeoutAt) {
+            const { session } = await source.getOAuthRuntimeSession(sessionId);
+            if (session.status === "completed" && session.hasAccessToken) return;
+            if (session.status === "error" || session.status === "stopped") {
+              throw new Error(
+                `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
+              );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+          throw new Error(`OAuth login timed out for '${serverName}'.`);
+        };
+
+        let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
+        if (runtimeSessionId) {
+          try {
+            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
+            if (session.status === "completed" && session.hasAccessToken) return runtimeSessionId;
+          } catch {
+            runtimeSessionId = undefined as unknown as string;
+          }
+        }
+
+        const created = await source.createOAuthRuntimeSession({ serverName });
+        runtimeSessionId = created.session.id;
+        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
+        const launchUrl = created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
+        if (launchUrl) {
+          const absoluteUrl = launchUrl.startsWith("http")
+            ? launchUrl
+            : `${window.location.origin}${launchUrl}`;
+          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+        }
+        await waitForSession(runtimeSessionId);
+        return runtimeSessionId;
+      };
+
+      try {
+        setAuthInProgress(true);
+        const sessionId = await ensureOAuthRuntimeSession(form.id);
+        oauthSessions = { [form.id]: sessionId };
+      } catch (err) {
+        setConnectState({
+          status: "error",
+          message: `OAuth login failed: ${err instanceof Error ? err.message : String(err)}`,
+          testedAt: new Date().toISOString(),
+        });
+        setAuthInProgress(false);
+        return;
+      } finally {
+        setAuthInProgress(false);
+      }
+    }
+
     try {
-      const result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
+      const result = await source.discoverToolsForAnalysis({
+        serverNames: [form.id],
+        oauthRuntimeSessions: oauthSessions,
+      });
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
@@ -192,7 +258,7 @@ const ServerDetail = () => {
           <h1 className="text-2xl font-bold">{isNew ? "New Server" : displayName(form)}</h1>
         </div>
         {!isNew && (
-          <Button type="button" onClick={() => void handleConnect()}>
+          <Button type="button" onClick={() => void handleConnect()} disabled={connectState.status === "loading" || authInProgress}>
             <Wifi className="mr-2 h-4 w-4" />
             Test Connection
           </Button>
@@ -231,7 +297,7 @@ const ServerDetail = () => {
             {connectState.status === "loading" && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Connecting to MCP server…
+                {authInProgress ? "Waiting for OAuth login in browser…" : "Connecting to MCP server…"}
               </div>
             )}
 
