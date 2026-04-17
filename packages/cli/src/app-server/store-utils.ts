@@ -1,9 +1,9 @@
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 export function ensureInsideRoot(rootDir: string, candidatePath: string): string {
   const root = resolve(rootDir);
   const candidate = resolve(candidatePath);
-  if (!(candidate === root || candidate.startsWith(`${root}/`))) {
+  if (!(candidate === root || candidate.startsWith(`${root}${sep}`))) {
     throw new Error(`Path outside allowed root: ${candidatePath}`);
   }
   return candidate;
