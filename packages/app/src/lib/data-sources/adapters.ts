@@ -376,7 +376,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
             type: 'oauth_authorization_code' as const,
             client_id: server.oauthClientId || '',
             client_secret: server.oauthClientSecret || undefined,
-            redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+            ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
             scope: server.oauthScope || undefined
           }
         : undefined;
@@ -570,7 +570,7 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
                   type: 'oauth_authorization_code' as const,
                   client_id: server.oauthClientId || '',
                   client_secret: server.oauthClientSecret || undefined,
-                  redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
+                  ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
                   scope: server.oauthScope || undefined
                 }
               : undefined
