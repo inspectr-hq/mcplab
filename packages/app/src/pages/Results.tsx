@@ -6,6 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -19,7 +28,6 @@ import { PassRateBadge } from "@/components/PassRateBadge";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type RunScopeSummary = {
   scenarioCount: number;
@@ -59,6 +67,7 @@ const Results = () => {
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios" | "avgToolCalls" | "toolTokens">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [scenarioFilter, setScenarioFilter] = useState("all");
+  const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -230,19 +239,51 @@ const Results = () => {
           <p className="text-sm text-muted-foreground">Browse evaluation runs and open detailed results</p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={scenarioFilter} onValueChange={setScenarioFilter}>
-            <SelectTrigger className="w-[260px]">
-              <SelectValue placeholder="Filter by scenario" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All scenarios</SelectItem>
-              {scenarioFilterOptions.map((label) => (
-                <SelectItem key={label} value={label}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-expanded={openScenarioFilterPicker}
+                className="w-[260px] justify-between font-normal"
+              >
+                <span className="truncate text-left">{scenarioFilter === "all" ? "All scenarios" : scenarioFilter}</span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[260px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search scenarios..." />
+                <CommandList>
+                  <CommandEmpty>No scenarios found.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="all scenarios"
+                      onSelect={() => {
+                        setScenarioFilter("all");
+                        setOpenScenarioFilterPicker(false);
+                      }}
+                    >
+                      All scenarios
+                    </CommandItem>
+                    {scenarioFilterOptions.map((label) => (
+                      <CommandItem
+                        key={label}
+                        value={label}
+                        onSelect={() => {
+                          setScenarioFilter(label);
+                          setOpenScenarioFilterPicker(false);
+                        }}
+                      >
+                        {label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? "Refreshing..." : "Refresh"}
           </Button>

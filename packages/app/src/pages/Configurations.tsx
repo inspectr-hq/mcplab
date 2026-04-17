@@ -4,6 +4,7 @@ import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useConfigs } from "@/contexts/ConfigContext";
@@ -17,6 +18,8 @@ const Configurations = () => {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<"name" | "scenarios" | "agents" | "updatedAt">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [configFilter, setConfigFilter] = useState("");
+  const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -55,8 +58,23 @@ const Configurations = () => {
   const scenarioCount = (cfg: (typeof configs)[number]) =>
     cfg.scenarioEntries?.length ?? cfg.scenarios?.length ?? 0;
 
+  const filteredConfigs = useMemo(() => {
+    if (normalizedConfigFilter.length === 0) return configs;
+    return configs.filter((cfg) => {
+      const haystack = [
+        displayConfigName(cfg),
+        cfg.id,
+        cfg.description ?? "",
+        cfg.loadError ?? ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedConfigFilter);
+    });
+  }, [configs, normalizedConfigFilter]);
+
   const sortedConfigs = useMemo(() => {
-    const sorted = [...configs].sort((a, b) => {
+    const sorted = [...filteredConfigs].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "name") cmp = displayConfigName(a).localeCompare(displayConfigName(b));
       if (sortBy === "scenarios") cmp = scenarioCount(a) - scenarioCount(b);
@@ -65,7 +83,7 @@ const Configurations = () => {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [configs, sortBy, sortDir]);
+  }, [filteredConfigs, sortBy, sortDir]);
 
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -83,6 +101,7 @@ const Configurations = () => {
           <p className="text-sm text-muted-foreground">Manage your MCP evaluation suites</p>
         </div>
         <div className="flex gap-2">
+          <SearchInput value={configFilter} onValueChange={setConfigFilter} placeholder="Search evaluations..." />
           <Button variant="outline" size="sm" onClick={() => void reload()}>
             <RefreshCw className="mr-2 h-4 w-4" />Refresh
           </Button>
@@ -179,6 +198,13 @@ const Configurations = () => {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
                     No MCP evaluations yet. Create your first one to get started.
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loading && configs.length > 0 && sortedConfigs.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                    No MCP evaluations match this filter.
                   </TableCell>
                 </TableRow>
               )}

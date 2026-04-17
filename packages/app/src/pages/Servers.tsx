@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Database } from "lucide-react";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -23,6 +24,8 @@ const Servers = () => {
   const { servers, setServers, reload, loading } = useLibraries();
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<ServerConfig | null>(null);
+  const [serverFilter, setServerFilter] = useState("");
+  const normalizedServerFilter = serverFilter.trim().toLowerCase();
   const displayName = (server: ServerConfig) => server.name?.trim() || server.id;
 
   const handleDuplicate = async (server: ServerConfig) => {
@@ -54,6 +57,24 @@ const Servers = () => {
     }
     return server.url || "";
   };
+  const filteredServers = useMemo(
+    () =>
+      normalizedServerFilter.length === 0
+        ? servers
+        : servers.filter((server) => {
+            const haystack = [
+              displayName(server),
+              server.id,
+              server.transport,
+              getEndpointDisplay(server),
+              server.authType ?? ""
+            ]
+              .join(" ")
+              .toLowerCase();
+            return haystack.includes(normalizedServerFilter);
+          }),
+    [servers, normalizedServerFilter]
+  );
 
   return (
     <div className="space-y-6">
@@ -68,6 +89,7 @@ const Servers = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SearchInput value={serverFilter} onValueChange={setServerFilter} placeholder="Search servers..." />
           <Button type="button" size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -87,6 +109,10 @@ const Servers = () => {
             Add Server
           </Button>
         </div>
+      ) : filteredServers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+          <p className="text-sm text-muted-foreground">No servers match this filter.</p>
+        </div>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -101,7 +127,7 @@ const Servers = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {servers.map((server) => (
+                {filteredServers.map((server) => (
                     <TableRow
                       key={server.id}
                       className="cursor-pointer hover:bg-muted/50"

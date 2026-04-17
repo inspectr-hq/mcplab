@@ -4,12 +4,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { ToolAnalysisResultSummary } from "@/lib/data-sources/types";
-import {Clock, Download, MoreHorizontal, Trash2, NotebookTabs} from "lucide-react";
+import { Clock, Download, MoreHorizontal, Trash2, NotebookTabs, ChevronDown } from "lucide-react";
 import { toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -28,6 +37,8 @@ export default function ToolAnalysisResultsPage() {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [serverFilter, setServerFilter] = useState("all");
+  const [openServerFilterPicker, setOpenServerFilterPicker] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -44,6 +55,15 @@ export default function ToolAnalysisResultsPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const serverOptions = useMemo(
+    () => Array.from(new Set(items.flatMap((item) => item.serverNames))).sort((a, b) => a.localeCompare(b)),
+    [items]
+  );
+  const filteredItems = useMemo(
+    () => (serverFilter === "all" ? items : items.filter((item) => item.serverNames.includes(serverFilter))),
+    [items, serverFilter]
+  );
 
   const deleteTarget = useMemo(() => items.find((i) => i.reportId === deleteId) ?? null, [items, deleteId]);
 
@@ -86,6 +106,54 @@ export default function ToolAnalysisResultsPage() {
           <p className="text-sm text-muted-foreground">Browse persisted Analyze MCP Tools reports.</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">MCP server</span>
+            <Popover open={openServerFilterPicker} onOpenChange={setOpenServerFilterPicker}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openServerFilterPicker}
+                  className="h-9 w-[240px] justify-between font-normal"
+                >
+                  <span className="truncate text-left">{serverFilter === "all" ? "All servers" : serverFilter}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search servers..." />
+                  <CommandList>
+                    <CommandEmpty>No servers found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="all servers"
+                        onSelect={() => {
+                          setServerFilter("all");
+                          setOpenServerFilterPicker(false);
+                        }}
+                      >
+                        All servers
+                      </CommandItem>
+                      {serverOptions.map((serverName) => (
+                        <CommandItem
+                          key={serverName}
+                          value={serverName}
+                          onSelect={() => {
+                            setServerFilter(serverName);
+                            setOpenServerFilterPicker(false);
+                          }}
+                        >
+                          {serverName}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
@@ -102,99 +170,111 @@ export default function ToolAnalysisResultsPage() {
           ) : items.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No saved tool analysis reports yet.</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Report ID</TableHead>
-                  <TableHead>Evaluated</TableHead>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Issues</TableHead>
-                  <TableHead>Modes</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.reportId}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <Link to={`/tool-analysis-results/${item.reportId}`} className="font-mono text-xs text-primary hover:underline">
-                          {item.reportId}
-                        </Link>
-                        <div className="text-[11px] text-muted-foreground">
-                          {item.assistantAgentName} · {item.assistantAgentModel}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
-                      <div className="space-y-0.5">
-                        <div>
-                          Servers: <span className="font-medium text-foreground">{item.serverNames.length}</span> · Tools:{" "}
-                          <span className="font-medium text-foreground">{item.summary.toolsAnalyzed}</span>
-                          {" · "}Skipped: <span className="font-medium text-foreground">{item.summary.toolsSkipped}</span>
-                        </div>
-                        <div className="font-mono text-xs text-foreground/80">
-                          {item.serverNames.slice(0, 2).join(", ")}
-                          {item.serverNames.length > 2 ? ` +${item.serverNames.length - 2}` : ""}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(item.createdAt).toLocaleString()}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(["critical", "high", "medium", "low", "info"] as const).map((sev) =>
-                          item.summary.issueCounts[sev] > 0 ? (
-                            <Badge key={`${item.reportId}-${sev}`} variant="outline" className="capitalize">
-                              {sev}: {item.summary.issueCounts[sev]}
-                            </Badge>
-                          ) : null
-                        )}
-                        {Object.values(item.summary.issueCounts).every((n) => n === 0) && (
-                          <Badge variant="outline">No issues</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
-                        {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link to={`/tool-analysis-results/${item.reportId}`}>View</Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "json")}>
-                            <Download className="mr-2 h-3.5 w-3.5" /> Export JSON
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "markdown")}>
-                            <Download className="mr-2 h-3.5 w-3.5" /> Export Markdown
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              setDeleteId(item.reportId);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <div className="border-b px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Showing <span className="font-medium text-foreground">{filteredItems.length}</span> of{" "}
+                  <span className="font-medium text-foreground">{items.length}</span> reports
+                </p>
+              </div>
+              {filteredItems.length === 0 ? (
+                <p className="p-6 text-sm text-muted-foreground">No reports for the selected MCP server.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Report ID</TableHead>
+                      <TableHead>Evaluated</TableHead>
+                      <TableHead>Timestamp</TableHead>
+                      <TableHead>Issues</TableHead>
+                      <TableHead>Modes</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredItems.map((item) => (
+                      <TableRow key={item.reportId}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Link to={`/tool-analysis-results/${item.reportId}`} className="font-mono text-xs text-primary hover:underline">
+                              {item.reportId}
+                            </Link>
+                            <div className="text-[11px] text-muted-foreground">
+                              {item.assistantAgentName} · {item.assistantAgentModel}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-muted-foreground">
+                          <div className="space-y-0.5">
+                            <div>
+                              Servers: <span className="font-medium text-foreground">{item.serverNames.length}</span> · Tools:{" "}
+                              <span className="font-medium text-foreground">{item.summary.toolsAnalyzed}</span>
+                              {" · "}Skipped: <span className="font-medium text-foreground">{item.summary.toolsSkipped}</span>
+                            </div>
+                            <div className="font-mono text-xs text-foreground/80">
+                              {item.serverNames.slice(0, 2).join(", ")}
+                              {item.serverNames.length > 2 ? ` +${item.serverNames.length - 2}` : ""}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(item.createdAt).toLocaleString()}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {(["critical", "high", "medium", "low", "info"] as const).map((sev) =>
+                              item.summary.issueCounts[sev] > 0 ? (
+                                <Badge key={`${item.reportId}-${sev}`} variant="outline" className="capitalize">
+                                  {sev}: {item.summary.issueCounts[sev]}
+                                </Badge>
+                              ) : null
+                            )}
+                            {Object.values(item.summary.issueCounts).every((n) => n === 0) && (
+                              <Badge variant="outline">No issues</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {item.modes.metadataReview && <Badge variant="outline">metadata</Badge>}
+                            {item.modes.deeperAnalysis && <Badge variant="outline">deeper</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link to={`/tool-analysis-results/${item.reportId}`}>View</Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "json")}>
+                                <Download className="mr-2 h-3.5 w-3.5" /> Export JSON
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => void exportReport(item.reportId, "markdown")}>
+                                <Download className="mr-2 h-3.5 w-3.5" /> Export Markdown
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  setDeleteId(item.reportId);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

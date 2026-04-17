@@ -5,6 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -59,6 +68,7 @@ const Compare = () => {
   const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [scenarioFilter, setScenarioFilter] = useState("all");
+  const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
 
   const initialModeParam = searchParams.get("mode");
   const initialMode: CompareMode = initialModeParam === "within-run" ? "within-run" : "runs";
@@ -73,6 +83,7 @@ const Compare = () => {
   const [withinRunId, setWithinRunId] = useState(initialWithinRunId);
   const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
   const [withinRunScenarioFilter, setWithinRunScenarioFilter] = useState(initialWithinRunScenario);
+  const [openWithinRunScenarioPicker, setOpenWithinRunScenarioPicker] = useState(false);
 
   const loadResults = async () => {
     setRefreshing(true);
@@ -414,19 +425,51 @@ const Compare = () => {
         </div>
         <div className="flex items-center gap-2">
           {mode === "runs" && (
-            <Select value={scenarioFilter} onValueChange={setScenarioFilter}>
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder="Filter by scenario" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All scenarios</SelectItem>
-                {scenarioFilterOptions.map((label) => (
-                  <SelectItem key={label} value={label}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openScenarioFilterPicker}
+                  className="w-[260px] justify-between font-normal"
+                >
+                  <span className="truncate text-left">{scenarioFilter === "all" ? "All scenarios" : scenarioFilter}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[260px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search scenarios..." />
+                  <CommandList>
+                    <CommandEmpty>No scenarios found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="all scenarios"
+                        onSelect={() => {
+                          setScenarioFilter("all");
+                          setOpenScenarioFilterPicker(false);
+                        }}
+                      >
+                        All scenarios
+                      </CommandItem>
+                      {scenarioFilterOptions.map((label) => (
+                        <CommandItem
+                          key={label}
+                          value={label}
+                          onSelect={() => {
+                            setScenarioFilter(label);
+                            setOpenScenarioFilterPicker(false);
+                          }}
+                        >
+                          {label}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           )}
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? "Refreshing..." : "Refresh"}
@@ -478,19 +521,53 @@ const Compare = () => {
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Scenario filter</p>
-                <Select value={withinRunScenarioFilter} onValueChange={setWithinRunScenarioFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All scenarios" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All scenarios</SelectItem>
-                    {withinRunScenarioOptions.map((label) => (
-                      <SelectItem key={label} value={label}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={openWithinRunScenarioPicker} onOpenChange={setOpenWithinRunScenarioPicker}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openWithinRunScenarioPicker}
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {withinRunScenarioFilter === "all" ? "All scenarios" : withinRunScenarioFilter}
+                      </span>
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search scenarios..." />
+                      <CommandList>
+                        <CommandEmpty>No scenarios found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="all scenarios"
+                            onSelect={() => {
+                              setWithinRunScenarioFilter("all");
+                              setOpenWithinRunScenarioPicker(false);
+                            }}
+                          >
+                            All scenarios
+                          </CommandItem>
+                          {withinRunScenarioOptions.map((label) => (
+                            <CommandItem
+                              key={label}
+                              value={label}
+                              onSelect={() => {
+                                setWithinRunScenarioFilter(label);
+                                setOpenWithinRunScenarioPicker(false);
+                              }}
+                            >
+                              {label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 

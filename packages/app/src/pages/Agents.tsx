@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot } from "lucide-react";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -23,6 +24,19 @@ const Agents = () => {
   const { agents, setAgents, reload, loading } = useLibraries();
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<AgentConfig | null>(null);
+  const [agentFilter, setAgentFilter] = useState("");
+  const normalizedAgentFilter = agentFilter.trim().toLowerCase();
+  const filteredAgents = useMemo(
+    () =>
+      normalizedAgentFilter.length === 0
+        ? agents
+        : agents.filter((agent) => {
+            const name = agent.name.toLowerCase();
+            const model = agent.model.toLowerCase();
+            return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
+          }),
+    [agents, normalizedAgentFilter]
+  );
 
   const handleDuplicate = async (agent: AgentConfig) => {
     const baseName = `${agent.name}-copy`;
@@ -60,6 +74,7 @@ const Agents = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SearchInput value={agentFilter} onValueChange={setAgentFilter} placeholder="Search agents..." />
           <Button type="button" size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -79,6 +94,10 @@ const Agents = () => {
             Add Agent
           </Button>
         </div>
+      ) : filteredAgents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+          <p className="text-sm text-muted-foreground">No agents match this filter.</p>
+        </div>
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -94,7 +113,7 @@ const Agents = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agents.map((agent) => (
+                {filteredAgents.map((agent) => (
                   <TableRow
                     key={agent.id}
                     className="cursor-pointer hover:bg-muted/50"
