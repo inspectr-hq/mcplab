@@ -26,7 +26,7 @@ export interface ServerAuthOauthAuthorizationCode {
   type: 'oauth_authorization_code';
   client_id: string;
   client_secret?: string;
-  redirect_url: string;
+  redirect_url?: string;
   scope?: string;
 }
 
