@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 1.5.0
+
+### Minor Changes
+
+- feat: add search capabilities and enhanced inputs across key page
+- feat: enhance tool analysis report with severity and tool grouping, filters, and better UX controls
+
 ## 1.4.0
 
 ### Minor Changes
