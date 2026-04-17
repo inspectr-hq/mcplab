@@ -84,7 +84,7 @@ const ServerDetail = () => {
             oauthScope: undefined,
           }
         : {
-            oauthRedirectUrl: f.oauthRedirectUrl || "http://localhost:6274/oauth/",
+            oauthRedirectUrl: f.oauthRedirectUrl || undefined,
           }),
     }));
   };
@@ -505,7 +505,7 @@ const ServerDetail = () => {
                 <div className="space-y-1.5">
                   <Label className="text-xs">Redirect URL</Label>
                   <Input
-                    value={form.oauthRedirectUrl || "http://localhost:6274/oauth/"}
+                    value={form.oauthRedirectUrl || ""}
                     onChange={(e) => setForm((f) => ({ ...f, oauthRedirectUrl: e.target.value }))}
                     placeholder="http://localhost:6274/oauth/"
                     className="font-mono text-xs"
