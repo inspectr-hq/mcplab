@@ -261,7 +261,8 @@ export function classifyToolSafety(
   if (hasDestructiveHint) {
     return {
       safetyClassification: 'unsafe_or_unknown',
-      classificationReason: "MCP annotations indicate destructive behavior ('destructiveHint: true')."
+      classificationReason:
+        "MCP annotations indicate destructive behavior ('destructiveHint: true')."
     };
   }
   if (hasReadOnlyHint) {
@@ -397,7 +398,9 @@ export function parseJsonFromAssistantText<T = unknown>(text: string): T {
   }
 }
 
-function parseJsonFromToolCalls(response: { tool_calls?: Array<{ name: string; arguments: unknown }> }): unknown {
+function parseJsonFromToolCalls(response: {
+  tool_calls?: Array<{ name: string; arguments: unknown }>;
+}): unknown {
   if (!Array.isArray(response.tool_calls) || response.tool_calls.length === 0) return undefined;
   const preferred =
     response.tool_calls.find((c) => c.name === TOOL_ANALYSIS_JSON_RESPONSE_TOOL.name) ??

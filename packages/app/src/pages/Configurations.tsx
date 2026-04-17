@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Download, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -192,8 +192,7 @@ const Configurations = () => {
                           <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
                             <Copy className="mr-2 h-3.5 w-3.5" />Clone
                           </DropdownMenuItem>
-                          <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Download YAML</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
+<DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
                             <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>

@@ -3,15 +3,21 @@ import { isWriteDeleteClassification, safeJsonStringify } from './tool-analysis-
 
 describe('isWriteDeleteClassification', () => {
   it('returns true for side-effectful prefix reason', () => {
-    expect(isWriteDeleteClassification("Name starts with potentially side-effectful prefix 'delete'.")).toBe(true);
+    expect(
+      isWriteDeleteClassification("Name starts with potentially side-effectful prefix 'delete'.")
+    ).toBe(true);
   });
 
   it('returns true for destructive behavior annotation reason', () => {
-    expect(isWriteDeleteClassification("MCP annotations indicate destructive behavior ('destructiveHint: true').")).toBe(true);
+    expect(
+      isWriteDeleteClassification(
+        "MCP annotations indicate destructive behavior ('destructiveHint: true')."
+      )
+    ).toBe(true);
   });
 
   it('returns true for destructiveHint mention in reason', () => {
-    expect(isWriteDeleteClassification("destructiveHint: true")).toBe(true);
+    expect(isWriteDeleteClassification('destructiveHint: true')).toBe(true);
   });
 
   it('returns false for read-like classification', () => {
@@ -19,7 +25,9 @@ describe('isWriteDeleteClassification', () => {
   });
 
   it('returns false for unknown/other unsafe reason', () => {
-    expect(isWriteDeleteClassification("Tool name does not match read-only allowlist prefixes.")).toBe(false);
+    expect(
+      isWriteDeleteClassification('Tool name does not match read-only allowlist prefixes.')
+    ).toBe(false);
   });
 });
 
