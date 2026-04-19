@@ -39,7 +39,6 @@ const emptyServer = (): ServerConfig => ({
   name: "",
   transport: "stdio",
   authType: "none",
-  oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
 const ServerDetail = () => {
@@ -503,7 +502,7 @@ const ServerDetail = () => {
                   type="button"
                   variant={form.oauthMode === "dcr" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setForm((f) => ({ ...f, oauthMode: "dcr" }))}
+                  onClick={() => setForm((f) => ({ ...f, oauthMode: "dcr", oauthClientId: undefined, oauthClientSecret: undefined }))}
                 >
                   DCR (Dynamic)
                 </Button>

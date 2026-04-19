@@ -21,7 +21,6 @@ const emptyServer = (): ServerConfig => ({
   name: "",
   transport: "stdio",
   authType: "none",
-  oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
 export function ServerForm({
@@ -223,7 +222,7 @@ export function ServerForm({
                     variant={srv.oauthMode === "dcr" ? "default" : "outline"}
                     size="sm"
                     disabled={readOnly}
-                    onClick={() => update(i, { oauthMode: "dcr" })}
+                    onClick={() => update(i, { oauthMode: "dcr", oauthClientId: undefined, oauthClientSecret: undefined })}
                   >
                     DCR (Dynamic)
                   </Button>
