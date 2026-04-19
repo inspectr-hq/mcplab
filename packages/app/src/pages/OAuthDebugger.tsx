@@ -34,8 +34,8 @@ function InfoTip({ text }: { text: string }) {
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Info className="inline h-3.5 w-3.5 cursor-help text-muted-foreground/60 hover:text-muted-foreground" />
+        <TooltipTrigger type="button" className="inline-flex shrink-0 items-center" onClick={(e) => e.preventDefault()}>
+          <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs text-xs leading-relaxed">{text}</TooltipContent>
       </Tooltip>
@@ -647,7 +647,7 @@ export default function OAuthDebuggerPage() {
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
                     DCR metadata JSON
-                    <InfoTip text="Extra fields to include in the dynamic client registration request (RFC 7591). For example: {\"client_name\": \"My App\", \"logo_uri\": \"https://...\"}. The debugger always adds redirect_uris and grant_types automatically." />
+                    <InfoTip text={'Extra fields for the dynamic client registration request (RFC 7591), e.g. {"client_name": "My App"}. redirect_uris and grant_types are always added automatically.'} />
                   </Label>
                   <Textarea
                     value={dcrMetadataJson}
