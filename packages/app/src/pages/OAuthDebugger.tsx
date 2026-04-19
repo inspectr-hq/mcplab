@@ -124,6 +124,8 @@ export default function OAuthDebuggerPage() {
   const unsubscribeRef = useRef<null | (() => void)>(null);
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
   const browserOpenedRef = useRef(false);
+  const autoOpenBrowserRef = useRef(autoOpenBrowser);
+  useEffect(() => { autoOpenBrowserRef.current = autoOpenBrowser; }, [autoOpenBrowser]);
 
   useEffect(() => {
     return () => {
@@ -266,6 +268,9 @@ export default function OAuthDebuggerPage() {
       }
       void source.getOAuthDebuggerSession(id).then((response) => {
         setSession(response.session);
+        if (response.session.uiHints.authorizationUrl) {
+          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${id}/authorize`);
+        }
         if (response.session.status === 'completed') {
           setViewStep('report');
         }
@@ -276,7 +281,7 @@ export default function OAuthDebuggerPage() {
   };
 
   const openAuthBrowser = (launchHref: string) => {
-    if (!autoOpenBrowser || browserOpenedRef.current || !launchHref) return;
+    if (!autoOpenBrowserRef.current || browserOpenedRef.current || !launchHref) return;
     browserOpenedRef.current = true;
     window.open(launchHref, '_blank', 'noopener,noreferrer');
   };
