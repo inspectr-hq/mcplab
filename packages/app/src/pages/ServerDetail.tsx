@@ -104,10 +104,24 @@ const ServerDetail = () => {
 
     if (form.authType === "oauth2") {
       const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
+        const openBrowserOnce = (() => {
+          let opened = false;
+          return (launchUrl: string) => {
+            if (opened || !launchUrl) return;
+            opened = true;
+            const absoluteUrl = launchUrl.startsWith("http")
+              ? launchUrl
+              : `${window.location.origin}${launchUrl}`;
+            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+          };
+        })();
+
         const waitForSession = async (sessionId: string) => {
           const timeoutAt = Date.now() + 5 * 60_000;
           while (Date.now() < timeoutAt) {
             const { session } = await source.getOAuthRuntimeSession(sessionId);
+            const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
+            if (launchUrl) openBrowserOnce(launchUrl);
             if (session.status === "completed" && session.hasAccessToken) return;
             if (session.status === "error" || session.status === "stopped") {
               throw new Error(
@@ -133,12 +147,7 @@ const ServerDetail = () => {
         runtimeSessionId = created.session.id;
         setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
         const launchUrl = created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
-        if (launchUrl) {
-          const absoluteUrl = launchUrl.startsWith("http")
-            ? launchUrl
-            : `${window.location.origin}${launchUrl}`;
-          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-        }
+        openBrowserOnce(launchUrl);
         await waitForSession(runtimeSessionId);
         return runtimeSessionId;
       };
