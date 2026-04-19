@@ -689,19 +689,31 @@ export default function OAuthDebuggerPage() {
                     <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Authorization endpoint</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Authorization endpoint
+                      <InfoTip text="The URL where users are redirected to log in and grant consent. Normally discovered automatically from the server metadata." />
+                    </Label>
                     <Input value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} placeholder="https://.../authorize" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Token endpoint</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Token endpoint
+                      <InfoTip text="The URL your app calls to exchange the authorization code for an access token. Normally discovered automatically." />
+                    </Label>
                     <Input value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} placeholder="https://.../token" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Registration endpoint (DCR)</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Registration endpoint (DCR)
+                      <InfoTip text="The URL used to dynamically register a new client (RFC 7591). Only relevant when using DCR. Override if the server doesn't advertise it in its metadata." />
+                    </Label>
                     <Input value={registrationEndpoint} onChange={(e) => setRegistrationEndpoint(e.target.value)} placeholder="https://.../register" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">CIMD URL override</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      CIMD URL override
+                      <InfoTip text="Override the Client ID Metadata Document URL. Use this if the server doesn't discover it automatically or you want to test with a specific metadata document." />
+                    </Label>
                     <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
                   </div>
                 </div>
