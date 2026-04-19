@@ -593,9 +593,33 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   markStepStarted(session, stepId);
   const server = session.serverConfig;
   if (!server) throw new Error(`MCP server '${session.config.target.serverName}' not found`);
+  // RFC 9728: probe the MCP server first. A 401/403 response may carry a
+  // WWW-Authenticate header with an explicit resource_metadata URL, which is
+  // more reliable than the inferred /.well-known path.
+  let probedResourceMetadataUrl: string | undefined;
+  if (!session.config.target.overrides?.authorizationServerMetadataUrl) {
+    const probeUrl = session.config.target.overrides?.resourceBaseUrl || server.url;
+    try {
+      const probeResponse = await fetchWithTrace({
+        session,
+        stepId,
+        label: 'MCP Server Probe',
+        url: probeUrl,
+        timeoutMs: 10_000
+      });
+      const wwwAuth = probeResponse.response.headers.get('www-authenticate') ?? '';
+      if (wwwAuth) {
+        const match = /resource_metadata=(?:"([^"]+)"|(\S+))/i.exec(wwwAuth);
+        if (match) probedResourceMetadataUrl = match[1] ?? match[2];
+      }
+    } catch {
+      // probe is best-effort — network errors are fine here
+    }
+  }
+
   const resourceMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl
     ? undefined
-    : inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
+    : probedResourceMetadataUrl ?? inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
   if (resourceMetadataUrl) {
     try {
       const { response, responseJson, responseText } = await fetchWithTrace({
@@ -711,6 +735,21 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
       ...(session.context.authServerMetadata ?? {}),
       registration_endpoint: session.config.target.overrides.registrationEndpoint
     };
+  }
+
+  // Scope auto-discovery: when no scopes are configured, derive them from
+  // discovered metadata so the authorization request isn't sent scope-less.
+  if ((session.config.runtime.scopes ?? []).length === 0) {
+    const fromResource = session.context.resourceMetadata?.scopes_supported;
+    const fromAuthServer = session.context.authServerMetadata?.scopes_supported;
+    const discovered = Array.isArray(fromResource)
+      ? (fromResource as string[])
+      : Array.isArray(fromAuthServer)
+      ? (fromAuthServer as string[])
+      : [];
+    if (discovered.length > 0) {
+      session.config.runtime.scopes = discovered;
+    }
   }
 
   markStepCompleted(session, stepId, 'Metadata resolution finished');
