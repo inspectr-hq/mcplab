@@ -497,11 +497,24 @@ function inferResourceMetadataUrl(baseUrl: string): string {
   return u.toString();
 }
 
-function inferAuthServerMetadataUrl(issuerOrBase: string): string {
-  const u = new URL(issuerOrBase);
-  u.pathname = '/.well-known/oauth-authorization-server';
-  u.search = '';
-  return u.toString();
+// Returns candidate URLs to try for auth server metadata, in priority order:
+//   1. OIDC relative to issuer path  — covers Keycloak, Auth0, and any path-based issuer
+//   2. RFC 8414 path-based           — /.well-known/oauth-authorization-server/{path}
+//   3. RFC 8414 root                 — /.well-known/oauth-authorization-server
+//   4. OIDC at origin                — final fallback for root-only OIDC providers
+function authServerMetadataCandidates(issuerUrl: string): string[] {
+  const u = new URL(issuerUrl);
+  const base = issuerUrl.replace(/\/$/, '');
+  const hasPath = u.pathname && u.pathname !== '/';
+  const candidates = [
+    `${base}/.well-known/openid-configuration`,
+    ...(hasPath
+      ? [`${u.origin}/.well-known/oauth-authorization-server${u.pathname.replace(/\/$/, '')}`]
+      : []),
+    `${u.origin}/.well-known/oauth-authorization-server`,
+    ...(hasPath ? [`${u.origin}/.well-known/openid-configuration`] : [])
+  ];
+  return [...new Set(candidates)];
 }
 
 function localCallbackUrl(session: OAuthDebuggerSession, appBaseUrl: string): string {
@@ -654,67 +667,54 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
     }
   }
 
-  const authMetadataUrl =
-    session.config.target.overrides?.authorizationServerMetadataUrl ||
-    (session.context.resourceMetadata?.authorization_servers?.[0]
-      ? inferAuthServerMetadataUrl(
-          String(session.context.resourceMetadata.authorization_servers[0])
-        )
+  // Build the ordered candidate list for auth server metadata.
+  // If the user supplied a direct metadata URL override, use it as-is.
+  // Otherwise derive candidates from the issuer URL found in resource metadata,
+  // or fall back to candidates based on the MCP server URL itself.
+  const overrideMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl;
+  const issuerFromMetadata =
+    session.context.resourceMetadata?.authorization_servers?.[0]
+      ? String(session.context.resourceMetadata.authorization_servers[0])
       : session.context.resourceMetadata?.authorization_server
-      ? inferAuthServerMetadataUrl(String(session.context.resourceMetadata.authorization_server))
-      : undefined);
+      ? String(session.context.resourceMetadata.authorization_server)
+      : undefined;
+  const metadataCandidates = overrideMetadataUrl
+    ? [overrideMetadataUrl]
+    : authServerMetadataCandidates(
+        issuerFromMetadata ?? session.config.target.overrides?.resourceBaseUrl ?? server.url
+      );
 
-  if (authMetadataUrl) {
-    const { response, responseJson, responseText } = await fetchWithTrace({
-      session,
-      stepId,
-      label: 'Authorization Server Metadata',
-      url: authMetadataUrl
-    });
-    if (!response.ok) {
-      throw new Error(`Authorization server metadata request failed (${response.status})`);
-    }
-    session.context.authServerMetadata = responseJson ?? { raw: responseText };
-  } else {
-    session.context.authServerMetadata = {};
-    addValidation(session, {
-      stepId,
-      severity: 'warning',
-      code: 'auth_metadata_missing',
-      title: 'Authorization metadata URL not discovered',
-      detail:
-        'Could not derive authorization server metadata URL automatically from the selected MCP server.',
-      recommendation: 'Use Advanced overrides to set authorization/token/registration endpoints.'
-    });
-  }
-
-  // OIDC fallback: many providers serve endpoints at /.well-known/openid-configuration
-  // instead of /.well-known/oauth-authorization-server (RFC 8414). Try it when the
-  // authorization_endpoint hasn't been resolved yet and no manual override is set.
-  if (
-    !session.context.authServerMetadata?.authorization_endpoint &&
-    !session.config.target.overrides?.authorizationEndpoint
-  ) {
-    const baseUrl = session.config.target.overrides?.resourceBaseUrl || server.url;
-    const oidcUrl = new URL(
-      '/.well-known/openid-configuration',
-      new URL(baseUrl).origin
-    ).toString();
+  let authMetadataFetched = false;
+  for (const candidateUrl of metadataCandidates) {
     try {
       const { response, responseJson } = await fetchWithTrace({
         session,
         stepId,
-        label: 'OIDC Discovery (fallback)',
-        url: oidcUrl
+        label: 'Authorization Server Metadata',
+        url: candidateUrl
       });
       if (response.ok && responseJson?.authorization_endpoint) {
-        session.context.authServerMetadata = {
-          ...(session.context.authServerMetadata ?? {}),
-          ...responseJson
-        };
+        session.context.authServerMetadata = responseJson;
+        authMetadataFetched = true;
+        break;
       }
     } catch {
-      // best-effort — ignore errors, manual overrides can be used instead
+      // try next candidate
+    }
+  }
+
+  if (!authMetadataFetched) {
+    session.context.authServerMetadata = {};
+    if (!session.config.target.overrides?.authorizationEndpoint) {
+      addValidation(session, {
+        stepId,
+        severity: 'warning',
+        code: 'auth_metadata_missing',
+        title: 'Authorization metadata URL not discovered',
+        detail:
+          'Could not derive authorization server metadata URL automatically from the selected MCP server.',
+        recommendation: 'Use Advanced overrides to set authorization/token/registration endpoints.'
+      });
     }
   }
 
