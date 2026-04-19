@@ -101,7 +101,7 @@ export default function OAuthDebuggerPage() {
   const [resource, setResource] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('');
+  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('__default__');
   const [dcrMetadataJson, setDcrMetadataJson] = useState('{}');
   const [cimdUrl, setCimdUrl] = useState('');
   const [expectedClientId, setExpectedClientId] = useState('');
@@ -222,14 +222,14 @@ export default function OAuthDebuggerPage() {
             ? {
                 clientId: clientId.trim(),
                 clientSecret: clientSecret.trim() || undefined,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         dcr:
           registrationMethod === 'dcr'
             ? {
                 metadata: dcrMetadata,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         cimd:
@@ -625,7 +625,7 @@ export default function OAuthDebuggerPage() {
                   <Select value={tokenEndpointAuthMethod} onValueChange={setTokenEndpointAuthMethod}>
                     <SelectTrigger><SelectValue placeholder="Server default (recommended)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Server default (let the server decide)</SelectItem>
+                      <SelectItem value="__default__">Server default (let the server decide)</SelectItem>
                       <SelectItem value="client_secret_basic">client_secret_basic — credentials in Authorization header</SelectItem>
                       <SelectItem value="client_secret_post">client_secret_post — credentials in request body</SelectItem>
                       <SelectItem value="none">none — public client, no secret</SelectItem>
