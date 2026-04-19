@@ -222,6 +222,18 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                     auth?.type === 'oauth_client_credentials'
                       ? String((auth.scope as string) || '') || undefined
                       : undefined,
+                  oauthMode:
+                    auth?.type === 'oauth_authorization_code'
+                      ? (auth.mode as 'pre_registered' | 'dcr' | undefined)
+                      : undefined,
+                  oauthAuthorizationUrl:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.authorization_url || '') || undefined
+                      : undefined,
+                  oauthTokenEndpoint:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.token_url || '') || undefined
+                      : undefined,
                   oauthTokenUrl:
                     auth?.type === 'oauth_client_credentials'
                       ? String(auth.token_url || '')
