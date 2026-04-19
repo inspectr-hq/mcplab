@@ -101,7 +101,7 @@ export default function OAuthDebuggerPage() {
   const [resource, setResource] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('client_secret_basic');
+  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('');
   const [dcrMetadataJson, setDcrMetadataJson] = useState('{}');
   const [cimdUrl, setCimdUrl] = useState('');
   const [expectedClientId, setExpectedClientId] = useState('');
@@ -620,14 +620,19 @@ export default function OAuthDebuggerPage() {
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
                     Token endpoint auth method
-                    <InfoTip text="How your client authenticates when exchanging the code for a token. 'client_secret_basic' sends credentials in the Authorization header (most common). 'client_secret_post' sends them in the request body. 'none' is for public clients with no secret." />
+                    <InfoTip text="How your client authenticates when exchanging the authorization code for a token. Choose 'none' for public clients (no secret). Leave as server default if unsure." />
                   </Label>
-                  <Input
-                    value={tokenEndpointAuthMethod}
-                    onChange={(e) => setTokenEndpointAuthMethod(e.target.value)}
-                    placeholder="client_secret_basic"
-                  />
-                  <p className="text-xs text-muted-foreground">Leave blank to use the server default.</p>
+                  <Select value={tokenEndpointAuthMethod} onValueChange={setTokenEndpointAuthMethod}>
+                    <SelectTrigger><SelectValue placeholder="Server default (recommended)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Server default (let the server decide)</SelectItem>
+                      <SelectItem value="client_secret_basic">client_secret_basic — credentials in Authorization header</SelectItem>
+                      <SelectItem value="client_secret_post">client_secret_post — credentials in request body</SelectItem>
+                      <SelectItem value="none">none — public client, no secret</SelectItem>
+                      <SelectItem value="private_key_jwt">private_key_jwt — signed JWT assertion</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Use "server default" unless the server requires a specific method.</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
