@@ -153,16 +153,34 @@ export async function createOAuthRuntimeSession(params: {
     );
   }
 
+  const isDcr = serverConfig.auth.mode === 'dcr' || !serverConfig.auth.client_id;
+
   const config: OAuthDebuggerSessionConfigInput = {
     profile: 'latest',
-    target: { serverName: params.serverName },
-    registrationMethod: 'pre_registered',
-    clientConfig: {
-      preRegistered: {
-        clientId: serverConfig.auth.client_id!,
-        clientSecret: serverConfig.auth.client_secret
-      }
+    target: {
+      serverName: params.serverName,
+      ...(serverConfig.auth.authorization_url || serverConfig.auth.token_url
+        ? {
+            overrides: {
+              ...(serverConfig.auth.authorization_url
+                ? { authorizationEndpoint: serverConfig.auth.authorization_url }
+                : {}),
+              ...(serverConfig.auth.token_url
+                ? { tokenEndpoint: serverConfig.auth.token_url }
+                : {})
+            }
+          }
+        : {})
     },
+    registrationMethod: isDcr ? 'dcr' : 'pre_registered',
+    clientConfig: isDcr
+      ? { dcr: { metadata: {} } }
+      : {
+          preRegistered: {
+            clientId: serverConfig.auth.client_id!,
+            clientSecret: serverConfig.auth.client_secret
+          }
+        },
     runtime: {
       redirectMode: 'local_callback',
       scopes: splitScopes(serverConfig.auth.scope),
