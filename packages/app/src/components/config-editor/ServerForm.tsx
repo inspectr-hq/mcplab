@@ -81,7 +81,17 @@ export function ServerForm({
     });
   };
 
-  const remove = (index: number) => onChange(servers.filter((_, i) => i !== index));
+  const remove = (index: number) => {
+    setAdvancedOauthOpen((prev) => {
+      const next = new Set<number>();
+      prev.forEach((idx) => {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      });
+      return next;
+    });
+    onChange(servers.filter((_, i) => i !== index));
+  };
   const add = () => onChange([...servers, emptyServer()]);
 
   return (
@@ -272,6 +282,7 @@ export function ServerForm({
                   <button
                     type="button"
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    disabled={readOnly}
                     onClick={() => toggleAdvancedOauth(i)}
                   >
                     <span>{advancedOauthOpen.has(i) ? "▾" : "▸"}</span>
