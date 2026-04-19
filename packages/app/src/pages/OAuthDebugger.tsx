@@ -133,6 +133,22 @@ export default function OAuthDebuggerPage() {
     }
   }, [oauthServers, selectedServerId]);
 
+  useEffect(() => {
+    if (!selectedServer) return;
+    if (selectedServer.oauthMode === 'dcr') {
+      setRegistrationMethod('dcr');
+      setClientId('');
+      setClientSecret('');
+    } else {
+      setRegistrationMethod('pre_registered');
+      setClientId(selectedServer.oauthClientId ?? '');
+      setClientSecret(selectedServer.oauthClientSecret ?? '');
+    }
+    setScopesText(selectedServer.oauthScope ?? '');
+    setAuthorizationEndpoint(selectedServer.oauthAuthorizationUrl ?? '');
+    setTokenEndpoint(selectedServer.oauthTokenEndpoint ?? '');
+  }, [selectedServer?.id]);
+
   const progressModel = useMemo(() => {
     const total = session?.stepStates.length ?? 0;
     const completed = session?.stepStates.filter((s) => s.status === 'completed' || s.status === 'skipped').length ?? 0;
@@ -461,6 +477,10 @@ export default function OAuthDebuggerPage() {
                 {selectedServer && (
                   <p className="text-xs text-muted-foreground">
                     {selectedServer.transport} · {selectedServer.url || selectedServer.command || 'No URL/command'}
+                    {' · '}
+                    <span className="text-primary">
+                      {selectedServer.oauthMode === 'dcr' ? 'DCR' : 'pre-registered'} fields pre-filled
+                    </span>
                   </p>
                 )}
               </div>
