@@ -159,7 +159,7 @@ export async function createOAuthRuntimeSession(params: {
     registrationMethod: 'pre_registered',
     clientConfig: {
       preRegistered: {
-        clientId: serverConfig.auth.client_id,
+        clientId: serverConfig.auth.client_id!,
         clientSecret: serverConfig.auth.client_secret
       }
     },

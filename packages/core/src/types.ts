@@ -24,10 +24,14 @@ export interface ServerAuthOauthClientCredentials {
 
 export interface ServerAuthOauthAuthorizationCode {
   type: 'oauth_authorization_code';
-  client_id: string;
+  mode?: 'pre_registered' | 'dcr';
+  client_id?: string;
   client_secret?: string;
   redirect_url?: string;
   scope?: string;
+  // Advanced: manual endpoint overrides when .well-known discovery fails
+  authorization_url?: string;
+  token_url?: string;
 }
 
 export type ServerAuth =
