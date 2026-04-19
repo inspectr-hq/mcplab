@@ -814,7 +814,9 @@ async function stepDcr(session: OAuthDebuggerSession) {
   const redirectUri = requiredString(session.context.callbackUrl, 'Callback URL not set');
   const bodyObj = {
     redirect_uris: [redirectUri],
-    token_endpoint_auth_method: session.config.clientConfig.dcr?.tokenEndpointAuthMethod ?? 'none',
+    ...(session.config.clientConfig.dcr?.tokenEndpointAuthMethod
+      ? { token_endpoint_auth_method: session.config.clientConfig.dcr.tokenEndpointAuthMethod }
+      : {}),
     client_name: 'MCP Lab OAuth Debugger',
     grant_types: ['authorization_code'],
     response_types: ['code'],
