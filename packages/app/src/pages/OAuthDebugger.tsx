@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ExternalLink, Loader2, Play, Square, Download, Copy, RefreshCw } from 'lucide-react';
+import { AlertCircle, ExternalLink, Loader2, Play, Square, Download, Copy, RefreshCw, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
@@ -28,6 +29,19 @@ const STEP_LABELS: Array<{ id: ViewStep; label: string }> = [
   { id: 'run', label: 'Run / Inspect Flow' },
   { id: 'report', label: 'Report / Export' }
 ];
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info className="inline h-3.5 w-3.5 cursor-help text-muted-foreground/60 hover:text-muted-foreground" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs leading-relaxed">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 function copyText(text: string) {
   return navigator.clipboard.writeText(text);
@@ -503,13 +517,14 @@ export default function OAuthDebuggerPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Client Registration Method</CardTitle>
+              <CardDescription>How your OAuth client is identified with the authorization server.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-2 md:grid-cols-3">
                 {[
-                  { id: 'pre_registered', label: 'Pre-registered client' },
-                  { id: 'dcr', label: 'Dynamic Client Registration (DCR)' },
-                  { id: 'cimd', label: 'Client ID Metadata Document (CIMD)' }
+                  { id: 'pre_registered', label: 'Pre-registered client', hint: 'You already have a client_id issued by the authorization server.' },
+                  { id: 'dcr', label: 'Dynamic Client Registration', hint: 'The server issues a client_id automatically at the start of the flow (RFC 7591).' },
+                  { id: 'cimd', label: 'Client ID Metadata Document', hint: 'The client identifies itself via a hosted JSON metadata document at a public URL (RFC 9728).' }
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -518,16 +533,20 @@ export default function OAuthDebuggerPage() {
                     className="rounded-md border p-3 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`h-2.5 w-2.5 rounded-full ${registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
+                      <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
                       <span className="text-sm font-medium">{option.label}</span>
                     </div>
+                    <p className="mt-1 pl-5 text-xs text-muted-foreground">{option.hint}</p>
                   </button>
                 ))}
               </div>
 
               <div className="grid gap-3 md:grid-cols-1">
                 <div className="max-w-md space-y-1">
-                  <Label className="text-xs">Redirect mode</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    Redirect mode
+                    <InfoTip text="Local callback (recommended): MCP Lab automatically captures the redirect after you log in — no copy-pasting needed. Manual: you complete the browser login and then paste the final redirect URL back here." />
+                  </Label>
                   <Select value={redirectMode} onValueChange={(v) => setRedirectMode(v as 'local_callback' | 'manual')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -541,19 +560,28 @@ export default function OAuthDebuggerPage() {
               {registrationMethod === 'pre_registered' && (
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">client_id</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      client_id
+                      <InfoTip text="The unique identifier for your application, issued by the authorization server when you registered the client." />
+                    </Label>
                     <Input value={clientId} onChange={(e) => setClientId(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">client_secret (optional)</Label>
-                    <Input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" />
+                    <Label className="text-xs flex items-center gap-1">
+                      client_secret
+                      <InfoTip text="Leave empty for public clients (e.g. SPAs or mobile apps). Required for confidential clients that authenticate with the token endpoint." />
+                    </Label>
+                    <Input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" placeholder="optional" />
                   </div>
                 </div>
               )}
 
               {registrationMethod === 'cimd' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">CIMD URL</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    CIMD URL
+                    <InfoTip text="A publicly reachable URL hosting a JSON document that describes this client. The authorization server fetches it to identify the client." />
+                  </Label>
                   <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
                 </div>
               )}
@@ -563,15 +591,20 @@ export default function OAuthDebuggerPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Runtime OAuth Inputs</CardTitle>
+              <CardDescription>Parameters sent in the authorization request.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs">Scopes (space or comma separated)</Label>
-                <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile mcp" />
+                <Label className="text-xs">Scopes</Label>
+                <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile email" />
+                <p className="text-xs text-muted-foreground">Space or comma separated. Leave empty to use scopes auto-discovered from the server metadata.</p>
               </div>
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={usePkce} onCheckedChange={(v) => setUsePkce(Boolean(v))} />
-                <Label>Use PKCE (S256)</Label>
+                <Label className="flex items-center gap-1">
+                  Use PKCE (S256)
+                  <InfoTip text="Proof Key for Code Exchange — generates a one-time code verifier so the authorization code can't be hijacked. Recommended for all clients; required for public clients." />
+                </Label>
               </div>
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={autoOpenBrowser} onCheckedChange={(v) => setAutoOpenBrowser(Boolean(v))} />
@@ -585,50 +618,74 @@ export default function OAuthDebuggerPage() {
             <div className="mt-3 space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">Token endpoint auth method</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    Token endpoint auth method
+                    <InfoTip text="How your client authenticates when exchanging the code for a token. 'client_secret_basic' sends credentials in the Authorization header (most common). 'client_secret_post' sends them in the request body. 'none' is for public clients with no secret." />
+                  </Label>
                   <Input
                     value={tokenEndpointAuthMethod}
                     onChange={(e) => setTokenEndpointAuthMethod(e.target.value)}
-                    placeholder="client_secret_basic / none / client_secret_post"
+                    placeholder="client_secret_basic"
                   />
+                  <p className="text-xs text-muted-foreground">Leave blank to use the server default.</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Resource / audience (optional)</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    Resource / audience
+                    <InfoTip text="Some servers (RFC 8707) require the target API's URI in the token request to scope the token. Only set this if your server explicitly requires it." />
+                  </Label>
                   <Input
                     value={resource}
                     onChange={(e) => setResource(e.target.value)}
-                    placeholder="https://resource.example.com"
+                    placeholder="https://api.example.com"
                   />
+                  <p className="text-xs text-muted-foreground">Optional. Only needed for servers that use resource indicators.</p>
                 </div>
               </div>
 
               {registrationMethod === 'dcr' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">DCR metadata JSON (optional overrides)</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    DCR metadata JSON
+                    <InfoTip text="Extra fields to include in the dynamic client registration request (RFC 7591). For example: {\"client_name\": \"My App\", \"logo_uri\": \"https://...\"}. The debugger always adds redirect_uris and grant_types automatically." />
+                  </Label>
                   <Textarea
                     value={dcrMetadataJson}
                     onChange={(e) => setDcrMetadataJson(e.target.value)}
                     className="min-h-32 font-mono text-xs"
                   />
+                  <p className="text-xs text-muted-foreground">Optional extra fields for the registration request body.</p>
                 </div>
               )}
 
               {registrationMethod === 'cimd' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Expected client_id (optional)</Label>
-                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} />
+                  <Label className="text-xs flex items-center gap-1">
+                    Expected client_id
+                    <InfoTip text="If you know what client_id the server should assign from the metadata document, enter it here for verification. Leave blank to accept whatever the server returns." />
+                  </Label>
+                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} placeholder="optional" />
                 </div>
               )}
 
               <div className="rounded-md border bg-background p-3">
-                <div className="mb-3 text-sm font-medium">Endpoint overrides</div>
+                <div className="mb-1 text-sm font-medium">Endpoint overrides</div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Override specific endpoints if auto-discovery fails or you want to test against a specific URL. Leave blank to use what the server advertises.
+                </p>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Authorization server metadata URL</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Authorization server metadata URL
+                      <InfoTip text="The /.well-known/oauth-authorization-server URL. Override if the server uses a non-standard path." />
+                    </Label>
                     <Input value={authorizationServerMetadataUrl} onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)} placeholder="https://.../.well-known/oauth-authorization-server" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Resource server base URL</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Resource server base URL
+                      <InfoTip text="The MCP server's base URL used to look up its /.well-known/oauth-protected-resource metadata. Override if the server uses a different base path." />
+                    </Label>
                     <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
                   </div>
                   <div className="space-y-1">
@@ -655,7 +712,7 @@ export default function OAuthDebuggerPage() {
                 <AlertTitle>Secrets display</AlertTitle>
                 <AlertDescription className="space-y-2">
                   <p>
-                    This debugger is configured to show full tokens/secrets in network logs and exports.
+                    By default, full tokens and secrets are visible in the network inspector and exports — useful for debugging but not for sharing.
                   </p>
                   <div className="flex items-center gap-2">
                     <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(v === false)} />
