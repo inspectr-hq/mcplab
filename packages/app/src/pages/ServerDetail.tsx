@@ -63,10 +63,14 @@ const ServerDetail = () => {
   const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
 
   useEffect(() => {
-    if (existingServer) setForm(existingServer);
+    if (existingServer) {
+      setForm(existingServer);
+      setShowAdvancedOauth(false);
+    }
   }, [existingServer]);
 
   const setAuthType = (nextType: ServerConfig["authType"]) => {
+    setShowAdvancedOauth(false);
     setForm((f) => ({
       ...f,
       authType: nextType,
