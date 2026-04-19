@@ -60,6 +60,7 @@ const ServerDetail = () => {
   const [showConnectPanel, setShowConnectPanel] = useState(false);
   const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
   const [authInProgress, setAuthInProgress] = useState(false);
+  const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
 
   useEffect(() => {
     if (existingServer) setForm(existingServer);
@@ -82,6 +83,9 @@ const ServerDetail = () => {
             oauthClientSecret: undefined,
             oauthRedirectUrl: undefined,
             oauthScope: undefined,
+            oauthMode: undefined,
+            oauthAuthorizationUrl: undefined,
+            oauthTokenEndpoint: undefined,
           }
         : {
             oauthRedirectUrl: f.oauthRedirectUrl || undefined,
@@ -480,46 +484,99 @@ const ServerDetail = () => {
           {form.authType === "oauth2" && (
             <div className="space-y-3 rounded-md border p-3">
               <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Client ID</Label>
-                  <Input
-                    value={form.oauthClientId || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthClientId: e.target.value }))}
-                    placeholder="your-client-id"
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Client Secret (optional)</Label>
-                  <Input
-                    type="password"
-                    value={form.oauthClientSecret || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthClientSecret: e.target.value }))}
-                    placeholder="••••••••"
-                    className="font-mono text-xs"
-                  />
-                </div>
+
+              {/* Mode toggle */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={!form.oauthMode || form.oauthMode === "pre_registered" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setForm((f) => ({ ...f, oauthMode: "pre_registered" }))}
+                >
+                  Pre-registered
+                </Button>
+                <Button
+                  type="button"
+                  variant={form.oauthMode === "dcr" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setForm((f) => ({ ...f, oauthMode: "dcr" }))}
+                >
+                  DCR (Dynamic)
+                </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Redirect URL</Label>
-                  <Input
-                    value={form.oauthRedirectUrl || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthRedirectUrl: e.target.value }))}
-                    placeholder="http://localhost:6274/oauth/"
-                    className="font-mono text-xs"
-                  />
+
+              {/* Client credentials — only for pre_registered */}
+              {(!form.oauthMode || form.oauthMode === "pre_registered") && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client ID</Label>
+                    <Input
+                      value={form.oauthClientId || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, oauthClientId: e.target.value }))}
+                      placeholder="your-client-id"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client Secret (optional)</Label>
+                    <Input
+                      type="password"
+                      value={form.oauthClientSecret || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, oauthClientSecret: e.target.value }))}
+                      placeholder="••••••••"
+                      className="font-mono text-xs"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Scope (space-separated)</Label>
-                  <Input
-                    value={form.oauthScope || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthScope: e.target.value }))}
-                    placeholder="openid profile mcp"
-                    className="font-mono text-xs"
-                  />
-                </div>
+              )}
+
+              {/* Scope */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Scope (optional, space-separated)</Label>
+                <Input
+                  value={form.oauthScope || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, oauthScope: e.target.value }))}
+                  placeholder="openid profile mcp"
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              {/* Advanced section */}
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowAdvancedOauth((v) => !v)}
+                >
+                  <span>{showAdvancedOauth ? "▾" : "▸"}</span>
+                  Advanced — manual endpoint overrides
+                </button>
+                {showAdvancedOauth && (
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Authorization URL</Label>
+                      <Input
+                        value={form.oauthAuthorizationUrl || ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, oauthAuthorizationUrl: e.target.value || undefined }))
+                        }
+                        placeholder="leave blank to use .well-known discovery"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Token URL</Label>
+                      <Input
+                        value={form.oauthTokenEndpoint || ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, oauthTokenEndpoint: e.target.value || undefined }))
+                        }
+                        placeholder="leave blank to use .well-known discovery"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
