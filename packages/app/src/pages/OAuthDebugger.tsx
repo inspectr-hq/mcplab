@@ -81,6 +81,7 @@ export default function OAuthDebuggerPage() {
   const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>('pre_registered');
   const [redirectMode, setRedirectMode] = useState<'local_callback' | 'manual'>('local_callback');
   const [showSensitiveValues, setShowSensitiveValues] = useState(true);
+  const [autoOpenBrowser, setAutoOpenBrowser] = useState(true);
   const [usePkce, setUsePkce] = useState(true);
   const [scopesText, setScopesText] = useState('');
   const [resource, setResource] = useState('');
@@ -108,6 +109,7 @@ export default function OAuthDebuggerPage() {
   const [networkTab, setNetworkTab] = useState<'events' | 'inspector'>('inspector');
   const unsubscribeRef = useRef<null | (() => void)>(null);
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
+  const browserOpenedRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -259,8 +261,15 @@ export default function OAuthDebuggerPage() {
     });
   };
 
+  const openAuthBrowser = (launchHref: string) => {
+    if (!autoOpenBrowser || browserOpenedRef.current || !launchHref) return;
+    browserOpenedRef.current = true;
+    window.open(launchHref, '_blank', 'noopener,noreferrer');
+  };
+
   const createAndStart = async () => {
     setSubmitting(true);
+    browserOpenedRef.current = false;
     try {
       const config = buildConfig();
       const created = await source.createOAuthDebuggerSession(config);
@@ -274,6 +283,9 @@ export default function OAuthDebuggerPage() {
       setRunning(true);
       if (started.session.status === 'waiting_for_user' || started.session.status === 'waiting_for_browser_callback') {
         setRunning(false);
+        if (started.session.uiHints.authorizationUrl) {
+          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${created.sessionId}/authorize`);
+        }
       }
     } catch (error: unknown) {
       toast({
@@ -560,6 +572,10 @@ export default function OAuthDebuggerPage() {
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={usePkce} onCheckedChange={(v) => setUsePkce(Boolean(v))} />
                 <Label>Use PKCE (S256)</Label>
+              </div>
+              <div className="flex items-center gap-2 md:col-span-2">
+                <Checkbox checked={autoOpenBrowser} onCheckedChange={(v) => setAutoOpenBrowser(Boolean(v))} />
+                <Label>Auto-open browser when authorization URL is ready</Label>
               </div>
             </CardContent>
           </Card>
