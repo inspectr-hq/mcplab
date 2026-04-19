@@ -143,21 +143,6 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one test.`]);
       return;
     }
-    const waitForOAuthRuntimeSession = async (sessionId: string, serverName: string) => {
-      const timeoutAt = Date.now() + 5 * 60_000;
-      while (Date.now() < timeoutAt) {
-        const { session } = await source.getOAuthRuntimeSession(sessionId);
-        if (session.status === "completed" && session.hasAccessToken) return;
-        if (session.status === "error" || session.status === "stopped") {
-          throw new Error(
-            `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
-          );
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
-      throw new Error(`OAuth login timed out for '${serverName}'.`);
-    };
-
     const ensureOAuthRuntimeSessions = async (serverNames: string[]) => {
       const mapping: Record<string, string> = {};
       for (const serverName of serverNames) {
@@ -174,23 +159,42 @@ const RunEvaluation = () => {
           }
         }
 
+        const openBrowserOnce = (() => {
+          let opened = false;
+          return (launchUrl: string) => {
+            if (opened || !launchUrl) return;
+            opened = true;
+            const absoluteUrl = launchUrl.startsWith("http")
+              ? launchUrl
+              : `${window.location.origin}${launchUrl}`;
+            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+            setLogs((prev) => [
+              ...prev,
+              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
+            ]);
+          };
+        })();
+
         const created = await source.createOAuthRuntimeSession({ serverName });
         runtimeSessionId = created.session.id;
         mapping[serverName] = runtimeSessionId;
         setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
-        const launchUrl =
-          created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
-        if (launchUrl) {
-          const absoluteUrl = launchUrl.startsWith("http")
-            ? launchUrl
-            : `${window.location.origin}${launchUrl}`;
-          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+
+        const timeoutAt = Date.now() + 5 * 60_000;
+        while (Date.now() < timeoutAt) {
+          const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
+          const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
+          if (launchUrl) openBrowserOnce(launchUrl);
+          if (session.status === "completed" && session.hasAccessToken) break;
+          if (session.status === "error" || session.status === "stopped") {
+            throw new Error(
+              `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
         }
-        setLogs((prev) => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
-        ]);
-        await waitForOAuthRuntimeSession(runtimeSessionId, serverName);
+
         setLogs((prev) => [
           ...prev,
           `[${new Date().toLocaleTimeString()}] OAuth login completed for '${serverName}'.`,
