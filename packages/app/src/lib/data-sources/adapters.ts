@@ -392,10 +392,17 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
         : server.authType === 'oauth2'
         ? {
             type: 'oauth_authorization_code' as const,
-            client_id: server.oauthClientId || '',
+            ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+            ...(server.oauthMode !== 'dcr' && server.oauthClientId
+              ? { client_id: server.oauthClientId }
+              : {}),
             client_secret: server.oauthClientSecret || undefined,
             ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-            scope: server.oauthScope || undefined
+            scope: server.oauthScope || undefined,
+            ...(server.oauthAuthorizationUrl
+              ? { authorization_url: server.oauthAuthorizationUrl }
+              : {}),
+            ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
           }
         : undefined;
     return {
@@ -586,10 +593,17 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
               : server.authType === 'oauth2'
               ? {
                   type: 'oauth_authorization_code' as const,
-                  client_id: server.oauthClientId || '',
+                  ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+                  ...(server.oauthMode !== 'dcr' && server.oauthClientId
+                    ? { client_id: server.oauthClientId }
+                    : {}),
                   client_secret: server.oauthClientSecret || undefined,
                   ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-                  scope: server.oauthScope || undefined
+                  scope: server.oauthScope || undefined,
+                  ...(server.oauthAuthorizationUrl
+                    ? { authorization_url: server.oauthAuthorizationUrl }
+                    : {}),
+                  ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
                 }
               : undefined
         };
