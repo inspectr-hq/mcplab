@@ -207,15 +207,15 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                     auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
                   oauthClientId:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_id || '')
+                      ? String(auth.client_id || '') || undefined
                       : undefined,
                   oauthClientSecret:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_secret || '')
+                      ? String(auth.client_secret || '') || undefined
                       : undefined,
                   oauthRedirectUrl:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.redirect_url || '')
+                      ? String(auth.redirect_url || '') || undefined
                       : undefined,
                   oauthScope:
                     auth?.type === 'oauth_authorization_code' ||
@@ -396,9 +396,9 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
             ...(server.oauthMode !== 'dcr' && server.oauthClientId
               ? { client_id: server.oauthClientId }
               : {}),
-            client_secret: server.oauthClientSecret || undefined,
+            ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
             ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-            scope: server.oauthScope || undefined,
+            ...(server.oauthScope ? { scope: server.oauthScope } : {}),
             ...(server.oauthAuthorizationUrl
               ? { authorization_url: server.oauthAuthorizationUrl }
               : {}),
@@ -597,9 +597,9 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
                   ...(server.oauthMode !== 'dcr' && server.oauthClientId
                     ? { client_id: server.oauthClientId }
                     : {}),
-                  client_secret: server.oauthClientSecret || undefined,
+                  ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
                   ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
-                  scope: server.oauthScope || undefined,
+                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
                   ...(server.oauthAuthorizationUrl
                     ? { authorization_url: server.oauthAuthorizationUrl }
                     : {}),
