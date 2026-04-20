@@ -37,7 +37,7 @@ const tocSections: { id: string; title: string }[] =
     <ImageLightbox client:load />
     <div class="mx-auto flex w-full max-w-7xl flex-1 overflow-hidden">
       <aside class="hidden lg:flex lg:flex-col w-72 shrink-0 border-r border-border/60 overflow-y-auto scrollbar-hidden px-6 pt-8 pb-6">
-        <nav class="space-y-6">
+        <nav class="space-y-3">
           {docsNavSections.map((section) => (
             <div>
               <h4 class="mb-2 text-sm font-semibold text-foreground">{section.title}</h4>
@@ -73,7 +73,7 @@ const tocSections: { id: string; title: string }[] =
         id="docs-sidebar-mobile"
         class="hidden fixed inset-y-0 left-0 z-[70] w-72 border-r border-border bg-background px-6 py-6 pt-20 overflow-y-auto lg:hidden"
       >
-        <nav class="space-y-6">
+        <nav class="space-y-3">
           {docsNavSections.map((section) => (
             <div>
               <h4 class="mb-2 text-sm font-semibold text-foreground">{section.title}</h4>
