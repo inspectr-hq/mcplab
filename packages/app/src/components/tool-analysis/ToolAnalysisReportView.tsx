@@ -285,7 +285,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
           <CardTitle className="text-base">Analysis Overview</CardTitle>
           <CardDescription>Visual breakdown of findings by severity. Click badges to filter the report.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           <div className="flex flex-wrap gap-2">
             {ALL_SEVERITIES.filter((s) => report.summary.issueCounts[s] > 0).map((severity) => {
               const active = reportSeveritySet.has(severity);
@@ -299,16 +299,6 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
             })}
             <Button type="button" size="sm" variant="ghost" onClick={() => setActiveSeverityFilters([...ALL_SEVERITIES])} className="h-7 px-2 text-xs">Reset</Button>
           </div>
-          {report.mcpServerVersions && Object.keys(report.mcpServerVersions).length > 0 && (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
-              {Object.entries(report.mcpServerVersions).map(([serverName, version]) => (
-                <span key={serverName} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <span className="font-medium">{serverName}</span>
-                  <span className="font-mono">{version ?? "unknown"}</span>
-                </span>
-              ))}
-            </div>
-          )}
         </CardContent>
       </Card>
 
