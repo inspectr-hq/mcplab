@@ -7,207 +7,174 @@ Source of truth: `config-schema.json`.
 
 ### Root Object
 
-- Required keys: `servers`, `agents`, `scenarios`
-
-### `servers`
-
-- Type: object map (`server_name -> server_config`)
-- Per server required keys: `transport`, `url`
-- `transport`:
-  - Type: string
-  - Allowed values: `http` only
-- `url`:
-  - Type: string
-  - Must be valid URI
-- `auth` (optional):
-  - `oneOf` two valid shapes:
-    1. Bearer:
-      - Required: `type`, `env`
-      - `type` must be `bearer`
-    2. OAuth client credentials:
-      - Required: `type`, `token_url`, `client_id_env`, `client_secret_env`
-      - `type` must be `oauth_client_credentials`
-      - Optional: `scope`, `audience`, `token_params` (`string -> string` map)
+- Required keys: `agents`, `scenarios`
+- Optional keys: `name`, `servers` (deprecated pool), `snapshot_eval`
 
 ### `agents`
 
-- Type: object map (`agent_name -> agent_config`)
-- Per agent required keys: `provider`, `model`
+- Type: array
+- Item shape:
+  - library ref: `{ ref: "<agent-id>" }`
+  - inline config: `{ id, provider, model, ... }`
+- Inline required keys: `id`, `provider`, `model`
 - `provider` enum: `openai`, `anthropic`, `azure_openai`
-- `model`: string
-- `temperature` (optional): number from `0` to `2`
-- `max_tokens` (optional): integer from `1` to `100000`
-- `system` (optional): string
+- Optional fields:
+  - `temperature`: number `0..2`
+  - `max_tokens`: integer `1..200000`
+  - `system`: string
 
 ### `scenarios`
 
 - Type: array
 - Minimum items: `1`
-- Per scenario required keys: `id`, `agent`, `servers`, `prompt`
-- `id`:
-  - Type: string
-  - Regex: `^[a-z0-9-]+$` (kebab-case)
-- `agent`: string (must reference key under `agents`)
-- `servers`:
-  - Type: array of strings
-  - Minimum items: `1`
-  - Each value must reference key under `servers`
-- `prompt`: string
-- `eval` (optional):
-  - `tool_constraints.required_tools`: string[]
-  - `tool_constraints.forbidden_tools`: string[]
-  - `tool_sequence.allow`: string[][]
-  - `response_assertions`: array of either:
-    - regex assertion: `{ type: "regex", pattern: string }`
-    - jsonpath assertion: `{ type: "jsonpath", path: string, equals?: string|number|boolean }`
-- `extract` (optional):
-  - Array of objects with required `name`, `from`, `regex`
-  - `from` enum: `final_text` only
-  - `regex` should include named capture group `value`
+- Item shape:
+  - library ref: `{ ref: "<scenario-id>" }`
+  - inline config
+- Inline required keys: `id`, `servers`, `prompt`
+- Optional: `agent`, `mcp_servers`, `eval`, `extract`, `snapshot_eval`
+- `id` best practice: kebab-case and unique.
+- `servers`: string array of server labels the scenario can use.
+- `mcp_servers`: optional array of MCP server entries:
+  - ref item: `{ ref: "<server-id>" }`
+  - inline item: `{ id, transport, url, auth? }`
+
+### Server Auth (`mcp_servers[].auth` or deprecated top-level `servers[].auth`)
+
+- Bearer:
+  - Required: `type: bearer`, `env`
+- OAuth client credentials:
+  - Required: `type: oauth_client_credentials`, `token_url`, `client_id_env`, `client_secret_env`
+  - Optional: `scope`, `audience`, `token_params`
+- OAuth authorization code:
+  - Required: `type: oauth_authorization_code`, `client_id`, `redirect_url`
+  - Optional: `client_secret`, `scope`
+
+### `eval`
+
+- `tool_constraints.required_tools`: string[]
+- `tool_constraints.forbidden_tools`: string[]
+- `tool_sequence.allow`: string[][]
+- `response_assertions`:
+  - regex assertion: `{ type: "regex", pattern: string }`
+  - jsonpath assertion: `{ type: "jsonpath", path: string, equals?: string|number|boolean }`
+
+### `extract`
+
+- Type: array
+- Required per item: `name`, `from`, `regex`
+- `from` enum: `final_text`
+- Include a named capture group `(?<value>...)` in regex.
 
 ## Minimal Valid Config
 
 ```yaml
-servers:
-  demo-server:
-    transport: "http"
-    url: "http://localhost:3000/mcp"
-
 agents:
-  claude-haiku:
-    provider: "anthropic"
-    model: "claude-3-5-haiku-20241022"
+  - id: claude-haiku
+    provider: anthropic
+    model: claude-3-5-haiku-20241022
     temperature: 0
-    max_tokens: 2048
 
 scenarios:
-  - id: "basic-check"
-    agent: "claude-haiku"
-    servers: ["demo-server"]
-    prompt: "Use available tools to complete the task."
+  - id: basic-check
+    agent: claude-haiku
+    servers: [demo-server]
+    mcp_servers:
+      - id: demo-server
+        transport: http
+        url: http://localhost:3000/mcp
+    prompt: Use available tools to complete the task.
 ```
 
 ## Full Annotated Template
 
 ```yaml
-servers:
-  my-server:
-    transport: "http" # enum: http
-    url: "https://api.example.com/mcp" # URI required
-    auth: # optional
-      type: "oauth_client_credentials" # or "bearer"
-      token_url: "https://auth.example.com/oauth/token"
-      client_id_env: "MCP_CLIENT_ID"
-      client_secret_env: "MCP_CLIENT_SECRET"
-      scope: "mcp.read" # optional
-      audience: "https://api.example.com" # optional
-      token_params: # optional map<string,string>
-        resource: "mcplab"
+name: OAuth eval sample
 
 agents:
-  claude:
-    provider: "anthropic" # enum: openai|anthropic|azure_openai
-    model: "claude-3-5-sonnet-20241022"
-    temperature: 0 # 0..2
-    max_tokens: 4096 # 1..100000
-    system: "You are a careful assistant." # optional
+  - ref: claude-haiku
+  - id: gpt-4o-mini
+    provider: openai
+    model: gpt-4o-mini
+    temperature: 0
 
 scenarios:
-  - id: "search-and-summarize" # regex: ^[a-z0-9-]+$
-    agent: "claude" # must exist in agents
-    servers: ["my-server"] # each must exist in servers
-    prompt: "Find matching items and summarize key outcomes."
+  - id: search-and-summarize
+    agent: gpt-4o-mini
+    servers: [orders-api]
+    mcp_servers:
+      - ref: orders-api
+    prompt: Find matching items and summarize key outcomes.
     eval:
       tool_constraints:
-        required_tools: ["search_items"]
-        forbidden_tools: ["delete_item"]
+        required_tools: [search_items]
+        forbidden_tools: [delete_item]
       tool_sequence:
         allow:
-          - ["search_items", "summarize_items"]
+          - [search_items, summarize_items]
       response_assertions:
-        - type: "regex"
-          pattern: "Found [0-9]+ items"
-        - type: "jsonpath"
-          path: "$.summary.count"
-          equals: 10
+        - type: regex
+          pattern: Found [0-9]+ items
     extract:
-      - name: "item_count"
-        from: "final_text" # enum: final_text
-        regex: "Found (?<value>[0-9]+) items"
+      - name: item_count
+        from: final_text
+        regex: 'Found (?<value>[0-9]+) items'
 ```
 
-## Auth Patterns
+## Auth Pattern Examples
 
-### Bearer Token
-
-```yaml
-servers:
-  my-server:
-    transport: "http"
-    url: "https://api.example.com/mcp"
-    auth:
-      type: "bearer"
-      token: ${MCP_TOKEN}        # env var reference
-      # token: my-secret-token   # or direct value
-```
-
-### API Key
+### Bearer
 
 ```yaml
-servers:
-  my-server:
-    transport: "http"
-    url: "https://api.example.com/mcp"
+mcp_servers:
+  - id: my-server
+    transport: http
+    url: https://api.example.com/mcp
     auth:
-      type: "api_key"
-      header_name: "X-API-Key"     # optional, defaults to X-API-Key
-      value: ${MY_API_KEY}
+      type: bearer
+      env: MY_SERVER_TOKEN
 ```
 
 ### OAuth Client Credentials
 
 ```yaml
-servers:
-  my-server:
-    transport: "http"
-    url: "https://api.example.com/mcp"
+mcp_servers:
+  - id: my-server
+    transport: http
+    url: https://api.example.com/mcp
     auth:
-      type: "oauth_client_credentials"
-      token_url: "https://auth.example.com/oauth/token"
-      client_id_env: "MCP_CLIENT_ID"
-      client_secret_env: "MCP_CLIENT_SECRET"
-      scope: "mcp.read"
-      audience: "https://api.example.com"
+      type: oauth_client_credentials
+      token_url: https://auth.example.com/oauth/token
+      client_id_env: MCP_CLIENT_ID
+      client_secret_env: MCP_CLIENT_SECRET
+      scope: mcp.read
 ```
 
 ## Schema-Driven Authoring Order
 
-1. Add root keys: `servers`, `agents`, `scenarios`.
-2. Define one valid server (`transport`, `url`).
-3. Define one valid agent (`provider`, `model`).
-4. Define one valid scenario (`id`, `agent`, `servers`, `prompt`).
-5. Run once with `mcplab run -c ...`.
-6. Add optional `eval` and `extract`.
-7. Add more servers/agents/scenarios only after baseline passes.
+1. Add one working `agents` entry.
+2. Add one working `scenarios` entry with `servers`, `mcp_servers`, and `prompt`.
+3. Run once with `mcplab run -c ...`.
+4. Add optional `eval` and `extract` once baseline passes.
+5. Add more agents/scenarios incrementally.
 
 ## Cross-Reference Checklist
 
-1. Every `scenarios[*].agent` exists under `agents`.
-2. Every `scenarios[*].servers[*]` exists under `servers`.
-3. Every scenario `id` is kebab-case and unique.
-4. `auth` object matches exactly one allowed shape.
-5. `temperature` and `max_tokens` values stay within schema bounds.
+1. Every inline `scenario.agent` exists in loaded agents (config and library).
+2. Every scenario has at least one `servers` label and one reachable MCP server path.
+3. Every scenario `id` is unique.
+4. `auth` matches exactly one schema shape.
+5. Numeric fields remain within schema bounds.
 6. `extract[*].from` is `final_text`.
 
 ## Preflight Env Checklist
 
-1. Agent provider credentials:
+1. Provider credentials:
    - `anthropic` -> `ANTHROPIC_API_KEY`
    - `openai` -> `OPENAI_API_KEY`
    - `azure_openai` -> `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`
 2. Server auth credentials:
-   - `bearer` -> env var named by `auth.env`
-   - `oauth_client_credentials` -> env vars named by `client_id_env` and `client_secret_env`
+   - `bearer` -> variable named by `auth.env`
+   - `oauth_client_credentials` -> vars named by `client_id_env` and `client_secret_env`
 3. Endpoint sanity:
-   - `servers.<name>.url` is reachable and points to MCP HTTP endpoint
+   - `mcp_servers[].url` is reachable and points to MCP HTTP endpoint
    - `auth.token_url` is reachable for OAuth flows

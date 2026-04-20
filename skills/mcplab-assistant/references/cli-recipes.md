@@ -6,58 +6,54 @@ Source of truth: `packages/cli/src/cli.ts`.
 ## Command Selection Matrix
 
 - Run evaluations once: `mcplab run`
-- Auto-rerun on config change: `mcplab watch`
 - Start local app/API bridge: `mcplab app`
 - Rebuild report from prior run: `mcplab report`
 
 ## Run Evaluations
 
 ```bash
-# Run all scenarios
-mcplab run -c configs/eval.yaml
+# Run all scenarios from a config
+mcplab run -c mcplab/evals/eval.yaml
 
 # Run one scenario
-mcplab run -c configs/eval.yaml -s basic-check
+mcplab run -c mcplab/evals/eval.yaml -s basic-check
 
 # Run variance testing
-mcplab run -c configs/eval.yaml -n 5
+mcplab run -c mcplab/evals/eval.yaml -n 5
 
-# Run each scenario with multiple agents
-mcplab run -c configs/eval.yaml --agents claude-haiku,gpt-4o-mini
+# Run each scenario with selected agents
+mcplab run -c mcplab/evals/eval.yaml --agents claude-haiku,gpt-4o-mini
+
+# Run each scenario with all available agents
+mcplab run -c mcplab/evals/eval.yaml --agents-all
 ```
 
 Notes:
+- `-c/--config` is required unless using `--interactive`.
+- `--agents` values must match agent IDs loaded from config/library.
 - `--runs`/`-n` must be a positive number.
-- `--agents` values must match keys under `agents:` in config.
-
-## Watch Config And Rerun
-
-```bash
-mcplab watch -c configs/eval.yaml
-mcplab watch -c configs/eval.yaml -s basic-check -n 3 --debounce 750
-```
-
-Notes:
-- `watch` supports `--config`, `--scenario`, `--runs`, `--debounce`.
-- `watch` does not support `--agents`.
 
 ## Serve App
 
 ```bash
-mcplab app --configs-dir configs --runs-dir runs --port 8787 --open
+mcplab app --evals-dir mcplab/evals --runs-dir mcplab/results/evaluation-runs --port 8787 --open
 mcplab app --host 0.0.0.0 --port 8787
-mcplab app --dev
+mcplab app --interactive
 ```
 
 Notes:
 - `--port` must be a positive number.
-- `--dev` proxies frontend requests to Vite, API remains local.
+- `--dev` proxies frontend requests to Vite while keeping API local.
+- `--libraries-dir` points to bundle root for reusable servers/agents/test-cases.
 
 ## Regenerate Report
 
 ```bash
-mcplab report --input runs/20260206-212239
+# From explicit run directory
+mcplab report --input mcplab/results/evaluation-runs/<run-id>
+
+# Interactive run directory picker
+mcplab report --interactive --runs-dir mcplab/results/evaluation-runs
 ```
 
-This reads `results.json` in the run dir and writes a new `report.html`.
-
+This reads `results.json` in the run directory and writes a fresh `report.html`.
