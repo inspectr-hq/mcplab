@@ -23,6 +23,7 @@ export interface RunOptions {
   cliVersion: string;
   runsDir?: string;
   mcpServerAuthHeaders?: Record<string, Record<string, string>>;
+  oauthTokens?: Record<string, string>;
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
 }
@@ -103,8 +104,19 @@ export async function runAll(
       type: 'mcp_connect_started',
       serverCount: Object.keys(config.servers).length
     });
+    const resolvedServerAuthHeaders: Record<string, Record<string, string>> = {
+      ...options.mcpServerAuthHeaders
+    };
+    if (options.oauthTokens) {
+      for (const [serverName, token] of Object.entries(options.oauthTokens)) {
+        resolvedServerAuthHeaders[serverName] = {
+          ...resolvedServerAuthHeaders[serverName],
+          authorization: `Bearer ${token}`
+        };
+      }
+    }
     await mcp.connectAll(config.servers, options.signal, {
-      serverAuthHeaders: options.mcpServerAuthHeaders
+      serverAuthHeaders: resolvedServerAuthHeaders
     });
     await emitProgress({
       type: 'mcp_connect_finished',

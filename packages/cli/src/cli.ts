@@ -62,6 +62,12 @@ program
   .option('--run-note <text>', 'Optional note attached to the run metadata (max 500 chars)')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
+  .option(
+    '--oauth-token <server=token>',
+    'Pre-obtained OAuth Bearer token for a server (repeatable, format: server-name=token)',
+    (val: string, acc: string[]) => [...acc, val],
+    [] as string[]
+  )
   .action(async (options) => {
     try {
       const hasAgentOverride = Boolean(options.agents) || Boolean(options.agentsAll);
@@ -133,6 +139,14 @@ program
       }
       const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
       const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+      const oauthTokens: Record<string, string> = {};
+      for (const entry of (options.oauthToken as string[])) {
+        const eqIdx = entry.indexOf('=');
+        if (eqIdx < 1) {
+          throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);
+        }
+        oauthTokens[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+      }
       const { runDir, results } = await runAll(selected, {
         runsPerScenario,
         scenarioId: options.scenario,
@@ -141,6 +155,7 @@ program
         gitCommit: getGitCommit(),
         cliVersion: pkgVersion,
         runsDir: String(options.runsDir),
+        oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
         onProgress: async (event) => {
           const line = formatRunProgressEvent(event);
           if (line) {
