@@ -20,6 +20,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { validateServerAuthConfig } from "@/lib/server-auth-validation";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 import type { ServerConfig } from "@/types/eval";
 
 type ConnectState =
@@ -117,23 +118,6 @@ const ServerDetail = () => {
           };
         })();
 
-        const waitForSession = async (sessionId: string): Promise<string | undefined> => {
-          const timeoutAt = Date.now() + 5 * 60_000;
-          while (Date.now() < timeoutAt) {
-            const { session } = await source.getOAuthRuntimeSession(sessionId);
-            const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
-            if (launchUrl) openBrowserOnce(launchUrl);
-            if (session.status === "completed" && session.hasAccessToken) return session.accessToken;
-            if (session.status === "error" || session.status === "stopped") {
-              throw new Error(
-                `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
-              );
-            }
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-          }
-          throw new Error(`OAuth login timed out for '${serverName}'.`);
-        };
-
         let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServer[serverName];
         if (runtimeSessionId) {
           try {
@@ -147,10 +131,19 @@ const ServerDetail = () => {
         const created = await source.createOAuthRuntimeSession({ serverName });
         runtimeSessionId = created.session.id;
         setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
-        const launchUrl = created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
-        openBrowserOnce(launchUrl);
-        const token = await waitForSession(runtimeSessionId);
-        if (token) setOauthAccessToken(token);
+        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+        await waitForOAuthRuntimeSession({
+          sessionId: runtimeSessionId,
+          source,
+          serverName,
+          onLaunchUrl: openBrowserOnce,
+        });
+        try {
+          const { accessToken } = await source.getOAuthRuntimeSessionToken(runtimeSessionId);
+          if (accessToken) setOauthAccessToken(accessToken);
+        } catch {
+          // token unavailable — copy button simply won't show
+        }
         return runtimeSessionId;
       };
 

@@ -598,7 +598,6 @@ export interface OAuthRuntimeSessionView {
   authorizeLaunchUrl?: string;
   callbackUrl?: string;
   hasAccessToken: boolean;
-  accessToken?: string;
   lastError?: string;
 }
 
@@ -793,6 +792,7 @@ export interface EvalDataSource {
     serverName: string;
   }) => Promise<{ session: OAuthRuntimeSessionView }>;
   getOAuthRuntimeSession: (sessionId: string) => Promise<{ session: OAuthRuntimeSessionView }>;
+  getOAuthRuntimeSessionToken: (sessionId: string) => Promise<{ accessToken: string }>;
   submitOAuthRuntimeCallback: (
     sessionId: string,
     payload: { redirectUrl?: string; code?: string; state?: string }

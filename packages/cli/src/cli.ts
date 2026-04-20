@@ -145,7 +145,15 @@ program
         if (eqIdx < 1) {
           throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);
         }
-        oauthTokens[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+        const serverName = entry.slice(0, eqIdx).trim();
+        const token = entry.slice(eqIdx + 1).trim();
+        if (!serverName) {
+          throw new Error(`Invalid --oauth-token '${entry}': server name cannot be empty`);
+        }
+        if (!token) {
+          throw new Error(`Invalid --oauth-token '${entry}': token value cannot be empty`);
+        }
+        oauthTokens[serverName] = token;
       }
       const { runDir, results } = await runAll(selected, {
         runsPerScenario,

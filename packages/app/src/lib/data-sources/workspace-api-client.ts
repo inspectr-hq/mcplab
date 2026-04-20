@@ -491,6 +491,8 @@ export const workspaceApiClient = {
     }),
   getOAuthRuntimeSession: (sessionId: string) =>
     request<{ session: OAuthRuntimeSessionView }>(`/api/oauth-runtime/sessions/${sessionId}`),
+  getOAuthRuntimeSessionToken: (sessionId: string) =>
+    request<{ accessToken: string }>(`/api/oauth-runtime/sessions/${sessionId}/token`),
   submitOAuthRuntimeCallback: (
     sessionId: string,
     payload: { redirectUrl?: string; code?: string; state?: string }

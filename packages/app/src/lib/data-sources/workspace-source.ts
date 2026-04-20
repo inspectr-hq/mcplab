@@ -235,6 +235,9 @@ export const workspaceSource: EvalDataSource = {
   async getOAuthRuntimeSession(sessionId) {
     return workspaceApiClient.getOAuthRuntimeSession(sessionId);
   },
+  async getOAuthRuntimeSessionToken(sessionId) {
+    return workspaceApiClient.getOAuthRuntimeSessionToken(sessionId);
+  },
   async submitOAuthRuntimeCallback(sessionId, payload) {
     return workspaceApiClient.submitOAuthRuntimeCallback(sessionId, payload);
   },

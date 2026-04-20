@@ -42,7 +42,6 @@ export interface OAuthRuntimeSessionView {
   authorizeLaunchUrl?: string;
   callbackUrl?: string;
   hasAccessToken: boolean;
-  accessToken?: string;
   lastError?: string;
 }
 
@@ -125,7 +124,6 @@ export function oauthRuntimeSessionView(params: {
       : undefined,
     callbackUrl: debuggerView?.uiHints.callbackUrl,
     hasAccessToken: Boolean(accessToken),
-    accessToken: accessToken ?? undefined,
     lastError:
       status === 'error'
         ? debuggerSession?.steps.find((step) => step.status === 'failed')?.outcomeSummary ||
@@ -299,4 +297,12 @@ export function resolveRuntimeOAuthAuthHeaders(params: {
   }
 
   return out;
+}
+
+export function getOAuthRuntimeSessionToken(params: {
+  runtimeSession: OAuthRuntimeSession;
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
+}): string | undefined {
+  const debuggerSession = params.oauthDebuggerSessions.get(params.runtimeSession.oauthDebuggerSessionId);
+  return getAccessToken(debuggerSession);
 }

@@ -4,6 +4,7 @@ import type { OAuthRuntimeSessionsMap } from './oauth-runtime-domain.js';
 import {
   cleanupOAuthRuntimeSessions,
   createOAuthRuntimeSession,
+  getOAuthRuntimeSessionToken,
   oauthRuntimeSessionView,
   stopOAuthRuntimeSession,
   submitOAuthRuntimeCallback
@@ -50,6 +51,26 @@ export async function handleOAuthRuntimeRoutes(params: {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/oauth-runtime/sessions/') &&
+    pathname.endsWith('/token') &&
+    method === 'GET'
+  ) {
+    const sessionId = pathname.split('/')[4];
+    const runtimeSession = runtimeSessions.get(sessionId);
+    if (!runtimeSession) {
+      asJson(res, 404, { error: 'OAuth runtime session not found' });
+      return true;
+    }
+    const accessToken = getOAuthRuntimeSessionToken({ runtimeSession, oauthDebuggerSessions });
+    if (!accessToken) {
+      asJson(res, 404, { error: 'No access token available for this session' });
+      return true;
+    }
+    asJson(res, 200, { accessToken });
     return true;
   }
 

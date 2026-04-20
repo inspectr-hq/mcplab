@@ -15,6 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { QueueEntry } from "@/lib/data-sources/types";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 
 const RUN_EVAL_ACTIVE_JOB_KEY = "mcplab.runEvaluation.activeJobId";
 
@@ -180,26 +181,12 @@ const RunEvaluation = () => {
         mapping[serverName] = runtimeSessionId;
         setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
         openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
-
-        const timeoutAt = Date.now() + 5 * 60_000;
-        let loginCompleted = false;
-        while (Date.now() < timeoutAt) {
-          const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
-          const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
-          if (launchUrl) openBrowserOnce(launchUrl);
-          if (session.status === "completed" && session.hasAccessToken) { loginCompleted = true; break; }
-          if (session.status === "error" || session.status === "stopped") {
-            throw new Error(
-              `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
-            );
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-        if (!loginCompleted) {
-          throw new Error(
-            `OAuth login timed out for '${serverName}'. Authorization was not completed within 5 minutes.`
-          );
-        }
+        await waitForOAuthRuntimeSession({
+          sessionId: runtimeSessionId,
+          source,
+          serverName,
+          onLaunchUrl: openBrowserOnce,
+        });
 
         setLogs((prev) => [
           ...prev,

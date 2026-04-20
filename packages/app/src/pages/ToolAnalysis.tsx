@@ -15,6 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
 import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 type ProgressEvent = { payload?: { message?: unknown } };
@@ -262,23 +263,6 @@ const ToolAnalysisPage = () => {
         };
       })();
 
-      const waitForSession = async (sessionId: string) => {
-        const timeoutAt = Date.now() + 5 * 60_000;
-        while (Date.now() < timeoutAt) {
-          const { session } = await source.getOAuthRuntimeSession(sessionId);
-          const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
-          if (launchUrl) openBrowserOnce(launchUrl);
-          if (session.status === "completed" && session.hasAccessToken) return;
-          if (session.status === "error" || session.status === "stopped") {
-            throw new Error(
-              `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
-            );
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-        throw new Error(`OAuth login timed out for '${serverName}'.`);
-      };
-
       let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
       if (runtimeSessionId) {
         try {
@@ -294,9 +278,13 @@ const ToolAnalysisPage = () => {
       const created = await source.createOAuthRuntimeSession({ serverName });
       runtimeSessionId = created.session.id;
       setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
-      const launchUrl = created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
-      openBrowserOnce(launchUrl);
-      await waitForSession(runtimeSessionId);
+      openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+      await waitForOAuthRuntimeSession({
+        sessionId: runtimeSessionId,
+        source,
+        serverName,
+        onLaunchUrl: openBrowserOnce,
+      });
       return runtimeSessionId;
     };
 
