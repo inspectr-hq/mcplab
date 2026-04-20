@@ -1,5 +1,22 @@
 # @inspectr/mcplab
 
+## 1.7.0
+
+### Minor Changes
+
+- feat: OAuth Debuggerfeat: OAuth Debugger
+- feat: Support OAuth login flow on run MCP evaluations
+- feat: Support OAuth login flow on run MCP analysis
+- feat: Run evaluations with --oauth-token <server=token>
+- feat: improved OAuth setup UX (clearer flow controls, endpoint hints/tooltips, token auth method selection)
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.5.0
+  - @inspectr/mcplab-mcp-server@1.1.3
+  - @inspectr/mcplab-reporting@1.1.4
+
 ## 1.6.0
 
 ### Minor Changes

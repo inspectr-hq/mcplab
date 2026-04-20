@@ -1,13 +1,23 @@
 # @inspectr/mcplab-core
 
+## 1.5.0
+
+### Minor Changes
+
+- feat: OAuth Debuggerfeat: OAuth Debugger
+- feat: Support OAuth login flow on run MCP evaluations
+- feat: Support OAuth login flow on run MCP analysis
+- feat: Run evaluations with --oauth-token <server=token>
+- feat: improved OAuth setup UX (clearer flow controls, endpoint hints/tooltips, token auth method selection)
+
 ## 1.4.0
 
 ### Minor Changes
 
 - feat: add analysis of title, outputSchema in tool analysis
-  ux: Show tool annotations in tool analysis
-  ux: Add "Run" button on Evalutations overview
-  fix: Improved safety classification mechanism
+- ux: Show tool annotations in tool analysis
+- ux: Add "Run" button on Evalutations overview
+- fix: Improved safety classification mechanism
 
 ## 1.3.0
 
