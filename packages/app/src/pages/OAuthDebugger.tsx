@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ExternalLink, Loader2, Play, Square, Download, Copy, RefreshCw, Info } from 'lucide-react';
+import { AlertCircle, Copy, Download, ExternalLink, Info, Loader2, Play, RefreshCw, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1069,6 +1069,27 @@ export default function OAuthDebuggerPage() {
               <div><Label className="text-xs">Token endpoint status</Label><p className="text-sm">{session.summary?.tokenEndpointStatus ?? '-'}</p></div>
               <div><Label className="text-xs">Token type</Label><p className="text-sm">{session.summary?.tokenType || '-'}</p></div>
               <div><Label className="text-xs">Scopes granted</Label><p className="text-sm break-all">{(session.summary?.grantedScopes ?? []).join(', ') || '-'}</p></div>
+              {session.summary?.accessToken && (
+                <div className="md:col-span-2 space-y-1">
+                  <Label className="text-xs">Access token</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs font-mono text-muted-foreground">
+                      {session.summary.accessToken.slice(0, 48)}…
+                    </code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 h-7 px-2 text-xs"
+                      onClick={() => void copyText(session.summary!.accessToken!)}
+                    >
+                      <Copy className="mr-1 h-3 w-3" />
+                      Copy token
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Visible because "Hide sensitive values" is off. Use this token with the CLI via <code className="font-mono">--oauth-token</code>.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

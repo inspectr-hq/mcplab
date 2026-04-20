@@ -124,6 +124,7 @@ export function oauthRuntimeSessionView(params: {
       : undefined,
     callbackUrl: debuggerView?.uiHints.callbackUrl,
     hasAccessToken: Boolean(accessToken),
+    accessToken: accessToken ?? undefined,
     lastError:
       status === 'error'
         ? debuggerSession?.steps.find((step) => step.status === 'failed')?.outcomeSummary ||

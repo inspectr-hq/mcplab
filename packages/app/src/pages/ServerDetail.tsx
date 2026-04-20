@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, Wifi, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Loader2, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +58,7 @@ const ServerDetail = () => {
   const [connectState, setConnectState] = useState<ConnectState>({ status: "idle" });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
   const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
+  const [oauthAccessToken, setOauthAccessToken] = useState<string | undefined>(undefined);
   const [authInProgress, setAuthInProgress] = useState(false);
   const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
 
@@ -116,13 +117,13 @@ const ServerDetail = () => {
           };
         })();
 
-        const waitForSession = async (sessionId: string) => {
+        const waitForSession = async (sessionId: string): Promise<string | undefined> => {
           const timeoutAt = Date.now() + 5 * 60_000;
           while (Date.now() < timeoutAt) {
             const { session } = await source.getOAuthRuntimeSession(sessionId);
             const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
             if (launchUrl) openBrowserOnce(launchUrl);
-            if (session.status === "completed" && session.hasAccessToken) return;
+            if (session.status === "completed" && session.hasAccessToken) return session.accessToken;
             if (session.status === "error" || session.status === "stopped") {
               throw new Error(
                 `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
@@ -148,7 +149,8 @@ const ServerDetail = () => {
         setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
         const launchUrl = created.session.authorizeLaunchUrl || created.session.authorizationUrl || "";
         openBrowserOnce(launchUrl);
-        await waitForSession(runtimeSessionId);
+        const token = await waitForSession(runtimeSessionId);
+        if (token) setOauthAccessToken(token);
         return runtimeSessionId;
       };
 
@@ -331,6 +333,24 @@ const ServerDetail = () => {
                         <li key={name} className="font-mono text-xs">{name}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {oauthAccessToken && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">OAuth access token</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate text-xs font-mono text-muted-foreground">{oauthAccessToken.slice(0, 32)}…</code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 h-7 px-2 text-xs"
+                        onClick={() => void navigator.clipboard.writeText(oauthAccessToken)}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        Copy token
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">

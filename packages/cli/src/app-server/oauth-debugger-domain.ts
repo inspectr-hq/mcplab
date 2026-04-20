@@ -186,6 +186,7 @@ export interface OAuthDebuggerSessionView {
     tokenEndpointStatus?: number;
     tokenType?: string;
     grantedScopes?: string[];
+    accessToken?: string;
   };
 }
 
@@ -1267,7 +1268,10 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
       grantedScopes:
         typeof token?.scope === 'string'
           ? String(token.scope).split(/\s+/).filter(Boolean)
-          : undefined
+          : undefined,
+      accessToken: session.config.display.showSensitiveValues && typeof token?.access_token === 'string'
+        ? token.access_token
+        : undefined
     }
   };
 }

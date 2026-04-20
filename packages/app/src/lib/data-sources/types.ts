@@ -512,6 +512,7 @@ export interface OAuthDebuggerSessionView {
     tokenEndpointStatus?: number;
     tokenType?: string;
     grantedScopes?: string[];
+    accessToken?: string;
   };
 }
 
@@ -597,6 +598,7 @@ export interface OAuthRuntimeSessionView {
   authorizeLaunchUrl?: string;
   callbackUrl?: string;
   hasAccessToken: boolean;
+  accessToken?: string;
   lastError?: string;
 }
 
