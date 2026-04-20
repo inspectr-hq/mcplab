@@ -30,7 +30,7 @@ export type DocPage = DocNavItem & {
 const overview: DocPage = {
   slug: 'overview',
   label: 'Overview',
-  href: '/docs',
+  href: '/docs/',
   description: 'What MCPLab does and when to use it.',
   keywords: ['overview', 'start', 'guide', 'introduction'],
   seoTitle: 'Documentation',
@@ -68,7 +68,7 @@ const overview: DocPage = {
 const installation: DocPage = {
   slug: 'installation',
   label: 'Installation',
-  href: '/docs/installation',
+  href: '/docs/installation/',
   description: 'Install MCPLab and configure your API keys.',
   keywords: ['install', 'npx', 'global', 'setup', 'api key'],
   seoTitle: 'Installation',
@@ -115,7 +115,7 @@ AZURE_OPENAI_DEPLOYMENT=gpt-4o`
 const quickStart: DocPage = {
   slug: 'quick-start',
   label: 'Quick Start',
-  href: '/docs/quick-start',
+  href: '/docs/quick-start/',
   description: 'Write your first eval and see results in under 5 minutes.',
   keywords: ['quick start', 'first eval', 'yaml', 'scenario', 'run'],
   seoTitle: 'Quick Start',
@@ -178,7 +178,7 @@ scenarios:
 const setupEvaluations: DocPage = {
   slug: 'setting-up-evaluations',
   label: 'Setting Up Evaluations',
-  href: '/docs/setting-up-evaluations',
+  href: '/docs/setting-up-evaluations/',
   description: 'Set up a robust evaluation workflow before running your first full test suite.',
   keywords: ['setup evaluations', 'eval config', 'libraries', 'mcp servers', 'auth', 'preflight'],
   seoTitle: 'Setting Up Evaluations',
@@ -269,7 +269,7 @@ const setupEvaluations: DocPage = {
 const scenarioConfiguration: DocPage = {
   slug: 'scenario-configuration',
   label: 'Scenario Configuration',
-  href: '/docs/scenario-configuration',
+  href: '/docs/scenario-configuration/',
   description: 'Detailed guide for writing MCPLab scenarios and assertions.',
   keywords: [
     'scenario configuration',
@@ -328,7 +328,7 @@ const scenarioConfiguration: DocPage = {
     servers: [weather-api]
     mcp_servers:
       - ref: weather-api
-    prompt: Find current temperature in Brussels and report it in Celsius.
+    prompt: Return JSON with city and temperature_c for Brussels.
     eval:
       tool_constraints:
         required_tools: [get_weather]
@@ -339,15 +339,16 @@ const scenarioConfiguration: DocPage = {
       response_assertions:
         - type: regex
           pattern: '([0-9]+)(\\.[0-9]+)?\\s?°?C'
-        - type: contains
-          value: Brussels`
+        - type: jsonpath
+          path: $.city
+          equals: Brussels`
         }
       ],
       bullets: [
         'Use `required_tools` to enforce critical tool calls.',
         'Use `forbidden_tools` to block unsafe or irrelevant tools.',
         'Use regex assertions for variable outputs (numbers, IDs, timestamps).',
-        'Use contains assertions for fixed business-critical phrases.'
+        'Use jsonpath assertions when the response is structured JSON.'
       ]
     },
     {
@@ -401,12 +402,86 @@ const scenarioConfiguration: DocPage = {
   ]
 };
 
+const librariesAndRefs: DocPage = {
+  slug: 'libraries-and-refs',
+  label: 'Libraries & Refs',
+  href: '/docs/libraries-and-refs/',
+  description: 'Reuse shared servers, agents, and scenarios across evaluation configs.',
+  keywords: ['libraries', 'refs', 'servers.yaml', 'agents.yaml', 'scenarios', 'reuse'],
+  seoTitle: 'Libraries & Refs',
+  track: 'getting-started',
+  sections: [
+    {
+      id: 'what-it-is',
+      title: 'What the Library System Is',
+      paragraphs: [
+        'MCPLab libraries let you define shared servers, agents, and scenarios once, then reference them from many eval configs.',
+        'This reduces duplication and keeps team-wide defaults consistent.'
+      ]
+    },
+    {
+      id: 'structure',
+      title: 'Recommended Library Structure',
+      codeBlocks: [
+        {
+          title: 'library layout',
+          language: 'text',
+          code: `mcplab/\n├── servers.yaml\n├── agents.yaml\n└── scenarios/\n    ├── scenario-a.yaml\n    └── scenario-b.yaml`
+        }
+      ],
+      bullets: [
+        '`servers.yaml` contains reusable MCP server definitions.',
+        '`agents.yaml` contains reusable LLM agent definitions.',
+        '`scenarios/` contains reusable scenario files.'
+      ]
+    },
+    {
+      id: 'use-refs',
+      title: 'Reference Library Items in eval.yaml',
+      paragraphs: ['Use `ref` entries to pull shared items into an eval config by id.'],
+      codeBlocks: [
+        {
+          title: 'eval.yaml using refs',
+          language: 'yaml',
+          code: `servers:\n  - ref: my-server\nagents:\n  - ref: claude-sonnet\nscenarios:\n  - ref: scenario-a`
+        }
+      ]
+    },
+    {
+      id: 'resolution',
+      title: 'How Ref Resolution Works',
+      bullets: [
+        'Server refs resolve from `servers.yaml`.',
+        'Agent refs resolve from `agents.yaml`.',
+        'Scenario refs resolve from files in `scenarios/`.',
+        'Missing refs are reported and should be fixed before running.'
+      ]
+    },
+    {
+      id: 'app-cli',
+      title: 'Use Libraries in App and CLI',
+      bullets: [
+        'App: start with `--libraries-dir` so shared library content is loaded.',
+        'CLI run: refs resolve when library files are present in the configured layout.',
+        'App UI: inspect and manage shared items in the Library section.'
+      ],
+      codeBlocks: [
+        {
+          title: 'start app with libraries',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab app --libraries-dir ./mcplab'
+        }
+      ]
+    }
+  ]
+};
+
 // ─── CLI Track ────────────────────────────────────────────────────────────────
 
 const cliRunning: DocPage = {
   slug: 'cli-running-evaluations',
   label: 'Running Evaluations',
-  href: '/docs/cli/running-evaluations',
+  href: '/docs/cli/running-evaluations/',
   description: 'The mcplab run command and all its options.',
   keywords: ['run', 'cli', 'scenarios', 'agents', 'variance', 'interactive'],
   seoTitle: 'CLI — Running Evaluations',
@@ -522,7 +597,7 @@ const cliRunning: DocPage = {
 const cliConfiguration: DocPage = {
   slug: 'cli-configuration',
   label: 'Configuration',
-  href: '/docs/cli/configuration',
+  href: '/docs/cli/configuration/',
   description: 'Write eval.yaml — servers, agents, scenarios, assertions, and auth.',
   keywords: [
     'config',
@@ -635,7 +710,7 @@ scenarios:
           code: `scenarios:
   - id: weather-lookup
     servers: [weather-server]
-    prompt: What is the current weather in Amsterdam?
+    prompt: Return JSON with city and temperature_c for Amsterdam.
     eval:
       tool_constraints:
         required_tools: [get_weather]
@@ -643,8 +718,9 @@ scenarios:
       response_assertions:
         - type: regex
           pattern: "Amsterdam"
-        - type: contains
-          value: "temperature"`
+        - type: jsonpath
+          path: "$.city"
+          equals: "Amsterdam"`
         }
       ]
     },
@@ -656,7 +732,7 @@ scenarios:
         'tool_constraints.required_tools — list of tool names the agent MUST call.',
         'tool_constraints.forbidden_tools — list of tool names the agent MUST NOT call.',
         'response_assertions type: regex — the agent response must match the regular expression in pattern.',
-        'response_assertions type: contains — the agent response must contain the exact string in value.'
+        'response_assertions type: jsonpath — evaluate JSON output at path and optionally match equals.'
       ]
     },
     {
@@ -732,7 +808,7 @@ scenarios:
 const cliReports: DocPage = {
   slug: 'cli-reports-output',
   label: 'Reports & Output',
-  href: '/docs/cli/reports-output',
+  href: '/docs/cli/reports-output/',
   description: 'What MCPLab writes after a run and how to work with it.',
   keywords: ['reports', 'output', 'results', 'trace', 'html', 'json', 'mcplab report'],
   seoTitle: 'CLI — Reports & Output',
@@ -790,7 +866,7 @@ const cliReports: DocPage = {
 const cliCicd: DocPage = {
   slug: 'cli-ci-cd',
   label: 'CI/CD',
-  href: '/docs/cli/ci-cd',
+  href: '/docs/cli/ci-cd/',
   description: 'Run MCPLab in GitHub Actions and other CI pipelines.',
   keywords: ['ci', 'cd', 'github actions', 'pipeline', 'automation', 'exit code'],
   seoTitle: 'CLI — CI/CD',
@@ -867,7 +943,7 @@ jobs:
 const appGettingStarted: DocPage = {
   slug: 'app-getting-started',
   label: 'Starting the App',
-  href: '/docs/app/getting-started',
+  href: '/docs/app/getting-started/',
   description: 'Launch the MCPLab web UI and find your way around.',
   keywords: ['app', 'ui', 'launch', 'mcplab app', 'dashboard'],
   seoTitle: 'App — Starting the App',
@@ -925,7 +1001,7 @@ const appGettingStarted: DocPage = {
 const appRunning: DocPage = {
   slug: 'app-running-evaluations',
   label: 'Running Evaluations',
-  href: '/docs/app/running-evaluations',
+  href: '/docs/app/running-evaluations/',
   description: 'Launch and monitor evaluations from the web UI.',
   keywords: ['run', 'evaluation', 'ui', 'agents', 'config', 'variance'],
   seoTitle: 'App — Running Evaluations',
@@ -967,7 +1043,7 @@ const appRunning: DocPage = {
 const appResults: DocPage = {
   slug: 'app-reading-results',
   label: 'Analysing Results',
-  href: '/docs/app/reading-results',
+  href: '/docs/app/reading-results/',
   description: 'Understand run output, compare agents, and browse markdown reports.',
   keywords: ['results', 'detail', 'compare', 'agents', 'trace', 'markdown reports'],
   seoTitle: 'App — Analysing Results',
@@ -1013,7 +1089,7 @@ const appResults: DocPage = {
 const appAssistants: DocPage = {
   slug: 'app-ai-assistants',
   label: 'AI Assistants',
-  href: '/docs/app/ai-assistants',
+  href: '/docs/app/ai-assistants/',
   description: 'Use the Scenario and Result AI assistants to work faster.',
   keywords: ['ai', 'assistant', 'scenario assistant', 'result assistant', 'chat'],
   seoTitle: 'App — AI Assistants',
@@ -1052,7 +1128,7 @@ const appAssistants: DocPage = {
 const appMcplabAssistantSkill: DocPage = {
   slug: 'app-mcplab-assistant-skill',
   label: 'MCPLab Assistant Skill',
-  href: '/docs/app/mcplab-assistant-skill',
+  href: '/docs/app/mcplab-assistant-skill/',
   description:
     'Install and use the mcplab-assistant skill from skills.sh in Codex/Claude-style agent workflows.',
   keywords: [
@@ -1150,7 +1226,7 @@ const appMcplabAssistantSkill: DocPage = {
 const appOAuthDebugger: DocPage = {
   slug: 'app-oauth-debugger',
   label: 'OAuth Debugger',
-  href: '/docs/app/oauth-debugger',
+  href: '/docs/app/oauth-debugger/',
   description: 'Debug OAuth 2.0 authorization flows for MCP servers step by step.',
   keywords: [
     'oauth debugger',
@@ -1172,7 +1248,7 @@ const appOAuthDebugger: DocPage = {
       ],
       bullets: [
         'Guided flow: Configure Debug Session -> Run / Inspect Flow -> Report / Export.',
-        'Supports pre-registered clients, DCR, and CIMD registration methods.',
+        'Supports pre-registered clients, DCR (Dynamic Client Registration), and CIMD (Client ID Metadata Document) registration methods.',
         'Includes network inspector, validation findings, and exportable traces.'
       ]
     },
@@ -1197,7 +1273,7 @@ const appOAuthDebugger: DocPage = {
       ],
       bullets: [
         'Select target MCP server (OAuth-enabled only).',
-        'Choose registration method: pre_registered, dcr, or cimd.',
+        'Choose registration method: pre_registered, dcr (Dynamic Client Registration), or cimd (Client ID Metadata Document).',
         'Set runtime options like redirect mode and PKCE.',
         'Start session and open the generated authorization URL.',
         'If required, paste the final redirect URL in manual callback mode.',
@@ -1239,7 +1315,7 @@ const appOAuthDebugger: DocPage = {
 const appScenarioSetup: DocPage = {
   slug: 'app-scenario-setup',
   label: 'Scenario Setup in the App',
-  href: '/docs/app/scenario-setup',
+  href: '/docs/app/scenario-setup/',
   description: 'Create and manage evaluation scenarios directly in the MCPLab app UI.',
   keywords: [
     'scenario setup',
@@ -1319,7 +1395,7 @@ const appScenarioSetup: DocPage = {
 const appToolAnalysis: DocPage = {
   slug: 'app-tool-analysis',
   label: 'MCP Tool Analysis',
-  href: '/docs/app/tool-analysis',
+  href: '/docs/app/tool-analysis/',
   description: 'Review MCP tool definitions for quality and LLM-readiness.',
   keywords: ['tool analysis', 'quality', 'mcp tools', 'review', 'llm-friendly'],
   seoTitle: 'App — MCP Tool Analysis',
@@ -1370,7 +1446,7 @@ const appToolAnalysis: DocPage = {
 const appLibrary: DocPage = {
   slug: 'app-library',
   label: 'Library',
-  href: '/docs/app/library',
+  href: '/docs/app/library/',
   description: 'Manage reusable agents and servers shared across eval configs.',
   keywords: ['library', 'agents', 'servers', 'reusable', 'shared', 'libraries-dir'],
   seoTitle: 'App — Library',
@@ -1423,7 +1499,7 @@ const appLibrary: DocPage = {
 const refConfiguration: DocPage = {
   slug: 'reference-configuration',
   label: 'Configuration Schema',
-  href: '/docs/reference/configuration',
+  href: '/docs/reference/configuration/',
   description: 'Complete field reference for eval.yaml.',
   keywords: ['schema', 'reference', 'fields', 'yaml', 'config', 'full reference'],
   seoTitle: 'Reference — Configuration Schema',
@@ -1467,7 +1543,7 @@ const refConfiguration: DocPage = {
         'tool_constraints.required_tools (string[], optional) — tool names the agent must call.',
         'tool_constraints.forbidden_tools (string[], optional) — tool names the agent must not call.',
         'response_assertions[ ].type: "regex" — agent response must match pattern.',
-        'response_assertions[ ].type: "contains" — agent response must contain value.'
+        'response_assertions[ ].type: "jsonpath" — evaluate JSON output at path and optionally match equals.'
       ]
     },
     {
@@ -1491,7 +1567,7 @@ const refConfiguration: DocPage = {
 const refEnvVars: DocPage = {
   slug: 'reference-env-vars',
   label: 'Environment Variables',
-  href: '/docs/reference/environment-variables',
+  href: '/docs/reference/environment-variables/',
   description: 'All environment variables read by MCPLab.',
   keywords: ['env', 'environment', 'api key', 'secrets', 'variables'],
   seoTitle: 'Reference — Environment Variables',
@@ -1556,6 +1632,7 @@ const pageIndex: DocPage[] = [
   quickStart,
   setupEvaluations,
   scenarioConfiguration,
+  librariesAndRefs,
   cliRunning,
   cliConfiguration,
   cliReports,
@@ -1578,7 +1655,7 @@ export const docsPages = pageIndex;
 export const docsNavSections = [
   {
     title: 'Getting Started',
-    items: [overview, installation, quickStart, setupEvaluations, scenarioConfiguration]
+    items: [overview, installation, quickStart, setupEvaluations, scenarioConfiguration, librariesAndRefs]
   },
   {
     title: 'CLI',

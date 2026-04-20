@@ -114,6 +114,9 @@ scenarios:
       response_assertions:
         - type: regex
           pattern: Found [0-9]+ items
+        - type: jsonpath
+          path: $.summary.count
+          equals: 10
     extract:
       - name: item_count
         from: final_text
@@ -147,6 +150,20 @@ mcp_servers:
       client_id_env: MCP_CLIENT_ID
       client_secret_env: MCP_CLIENT_SECRET
       scope: mcp.read
+```
+
+### OAuth Authorization Code
+
+```yaml
+mcp_servers:
+  - id: my-server
+    transport: http
+    url: https://api.example.com/mcp
+    auth:
+      type: oauth_authorization_code
+      client_id: my-client-id
+      redirect_url: http://127.0.0.1:8787/api/oauth-debugger/sessions/<session-id>/callback
+      scope: openid profile
 ```
 
 ## Schema-Driven Authoring Order
