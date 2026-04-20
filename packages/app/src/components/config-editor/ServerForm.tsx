@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,6 @@ const emptyServer = (): ServerConfig => ({
   name: "",
   transport: "stdio",
   authType: "none",
-  oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
 export function ServerForm({
@@ -31,6 +31,17 @@ export function ServerForm({
   allowStructureEdits = !readOnly,
   showHeader = true
 }: ServerFormProps) {
+  const [advancedOauthOpen, setAdvancedOauthOpen] = useState<Set<number>>(new Set());
+
+  const toggleAdvancedOauth = (index: number) => {
+    setAdvancedOauthOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
   const update = (index: number, patch: Partial<ServerConfig>) => {
     const next = servers.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
@@ -39,6 +50,13 @@ export function ServerForm({
   const setAuthType = (index: number, nextType: ServerConfig["authType"]) => {
     const current = servers[index];
     if (!current) return;
+    if (nextType !== "oauth2") {
+      setAdvancedOauthOpen((prev) => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
     update(index, {
       authType: nextType,
       ...(nextType !== "bearer" && nextType !== "api-key"
@@ -52,15 +70,28 @@ export function ServerForm({
             oauthClientId: undefined,
             oauthClientSecret: undefined,
             oauthRedirectUrl: undefined,
-            oauthScope: undefined
+            oauthScope: undefined,
+            oauthMode: undefined,
+            oauthAuthorizationUrl: undefined,
+            oauthTokenEndpoint: undefined,
           }
         : {
-            oauthRedirectUrl: current.oauthRedirectUrl || "http://localhost:6274/oauth/"
+            oauthRedirectUrl: current.oauthRedirectUrl || undefined,
           })
     });
   };
 
-  const remove = (index: number) => onChange(servers.filter((_, i) => i !== index));
+  const remove = (index: number) => {
+    setAdvancedOauthOpen((prev) => {
+      const next = new Set<number>();
+      prev.forEach((idx) => {
+        if (idx < index) next.add(idx);
+        else if (idx > index) next.add(idx - 1);
+      });
+      return next;
+    });
+    onChange(servers.filter((_, i) => i !== index));
+  };
   const add = () => onChange([...servers, emptyServer()]);
 
   return (
@@ -184,50 +215,107 @@ export function ServerForm({
             {srv.authType === "oauth2" && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Client ID</Label>
-                    <Input
-                      value={srv.oauthClientId || ""}
-                      onChange={(e) => update(i, { oauthClientId: e.target.value })}
-                      disabled={readOnly}
-                      placeholder="your-client-id"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Client Secret (optional)</Label>
-                    <Input
-                      type="password"
-                      value={srv.oauthClientSecret || ""}
-                      onChange={(e) => update(i, { oauthClientSecret: e.target.value })}
-                      disabled={readOnly}
-                      placeholder="••••••••"
-                      className="font-mono text-xs"
-                    />
-                  </div>
+
+                {/* Mode toggle */}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={!srv.oauthMode || srv.oauthMode === "pre_registered" ? "default" : "outline"}
+                    size="sm"
+                    disabled={readOnly}
+                    onClick={() => update(i, { oauthMode: "pre_registered" })}
+                  >
+                    Pre-registered
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={srv.oauthMode === "dcr" ? "default" : "outline"}
+                    size="sm"
+                    disabled={readOnly}
+                    onClick={() => update(i, { oauthMode: "dcr", oauthClientId: undefined, oauthClientSecret: undefined })}
+                  >
+                    DCR (Dynamic)
+                  </Button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Redirect URL</Label>
-                    <Input
-                      value={srv.oauthRedirectUrl || "http://localhost:6274/oauth/"}
-                      onChange={(e) => update(i, { oauthRedirectUrl: e.target.value })}
-                      disabled={readOnly}
-                      placeholder="http://localhost:6274/oauth/"
-                      className="font-mono text-xs"
-                    />
+
+                {/* Client credentials — only for pre_registered */}
+                {(!srv.oauthMode || srv.oauthMode === "pre_registered") && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Client ID</Label>
+                      <Input
+                        value={srv.oauthClientId || ""}
+                        onChange={(e) => update(i, { oauthClientId: e.target.value })}
+                        disabled={readOnly}
+                        placeholder="your-client-id"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Client Secret (optional)</Label>
+                      <Input
+                        type="password"
+                        value={srv.oauthClientSecret || ""}
+                        onChange={(e) => update(i, { oauthClientSecret: e.target.value })}
+                        disabled={readOnly}
+                        placeholder="••••••••"
+                        className="font-mono text-xs"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Scope (space-separated)</Label>
-                    <Input
-                      value={srv.oauthScope || ""}
-                      onChange={(e) => update(i, { oauthScope: e.target.value })}
-                      disabled={readOnly}
-                      placeholder="openid profile mcp"
-                      className="font-mono text-xs"
-                    />
-                  </div>
+                )}
+
+                {/* Scope */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Scope (optional, space-separated)</Label>
+                  <Input
+                    value={srv.oauthScope || ""}
+                    onChange={(e) => update(i, { oauthScope: e.target.value })}
+                    disabled={readOnly}
+                    placeholder="openid profile mcp"
+                    className="font-mono text-xs"
+                  />
+                </div>
+
+                {/* Advanced section */}
+                <div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    disabled={readOnly}
+                    onClick={() => toggleAdvancedOauth(i)}
+                  >
+                    <span>{advancedOauthOpen.has(i) ? "▾" : "▸"}</span>
+                    Advanced — manual endpoint overrides
+                  </button>
+                  {advancedOauthOpen.has(i) && (
+                    <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Authorization URL</Label>
+                        <Input
+                          value={srv.oauthAuthorizationUrl || ""}
+                          onChange={(e) =>
+                            update(i, { oauthAuthorizationUrl: e.target.value || undefined })
+                          }
+                          disabled={readOnly}
+                          placeholder="leave blank to use .well-known discovery"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Token URL</Label>
+                        <Input
+                          value={srv.oauthTokenEndpoint || ""}
+                          onChange={(e) =>
+                            update(i, { oauthTokenEndpoint: e.target.value || undefined })
+                          }
+                          disabled={readOnly}
+                          placeholder="leave blank to use .well-known discovery"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

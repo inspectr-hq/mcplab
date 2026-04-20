@@ -96,6 +96,16 @@ export default function ToolAnalysisResultDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {record.report.mcpServerVersions && Object.keys(record.report.mcpServerVersions).length > 0 && (
+            <span className="inline-flex items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
+              <span className="font-medium">MCP:</span>
+              <span className="ml-1 font-mono">
+                {Object.entries(record.report.mcpServerVersions)
+                  .map(([name, v]) => `${name}: ${v ?? "unknown"}`)
+                  .join(", ")}
+              </span>
+            </span>
+          )}
           <Button asChild size="sm" variant="outline">
             <Link to="/tool-analysis-results">Back to results</Link>
           </Button>

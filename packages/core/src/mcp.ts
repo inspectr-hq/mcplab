@@ -15,6 +15,10 @@ export interface McpCallToolOptions {
   requestHeaders?: Record<string, string>;
 }
 
+export interface McpConnectAllOptions {
+  serverAuthHeaders?: Record<string, Record<string, string>>;
+}
+
 export function normalizeListedTool(tool: any): ToolDef {
   return {
     name: tool.name,
@@ -47,7 +51,11 @@ export class McpClientManager {
     this.maxScopedClients = Math.max(1, configuredMax);
   }
 
-  async connectAll(servers: Record<string, ServerConfig>, signal?: AbortSignal): Promise<void> {
+  async connectAll(
+    servers: Record<string, ServerConfig>,
+    signal?: AbortSignal,
+    options?: McpConnectAllOptions
+  ): Promise<void> {
     McpClientManager.onBeforeConnect?.();
     throwIfAborted(signal);
     this.servers = new Map(Object.entries(servers));
@@ -58,7 +66,11 @@ export class McpClientManager {
         throw new Error(`Unsupported transport for server ${name}: ${server.transport}`);
       }
       try {
-        const authHeaders = await this.getAuthHeaders(name, server);
+        const authHeadersOverride = options?.serverAuthHeaders?.[name];
+        const authHeaders =
+          authHeadersOverride && Object.keys(authHeadersOverride).length > 0
+            ? mergeRequestHeaders(authHeadersOverride)
+            : await this.getAuthHeaders(name, server);
         this.authHeaders.set(name, authHeaders);
         const headers = mergeRequestHeaders(authHeaders, getStaticHeaders(server));
         const client = await this.connectClientWithRetry(

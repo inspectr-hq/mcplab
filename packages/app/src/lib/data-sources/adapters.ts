@@ -87,6 +87,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
           : entry.auth?.type === 'oauth_client_credentials'
           ? entry.auth.scope
           : undefined,
+      oauthMode:
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.mode : undefined,
+      oauthAuthorizationUrl:
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.authorization_url : undefined,
+      oauthTokenEndpoint:
+        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.token_url : undefined,
       oauthTokenUrl:
         entry.auth?.type === 'oauth_client_credentials' ? entry.auth.token_url : undefined,
       oauthClientIdEnv:
@@ -201,20 +207,32 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
                     auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
                   oauthClientId:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_id || '')
+                      ? String(auth.client_id || '') || undefined
                       : undefined,
                   oauthClientSecret:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_secret || '')
+                      ? String(auth.client_secret || '') || undefined
                       : undefined,
                   oauthRedirectUrl:
                     auth?.type === 'oauth_authorization_code'
-                      ? String(auth.redirect_url || '')
+                      ? String(auth.redirect_url || '') || undefined
                       : undefined,
                   oauthScope:
                     auth?.type === 'oauth_authorization_code' ||
                     auth?.type === 'oauth_client_credentials'
                       ? String((auth.scope as string) || '') || undefined
+                      : undefined,
+                  oauthMode:
+                    auth?.type === 'oauth_authorization_code'
+                      ? (auth.mode as 'pre_registered' | 'dcr' | undefined)
+                      : undefined,
+                  oauthAuthorizationUrl:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.authorization_url || '') || undefined
+                      : undefined,
+                  oauthTokenEndpoint:
+                    auth?.type === 'oauth_authorization_code'
+                      ? String(auth.token_url || '') || undefined
                       : undefined,
                   oauthTokenUrl:
                     auth?.type === 'oauth_client_credentials'
@@ -374,10 +392,17 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
         : server.authType === 'oauth2'
         ? {
             type: 'oauth_authorization_code' as const,
-            client_id: server.oauthClientId || '',
-            client_secret: server.oauthClientSecret || undefined,
-            redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
-            scope: server.oauthScope || undefined
+            ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+            ...(server.oauthMode !== 'dcr' && server.oauthClientId
+              ? { client_id: server.oauthClientId }
+              : {}),
+            ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
+            ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
+            ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+            ...(server.oauthAuthorizationUrl
+              ? { authorization_url: server.oauthAuthorizationUrl }
+              : {}),
+            ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
           }
         : undefined;
     return {
@@ -568,10 +593,17 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
               : server.authType === 'oauth2'
               ? {
                   type: 'oauth_authorization_code' as const,
-                  client_id: server.oauthClientId || '',
-                  client_secret: server.oauthClientSecret || undefined,
-                  redirect_url: server.oauthRedirectUrl || 'http://localhost:6274/oauth/',
-                  scope: server.oauthScope || undefined
+                  ...(server.oauthMode === 'dcr' ? { mode: 'dcr' as const } : {}),
+                  ...(server.oauthMode !== 'dcr' && server.oauthClientId
+                    ? { client_id: server.oauthClientId }
+                    : {}),
+                  ...(server.oauthClientSecret ? { client_secret: server.oauthClientSecret } : {}),
+                  ...(server.oauthRedirectUrl ? { redirect_url: server.oauthRedirectUrl } : {}),
+                  ...(server.oauthScope ? { scope: server.oauthScope } : {}),
+                  ...(server.oauthAuthorizationUrl
+                    ? { authorization_url: server.oauthAuthorizationUrl }
+                    : {}),
+                  ...(server.oauthTokenEndpoint ? { token_url: server.oauthTokenEndpoint } : {})
                 }
               : undefined
         };

@@ -15,6 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
 import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 type ProgressEvent = { payload?: { message?: unknown } };
@@ -127,6 +128,10 @@ const ToolAnalysisPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [viewStep, setViewStep] = useState<"configure" | "run" | "report">("configure");
   const [runState, setRunState] = useState<"idle" | "running" | "stopped" | "error">("idle");
+  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<
+    Record<string, string>
+  >({});
+  const [authInProgress, setAuthInProgress] = useState(false);
   const cleanupRef = useRef<null | (() => void)>(null);
   const eventsContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -241,9 +246,75 @@ const ToolAnalysisPage = () => {
       setSelectedToolsByServer({});
       return;
     }
+    const ensureOAuthRuntimeSession = async (serverName: string) => {
+      const openBrowserOnce = (() => {
+        let opened = false;
+        return (launchUrl: string) => {
+          if (opened || !launchUrl) return;
+          opened = true;
+          const absoluteUrl = launchUrl.startsWith("http")
+            ? launchUrl
+            : `${window.location.origin}${launchUrl}`;
+          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+          toast({
+            title: `OAuth login required for ${serverName}`,
+            description: "Complete login in the opened browser tab. Discovery will continue automatically."
+          });
+        };
+      })();
+
+      let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
+      if (runtimeSessionId) {
+        try {
+          const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
+          if (session.status === "completed" && session.hasAccessToken) {
+            return runtimeSessionId;
+          }
+        } catch {
+          runtimeSessionId = undefined;
+        }
+      }
+
+      const created = await source.createOAuthRuntimeSession({ serverName });
+      runtimeSessionId = created.session.id;
+      setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
+      openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+      await waitForOAuthRuntimeSession({
+        sessionId: runtimeSessionId,
+        source,
+        serverName,
+        onLaunchUrl: openBrowserOnce,
+      });
+      return runtimeSessionId;
+    };
+
+    let oauthSessions: Record<string, string> | undefined;
+    const selectedServerName = selectedServerNames[0];
+    const selectedServer = servers.find((server) => server.id === selectedServerName);
+    try {
+      if (selectedServer?.authType === "oauth2") {
+        setAuthInProgress(true);
+        const sessionId = await ensureOAuthRuntimeSession(selectedServerName);
+        oauthSessions = { [selectedServerName]: sessionId };
+      }
+    } catch (error: unknown) {
+      toast({
+        title: "OAuth login failed",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive"
+      });
+      setAuthInProgress(false);
+      return;
+    } finally {
+      setAuthInProgress(false);
+    }
+
     setDiscovering(true);
     try {
-      const response = await source.discoverToolsForAnalysis({ serverNames: selectedServerNames });
+      const response = await source.discoverToolsForAnalysis({
+        serverNames: selectedServerNames,
+        oauthRuntimeSessions: oauthSessions
+      });
       setDiscovered(response.servers);
       setSelectedToolsByServer((prev) => {
         const next: Record<string, string[]> = {};
@@ -313,8 +384,22 @@ const ToolAnalysisPage = () => {
     setViewStep("run");
     setRunState("running");
     try {
+      let oauthSessions: Record<string, string> | undefined;
+      const selectedServerName = selectedServerNames[0];
+      const selectedServer = servers.find((server) => server.id === selectedServerName);
+      if (selectedServer?.authType === "oauth2") {
+        setAuthInProgress(true);
+        const existing = oauthRuntimeSessionsByServer[selectedServerName];
+        if (!existing) {
+          throw new Error(
+            `OAuth login for '${selectedServerName}' is required. Click Discover Tools first to authenticate.`
+          );
+        }
+        oauthSessions = { [selectedServerName]: existing };
+      }
       const { jobId } = await source.startToolAnalysis({
         serverNames: selectedServerNames,
+        oauthRuntimeSessions: oauthSessions,
         selectedToolsByServer,
         maxParallelTools,
         modes: { metadataReview, deeperAnalysis },
@@ -336,6 +421,8 @@ const ToolAnalysisPage = () => {
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
+    } finally {
+      setAuthInProgress(false);
     }
   };
 
@@ -523,7 +610,7 @@ const ToolAnalysisPage = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => void reloadLibraries()}
-                disabled={librariesLoading}
+                disabled={librariesLoading || authInProgress}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refresh Servers
@@ -571,7 +658,7 @@ const ToolAnalysisPage = () => {
               <Label className="text-xs">
                 {selectedServerLabel ? `Tools for ${selectedServerLabel}` : "Tools"}
               </Label>
-              <Button type="button" size="sm" variant="outline" onClick={() => void discoverTools()} disabled={discovering || selectedServerNames.length === 0}>
+              <Button type="button" size="sm" variant="outline" onClick={() => void discoverTools()} disabled={discovering || authInProgress || selectedServerNames.length === 0}>
                 {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Discover Tools
               </Button>
@@ -743,7 +830,7 @@ const ToolAnalysisPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => void startAnalysis()} disabled={submitting || !!activeJobId}>
+            <Button type="button" onClick={() => void startAnalysis()} disabled={submitting || authInProgress || !!activeJobId}>
               {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Analyze Tools
             </Button>

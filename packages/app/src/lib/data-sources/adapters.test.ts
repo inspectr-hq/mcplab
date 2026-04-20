@@ -909,4 +909,192 @@ describe('config adapters round-trip', () => {
     ];
     expect(() => toCoreConfigYaml(config)).toThrow(/missing API key value/i);
   });
+
+  it('round-trips oauth_authorization_code pre-registered with all fields', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-oac-prereg',
+      name: 'oac-prereg-test',
+      path: '/tmp/oac-prereg-test.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-oac-prereg',
+      config: {
+        servers: [
+          {
+            id: 'my-oauth-server',
+            name: 'My OAuth Server',
+            transport: 'http',
+            url: 'http://localhost:3010/mcp',
+            auth: {
+              type: 'oauth_authorization_code',
+              mode: 'pre_registered',
+              client_id: 'my-client-id',
+              client_secret: 'my-client-secret',
+              scope: 'openid profile',
+              authorization_url: 'https://auth.example.com/authorize',
+              token_url: 'https://auth.example.com/token'
+            }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const server = uiConfig.servers.find((s) => s.id === 'my-oauth-server');
+    expect(server?.authType).toBe('oauth2');
+    expect(server?.oauthMode).toBe('pre_registered');
+    expect(server?.oauthClientId).toBe('my-client-id');
+    expect(server?.oauthClientSecret).toBe('my-client-secret');
+    expect(server?.oauthScope).toBe('openid profile');
+    expect(server?.oauthAuthorizationUrl).toBe('https://auth.example.com/authorize');
+    expect(server?.oauthTokenEndpoint).toBe('https://auth.example.com/token');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-oauth-server');
+    // mode: 'pre_registered' is the default and intentionally omitted on serialization
+    expect(written?.auth).toEqual({
+      type: 'oauth_authorization_code',
+      client_id: 'my-client-id',
+      client_secret: 'my-client-secret',
+      scope: 'openid profile',
+      authorization_url: 'https://auth.example.com/authorize',
+      token_url: 'https://auth.example.com/token'
+    });
+  });
+
+  it('round-trips oauth_authorization_code DCR mode without client_id', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-oac-dcr',
+      name: 'oac-dcr-test',
+      path: '/tmp/oac-dcr-test.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-oac-dcr',
+      config: {
+        servers: [
+          {
+            id: 'dcr-server',
+            name: 'DCR Server',
+            transport: 'http',
+            url: 'http://localhost:3011/mcp',
+            auth: {
+              type: 'oauth_authorization_code',
+              mode: 'dcr',
+              scope: 'read'
+            }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const server = uiConfig.servers.find((s) => s.id === 'dcr-server');
+    expect(server?.authType).toBe('oauth2');
+    expect(server?.oauthMode).toBe('dcr');
+    expect(server?.oauthClientId).toBeUndefined();
+    expect(server?.oauthClientSecret).toBeUndefined();
+    expect(server?.oauthScope).toBe('read');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'dcr-server');
+    expect(written?.auth).toEqual({
+      type: 'oauth_authorization_code',
+      mode: 'dcr',
+      scope: 'read'
+    });
+    expect(written?.auth?.client_id).toBeUndefined();
+    expect(written?.auth?.client_secret).toBeUndefined();
+  });
+
+  it('round-trips oauth_authorization_code on scenario-owned inline server', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-oac-inline',
+      name: 'oac-inline-test',
+      path: '/tmp/oac-inline-test.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-oac-inline',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-oauth',
+            name: 'OAuth Scenario',
+            mcp_servers: [
+              {
+                id: 'inline-oauth',
+                name: 'Inline OAuth',
+                transport: 'http',
+                url: 'http://localhost:3012/mcp',
+                auth: {
+                  type: 'oauth_authorization_code',
+                  client_id: 'inline-client',
+                  scope: 'email'
+                }
+              }
+            ],
+            prompt: 'test',
+            eval: {
+              tool_constraints: { required_tools: [], forbidden_tools: [] },
+              response_assertions: []
+            },
+            extract: []
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const server = uiConfig.servers.find((s) => s.id === 'inline-oauth');
+    expect(server?.authType).toBe('oauth2');
+    expect(server?.oauthClientId).toBe('inline-client');
+    expect(server?.oauthScope).toBe('email');
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const writtenScenario = (roundTripped.scenarios as any[]).find((s: any) => s.id === 'scn-oauth');
+    const writtenServer = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'inline-oauth');
+    expect(writtenServer?.auth).toEqual({
+      type: 'oauth_authorization_code',
+      client_id: 'inline-client',
+      scope: 'email'
+    });
+  });
+
+  it('omits empty optional fields when serializing oauth_authorization_code', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-oac-minimal',
+      name: 'oac-minimal-test',
+      path: '/tmp/oac-minimal-test.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-oac-minimal',
+      config: {
+        servers: [
+          {
+            id: 'minimal-oauth',
+            name: 'Minimal OAuth',
+            transport: 'http',
+            url: 'http://localhost:3013/mcp',
+            auth: {
+              type: 'oauth_authorization_code',
+              client_id: 'only-client-id'
+            }
+          }
+        ],
+        agents: [],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'minimal-oauth');
+    expect(written?.auth?.client_id).toBe('only-client-id');
+    expect(written?.auth?.client_secret).toBeUndefined();
+    expect(written?.auth?.scope).toBeUndefined();
+    expect(written?.auth?.mode).toBeUndefined();
+    expect(written?.auth?.authorization_url).toBeUndefined();
+    expect(written?.auth?.token_url).toBeUndefined();
+  });
 });

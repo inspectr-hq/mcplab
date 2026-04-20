@@ -13,6 +13,7 @@ import type {
   OAuthDebuggerSessionConfig,
   OAuthDebuggerSessionEvent,
   OAuthDebuggerSessionView,
+  OAuthRuntimeSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
@@ -249,6 +250,7 @@ export const workspaceApiClient = {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
+    oauthRuntimeSessions?: Record<string, string>;
   }) =>
     request<{ jobId: string }>('/api/runs', {
       method: 'POST',
@@ -312,7 +314,10 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }),
-  discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
+  discoverToolsForAnalysis: (params: {
+    serverNames: string[];
+    oauthRuntimeSessions?: Record<string, string>;
+  }) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',
       body: JSON.stringify(params)
@@ -320,6 +325,7 @@ export const workspaceApiClient = {
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];
+    oauthRuntimeSessions?: Record<string, string>;
     selectedToolsByServer?: Record<string, string[]>;
     maxParallelTools?: number;
     modes: { metadataReview: boolean; deeperAnalysis: boolean };
@@ -478,6 +484,34 @@ export const workspaceApiClient = {
           `/api/oauth-debugger/sessions/${sessionId}/export?format=json`
         )
       : requestText(`/api/oauth-debugger/sessions/${sessionId}/export?format=${format}`),
+  createOAuthRuntimeSession: (params: { serverName: string }) =>
+    request<{ session: OAuthRuntimeSessionView }>('/api/oauth-runtime/sessions', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }),
+  getOAuthRuntimeSession: (sessionId: string) =>
+    request<{ session: OAuthRuntimeSessionView }>(`/api/oauth-runtime/sessions/${sessionId}`),
+  getOAuthRuntimeSessionToken: (sessionId: string) =>
+    request<{ accessToken: string }>(`/api/oauth-runtime/sessions/${sessionId}/token`),
+  submitOAuthRuntimeCallback: (
+    sessionId: string,
+    payload: { redirectUrl?: string; code?: string; state?: string }
+  ) =>
+    request<{ session: OAuthRuntimeSessionView }>(
+      `/api/oauth-runtime/sessions/${sessionId}/callback`,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }
+    ),
+  cancelOAuthRuntimeSession: (sessionId: string) =>
+    request<{ session: OAuthRuntimeSessionView }>(
+      `/api/oauth-runtime/sessions/${sessionId}/cancel`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
+      }
+    ),
   stopRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Loader2, Wifi, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Loader2, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { validateServerAuthConfig } from "@/lib/server-auth-validation";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 import type { ServerConfig } from "@/types/eval";
 
 type ConnectState =
@@ -39,7 +40,6 @@ const emptyServer = (): ServerConfig => ({
   name: "",
   transport: "stdio",
   authType: "none",
-  oauthRedirectUrl: "http://localhost:6274/oauth/",
 });
 
 const ServerDetail = () => {
@@ -58,12 +58,20 @@ const ServerDetail = () => {
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: "idle" });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
+  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
+  const [oauthAccessToken, setOauthAccessToken] = useState<string | undefined>(undefined);
+  const [authInProgress, setAuthInProgress] = useState(false);
+  const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
 
   useEffect(() => {
-    if (existingServer) setForm(existingServer);
+    if (existingServer) {
+      setForm(existingServer);
+      setShowAdvancedOauth(false);
+    }
   }, [existingServer]);
 
   const setAuthType = (nextType: ServerConfig["authType"]) => {
+    setShowAdvancedOauth(false);
     setForm((f) => ({
       ...f,
       authType: nextType,
@@ -80,9 +88,12 @@ const ServerDetail = () => {
             oauthClientSecret: undefined,
             oauthRedirectUrl: undefined,
             oauthScope: undefined,
+            oauthMode: undefined,
+            oauthAuthorizationUrl: undefined,
+            oauthTokenEndpoint: undefined,
           }
         : {
-            oauthRedirectUrl: f.oauthRedirectUrl || "http://localhost:6274/oauth/",
+            oauthRedirectUrl: f.oauthRedirectUrl || undefined,
           }),
     }));
   };
@@ -90,8 +101,74 @@ const ServerDetail = () => {
   const handleConnect = async () => {
     setShowConnectPanel(true);
     setConnectState({ status: "loading" });
+
+    let oauthSessions: Record<string, string> | undefined;
+
+    if (form.authType === "oauth2") {
+      const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
+        const openBrowserOnce = (() => {
+          let opened = false;
+          return (launchUrl: string) => {
+            if (opened || !launchUrl) return;
+            opened = true;
+            const absoluteUrl = launchUrl.startsWith("http")
+              ? launchUrl
+              : `${window.location.origin}${launchUrl}`;
+            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+          };
+        })();
+
+        let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServer[serverName];
+        if (runtimeSessionId) {
+          try {
+            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
+            if (session.status === "completed" && session.hasAccessToken) return runtimeSessionId;
+          } catch {
+            runtimeSessionId = undefined;
+          }
+        }
+
+        const created = await source.createOAuthRuntimeSession({ serverName });
+        runtimeSessionId = created.session.id;
+        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
+        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+        await waitForOAuthRuntimeSession({
+          sessionId: runtimeSessionId,
+          source,
+          serverName,
+          onLaunchUrl: openBrowserOnce,
+        });
+        try {
+          const { accessToken } = await source.getOAuthRuntimeSessionToken(runtimeSessionId);
+          if (accessToken) setOauthAccessToken(accessToken);
+        } catch {
+          // token unavailable — copy button simply won't show
+        }
+        return runtimeSessionId;
+      };
+
+      try {
+        setAuthInProgress(true);
+        const sessionId = await ensureOAuthRuntimeSession(form.id);
+        oauthSessions = { [form.id]: sessionId };
+      } catch (err) {
+        setConnectState({
+          status: "error",
+          message: `OAuth login failed: ${err instanceof Error ? err.message : String(err)}`,
+          testedAt: new Date().toISOString(),
+        });
+        setAuthInProgress(false);
+        return;
+      } finally {
+        setAuthInProgress(false);
+      }
+    }
+
     try {
-      const result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
+      const result = await source.discoverToolsForAnalysis({
+        serverNames: [form.id],
+        oauthRuntimeSessions: oauthSessions,
+      });
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
@@ -192,7 +269,7 @@ const ServerDetail = () => {
           <h1 className="text-2xl font-bold">{isNew ? "New Server" : displayName(form)}</h1>
         </div>
         {!isNew && (
-          <Button type="button" onClick={() => void handleConnect()}>
+          <Button type="button" onClick={() => void handleConnect()} disabled={connectState.status === "loading" || authInProgress}>
             <Wifi className="mr-2 h-4 w-4" />
             Test Connection
           </Button>
@@ -231,7 +308,7 @@ const ServerDetail = () => {
             {connectState.status === "loading" && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Connecting to MCP server…
+                {authInProgress ? "Waiting for OAuth login in browser…" : "Connecting to MCP server…"}
               </div>
             )}
 
@@ -249,6 +326,24 @@ const ServerDetail = () => {
                         <li key={name} className="font-mono text-xs">{name}</li>
                       ))}
                     </ul>
+                  </div>
+                )}
+                {oauthAccessToken && (
+                  <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">OAuth access token</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate text-xs font-mono text-muted-foreground">{oauthAccessToken.slice(0, 32)}…</code>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 h-7 px-2 text-xs"
+                        onClick={() => void navigator.clipboard.writeText(oauthAccessToken)}
+                      >
+                        <Copy className="mr-1 h-3 w-3" />
+                        Copy token
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
@@ -414,46 +509,99 @@ const ServerDetail = () => {
           {form.authType === "oauth2" && (
             <div className="space-y-3 rounded-md border p-3">
               <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Client ID</Label>
-                  <Input
-                    value={form.oauthClientId || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthClientId: e.target.value }))}
-                    placeholder="your-client-id"
-                    className="font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Client Secret (optional)</Label>
-                  <Input
-                    type="password"
-                    value={form.oauthClientSecret || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthClientSecret: e.target.value }))}
-                    placeholder="••••••••"
-                    className="font-mono text-xs"
-                  />
-                </div>
+
+              {/* Mode toggle */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={!form.oauthMode || form.oauthMode === "pre_registered" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setForm((f) => ({ ...f, oauthMode: "pre_registered" }))}
+                >
+                  Pre-registered
+                </Button>
+                <Button
+                  type="button"
+                  variant={form.oauthMode === "dcr" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setForm((f) => ({ ...f, oauthMode: "dcr", oauthClientId: undefined, oauthClientSecret: undefined }))}
+                >
+                  DCR (Dynamic)
+                </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Redirect URL</Label>
-                  <Input
-                    value={form.oauthRedirectUrl || "http://localhost:6274/oauth/"}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthRedirectUrl: e.target.value }))}
-                    placeholder="http://localhost:6274/oauth/"
-                    className="font-mono text-xs"
-                  />
+
+              {/* Client credentials — only for pre_registered */}
+              {(!form.oauthMode || form.oauthMode === "pre_registered") && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client ID</Label>
+                    <Input
+                      value={form.oauthClientId || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, oauthClientId: e.target.value }))}
+                      placeholder="your-client-id"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Client Secret (optional)</Label>
+                    <Input
+                      type="password"
+                      value={form.oauthClientSecret || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, oauthClientSecret: e.target.value }))}
+                      placeholder="••••••••"
+                      className="font-mono text-xs"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Scope (space-separated)</Label>
-                  <Input
-                    value={form.oauthScope || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, oauthScope: e.target.value }))}
-                    placeholder="openid profile mcp"
-                    className="font-mono text-xs"
-                  />
-                </div>
+              )}
+
+              {/* Scope */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Scope (optional, space-separated)</Label>
+                <Input
+                  value={form.oauthScope || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, oauthScope: e.target.value }))}
+                  placeholder="openid profile mcp"
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              {/* Advanced section */}
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowAdvancedOauth((v) => !v)}
+                >
+                  <span>{showAdvancedOauth ? "▾" : "▸"}</span>
+                  Advanced — manual endpoint overrides
+                </button>
+                {showAdvancedOauth && (
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Authorization URL</Label>
+                      <Input
+                        value={form.oauthAuthorizationUrl || ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, oauthAuthorizationUrl: e.target.value || undefined }))
+                        }
+                        placeholder="leave blank to use .well-known discovery"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Token URL</Label>
+                      <Input
+                        value={form.oauthTokenEndpoint || ""}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, oauthTokenEndpoint: e.target.value || undefined }))
+                        }
+                        placeholder="leave blank to use .well-known discovery"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

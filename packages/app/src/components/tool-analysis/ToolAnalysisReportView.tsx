@@ -83,6 +83,12 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
   lines.push(`- Created: ${report.createdAt}`);
   lines.push(`- Assistant Agent: ${report.assistantAgentName}`);
   lines.push(`- Assistant Model: ${report.assistantAgentModel}`);
+  if (report.mcpServerVersions && Object.keys(report.mcpServerVersions).length > 0) {
+    const versionStr = Object.entries(report.mcpServerVersions)
+      .map(([name, v]) => `${name}: ${v ?? "unknown"}`)
+      .join(", ");
+    lines.push(`- MCP Server Versions: ${versionStr}`);
+  }
   lines.push(
     `- Modes: ${[
       report.modes.metadataReview ? "metadata review" : null,

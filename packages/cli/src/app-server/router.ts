@@ -51,6 +51,7 @@ import { decodeEvalId, ensureInsideRoot, safeFileName } from './store-utils.js';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
+import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleSnapshotsRoutes } from './snapshots-routes.js';
@@ -88,6 +89,7 @@ import {
   oauthDebuggerExportRawTrace,
   type OAuthDebuggerSession
 } from './oauth-debugger-domain.js';
+import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -182,6 +184,7 @@ export async function startAppServer(options: AppServerOptions) {
   const jobs = new Map<string, RunJob>();
   const toolAnalysisJobs = new Map<string, ToolAnalysisJob>();
   const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();
+  const oauthRuntimeSessions = new Map<string, OAuthRuntimeSession>();
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const runQueueState: RunQueueState = { activeJobId: null, queue: [] };
@@ -345,6 +348,21 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (
+        await handleOAuthRuntimeRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          settings,
+          runtimeSessions: oauthRuntimeSessions,
+          oauthDebuggerSessions,
+          deps: routeDeps
+        })
+      ) {
+        return;
+      }
+
+      if (
         await handleOAuthDebuggerRoutes({
           req,
           res,
@@ -379,6 +397,8 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           toolAnalysisJobs,
+          oauthRuntimeSessions,
+          oauthDebuggerSessions,
           deps: routeDeps
         })
       ) {
@@ -448,6 +468,8 @@ export async function startAppServer(options: AppServerOptions) {
           settings,
           jobs,
           runQueueState,
+          oauthRuntimeSessions,
+          oauthDebuggerSessions,
           deps: routeDeps
         })
       ) {

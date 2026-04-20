@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, ExternalLink, Loader2, Play, Square, Download, Copy, RefreshCw } from 'lucide-react';
+import { AlertCircle, Copy, Download, ExternalLink, Info, Loader2, Play, RefreshCw, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
@@ -28,6 +29,19 @@ const STEP_LABELS: Array<{ id: ViewStep; label: string }> = [
   { id: 'run', label: 'Run / Inspect Flow' },
   { id: 'report', label: 'Report / Export' }
 ];
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger type="button" className="inline-flex shrink-0 items-center" onClick={(e) => e.preventDefault()}>
+          <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground" />
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs leading-relaxed">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 function copyText(text: string) {
   return navigator.clipboard.writeText(text);
@@ -81,12 +95,13 @@ export default function OAuthDebuggerPage() {
   const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>('pre_registered');
   const [redirectMode, setRedirectMode] = useState<'local_callback' | 'manual'>('local_callback');
   const [showSensitiveValues, setShowSensitiveValues] = useState(true);
+  const [autoOpenBrowser, setAutoOpenBrowser] = useState(true);
   const [usePkce, setUsePkce] = useState(true);
   const [scopesText, setScopesText] = useState('');
   const [resource, setResource] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('client_secret_basic');
+  const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState('__default__');
   const [dcrMetadataJson, setDcrMetadataJson] = useState('{}');
   const [cimdUrl, setCimdUrl] = useState('');
   const [expectedClientId, setExpectedClientId] = useState('');
@@ -108,6 +123,9 @@ export default function OAuthDebuggerPage() {
   const [networkTab, setNetworkTab] = useState<'events' | 'inspector'>('inspector');
   const unsubscribeRef = useRef<null | (() => void)>(null);
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
+  const browserOpenedRef = useRef(false);
+  const autoOpenBrowserRef = useRef(autoOpenBrowser);
+  useEffect(() => { autoOpenBrowserRef.current = autoOpenBrowser; }, [autoOpenBrowser]);
 
   useEffect(() => {
     return () => {
@@ -132,6 +150,22 @@ export default function OAuthDebuggerPage() {
       setSelectedServerId('');
     }
   }, [oauthServers, selectedServerId]);
+
+  useEffect(() => {
+    if (!selectedServer) return;
+    if (selectedServer.oauthMode === 'dcr') {
+      setRegistrationMethod('dcr');
+      setClientId('');
+      setClientSecret('');
+    } else {
+      setRegistrationMethod('pre_registered');
+      setClientId(selectedServer.oauthClientId ?? '');
+      setClientSecret(selectedServer.oauthClientSecret ?? '');
+    }
+    setScopesText(selectedServer.oauthScope ?? '');
+    setAuthorizationEndpoint(selectedServer.oauthAuthorizationUrl ?? '');
+    setTokenEndpoint(selectedServer.oauthTokenEndpoint ?? '');
+  }, [selectedServer?.id]);
 
   const progressModel = useMemo(() => {
     const total = session?.stepStates.length ?? 0;
@@ -190,14 +224,14 @@ export default function OAuthDebuggerPage() {
             ? {
                 clientId: clientId.trim(),
                 clientSecret: clientSecret.trim() || undefined,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         dcr:
           registrationMethod === 'dcr'
             ? {
                 metadata: dcrMetadata,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         cimd:
@@ -234,6 +268,9 @@ export default function OAuthDebuggerPage() {
       }
       void source.getOAuthDebuggerSession(id).then((response) => {
         setSession(response.session);
+        if (response.session.uiHints.authorizationUrl) {
+          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${id}/authorize`);
+        }
         if (response.session.status === 'completed') {
           setViewStep('report');
         }
@@ -243,8 +280,15 @@ export default function OAuthDebuggerPage() {
     });
   };
 
+  const openAuthBrowser = (launchHref: string) => {
+    if (!autoOpenBrowserRef.current || browserOpenedRef.current || !launchHref) return;
+    browserOpenedRef.current = true;
+    window.open(launchHref, '_blank', 'noopener,noreferrer');
+  };
+
   const createAndStart = async () => {
     setSubmitting(true);
+    browserOpenedRef.current = false;
     try {
       const config = buildConfig();
       const created = await source.createOAuthDebuggerSession(config);
@@ -258,6 +302,9 @@ export default function OAuthDebuggerPage() {
       setRunning(true);
       if (started.session.status === 'waiting_for_user' || started.session.status === 'waiting_for_browser_callback') {
         setRunning(false);
+        if (started.session.uiHints.authorizationUrl) {
+          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${created.sessionId}/authorize`);
+        }
       }
     } catch (error: unknown) {
       toast({
@@ -461,6 +508,10 @@ export default function OAuthDebuggerPage() {
                 {selectedServer && (
                   <p className="text-xs text-muted-foreground">
                     {selectedServer.transport} · {selectedServer.url || selectedServer.command || 'No URL/command'}
+                    {' · '}
+                    <span className="text-primary">
+                      {selectedServer.oauthMode === 'dcr' ? 'DCR' : 'pre-registered'} fields pre-filled
+                    </span>
                   </p>
                 )}
               </div>
@@ -471,13 +522,14 @@ export default function OAuthDebuggerPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Client Registration Method</CardTitle>
+              <CardDescription>How your OAuth client is identified with the authorization server.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-2 md:grid-cols-3">
                 {[
-                  { id: 'pre_registered', label: 'Pre-registered client' },
-                  { id: 'dcr', label: 'Dynamic Client Registration (DCR)' },
-                  { id: 'cimd', label: 'Client ID Metadata Document (CIMD)' }
+                  { id: 'pre_registered', label: 'Pre-registered client', hint: 'You already have a client_id issued by the authorization server.' },
+                  { id: 'dcr', label: 'Dynamic Client Registration', hint: 'The server issues a client_id automatically at the start of the flow (RFC 7591).' },
+                  { id: 'cimd', label: 'Client ID Metadata Document', hint: 'The client identifies itself via a hosted JSON metadata document at a public URL (RFC 9728).' }
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -486,16 +538,20 @@ export default function OAuthDebuggerPage() {
                     className="rounded-md border p-3 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`h-2.5 w-2.5 rounded-full ${registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
+                      <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
                       <span className="text-sm font-medium">{option.label}</span>
                     </div>
+                    <p className="mt-1 pl-5 text-xs text-muted-foreground">{option.hint}</p>
                   </button>
                 ))}
               </div>
 
               <div className="grid gap-3 md:grid-cols-1">
                 <div className="max-w-md space-y-1">
-                  <Label className="text-xs">Redirect mode</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    Redirect mode
+                    <InfoTip text="Local callback (recommended): MCP Lab automatically captures the redirect after you log in — no copy-pasting needed. Manual: you complete the browser login and then paste the final redirect URL back here." />
+                  </Label>
                   <Select value={redirectMode} onValueChange={(v) => setRedirectMode(v as 'local_callback' | 'manual')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -509,19 +565,28 @@ export default function OAuthDebuggerPage() {
               {registrationMethod === 'pre_registered' && (
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">client_id</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      client_id
+                      <InfoTip text="The unique identifier for your application, issued by the authorization server when you registered the client." />
+                    </Label>
                     <Input value={clientId} onChange={(e) => setClientId(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">client_secret (optional)</Label>
-                    <Input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" />
+                    <Label className="text-xs flex items-center gap-1">
+                      client_secret
+                      <InfoTip text="Leave empty for public clients (e.g. SPAs or mobile apps). Required for confidential clients that authenticate with the token endpoint." />
+                    </Label>
+                    <Input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" placeholder="optional" />
                   </div>
                 </div>
               )}
 
               {registrationMethod === 'cimd' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">CIMD URL</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    CIMD URL
+                    <InfoTip text="A publicly reachable URL hosting a JSON document that describes this client. The authorization server fetches it to identify the client." />
+                  </Label>
                   <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
                 </div>
               )}
@@ -531,15 +596,24 @@ export default function OAuthDebuggerPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Runtime OAuth Inputs</CardTitle>
+              <CardDescription>Parameters sent in the authorization request.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <Label className="text-xs">Scopes (space or comma separated)</Label>
-                <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile mcp" />
+                <Label className="text-xs">Scopes</Label>
+                <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile email" />
+                <p className="text-xs text-muted-foreground">Space or comma separated. Leave empty to use scopes auto-discovered from the server metadata.</p>
               </div>
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={usePkce} onCheckedChange={(v) => setUsePkce(Boolean(v))} />
-                <Label>Use PKCE (S256)</Label>
+                <Label className="flex items-center gap-1">
+                  Use PKCE (S256)
+                  <InfoTip text="Proof Key for Code Exchange — generates a one-time code verifier so the authorization code can't be hijacked. Recommended for all clients; required for public clients." />
+                </Label>
+              </div>
+              <div className="flex items-center gap-2 md:col-span-2">
+                <Checkbox checked={autoOpenBrowser} onCheckedChange={(v) => setAutoOpenBrowser(Boolean(v))} />
+                <Label>Auto-open browser when authorization URL is ready</Label>
               </div>
             </CardContent>
           </Card>
@@ -549,66 +623,107 @@ export default function OAuthDebuggerPage() {
             <div className="mt-3 space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-xs">Token endpoint auth method</Label>
-                  <Input
-                    value={tokenEndpointAuthMethod}
-                    onChange={(e) => setTokenEndpointAuthMethod(e.target.value)}
-                    placeholder="client_secret_basic / none / client_secret_post"
-                  />
+                  <Label className="text-xs flex items-center gap-1">
+                    Token endpoint auth method
+                    <InfoTip text="How your client authenticates when exchanging the authorization code for a token. Choose 'none' for public clients (no secret). Leave as server default if unsure." />
+                  </Label>
+                  <Select value={tokenEndpointAuthMethod} onValueChange={setTokenEndpointAuthMethod}>
+                    <SelectTrigger><SelectValue placeholder="Server default (recommended)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__default__">Server default (let the server decide)</SelectItem>
+                      <SelectItem value="client_secret_basic">client_secret_basic — credentials in Authorization header</SelectItem>
+                      <SelectItem value="client_secret_post">client_secret_post — credentials in request body</SelectItem>
+                      <SelectItem value="none">none — public client, no secret</SelectItem>
+                      <SelectItem value="private_key_jwt">private_key_jwt — signed JWT assertion</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Use "server default" unless the server requires a specific method.</p>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Resource / audience (optional)</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    Resource / audience
+                    <InfoTip text="Some servers (RFC 8707) require the target API's URI in the token request to scope the token. Only set this if your server explicitly requires it." />
+                  </Label>
                   <Input
                     value={resource}
                     onChange={(e) => setResource(e.target.value)}
-                    placeholder="https://resource.example.com"
+                    placeholder="https://api.example.com"
                   />
+                  <p className="text-xs text-muted-foreground">Optional. Only needed for servers that use resource indicators.</p>
                 </div>
               </div>
 
               {registrationMethod === 'dcr' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">DCR metadata JSON (optional overrides)</Label>
+                  <Label className="text-xs flex items-center gap-1">
+                    DCR metadata JSON
+                    <InfoTip text={'Extra fields for the dynamic client registration request (RFC 7591), e.g. {"client_name": "My App"}. redirect_uris and grant_types are always added automatically.'} />
+                  </Label>
                   <Textarea
                     value={dcrMetadataJson}
                     onChange={(e) => setDcrMetadataJson(e.target.value)}
                     className="min-h-32 font-mono text-xs"
                   />
+                  <p className="text-xs text-muted-foreground">Optional extra fields for the registration request body.</p>
                 </div>
               )}
 
               {registrationMethod === 'cimd' && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Expected client_id (optional)</Label>
-                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} />
+                  <Label className="text-xs flex items-center gap-1">
+                    Expected client_id
+                    <InfoTip text="If you know what client_id the server should assign from the metadata document, enter it here for verification. Leave blank to accept whatever the server returns." />
+                  </Label>
+                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} placeholder="optional" />
                 </div>
               )}
 
               <div className="rounded-md border bg-background p-3">
-                <div className="mb-3 text-sm font-medium">Endpoint overrides</div>
+                <div className="mb-1 text-sm font-medium">Endpoint overrides</div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Override specific endpoints if auto-discovery fails or you want to test against a specific URL. Leave blank to use what the server advertises.
+                </p>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Authorization server metadata URL</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Authorization server metadata URL
+                      <InfoTip text="The /.well-known/oauth-authorization-server URL. Override if the server uses a non-standard path." />
+                    </Label>
                     <Input value={authorizationServerMetadataUrl} onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)} placeholder="https://.../.well-known/oauth-authorization-server" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Resource server base URL</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Resource server base URL
+                      <InfoTip text="The MCP server's base URL used to look up its /.well-known/oauth-protected-resource metadata. Override if the server uses a different base path." />
+                    </Label>
                     <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Authorization endpoint</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Authorization endpoint
+                      <InfoTip text="The URL where users are redirected to log in and grant consent. Normally discovered automatically from the server metadata." />
+                    </Label>
                     <Input value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} placeholder="https://.../authorize" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Token endpoint</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Token endpoint
+                      <InfoTip text="The URL your app calls to exchange the authorization code for an access token. Normally discovered automatically." />
+                    </Label>
                     <Input value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} placeholder="https://.../token" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Registration endpoint (DCR)</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Registration endpoint (DCR)
+                      <InfoTip text="The URL used to dynamically register a new client (RFC 7591). Only relevant when using DCR. Override if the server doesn't advertise it in its metadata." />
+                    </Label>
                     <Input value={registrationEndpoint} onChange={(e) => setRegistrationEndpoint(e.target.value)} placeholder="https://.../register" />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">CIMD URL override</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      CIMD URL override
+                      <InfoTip text="Override the Client ID Metadata Document URL. Use this if the server doesn't discover it automatically or you want to test with a specific metadata document." />
+                    </Label>
                     <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
                   </div>
                 </div>
@@ -619,7 +734,7 @@ export default function OAuthDebuggerPage() {
                 <AlertTitle>Secrets display</AlertTitle>
                 <AlertDescription className="space-y-2">
                   <p>
-                    This debugger is configured to show full tokens/secrets in network logs and exports.
+                    By default, full tokens and secrets are visible in the network inspector and exports — useful for debugging but not for sharing.
                   </p>
                   <div className="flex items-center gap-2">
                     <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(v === false)} />
@@ -954,6 +1069,27 @@ export default function OAuthDebuggerPage() {
               <div><Label className="text-xs">Token endpoint status</Label><p className="text-sm">{session.summary?.tokenEndpointStatus ?? '-'}</p></div>
               <div><Label className="text-xs">Token type</Label><p className="text-sm">{session.summary?.tokenType || '-'}</p></div>
               <div><Label className="text-xs">Scopes granted</Label><p className="text-sm break-all">{(session.summary?.grantedScopes ?? []).join(', ') || '-'}</p></div>
+              {session.summary?.accessToken && (
+                <div className="md:col-span-2 space-y-1">
+                  <Label className="text-xs">Access token</Label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs font-mono text-muted-foreground">
+                      {session.summary.accessToken.slice(0, 48)}…
+                    </code>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 h-7 px-2 text-xs"
+                      onClick={() => void copyText(session.summary!.accessToken!)}
+                    >
+                      <Copy className="mr-1 h-3 w-3" />
+                      Copy token
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Visible because "Hide sensitive values" is off. Use this token with the CLI via <code className="font-mono">--oauth-token</code>.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

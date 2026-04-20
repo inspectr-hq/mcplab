@@ -14,7 +14,14 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
-import type { RunQueueState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
+import type {
+  RunQueueState,
+  AppRouteDeps,
+  AppRouteRequestContext,
+  OAuthRuntimeSessionsMap,
+  OAuthDebuggerSessionsMap
+} from './app-context.js';
+import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
 
 export type RunsRouteDeps = Pick<
   AppRouteDeps,
@@ -47,6 +54,7 @@ type RunParams = {
   requestedAgents?: string[];
   applySnapshotEval: boolean;
   runNote?: string;
+  oauthRuntimeSessions?: Record<string, string>;
 };
 
 type RunJob = {
@@ -81,6 +89,7 @@ type RunRequestBody = {
   agents?: unknown;
   applySnapshotEval?: unknown;
   runNote?: unknown;
+  oauthRuntimeSessions?: unknown;
 };
 
 type ConfigScenario = EvalConfig['scenarios'][number];
@@ -93,9 +102,22 @@ export async function handleRunsRoutes(params: {
   settings: AppRouteRequestContext['settings'];
   jobs: Map<string, RunJob>;
   runQueueState: RunQueueState;
+  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
   deps: RunsRouteDeps;
 }): Promise<boolean> {
-  const { req, res, pathname, method, settings, jobs, runQueueState, deps } = params;
+  const {
+    req,
+    res,
+    pathname,
+    method,
+    settings,
+    jobs,
+    runQueueState,
+    oauthRuntimeSessions,
+    oauthDebuggerSessions,
+    deps
+  } = params;
   const {
     parseBody,
     asJson,
@@ -268,6 +290,17 @@ export async function handleRunsRoutes(params: {
     const applySnapshotEval = body.applySnapshotEval !== false;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+    const oauthRuntimeSessionsByServer =
+      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
+        ? Object.fromEntries(
+            Object.entries(body.oauthRuntimeSessions as Record<string, unknown>)
+              .map(([serverName, runtimeSessionId]) => [
+                serverName.trim(),
+                String(runtimeSessionId ?? '').trim()
+              ])
+              .filter(([serverName, runtimeSessionId]) => serverName && runtimeSessionId)
+          )
+        : undefined;
 
     if (!configPathRaw) {
       asJson(res, 400, { error: 'configPath is required' });
@@ -294,7 +327,8 @@ export async function handleRunsRoutes(params: {
       scenarioIds,
       requestedAgents,
       applySnapshotEval,
-      runNote
+      runNote,
+      oauthRuntimeSessions: oauthRuntimeSessionsByServer
     };
     const job: RunJob = {
       id: jobId,
@@ -322,7 +356,15 @@ export async function handleRunsRoutes(params: {
           runNote: runNote ?? null
         }
       });
-      void executeRunJob(job, settings, jobs, runQueueState, deps);
+      void executeRunJob(
+        job,
+        settings,
+        jobs,
+        runQueueState,
+        oauthRuntimeSessions,
+        oauthDebuggerSessions,
+        deps
+      );
       asJson(res, 202, { jobId });
     } else {
       // Queue this job
@@ -554,6 +596,8 @@ function advanceQueue(
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
   settings: AppRouteRequestContext['settings'],
+  oauthRuntimeSessions: OAuthRuntimeSessionsMap,
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap,
   deps: RunsRouteDeps
 ) {
   if (runQueueState.activeJobId) return;
@@ -575,7 +619,15 @@ function advanceQueue(
         runNote: nextJob.runParams.runNote ?? null
       }
     });
-    void executeRunJob(nextJob, settings, jobs, runQueueState, deps);
+    void executeRunJob(
+      nextJob,
+      settings,
+      jobs,
+      runQueueState,
+      oauthRuntimeSessions,
+      oauthDebuggerSessions,
+      deps
+    );
     return;
   }
 }
@@ -585,6 +637,8 @@ async function executeRunJob(
   settings: AppRouteRequestContext['settings'],
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
+  oauthRuntimeSessions: OAuthRuntimeSessionsMap,
+  oauthDebuggerSessions: OAuthDebuggerSessionsMap,
   deps: RunsRouteDeps
 ) {
   const {
@@ -675,6 +729,27 @@ async function executeRunJob(
         message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
       }
     });
+    const oauthServers = Object.entries(expandedConfig.servers)
+      .filter(([, serverConfig]) => serverConfig.auth?.type === 'oauth_authorization_code')
+      .map(([serverName]) => serverName);
+    const mcpServerAuthHeaders =
+      oauthServers.length > 0
+        ? resolveRuntimeOAuthAuthHeaders({
+            requiredServerNames: oauthServers,
+            oauthRuntimeSessionsByServer: job.runParams.oauthRuntimeSessions,
+            runtimeSessions: oauthRuntimeSessions,
+            oauthDebuggerSessions
+          })
+        : undefined;
+    if (oauthServers.length > 0) {
+      addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `OAuth runtime credentials resolved for server(s): ${oauthServers.join(', ')}`
+        }
+      });
+    }
     const cwdBefore = process.cwd();
     process.chdir(settings.workspaceRoot);
     try {
@@ -699,6 +774,7 @@ async function executeRunJob(
         configHash: loaded.hash,
         cliVersion: pkgVersion,
         runsDir: settings.runsDir,
+        mcpServerAuthHeaders,
         signal: job.abortController.signal,
         onProgress: async (event: RunProgressEvent) => {
           const message = formatRunProgressMessage(event);
@@ -862,7 +938,7 @@ async function executeRunJob(
     runQueueState.activeJobId = null;
     for (const client of job.clients) client.end();
     job.clients.clear();
-    advanceQueue(jobs, runQueueState, settings, deps);
+    advanceQueue(jobs, runQueueState, settings, oauthRuntimeSessions, oauthDebuggerSessions, deps);
     pruneOldJobs(jobs, runQueueState);
   }
 }

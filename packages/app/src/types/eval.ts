@@ -16,6 +16,9 @@ export interface ServerConfig {
   oauthClientSecret?: string;
   oauthRedirectUrl?: string;
   oauthScope?: string;
+  oauthMode?: 'pre_registered' | 'dcr';
+  oauthAuthorizationUrl?: string;
+  oauthTokenEndpoint?: string;
   // oauth_client_credentials fields (used by libraries/YAML, not exposed in UI dropdown)
   oauthTokenUrl?: string;
   oauthClientIdEnv?: string;

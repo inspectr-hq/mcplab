@@ -186,6 +186,7 @@ export interface OAuthDebuggerSessionView {
     tokenEndpointStatus?: number;
     tokenType?: string;
     grantedScopes?: string[];
+    accessToken?: string;
   };
 }
 
@@ -497,11 +498,24 @@ function inferResourceMetadataUrl(baseUrl: string): string {
   return u.toString();
 }
 
-function inferAuthServerMetadataUrl(issuerOrBase: string): string {
-  const u = new URL(issuerOrBase);
-  u.pathname = '/.well-known/oauth-authorization-server';
-  u.search = '';
-  return u.toString();
+// Returns candidate URLs to try for auth server metadata, in priority order:
+//   1. OIDC relative to issuer path  — covers Keycloak, Auth0, and any path-based issuer
+//   2. RFC 8414 path-based           — /.well-known/oauth-authorization-server/{path}
+//   3. RFC 8414 root                 — /.well-known/oauth-authorization-server
+//   4. OIDC at origin                — final fallback for root-only OIDC providers
+function authServerMetadataCandidates(issuerUrl: string): string[] {
+  const u = new URL(issuerUrl);
+  const base = issuerUrl.replace(/\/$/, '');
+  const hasPath = u.pathname && u.pathname !== '/';
+  const candidates = [
+    `${base}/.well-known/openid-configuration`,
+    ...(hasPath
+      ? [`${u.origin}/.well-known/oauth-authorization-server${u.pathname.replace(/\/$/, '')}`]
+      : []),
+    `${u.origin}/.well-known/oauth-authorization-server`,
+    ...(hasPath ? [`${u.origin}/.well-known/openid-configuration`] : [])
+  ];
+  return [...new Set(candidates)];
 }
 
 function localCallbackUrl(session: OAuthDebuggerSession, appBaseUrl: string): string {
@@ -593,9 +607,33 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   markStepStarted(session, stepId);
   const server = session.serverConfig;
   if (!server) throw new Error(`MCP server '${session.config.target.serverName}' not found`);
+  // RFC 9728: probe the MCP server first. A 401/403 response may carry a
+  // WWW-Authenticate header with an explicit resource_metadata URL, which is
+  // more reliable than the inferred /.well-known path.
+  let probedResourceMetadataUrl: string | undefined;
+  if (!session.config.target.overrides?.authorizationServerMetadataUrl) {
+    const probeUrl = session.config.target.overrides?.resourceBaseUrl || server.url;
+    try {
+      const probeResponse = await fetchWithTrace({
+        session,
+        stepId,
+        label: 'MCP Server Probe',
+        url: probeUrl,
+        timeoutMs: 10_000
+      });
+      const wwwAuth = probeResponse.response.headers.get('www-authenticate') ?? '';
+      if (wwwAuth) {
+        const match = /resource_metadata=(?:"([^"]+)"|(\S+))/i.exec(wwwAuth);
+        if (match) probedResourceMetadataUrl = match[1] ?? match[2];
+      }
+    } catch {
+      // probe is best-effort — network errors are fine here
+    }
+  }
+
   const resourceMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl
     ? undefined
-    : inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
+    : probedResourceMetadataUrl ?? inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
   if (resourceMetadataUrl) {
     try {
       const { response, responseJson, responseText } = await fetchWithTrace({
@@ -630,38 +668,55 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
     }
   }
 
-  const authMetadataUrl =
-    session.config.target.overrides?.authorizationServerMetadataUrl ||
-    (session.context.resourceMetadata?.authorization_servers?.[0]
-      ? inferAuthServerMetadataUrl(
-          String(session.context.resourceMetadata.authorization_servers[0])
-        )
+  // Build the ordered candidate list for auth server metadata.
+  // If the user supplied a direct metadata URL override, use it as-is.
+  // Otherwise derive candidates from the issuer URL found in resource metadata,
+  // or fall back to candidates based on the MCP server URL itself.
+  const overrideMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl;
+  const issuerFromMetadata =
+    session.context.resourceMetadata?.authorization_servers?.[0]
+      ? String(session.context.resourceMetadata.authorization_servers[0])
       : session.context.resourceMetadata?.authorization_server
-      ? inferAuthServerMetadataUrl(String(session.context.resourceMetadata.authorization_server))
-      : undefined);
+      ? String(session.context.resourceMetadata.authorization_server)
+      : undefined;
+  const metadataCandidates = overrideMetadataUrl
+    ? [overrideMetadataUrl]
+    : authServerMetadataCandidates(
+        issuerFromMetadata ?? session.config.target.overrides?.resourceBaseUrl ?? server.url
+      );
 
-  if (authMetadataUrl) {
-    const { response, responseJson, responseText } = await fetchWithTrace({
-      session,
-      stepId,
-      label: 'Authorization Server Metadata',
-      url: authMetadataUrl
-    });
-    if (!response.ok) {
-      throw new Error(`Authorization server metadata request failed (${response.status})`);
+  let authMetadataFetched = false;
+  for (const candidateUrl of metadataCandidates) {
+    try {
+      const { response, responseJson } = await fetchWithTrace({
+        session,
+        stepId,
+        label: 'Authorization Server Metadata',
+        url: candidateUrl
+      });
+      if (response.ok && responseJson?.authorization_endpoint) {
+        session.context.authServerMetadata = responseJson;
+        authMetadataFetched = true;
+        break;
+      }
+    } catch {
+      // try next candidate
     }
-    session.context.authServerMetadata = responseJson ?? { raw: responseText };
-  } else {
+  }
+
+  if (!authMetadataFetched) {
     session.context.authServerMetadata = {};
-    addValidation(session, {
-      stepId,
-      severity: 'warning',
-      code: 'auth_metadata_missing',
-      title: 'Authorization metadata URL not discovered',
-      detail:
-        'Could not derive authorization server metadata URL automatically from the selected MCP server.',
-      recommendation: 'Use Advanced overrides to set authorization/token/registration endpoints.'
-    });
+    if (!session.config.target.overrides?.authorizationEndpoint) {
+      addValidation(session, {
+        stepId,
+        severity: 'warning',
+        code: 'auth_metadata_missing',
+        title: 'Authorization metadata URL not discovered',
+        detail:
+          'Could not derive authorization server metadata URL automatically from the selected MCP server.',
+        recommendation: 'Use Advanced overrides to set authorization/token/registration endpoints.'
+      });
+    }
   }
 
   if (session.config.target.overrides?.authorizationEndpoint) {
@@ -681,6 +736,21 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
       ...(session.context.authServerMetadata ?? {}),
       registration_endpoint: session.config.target.overrides.registrationEndpoint
     };
+  }
+
+  // Scope auto-discovery: when no scopes are configured, derive them from
+  // discovered metadata so the authorization request isn't sent scope-less.
+  if ((session.config.runtime.scopes ?? []).length === 0) {
+    const fromResource = session.context.resourceMetadata?.scopes_supported;
+    const fromAuthServer = session.context.authServerMetadata?.scopes_supported;
+    const discovered = Array.isArray(fromResource)
+      ? (fromResource as string[])
+      : Array.isArray(fromAuthServer)
+      ? (fromAuthServer as string[])
+      : [];
+    if (discovered.length > 0) {
+      session.config.runtime.scopes = discovered;
+    }
   }
 
   markStepCompleted(session, stepId, 'Metadata resolution finished');
@@ -745,7 +815,9 @@ async function stepDcr(session: OAuthDebuggerSession) {
   const redirectUri = requiredString(session.context.callbackUrl, 'Callback URL not set');
   const bodyObj = {
     redirect_uris: [redirectUri],
-    token_endpoint_auth_method: session.config.clientConfig.dcr?.tokenEndpointAuthMethod ?? 'none',
+    ...(session.config.clientConfig.dcr?.tokenEndpointAuthMethod
+      ? { token_endpoint_auth_method: session.config.clientConfig.dcr.tokenEndpointAuthMethod }
+      : {}),
     client_name: 'MCP Lab OAuth Debugger',
     grant_types: ['authorization_code'],
     response_types: ['code'],
@@ -1196,7 +1268,10 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
       grantedScopes:
         typeof token?.scope === 'string'
           ? String(token.scope).split(/\s+/).filter(Boolean)
-          : undefined
+          : undefined,
+      accessToken: session.config.display.showSensitiveValues && typeof token?.access_token === 'string'
+        ? token.access_token
+        : undefined
     }
   };
 }

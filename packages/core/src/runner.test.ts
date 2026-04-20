@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFallbackScenarioRequestId, buildScenarioRequestId } from './runner.js';
+import { buildFallbackScenarioRequestId, buildMcpServerAuthHeaders, buildScenarioRequestId } from './runner.js';
 
 describe('buildScenarioRequestId', () => {
   it('builds deterministic IDs with run fallback suffix', () => {
@@ -73,6 +73,36 @@ describe('buildScenarioRequestId', () => {
     expect(run2.length).toBeLessThanOrEqual(180);
     expect(run1.endsWith('-run1')).toBe(true);
     expect(run2.endsWith('-run2')).toBe(true);
+  });
+});
+
+describe('buildMcpServerAuthHeaders', () => {
+  it('returns empty object when no options provided', () => {
+    expect(buildMcpServerAuthHeaders({})).toEqual({});
+  });
+
+  it('converts oauthTokens entries to Bearer authorization headers', () => {
+    const result = buildMcpServerAuthHeaders({
+      oauthTokens: { 'my-server': 'tok-abc' }
+    });
+    expect(result['my-server']).toEqual({ authorization: 'Bearer tok-abc' });
+  });
+
+  it('merges oauthTokens on top of existing mcpServerAuthHeaders', () => {
+    const result = buildMcpServerAuthHeaders({
+      mcpServerAuthHeaders: { 'my-server': { 'x-custom': 'val' } },
+      oauthTokens: { 'my-server': 'tok-abc' }
+    });
+    expect(result['my-server']).toEqual({ 'x-custom': 'val', authorization: 'Bearer tok-abc' });
+  });
+
+  it('preserves mcpServerAuthHeaders servers not in oauthTokens', () => {
+    const result = buildMcpServerAuthHeaders({
+      mcpServerAuthHeaders: { 'other-server': { authorization: 'Bearer existing' } },
+      oauthTokens: { 'my-server': 'tok-abc' }
+    });
+    expect(result['other-server']).toEqual({ authorization: 'Bearer existing' });
+    expect(result['my-server']).toEqual({ authorization: 'Bearer tok-abc' });
   });
 });
 
