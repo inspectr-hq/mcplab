@@ -1,0 +1,97 @@
+---
+import { Bot, Sparkles } from 'lucide-react';
+import CopyButton from './CopyButton';
+
+const installCmd = 'npx skills add https://github.com/inspectr-hq/mcplab --skill mcplab-assistant';
+const promptExamples = [
+  {
+    title: 'Config authoring',
+    explanation: 'Generate a minimal, valid starter config before scaling up scenarios and agents.',
+    prompt:
+      'Use the mcplab-assistant skill to draft a minimal MCPLab eval config with one scenario and OAuth client-credentials auth.'
+  },
+  {
+    title: 'Run + compare',
+    explanation: 'Run one config across multiple agents and summarize performance differences clearly.',
+    prompt:
+      'Use mcplab-assistant to run this config and compare claude-haiku vs gpt-4o-mini with --agents, then summarize pass-rate differences.'
+  },
+  {
+    title: 'Result analysis',
+    explanation: 'Analyze run artifacts and return concrete fixes tied to failed scenarios.',
+    prompt:
+      'Use mcplab-assistant to analyze this run directory and explain failing scenarios with concrete fixes and a rerun command.'
+  }
+];
+---
+
+<section id="agents" class="border-t border-border/50 py-20">
+  <div class="container mx-auto px-4">
+    <div class="mx-auto max-w-5xl">
+      <div class="mx-auto mb-10 max-w-3xl text-center">
+        <p class="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">Agent Workflows</p>
+        <h2 class="font-display text-3xl font-bold sm:text-4xl">
+          Use MCPLab with <span class="text-primary">LLM agents</span>
+        </h2>
+        <p class="mt-4 text-muted-foreground">
+          Install the `mcplab-assistant` skill and reuse the same prompts across Claude, OpenAI Codex, and similar coding agents.
+        </p>
+      </div>
+
+      <div class="mb-6 rounded-xl border border-border bg-card p-5">
+        <div class="flex items-start gap-3">
+          <div class="mt-0.5 rounded-lg bg-primary/10 p-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 class="font-display text-lg font-semibold">Install the skill once</h3>
+            <p class="mt-1 text-sm text-muted-foreground">Use the Skills CLI installation flow documented in the MCPLab docs.</p>
+            <div class="relative mt-3 rounded-lg border border-border bg-muted/40 p-3 pr-12 font-mono text-xs text-foreground/90">
+              <CopyButton text={installCmd} client:load />
+              {installCmd}
+            </div>
+            <a href="/docs/app/mcplab-assistant-skill/" class="mt-3 inline-flex text-sm font-medium text-primary hover:underline">
+              Open installation guide
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-border bg-card p-5">
+        <div class="mb-4 flex items-center gap-2">
+          <Bot className="h-5 w-5 text-secondary" />
+          <h3 class="font-display text-lg font-semibold">Prompt examples for any LLM agent</h3>
+        </div>
+        <p class="mb-4 text-sm text-muted-foreground">
+          These prompts are agent-neutral and work as reusable starting points.
+        </p>
+        <div class="space-y-4">
+          {promptExamples.map((example) => (
+            <div class="rounded-lg border border-border bg-muted/30 p-4">
+              <div class="grid gap-3 md:grid-cols-[1.1fr_1.4fr] md:items-start">
+                <div>
+                  <div class="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    {example.title}
+                  </div>
+                  <p class="text-sm text-muted-foreground">{example.explanation}</p>
+                </div>
+                <div class="relative rounded-lg border border-border bg-muted/40 p-3 pr-12 font-mono text-xs text-foreground/90">
+                  <CopyButton text={example.prompt} client:load />
+                  {example.prompt}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="mt-6 text-center">
+        <a
+          href="/docs/app/mcplab-assistant-skill/"
+          class="inline-flex items-center justify-center rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent/40"
+        >
+          Find out how use Agents with MCPLabs
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

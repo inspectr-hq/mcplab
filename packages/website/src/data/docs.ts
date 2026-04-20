@@ -30,7 +30,7 @@ export type DocPage = DocNavItem & {
 const overview: DocPage = {
   slug: 'overview',
   label: 'Overview',
-  href: '/docs',
+  href: '/docs/',
   description: 'What MCPLab does and when to use it.',
   keywords: ['overview', 'start', 'guide', 'introduction'],
   seoTitle: 'Documentation',
@@ -68,7 +68,7 @@ const overview: DocPage = {
 const installation: DocPage = {
   slug: 'installation',
   label: 'Installation',
-  href: '/docs/installation',
+  href: '/docs/installation/',
   description: 'Install MCPLab and configure your API keys.',
   keywords: ['install', 'npx', 'global', 'setup', 'api key'],
   seoTitle: 'Installation',
@@ -115,7 +115,7 @@ AZURE_OPENAI_DEPLOYMENT=gpt-4o`
 const quickStart: DocPage = {
   slug: 'quick-start',
   label: 'Quick Start',
-  href: '/docs/quick-start',
+  href: '/docs/quick-start/',
   description: 'Write your first eval and see results in under 5 minutes.',
   keywords: ['quick start', 'first eval', 'yaml', 'scenario', 'run'],
   seoTitle: 'Quick Start',
@@ -175,12 +175,313 @@ scenarios:
   ]
 };
 
+const setupEvaluations: DocPage = {
+  slug: 'setting-up-evaluations',
+  label: 'Setting Up Evaluations',
+  href: '/docs/setting-up-evaluations/',
+  description: 'Set up a robust evaluation workflow before running your first full test suite.',
+  keywords: ['setup evaluations', 'eval config', 'libraries', 'mcp servers', 'auth', 'preflight'],
+  seoTitle: 'Setting Up Evaluations',
+  track: 'getting-started',
+  sections: [
+    {
+      id: 'layout',
+      title: 'Recommended Project Layout',
+      paragraphs: [
+        'Use a consistent workspace layout so CLI and App commands resolve configs, libraries, and results predictably.'
+      ],
+      codeBlocks: [
+        {
+          title: 'recommended layout',
+          language: 'text',
+          code: `mcplab/\n  evals/\n    eval.yaml\n  results/\n    evaluation-runs/\n  servers.yaml\n  agents.yaml`
+        }
+      ],
+      bullets: [
+        'Keep evaluation YAML files in `mcplab/evals`.',
+        'Keep reusable servers and agents in library files.',
+        'Store run output in `mcplab/results/evaluation-runs`.'
+      ]
+    },
+    {
+      id: 'author-config',
+      title: 'Author a Minimal, Valid Config',
+      paragraphs: [
+        'Start with one agent and one scenario. Validate this baseline first before adding more scenarios or models.'
+      ],
+      codeBlocks: [
+        {
+          title: 'mcplab/evals/eval.yaml',
+          language: 'yaml',
+          code: `agents:\n  - id: claude-haiku\n    provider: anthropic\n    model: claude-haiku-4-5-20251001\n    temperature: 0\n\nscenarios:\n  - id: setup-check\n    agent: claude-haiku\n    servers: [demo-server]\n    mcp_servers:\n      - id: demo-server\n        transport: http\n        url: http://localhost:3000/mcp\n    prompt: Use available tools to complete this setup verification task.`
+        }
+      ]
+    },
+    {
+      id: 'auth-env',
+      title: 'Configure Auth and Environment',
+      paragraphs: [
+        'Set provider keys and server auth variables before running evaluations. Keep secret values in environment variables, not in committed YAML.'
+      ],
+      codeBlocks: [
+        {
+          title: '.env example',
+          language: 'bash',
+          code: `ANTHROPIC_API_KEY=...\nOPENAI_API_KEY=...\nMY_SERVER_TOKEN=...`
+        }
+      ],
+      bullets: [
+        'Use `auth.type: bearer` + `env` for bearer-token server auth.',
+        'Use `auth.type: oauth_client_credentials` for client-credentials flows.',
+        'Use `auth.type: oauth_authorization_code` when interactive/browser OAuth is required.'
+      ]
+    },
+    {
+      id: 'preflight',
+      title: 'Preflight Checklist',
+      bullets: [
+        'MCP endpoint URL is reachable and returns MCP responses.',
+        'Scenario IDs are unique and agent references resolve.',
+        'Server labels in `scenarios[].servers` match your intended MCP server entries.',
+        'All required env var names are set in your shell/session.',
+        'You can run one scenario once successfully before scaling.'
+      ],
+      codeBlocks: [
+        {
+          title: 'first validation run',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c mcplab/evals/eval.yaml -s setup-check -n 1'
+        }
+      ]
+    },
+    {
+      id: 'next',
+      title: 'Next Setup Steps',
+      bullets: [
+        'Add more scenarios after the baseline setup-check passes.',
+        'Use `--agents` to compare models on the same scenarios.',
+        'Open `report.html` or the App results view to inspect failures and tool traces.'
+      ]
+    }
+  ]
+};
+
+const scenarioConfiguration: DocPage = {
+  slug: 'scenario-configuration',
+  label: 'Scenario Configuration',
+  href: '/docs/scenario-configuration/',
+  description: 'Detailed guide for writing MCPLab scenarios and assertions.',
+  keywords: [
+    'scenario configuration',
+    'scenarios',
+    'mcp_servers',
+    'tool constraints',
+    'response assertions',
+    'extract'
+  ],
+  seoTitle: 'Scenario Configuration',
+  track: 'getting-started',
+  sections: [
+    {
+      id: 'scenario-fields',
+      title: 'Scenario Fields',
+      paragraphs: ['A scenario defines one test case the agent must execute against available MCP servers.'],
+      bullets: [
+        '`id` — unique scenario identifier. Use kebab-case.',
+        '`prompt` — exact task instruction given to the agent.',
+        '`agent` — optional pinned agent id. Omit to run all selected agents.',
+        '`servers` — labels available in the scenario context.',
+        '`mcp_servers` — concrete MCP server definitions (`ref` or inline server config).',
+        '`eval` — assertions on tool usage, sequence, and response output.',
+        '`extract` — capture values from final text using regex named group `value`.'
+      ]
+    },
+    {
+      id: 'minimal-example',
+      title: 'Minimal Scenario Example',
+      codeBlocks: [
+        {
+          title: 'single scenario baseline',
+          language: 'yaml',
+          code: `scenarios:
+  - id: weather-baseline
+    agent: claude-haiku
+    servers: [weather-api]
+    mcp_servers:
+      - id: weather-api
+        transport: http
+        url: http://localhost:3000/mcp
+    prompt: Get today's forecast for Brussels and summarize in one sentence.`
+        }
+      ]
+    },
+    {
+      id: 'tool-assertions',
+      title: 'Tool and Response Assertions',
+      paragraphs: ['Add `eval` only after the baseline prompt run works, then tighten expectations incrementally.'],
+      codeBlocks: [
+        {
+          title: 'scenario with assertions',
+          language: 'yaml',
+          code: `scenarios:
+  - id: weather-asserted
+    servers: [weather-api]
+    mcp_servers:
+      - ref: weather-api
+    prompt: Return JSON with city and temperature_c for Brussels.
+    eval:
+      tool_constraints:
+        required_tools: [get_weather]
+        forbidden_tools: [delete_city]
+      tool_sequence:
+        allow:
+          - [get_weather]
+      response_assertions:
+        - type: regex
+          pattern: '([0-9]+)(\\.[0-9]+)?\\s?°?C'
+        - type: jsonpath
+          path: $.city
+          equals: Brussels`
+        }
+      ],
+      bullets: [
+        'Use `required_tools` to enforce critical tool calls.',
+        'Use `forbidden_tools` to block unsafe or irrelevant tools.',
+        'Use regex assertions for variable outputs (numbers, IDs, timestamps).',
+        'Use jsonpath assertions when the response is structured JSON.'
+      ]
+    },
+    {
+      id: 'extract-values',
+      title: 'Extract Structured Values',
+      paragraphs: ['Use `extract` when you want reusable values from the final response for downstream checks or reporting.'],
+      codeBlocks: [
+        {
+          title: 'extract with named capture group',
+          language: 'yaml',
+          code: `scenarios:
+  - id: extract-temperature
+    servers: [weather-api]
+    prompt: Report the current temperature in Brussels in Celsius.
+    extract:
+      - name: brussels_temp_c
+        from: final_text
+        regex: 'Temperature:\\s*(?<value>[0-9]+(\\.[0-9]+)?)\\s*°?C'`
+        }
+      ]
+    },
+    {
+      id: 'common-patterns',
+      title: 'Common Configuration Patterns',
+      bullets: [
+        'Start with one scenario and one run (`-n 1`) until stable.',
+        'Keep prompts deterministic; avoid broad, open-ended tasks first.',
+        'Prefer `mcp_servers` refs for shared servers across many scenarios.',
+        'Add one assertion at a time so failures are easy to diagnose.',
+        'Split large workflows into multiple scenarios instead of one giant prompt.'
+      ]
+    },
+    {
+      id: 'validation-checklist',
+      title: 'Scenario Validation Checklist',
+      bullets: [
+        'Scenario id is unique and readable.',
+        '`servers` labels and `mcp_servers` mapping are coherent.',
+        'Pinned `agent` exists in your agents list/library.',
+        'Assertions test behavior, not cosmetic phrasing only.',
+        'A focused command can run this scenario in isolation.'
+      ],
+      codeBlocks: [
+        {
+          title: 'run one scenario',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c mcplab/evals/eval.yaml -s weather-asserted -n 1'
+        }
+      ]
+    }
+  ]
+};
+
+const librariesAndRefs: DocPage = {
+  slug: 'libraries-and-refs',
+  label: 'Libraries & Refs',
+  href: '/docs/libraries-and-refs/',
+  description: 'Reuse shared servers, agents, and scenarios across evaluation configs.',
+  keywords: ['libraries', 'refs', 'servers.yaml', 'agents.yaml', 'scenarios', 'reuse'],
+  seoTitle: 'Libraries & Refs',
+  track: 'getting-started',
+  sections: [
+    {
+      id: 'what-it-is',
+      title: 'What the Library System Is',
+      paragraphs: [
+        'MCPLab libraries let you define shared servers, agents, and scenarios once, then reference them from many eval configs.',
+        'This reduces duplication and keeps team-wide defaults consistent.'
+      ]
+    },
+    {
+      id: 'structure',
+      title: 'Recommended Library Structure',
+      codeBlocks: [
+        {
+          title: 'library layout',
+          language: 'text',
+          code: `mcplab/\n├── servers.yaml\n├── agents.yaml\n└── scenarios/\n    ├── scenario-a.yaml\n    └── scenario-b.yaml`
+        }
+      ],
+      bullets: [
+        '`servers.yaml` contains reusable MCP server definitions.',
+        '`agents.yaml` contains reusable LLM agent definitions.',
+        '`scenarios/` contains reusable scenario files.'
+      ]
+    },
+    {
+      id: 'use-refs',
+      title: 'Reference Library Items in eval.yaml',
+      paragraphs: ['Use `ref` entries to pull shared items into an eval config by id.'],
+      codeBlocks: [
+        {
+          title: 'eval.yaml using refs',
+          language: 'yaml',
+          code: `servers:\n  - ref: my-server\nagents:\n  - ref: claude-sonnet\nscenarios:\n  - ref: scenario-a`
+        }
+      ]
+    },
+    {
+      id: 'resolution',
+      title: 'How Ref Resolution Works',
+      bullets: [
+        'Server refs resolve from `servers.yaml`.',
+        'Agent refs resolve from `agents.yaml`.',
+        'Scenario refs resolve from files in `scenarios/`.',
+        'Missing refs are reported and should be fixed before running.'
+      ]
+    },
+    {
+      id: 'app-cli',
+      title: 'Use Libraries in App and CLI',
+      bullets: [
+        'App: start with `--libraries-dir` so shared library content is loaded.',
+        'CLI run: refs resolve when library files are present in the configured layout.',
+        'App UI: inspect and manage shared items in the Library section.'
+      ],
+      codeBlocks: [
+        {
+          title: 'start app with libraries',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab app --libraries-dir ./mcplab'
+        }
+      ]
+    }
+  ]
+};
+
 // ─── CLI Track ────────────────────────────────────────────────────────────────
 
 const cliRunning: DocPage = {
   slug: 'cli-running-evaluations',
   label: 'Running Evaluations',
-  href: '/docs/cli/running-evaluations',
+  href: '/docs/cli/running-evaluations/',
   description: 'The mcplab run command and all its options.',
   keywords: ['run', 'cli', 'scenarios', 'agents', 'variance', 'interactive'],
   seoTitle: 'CLI — Running Evaluations',
@@ -296,7 +597,7 @@ const cliRunning: DocPage = {
 const cliConfiguration: DocPage = {
   slug: 'cli-configuration',
   label: 'Configuration',
-  href: '/docs/cli/configuration',
+  href: '/docs/cli/configuration/',
   description: 'Write eval.yaml — servers, agents, scenarios, assertions, and auth.',
   keywords: [
     'config',
@@ -409,7 +710,7 @@ scenarios:
           code: `scenarios:
   - id: weather-lookup
     servers: [weather-server]
-    prompt: What is the current weather in Amsterdam?
+    prompt: Return JSON with city and temperature_c for Amsterdam.
     eval:
       tool_constraints:
         required_tools: [get_weather]
@@ -417,8 +718,9 @@ scenarios:
       response_assertions:
         - type: regex
           pattern: "Amsterdam"
-        - type: contains
-          value: "temperature"`
+        - type: jsonpath
+          path: "$.city"
+          equals: "Amsterdam"`
         }
       ]
     },
@@ -430,7 +732,7 @@ scenarios:
         'tool_constraints.required_tools — list of tool names the agent MUST call.',
         'tool_constraints.forbidden_tools — list of tool names the agent MUST NOT call.',
         'response_assertions type: regex — the agent response must match the regular expression in pattern.',
-        'response_assertions type: contains — the agent response must contain the exact string in value.'
+        'response_assertions type: jsonpath — evaluate JSON output at path and optionally match equals.'
       ]
     },
     {
@@ -506,7 +808,7 @@ scenarios:
 const cliReports: DocPage = {
   slug: 'cli-reports-output',
   label: 'Reports & Output',
-  href: '/docs/cli/reports-output',
+  href: '/docs/cli/reports-output/',
   description: 'What MCPLab writes after a run and how to work with it.',
   keywords: ['reports', 'output', 'results', 'trace', 'html', 'json', 'mcplab report'],
   seoTitle: 'CLI — Reports & Output',
@@ -564,7 +866,7 @@ const cliReports: DocPage = {
 const cliCicd: DocPage = {
   slug: 'cli-ci-cd',
   label: 'CI/CD',
-  href: '/docs/cli/ci-cd',
+  href: '/docs/cli/ci-cd/',
   description: 'Run MCPLab in GitHub Actions and other CI pipelines.',
   keywords: ['ci', 'cd', 'github actions', 'pipeline', 'automation', 'exit code'],
   seoTitle: 'CLI — CI/CD',
@@ -641,7 +943,7 @@ jobs:
 const appGettingStarted: DocPage = {
   slug: 'app-getting-started',
   label: 'Starting the App',
-  href: '/docs/app/getting-started',
+  href: '/docs/app/getting-started/',
   description: 'Launch the MCPLab web UI and find your way around.',
   keywords: ['app', 'ui', 'launch', 'mcplab app', 'dashboard'],
   seoTitle: 'App — Starting the App',
@@ -699,7 +1001,7 @@ const appGettingStarted: DocPage = {
 const appRunning: DocPage = {
   slug: 'app-running-evaluations',
   label: 'Running Evaluations',
-  href: '/docs/app/running-evaluations',
+  href: '/docs/app/running-evaluations/',
   description: 'Launch and monitor evaluations from the web UI.',
   keywords: ['run', 'evaluation', 'ui', 'agents', 'config', 'variance'],
   seoTitle: 'App — Running Evaluations',
@@ -741,7 +1043,7 @@ const appRunning: DocPage = {
 const appResults: DocPage = {
   slug: 'app-reading-results',
   label: 'Analysing Results',
-  href: '/docs/app/reading-results',
+  href: '/docs/app/reading-results/',
   description: 'Understand run output, compare agents, and browse markdown reports.',
   keywords: ['results', 'detail', 'compare', 'agents', 'trace', 'markdown reports'],
   seoTitle: 'App — Analysing Results',
@@ -787,7 +1089,7 @@ const appResults: DocPage = {
 const appAssistants: DocPage = {
   slug: 'app-ai-assistants',
   label: 'AI Assistants',
-  href: '/docs/app/ai-assistants',
+  href: '/docs/app/ai-assistants/',
   description: 'Use the Scenario and Result AI assistants to work faster.',
   keywords: ['ai', 'assistant', 'scenario assistant', 'result assistant', 'chat'],
   seoTitle: 'App — AI Assistants',
@@ -823,10 +1125,277 @@ const appAssistants: DocPage = {
   ]
 };
 
+const appMcplabAssistantSkill: DocPage = {
+  slug: 'app-mcplab-assistant-skill',
+  label: 'MCPLab Assistant Skill',
+  href: '/docs/app/mcplab-assistant-skill/',
+  description:
+    'Install and use the mcplab-assistant skill from skills.sh in Codex/Claude-style agent workflows.',
+  keywords: [
+    'mcplab-assistant',
+    'skills.sh',
+    'vercel skills',
+    'agent skill',
+    'codex',
+    'claude'
+  ],
+  seoTitle: 'App — MCPLab Assistant Skill',
+  track: 'app',
+  sections: [
+    {
+      id: 'what-it-is',
+      title: 'What This Skill Is For',
+      paragraphs: [
+        'The mcplab-assistant skill is an operator guide for running MCPLab workflows through an AI coding assistant. It focuses on practical operations: authoring eval config YAML, running commands, triaging failures, and interpreting run artifacts.',
+        'Use it when you want consistent, deterministic help with MCPLab usage rather than generic advice.'
+      ],
+      bullets: [
+        'Config authoring and edits for MCPLab eval files.',
+        'Command help for `mcplab run`, `mcplab app`, and `mcplab report`.',
+        'Failure triage for auth/config/selection/numeric-flag errors.',
+        'Output analysis for `results.json`, `summary.md`, `trace.jsonl`, and `report.html`.'
+      ]
+    },
+    {
+      id: 'install',
+      title: 'Install via Skills CLI',
+      paragraphs: [
+        'Install the skill with the Skills CLI from the source repository. This pattern is useful before or independent of a leaderboard slug.'
+      ],
+      codeBlocks: [
+        {
+          title: 'install mcplab-assistant',
+          language: 'bash',
+          code: 'npx skills add https://github.com/inspectr-hq/mcplab --skill mcplab-assistant'
+        }
+      ]
+    },
+    {
+      id: 'use-in-chat',
+      title: 'Use in Agent Chats',
+      paragraphs: [
+        'After installation, ask your coding agent to use the skill explicitly when working with MCPLab. Keep prompts task-focused and include file paths or command output when debugging.'
+      ],
+      codeBlocks: [
+        {
+          title: 'config authoring',
+          language: 'text',
+          code: 'Use the mcplab-assistant skill to draft a minimal eval config with one scenario and OAuth client-credentials auth.'
+        },
+        {
+          title: 'run + compare',
+          language: 'text',
+          code: 'Use mcplab-assistant to run this config and compare claude-haiku vs gpt-4o-mini with --agents.'
+        },
+        {
+          title: 'failure triage',
+          language: 'text',
+          code: 'My run fails with fetch failed. Use mcplab-assistant to triage. Here is the command, stderr, and relevant config block.'
+        },
+        {
+          title: 'result analysis',
+          language: 'text',
+          code: 'Use mcplab-assistant to analyze this run directory and summarize why failing scenarios failed.'
+        }
+      ]
+    },
+    {
+      id: 'verification',
+      title: 'Verify Installation and Usage',
+      paragraphs: ['A successful setup should satisfy all checks below.'],
+      bullets: [
+        'The install command completes without errors.',
+        'Your agent can confirm the `mcplab-assistant` skill is available.',
+        'Prompts that request the skill return MCPLab-specific, command-ready guidance.',
+        'Guidance follows a deterministic structure: Intent -> Actions -> Verification -> If It Fails.'
+      ]
+    },
+    {
+      id: 'troubleshooting',
+      title: 'Troubleshooting',
+      bullets: [
+        'Install failed: verify the GitHub URL is reachable and the skill name is exactly `mcplab-assistant`.',
+        'Skill not detected by your agent: restart the agent session and re-check installed skills.',
+        'Guidance is generic: explicitly request use of `mcplab-assistant` and provide config snippets/command output.',
+        'Command mismatch: prioritize current MCPLab CLI contracts from local `packages/cli/src/cli.ts`.'
+      ]
+    }
+  ]
+};
+
+const appOAuthDebugger: DocPage = {
+  slug: 'app-oauth-debugger',
+  label: 'OAuth Debugger',
+  href: '/docs/app/oauth-debugger/',
+  description: 'Debug OAuth 2.0 authorization flows for MCP servers step by step.',
+  keywords: [
+    'oauth debugger',
+    'oauth2',
+    'authorization code',
+    'pkce',
+    'mcp server auth',
+    'oauth token'
+  ],
+  seoTitle: 'App — OAuth Debugger',
+  track: 'app',
+  sections: [
+    {
+      id: 'what-it-does',
+      title: 'What OAuth Debugger Does',
+      paragraphs: [
+        'OAuth Debugger helps you inspect OAuth 2.0 authorization-code flows for MCP servers configured in your MCPLab libraries.',
+        'It walks through setup, authorization, token exchange, and validation with live logs so you can find configuration and protocol issues quickly.'
+      ],
+      bullets: [
+        'Guided flow: Configure Debug Session -> Run / Inspect Flow -> Report / Export.',
+        'Supports pre-registered clients, DCR (Dynamic Client Registration), and CIMD (Client ID Metadata Document) registration methods.',
+        'Includes network inspector, validation findings, and exportable traces.'
+      ]
+    },
+    {
+      id: 'before-you-start',
+      title: 'Before You Start',
+      paragraphs: [
+        'OAuth Debugger shows servers that are configured with OAuth 2.0 auth in your Libraries.',
+        'If no servers appear, add or update a server in Library / Servers with OAuth 2.0 settings first.'
+      ],
+      bullets: [
+        'Open the app with `npx @inspectr/mcplab app`.',
+        'In the sidebar, open Lab -> OAuth Debugger.',
+        'Ensure your server config includes OAuth authorization-code fields.'
+      ]
+    },
+    {
+      id: 'run-a-session',
+      title: 'Run a Debug Session',
+      paragraphs: [
+        'Create a session, start the flow, complete browser authorization, then inspect results.'
+      ],
+      bullets: [
+        'Select target MCP server (OAuth-enabled only).',
+        'Choose registration method: pre_registered, dcr (Dynamic Client Registration), or cimd (Client ID Metadata Document).',
+        'Set runtime options like redirect mode and PKCE.',
+        'Start session and open the generated authorization URL.',
+        'If required, paste the final redirect URL in manual callback mode.',
+        'Review step states, event stream, and request/response inspector.'
+      ]
+    },
+    {
+      id: 'inspect-and-export',
+      title: 'Inspect and Export Results',
+      paragraphs: [
+        'After completion (or failure), use Report / Export to review summarized values, validation findings, and full traces.'
+      ],
+      bullets: [
+        'Export formats: JSON, Markdown, and raw trace.',
+        'Review key values like issuer, redirect URI, scopes, token endpoint status, and token type.',
+        'Copy access token from report when visible and use it for CLI runs.'
+      ],
+      codeBlocks: [
+        {
+          title: 'run eval with OAuth token from debugger',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml --oauth-token my-server=<access-token>'
+        }
+      ]
+    },
+    {
+      id: 'common-issues',
+      title: 'Common Issues',
+      bullets: [
+        'No server listed: verify server auth is OAuth 2.0 in Library / Servers.',
+        'Waiting for callback: complete authorization in browser or submit manual callback URL.',
+        'Token exchange errors: verify token endpoint, client auth method, and redirect URI.',
+        'Validation warnings: use spec reference links and apply suggested improvements from findings.'
+      ]
+    }
+  ]
+};
+
+const appScenarioSetup: DocPage = {
+  slug: 'app-scenario-setup',
+  label: 'Scenario Setup in the App',
+  href: '/docs/app/scenario-setup/',
+  description: 'Create and manage evaluation scenarios directly in the MCPLab app UI.',
+  keywords: [
+    'scenario setup',
+    'config editor',
+    'mcp evaluations',
+    'inline scenario',
+    'scenario reference',
+    'app workflow'
+  ],
+  seoTitle: 'App — Scenario Setup',
+  track: 'app',
+  sections: [
+    {
+      id: 'open-editor',
+      title: 'Open the Config Editor',
+      paragraphs: [
+        'In the app sidebar, open MCP Evaluations, then click Create New (or edit an existing evaluation).',
+        'The editor opens with tabs for Scenarios and Agents. Use Scenarios to build the test cases in your evaluation config.'
+      ],
+      bullets: [
+        'Path: Lab -> MCP Evaluations -> Create New.',
+        'Existing configs: open a row and click Edit.',
+        'Use Name/Description fields to document the evaluation purpose.'
+      ]
+    },
+    {
+      id: 'add-scenarios',
+      title: 'Add Scenarios (Reference or Inline)',
+      paragraphs: [
+        'The Scenarios tab supports three entry methods so you can mix reusable library scenarios with config-specific inline scenarios.'
+      ],
+      bullets: [
+        'Add Ref: reference a scenario from the scenario library.',
+        'Import Inline: copy a library scenario into this config for local customization.',
+        'Add scenario: create a brand-new inline scenario from scratch.'
+      ]
+    },
+    {
+      id: 'edit-inline',
+      title: 'Edit Inline Scenario Details',
+      paragraphs: [
+        'Expand an inline scenario row to edit prompt, server bindings, tool constraints, assertions, and extraction rules through the scenario form.',
+        'Inline scenarios require a name before saving. Keep names unique and descriptive for easier run analysis.'
+      ],
+      bullets: [
+        'Click the chevron on an inline row to expand details.',
+        'Use concise, deterministic prompts first, then tighten assertions.',
+        'Save after each meaningful scenario change to keep diffs reviewable.'
+      ]
+    },
+    {
+      id: 'organize-list',
+      title: 'Organize and Normalize Scenario Entries',
+      bullets: [
+        'Use up/down arrows to reorder scenario execution.',
+        'Use Convert to inline to copy a referenced scenario into editable inline form.',
+        'Use Remove to drop scenarios you no longer need.',
+        'Fix Missing badges for broken references before running.'
+      ]
+    },
+    {
+      id: 'run-from-app',
+      title: 'Run and Validate from the App',
+      paragraphs: [
+        'After saving, open Run Evaluation, choose your config, select scenarios and agents, then execute a baseline run.',
+        'Start with one scenario and one run to validate setup before scaling to more scenarios or higher variance.'
+      ],
+      bullets: [
+        'Use scenario selection to isolate failures quickly.',
+        'Use Results and Result Detail to verify assertions and tool usage.',
+        'Iterate in Config Editor, save, and rerun until the baseline is stable.'
+      ]
+    }
+  ]
+};
+
 const appToolAnalysis: DocPage = {
   slug: 'app-tool-analysis',
   label: 'MCP Tool Analysis',
-  href: '/docs/app/tool-analysis',
+  href: '/docs/app/tool-analysis/',
   description: 'Review MCP tool definitions for quality and LLM-readiness.',
   keywords: ['tool analysis', 'quality', 'mcp tools', 'review', 'llm-friendly'],
   seoTitle: 'App — MCP Tool Analysis',
@@ -877,7 +1446,7 @@ const appToolAnalysis: DocPage = {
 const appLibrary: DocPage = {
   slug: 'app-library',
   label: 'Library',
-  href: '/docs/app/library',
+  href: '/docs/app/library/',
   description: 'Manage reusable agents and servers shared across eval configs.',
   keywords: ['library', 'agents', 'servers', 'reusable', 'shared', 'libraries-dir'],
   seoTitle: 'App — Library',
@@ -930,7 +1499,7 @@ const appLibrary: DocPage = {
 const refConfiguration: DocPage = {
   slug: 'reference-configuration',
   label: 'Configuration Schema',
-  href: '/docs/reference/configuration',
+  href: '/docs/reference/configuration/',
   description: 'Complete field reference for eval.yaml.',
   keywords: ['schema', 'reference', 'fields', 'yaml', 'config', 'full reference'],
   seoTitle: 'Reference — Configuration Schema',
@@ -974,7 +1543,7 @@ const refConfiguration: DocPage = {
         'tool_constraints.required_tools (string[], optional) — tool names the agent must call.',
         'tool_constraints.forbidden_tools (string[], optional) — tool names the agent must not call.',
         'response_assertions[ ].type: "regex" — agent response must match pattern.',
-        'response_assertions[ ].type: "contains" — agent response must contain value.'
+        'response_assertions[ ].type: "jsonpath" — evaluate JSON output at path and optionally match equals.'
       ]
     },
     {
@@ -998,7 +1567,7 @@ const refConfiguration: DocPage = {
 const refEnvVars: DocPage = {
   slug: 'reference-env-vars',
   label: 'Environment Variables',
-  href: '/docs/reference/environment-variables',
+  href: '/docs/reference/environment-variables/',
   description: 'All environment variables read by MCPLab.',
   keywords: ['env', 'environment', 'api key', 'secrets', 'variables'],
   seoTitle: 'Reference — Environment Variables',
@@ -1061,6 +1630,9 @@ const pageIndex: DocPage[] = [
   overview,
   installation,
   quickStart,
+  setupEvaluations,
+  scenarioConfiguration,
+  librariesAndRefs,
   cliRunning,
   cliConfiguration,
   cliReports,
@@ -1069,6 +1641,9 @@ const pageIndex: DocPage[] = [
   appRunning,
   appResults,
   appAssistants,
+  appMcplabAssistantSkill,
+  appOAuthDebugger,
+  appScenarioSetup,
   appToolAnalysis,
   appLibrary,
   refConfiguration,
@@ -1080,7 +1655,7 @@ export const docsPages = pageIndex;
 export const docsNavSections = [
   {
     title: 'Getting Started',
-    items: [overview, installation, quickStart]
+    items: [overview, installation, quickStart, setupEvaluations, scenarioConfiguration, librariesAndRefs]
   },
   {
     title: 'CLI',
@@ -1088,7 +1663,17 @@ export const docsNavSections = [
   },
   {
     title: 'App',
-    items: [appGettingStarted, appRunning, appResults, appAssistants, appToolAnalysis, appLibrary]
+    items: [
+      appGettingStarted,
+      appRunning,
+      appResults,
+      appAssistants,
+      appMcplabAssistantSkill,
+      appOAuthDebugger,
+      appScenarioSetup,
+      appToolAnalysis,
+      appLibrary
+    ]
   },
   {
     title: 'Reference',

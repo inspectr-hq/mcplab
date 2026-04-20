@@ -1,33 +1,24 @@
 # Examples Map
 
-Map user goals to existing example configs in `examples/`.
+Map user goals to reliable starting points.
 
-## Goal -> Example
+## Goal -> Starting Point
 
 - "I need a baseline config to start from."
-  Use `examples/eval.yaml`.
+  Use the minimal template from `references/config-recipes.md` and tailor IDs/URLs.
 
-- "I need TrendMiner-focused scenarios."
-  Use `examples/eval-trendminer.yaml`.
+- "I need OAuth auth."
+  Use the OAuth client credentials snippet in `references/config-recipes.md`.
 
-- "I need a broad TrendMiner regression suite."
-  Use `examples/eval-trendminer-comprehensive.yaml`.
+- "I need to compare models."
+  Start with one scenario and run `mcplab run -c <config> --agents <id1,id2>`.
 
-- "I need a small TrendMiner suite for quick checks."
-  Use `examples/eval-trendminer-simple.yaml`.
-
-- "I need multi-LLM comparison config."
-  Use `examples/eval-trendminer-multi-llm.yaml`.
-
-- "I need TM MCP server-specific setup."
-  Use `examples/eval-tm-mcp-server.yaml`.
+- "I need to debug failing runs."
+  Follow `references/troubleshooting.md` and inspect `results.json` then `trace.jsonl`.
 
 ## Selection Heuristic
 
-1. Pick the smallest example that satisfies the requested domain.
-2. Run it unchanged once.
-3. Clone and adjust only the sections needed:
-- `servers` for endpoint/auth
-- `agents` for model/provider
-- `scenarios` for prompts/assertions
-
+1. Start from the smallest valid config.
+2. Run it unchanged once to establish a baseline.
+3. Add one change at a time (agent, scenario, or auth).
+4. Re-run and validate before adding the next change.
