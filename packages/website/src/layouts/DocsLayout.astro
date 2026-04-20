@@ -20,7 +20,7 @@ const nextPage = currentIndex >= 0 && currentIndex < allPages.length - 1 ? allPa
 const currentPage = docsPages.find((p) => p.href === currentPath);
 
 const tocSections: { id: string; title: string }[] =
-  currentPath === '/docs'
+  currentPath === '/docs/'
     ? [
         { id: 'what-it-does', title: 'What MCPLab Does' },
         ...docsNavSections.map((s) => ({
