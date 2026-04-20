@@ -387,6 +387,7 @@ export interface ToolAnalysisReport {
   };
   servers: ToolAnalysisServerReport[];
   findings: ToolAnalysisFinding[];
+  mcpServerVersions?: Record<string, string | null>;
 }
 
 export interface SavedToolAnalysisReportRecord {

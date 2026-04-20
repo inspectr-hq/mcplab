@@ -118,6 +118,7 @@ export interface ToolAnalysisReport {
   };
   servers: ToolAnalysisServerReport[];
   findings: ToolAnalysisFinding[];
+  mcpServerVersions?: Record<string, string | null>;
 }
 
 interface ToolAnalysisDiscoveredTool {
@@ -677,6 +678,7 @@ export async function runToolAnalysisJob(params: {
     serverNames,
     { serverAuthHeaders }
   );
+  const mcpServerVersions = mcp.getServerVersions();
   try {
     const serverReports: ToolAnalysisServerReport[] = [];
     const allFindings: ToolAnalysisFinding[] = [];
@@ -1068,7 +1070,8 @@ export async function runToolAnalysisJob(params: {
         issueCounts
       },
       servers: serverReports,
-      findings: allFindings
+      findings: allFindings,
+      mcpServerVersions: Object.keys(mcpServerVersions).length > 0 ? mcpServerVersions : undefined
     };
   } finally {
     // McpClientManager currently has no explicit close lifecycle API.
