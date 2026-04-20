@@ -161,6 +161,46 @@ describe('resolveRuntimeOAuthAuthHeaders', () => {
     expect(result['server-a']).toEqual({ authorization: 'Bearer token-a' });
     expect(result['server-b']).toEqual({ authorization: 'Bearer token-b' });
   });
+
+  it('throws when runtime session has status stopped', () => {
+    const session = makeRuntimeSession({ status: 'stopped' });
+    const debuggerSession = makeDebuggerSession({
+      context: { tokenResponse: { access_token: 'tok-stale' } }
+    });
+    const runtimeSessions: OAuthRuntimeSessionsMap = new Map([[session.id, session]]);
+    const oauthDebuggerSessions: OAuthDebuggerSessionsMap = new Map([
+      [debuggerSession.id, debuggerSession]
+    ]);
+
+    expect(() =>
+      resolveRuntimeOAuthAuthHeaders({
+        requiredServerNames: ['my-server'],
+        oauthRuntimeSessionsByServer: { 'my-server': session.id },
+        runtimeSessions,
+        oauthDebuggerSessions
+      })
+    ).toThrow(/stopped and cannot be used for authorization/i);
+  });
+
+  it('throws when runtime session has status error', () => {
+    const session = makeRuntimeSession({ status: 'error' });
+    const debuggerSession = makeDebuggerSession({
+      context: { tokenResponse: { access_token: 'tok-stale' } }
+    });
+    const runtimeSessions: OAuthRuntimeSessionsMap = new Map([[session.id, session]]);
+    const oauthDebuggerSessions: OAuthDebuggerSessionsMap = new Map([
+      [debuggerSession.id, debuggerSession]
+    ]);
+
+    expect(() =>
+      resolveRuntimeOAuthAuthHeaders({
+        requiredServerNames: ['my-server'],
+        oauthRuntimeSessionsByServer: { 'my-server': session.id },
+        runtimeSessions,
+        oauthDebuggerSessions
+      })
+    ).toThrow(/error and cannot be used for authorization/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

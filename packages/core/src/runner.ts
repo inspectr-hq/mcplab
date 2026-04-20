@@ -65,6 +65,18 @@ export type RunProgressEvent =
     }
   | { type: 'run_finished'; runId: string; totalScenarioRuns: number };
 
+export function buildMcpServerAuthHeaders(
+  options: Pick<RunOptions, 'mcpServerAuthHeaders' | 'oauthTokens'>
+): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = { ...options.mcpServerAuthHeaders };
+  if (options.oauthTokens) {
+    for (const [serverName, token] of Object.entries(options.oauthTokens)) {
+      out[serverName] = { ...out[serverName], authorization: `Bearer ${token}` };
+    }
+  }
+  return out;
+}
+
 export async function runAll(
   config: ExecutableEvalConfig,
   options: RunOptions
@@ -104,19 +116,8 @@ export async function runAll(
       type: 'mcp_connect_started',
       serverCount: Object.keys(config.servers).length
     });
-    const resolvedServerAuthHeaders: Record<string, Record<string, string>> = {
-      ...options.mcpServerAuthHeaders
-    };
-    if (options.oauthTokens) {
-      for (const [serverName, token] of Object.entries(options.oauthTokens)) {
-        resolvedServerAuthHeaders[serverName] = {
-          ...resolvedServerAuthHeaders[serverName],
-          authorization: `Bearer ${token}`
-        };
-      }
-    }
     await mcp.connectAll(config.servers, options.signal, {
-      serverAuthHeaders: resolvedServerAuthHeaders
+      serverAuthHeaders: buildMcpServerAuthHeaders(options)
     });
     await emitProgress({
       type: 'mcp_connect_finished',

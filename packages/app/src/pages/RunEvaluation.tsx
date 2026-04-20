@@ -182,17 +182,23 @@ const RunEvaluation = () => {
         openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
 
         const timeoutAt = Date.now() + 5 * 60_000;
+        let loginCompleted = false;
         while (Date.now() < timeoutAt) {
           const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
           const launchUrl = session.authorizeLaunchUrl || session.authorizationUrl || "";
           if (launchUrl) openBrowserOnce(launchUrl);
-          if (session.status === "completed" && session.hasAccessToken) break;
+          if (session.status === "completed" && session.hasAccessToken) { loginCompleted = true; break; }
           if (session.status === "error" || session.status === "stopped") {
             throw new Error(
               `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ""}`.trim()
             );
           }
           await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        if (!loginCompleted) {
+          throw new Error(
+            `OAuth login timed out for '${serverName}'. Authorization was not completed within 5 minutes.`
+          );
         }
 
         setLogs((prev) => [

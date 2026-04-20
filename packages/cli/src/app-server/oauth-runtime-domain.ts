@@ -281,6 +281,11 @@ export function resolveRuntimeOAuthAuthHeaders(params: {
     if (!runtimeSession || runtimeSession.serverName !== serverName) {
       throw new Error(`OAuth runtime session '${runtimeSessionId}' is invalid for '${serverName}'`);
     }
+    if (runtimeSession.status === 'stopped' || runtimeSession.status === 'error') {
+      throw new Error(
+        `OAuth runtime session '${runtimeSessionId}' for '${serverName}' is ${runtimeSession.status} and cannot be used for authorization`
+      );
+    }
     const debuggerSession = params.oauthDebuggerSessions.get(runtimeSession.oauthDebuggerSessionId);
     const accessToken = getAccessToken(debuggerSession);
     if (!accessToken) {
