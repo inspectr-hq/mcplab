@@ -26,10 +26,13 @@ mcplab run -c mcplab/evals/eval.yaml --agents claude-haiku,gpt-4o-mini
 
 # Run each scenario with all available agents
 mcplab run -c mcplab/evals/eval.yaml --agents-all
+
+# Pick config and scenarios interactively at the terminal
+mcplab run --interactive
 ```
 
 Notes:
-- `-c/--config` is required unless using `--interactive`.
+- `-c/--config` is required unless using `--interactive`. Interactive mode prompts you to select a config file and scenarios without specifying flags.
 - `--agents` values must match agent IDs loaded from config/library.
 - `--runs`/`-n` must be a positive number.
 
@@ -43,6 +46,7 @@ mcplab app --interactive
 
 Notes:
 - `--port` must be a positive number.
+- `--interactive` prompts for host, port, and directory paths before startup — use when you don't want to pass all flags on the command line.
 - `--dev` proxies frontend requests to Vite while keeping API local.
 - `--libraries-dir` points to bundle root for reusable servers/agents/test-cases.
 

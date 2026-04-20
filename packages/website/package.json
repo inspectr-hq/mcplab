@@ -9,7 +9,13 @@
     "lint": "eslint .",
     "preview": "astro preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:links": "node scripts/check-trailing-slashes.mjs",
+    "check:deadlinks": "node scripts/check-dead-links.mjs",
+    "check:sitemap": "node scripts/check-sitemap-status.mjs",
+    "check:sitemap:diff": "node scripts/compare-sitemaps.mjs",
+    "check:all": "npm run check:links && npm run check:deadlinks",
+    "build:check": "npm run build && npm run check:all"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.1",
