@@ -90,7 +90,10 @@ const CodeBlock = ({ code, language, title }: CodeBlockProps) => {
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
           ) : null}
-          <pre className="m-0 overflow-x-auto bg-transparent p-4 text-sm leading-relaxed">
+          <pre
+            tabIndex={0}
+            className={`m-0 overflow-x-auto bg-transparent p-4 text-sm leading-relaxed language-${resolvedLanguage}`}
+          >
             <code ref={codeRef} className={`language-${resolvedLanguage}`}>
               {code}
             </code>
