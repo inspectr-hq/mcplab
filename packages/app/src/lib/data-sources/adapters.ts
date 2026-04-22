@@ -87,8 +87,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
           : entry.auth?.type === 'oauth_client_credentials'
           ? entry.auth.scope
           : undefined,
-      oauthMode:
-        entry.auth?.type === 'oauth_authorization_code' ? entry.auth.mode : undefined,
+      oauthMode: entry.auth?.type === 'oauth_authorization_code' ? entry.auth.mode : undefined,
       oauthAuthorizationUrl:
         entry.auth?.type === 'oauth_authorization_code' ? entry.auth.authorization_url : undefined,
       oauthTokenEndpoint:

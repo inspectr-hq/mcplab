@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildFallbackScenarioRequestId, buildMcpServerAuthHeaders, buildScenarioRequestId } from './runner.js';
+import {
+  buildFallbackScenarioRequestId,
+  buildMcpServerAuthHeaders,
+  buildScenarioRequestId
+} from './runner.js';
 
 describe('buildScenarioRequestId', () => {
   it('builds deterministic IDs with run fallback suffix', () => {

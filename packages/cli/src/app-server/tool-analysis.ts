@@ -96,7 +96,8 @@ export async function handleToolAnalysisRoutes(params: {
         ? (body.oauthRuntimeSessions as Record<string, string>)
         : undefined;
     const oauthServers = serverNames.filter(
-      (serverName: string) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
+      (serverName: string) =>
+        libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
     const serverAuthHeaders =
       oauthServers.length > 0

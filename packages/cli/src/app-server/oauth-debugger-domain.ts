@@ -633,7 +633,8 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
 
   const resourceMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl
     ? undefined
-    : probedResourceMetadataUrl ?? inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
+    : probedResourceMetadataUrl ??
+      inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
   if (resourceMetadataUrl) {
     try {
       const { response, responseJson, responseText } = await fetchWithTrace({
@@ -673,12 +674,11 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   // Otherwise derive candidates from the issuer URL found in resource metadata,
   // or fall back to candidates based on the MCP server URL itself.
   const overrideMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl;
-  const issuerFromMetadata =
-    session.context.resourceMetadata?.authorization_servers?.[0]
-      ? String(session.context.resourceMetadata.authorization_servers[0])
-      : session.context.resourceMetadata?.authorization_server
-      ? String(session.context.resourceMetadata.authorization_server)
-      : undefined;
+  const issuerFromMetadata = session.context.resourceMetadata?.authorization_servers?.[0]
+    ? String(session.context.resourceMetadata.authorization_servers[0])
+    : session.context.resourceMetadata?.authorization_server
+    ? String(session.context.resourceMetadata.authorization_server)
+    : undefined;
   const metadataCandidates = overrideMetadataUrl
     ? [overrideMetadataUrl]
     : authServerMetadataCandidates(
@@ -1269,9 +1269,10 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
         typeof token?.scope === 'string'
           ? String(token.scope).split(/\s+/).filter(Boolean)
           : undefined,
-      accessToken: session.config.display.showSensitiveValues && typeof token?.access_token === 'string'
-        ? token.access_token
-        : undefined
+      accessToken:
+        session.config.display.showSensitiveValues && typeof token?.access_token === 'string'
+          ? token.access_token
+          : undefined
     }
   };
 }

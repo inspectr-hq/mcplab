@@ -1053,7 +1053,9 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('email');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const writtenScenario = (roundTripped.scenarios as any[]).find((s: any) => s.id === 'scn-oauth');
+    const writtenScenario = (roundTripped.scenarios as any[]).find(
+      (s: any) => s.id === 'scn-oauth'
+    );
     const writtenServer = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'inline-oauth');
     expect(writtenServer?.auth).toEqual({
       type: 'oauth_authorization_code',

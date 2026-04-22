@@ -285,7 +285,9 @@ const scenarioConfiguration: DocPage = {
     {
       id: 'scenario-fields',
       title: 'Scenario Fields',
-      paragraphs: ['A scenario defines one test case the agent must execute against available MCP servers.'],
+      paragraphs: [
+        'A scenario defines one test case the agent must execute against available MCP servers.'
+      ],
       bullets: [
         '`id` — unique scenario identifier. Use kebab-case.',
         '`prompt` — exact task instruction given to the agent.',
@@ -318,7 +320,9 @@ const scenarioConfiguration: DocPage = {
     {
       id: 'tool-assertions',
       title: 'Tool and Response Assertions',
-      paragraphs: ['Add `eval` only after the baseline prompt run works, then tighten expectations incrementally.'],
+      paragraphs: [
+        'Add `eval` only after the baseline prompt run works, then tighten expectations incrementally.'
+      ],
       codeBlocks: [
         {
           title: 'scenario with assertions',
@@ -354,7 +358,9 @@ const scenarioConfiguration: DocPage = {
     {
       id: 'extract-values',
       title: 'Extract Structured Values',
-      paragraphs: ['Use `extract` when you want reusable values from the final response for downstream checks or reporting.'],
+      paragraphs: [
+        'Use `extract` when you want reusable values from the final response for downstream checks or reporting.'
+      ],
       codeBlocks: [
         {
           title: 'extract with named capture group',
@@ -1131,14 +1137,7 @@ const appMcplabAssistantSkill: DocPage = {
   href: '/docs/app/mcplab-assistant-skill/',
   description:
     'Install and use the mcplab-assistant skill from skills.sh in Codex/Claude-style agent workflows.',
-  keywords: [
-    'mcplab-assistant',
-    'skills.sh',
-    'vercel skills',
-    'agent skill',
-    'codex',
-    'claude'
-  ],
+  keywords: ['mcplab-assistant', 'skills.sh', 'vercel skills', 'agent skill', 'codex', 'claude'],
   seoTitle: 'App — MCPLab Assistant Skill',
   track: 'app',
   sections: [
@@ -1655,7 +1654,14 @@ export const docsPages = pageIndex;
 export const docsNavSections = [
   {
     title: 'Getting Started',
-    items: [overview, installation, quickStart, setupEvaluations, scenarioConfiguration, librariesAndRefs]
+    items: [
+      overview,
+      installation,
+      quickStart,
+      setupEvaluations,
+      scenarioConfiguration,
+      librariesAndRefs
+    ]
   },
   {
     title: 'CLI',

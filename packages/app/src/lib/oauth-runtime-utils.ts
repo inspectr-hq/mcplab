@@ -20,7 +20,9 @@ export async function waitForOAuthRuntimeSession(params: {
     }
     if (session.status === 'error' || session.status === 'stopped') {
       throw new Error(
-        `OAuth login failed for '${serverName}' (${session.status}). ${session.lastError || ''}`.trim()
+        `OAuth login failed for '${serverName}' (${session.status}). ${
+          session.lastError || ''
+        }`.trim()
       );
     }
     await new Promise<void>((resolve) => setTimeout(resolve, 1500));
