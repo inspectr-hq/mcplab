@@ -218,7 +218,8 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
 export async function preloadAssistantTools(
   session: ScenarioAssistantSession,
   serversByName: Record<string, EvalConfig['servers'][string]>,
-  selectedServerNames: string[]
+  selectedServerNames: string[],
+  options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
 ): Promise<void> {
   const usedNames = new Set<string>();
   for (const serverName of selectedServerNames) {
@@ -228,7 +229,9 @@ export async function preloadAssistantTools(
       continue;
     }
     try {
-      await session.mcp.connectAll({ [serverName]: server });
+      await session.mcp.connectAll({ [serverName]: server }, undefined, {
+        serverAuthHeaders: options?.serverAuthHeaders
+      });
       const tools = await session.mcp.listTools(serverName);
       for (const tool of tools) {
         const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);

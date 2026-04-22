@@ -700,6 +700,7 @@ export interface EvalDataSource {
     configPath?: string;
     scenarioId: string;
     selectedAssistantAgentName: string;
+    oauthRuntimeSessions?: Record<string, string>;
     context: {
       configSnapshotPolicy?: {
         enabled: boolean;

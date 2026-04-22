@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
 import type {
   ScenarioAssistantSessionView,
@@ -86,6 +87,8 @@ export function ScenarioAssistantDialog({
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
+  const oauthRuntimeSessionsByServerRef = useRef<Record<string, string>>({});
   const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -100,12 +103,71 @@ export function ScenarioAssistantDialog({
     if (!resolvedAssistantAgentName || sessionId) return;
     let cancelled = false;
     setLoading(true);
-    source
-      .createScenarioAssistantSession({
+    const bootstrap = async () => {
+      const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
+        const openBrowserOnce = (() => {
+          let opened = false;
+          return (launchUrl: string) => {
+            if (opened || !launchUrl) return;
+            opened = true;
+            const absoluteUrl = launchUrl.startsWith("http")
+              ? launchUrl
+              : `${window.location.origin}${launchUrl}`;
+            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
+          };
+        })();
+
+        let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServerRef.current[serverName];
+        if (runtimeSessionId) {
+          try {
+            const { session: existingSession } = await source.getOAuthRuntimeSession(runtimeSessionId);
+            if (existingSession.status === "completed" && existingSession.hasAccessToken) {
+              return runtimeSessionId;
+            }
+          } catch {
+            runtimeSessionId = undefined;
+          }
+        }
+
+        const created = await source.createOAuthRuntimeSession({ serverName });
+        runtimeSessionId = created.session.id;
+        if (!cancelled) {
+          setOauthRuntimeSessionsByServer((prev) => {
+            const next = { ...prev, [serverName]: runtimeSessionId! };
+            oauthRuntimeSessionsByServerRef.current = next;
+            return next;
+          });
+        }
+        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
+        await waitForOAuthRuntimeSession({
+          sessionId: runtimeSessionId,
+          source,
+          serverName,
+          onLaunchUrl: openBrowserOnce
+        });
+        return runtimeSessionId;
+      };
+
+      const selectedOauthServers = Array.from(
+        new Set(
+          scenario.serverIds.filter((serverId) => {
+            const server = servers.find((entry) => entry.id === serverId);
+            return server?.authType === "oauth2";
+          })
+        )
+      );
+      const oauthRuntimeSessions: Record<string, string> = {};
+      for (const serverName of selectedOauthServers) {
+        oauthRuntimeSessions[serverName] = await ensureOAuthRuntimeSession(serverName);
+      }
+
+      const resp = await source.createScenarioAssistantSession({
         configId,
         configPath,
         scenarioId: scenario.id,
         selectedAssistantAgentName: resolvedAssistantAgentName,
+        oauthRuntimeSessions:
+          Object.keys(oauthRuntimeSessions).length > 0 ? oauthRuntimeSessions : undefined,
         context: {
           configSnapshotPolicy: snapshotEval
             ? {
@@ -135,12 +197,12 @@ export function ScenarioAssistantDialog({
             model: agent.model
           }))
         }
-      })
-      .then((resp) => {
-        if (cancelled) return;
-        setSessionId(resp.sessionId);
-        setSession(resp.session);
-      })
+      });
+      if (cancelled) return;
+      setSessionId(resp.sessionId);
+      setSession(resp.session);
+    };
+    void bootstrap()
       .catch((error: unknown) => {
         if (cancelled) return;
         toast({

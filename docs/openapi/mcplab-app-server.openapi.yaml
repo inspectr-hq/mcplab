@@ -1749,6 +1749,11 @@ components:
           type: string
         selectedAssistantAgentName:
           type: string
+        oauthRuntimeSessions:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional OAuth runtime session mapping (serverName -> runtimeSessionId)
         context:
           type: object
           required: [scenario]

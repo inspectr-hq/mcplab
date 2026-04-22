@@ -265,6 +265,7 @@ export const workspaceApiClient = {
     configPath?: string;
     scenarioId: string;
     selectedAssistantAgentName: string;
+    oauthRuntimeSessions?: Record<string, string>;
     context: unknown;
   }) =>
     request<{ sessionId: string; session: ScenarioAssistantSessionView }>(

@@ -427,6 +427,8 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           assistantSessions,
+          oauthRuntimeSessions,
+          oauthDebuggerSessions,
           deps: routeDeps
         })
       ) {
