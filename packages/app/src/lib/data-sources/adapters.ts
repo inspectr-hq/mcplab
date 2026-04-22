@@ -30,6 +30,76 @@ function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
 }
 
+function toUiEvalRule(assertion: any): EvalRule {
+  switch (assertion.type) {
+    case 'regex':
+      return { type: 'response_regex', value: assertion.pattern };
+    case 'contains':
+      return { type: 'response_contains', value: assertion.value };
+    case 'not_contains':
+      return { type: 'response_not_contains', value: assertion.value };
+    case 'starts_with':
+      return { type: 'response_starts_with', value: assertion.value };
+    case 'ends_with':
+      return { type: 'response_ends_with', value: assertion.value };
+    case 'equals':
+      return { type: 'response_equals', value: assertion.value };
+    case 'jsonpath':
+      return { type: 'response_jsonpath', path: assertion.path, equals: assertion.equals };
+    case 'jsonpath_exists':
+      return { type: 'response_jsonpath_exists', path: assertion.path };
+    case 'jsonpath_not_exists':
+      return { type: 'response_jsonpath_not_exists', path: assertion.path };
+    default:
+      return { type: 'response_regex', value: String(assertion?.pattern ?? '') };
+  }
+}
+
+function toCoreResponseAssertion(rule: EvalRule):
+  | { type: 'regex'; pattern: string }
+  | { type: 'contains'; value: string }
+  | { type: 'not_contains'; value: string }
+  | { type: 'starts_with'; value: string }
+  | { type: 'ends_with'; value: string }
+  | { type: 'equals'; value: string }
+  | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
+  | { type: 'jsonpath_exists'; path: string }
+  | { type: 'jsonpath_not_exists'; path: string }
+  | null {
+  if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') return null;
+  if (rule.type === 'response_contains') {
+    return rule.value ? { type: 'contains', value: rule.value } : null;
+  }
+  if (rule.type === 'response_not_contains') {
+    return rule.value ? { type: 'not_contains', value: rule.value } : null;
+  }
+  if (rule.type === 'response_starts_with') {
+    return rule.value ? { type: 'starts_with', value: rule.value } : null;
+  }
+  if (rule.type === 'response_ends_with') {
+    return rule.value ? { type: 'ends_with', value: rule.value } : null;
+  }
+  if (rule.type === 'response_equals') {
+    return rule.value ? { type: 'equals', value: rule.value } : null;
+  }
+  if (rule.type === 'response_regex') {
+    return rule.value ? { type: 'regex', pattern: rule.value } : null;
+  }
+  if (rule.type === 'response_jsonpath') {
+    if (!rule.path?.trim()) return null;
+    return rule.equals !== undefined
+      ? { type: 'jsonpath', path: rule.path.trim(), equals: rule.equals }
+      : { type: 'jsonpath', path: rule.path.trim() };
+  }
+  if (rule.type === 'response_jsonpath_exists') {
+    return rule.path?.trim() ? { type: 'jsonpath_exists', path: rule.path.trim() } : null;
+  }
+  if (rule.type === 'response_jsonpath_not_exists') {
+    return rule.path?.trim() ? { type: 'jsonpath_not_exists', path: rule.path.trim() } : null;
+  }
+  return null;
+}
+
 export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const configName =
     typeof record.config.name === 'string' && record.config.name.trim().length > 0
@@ -149,16 +219,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       evalRules.push({ type: 'forbidden_tool', value: tool });
     }
     for (const assertion of scenario.eval?.response_assertions ?? []) {
-      if (assertion.type === 'regex') {
-        evalRules.push({ type: 'response_contains', value: assertion.pattern });
-      } else {
-        evalRules.push({
-          type: 'response_contains',
-          value: `${assertion.path}${
-            assertion.equals !== undefined ? ` == ${assertion.equals}` : ''
-          }`
-        });
-      }
+      evalRules.push(toUiEvalRule(assertion));
     }
 
     const mappedScenario = {
@@ -469,13 +530,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
     const required_tools = scenario.evalRules
       .filter((rule) => rule.type === 'required_tool')
-      .map((rule) => rule.value);
+      .map((rule) => rule.value)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
     const forbidden_tools = scenario.evalRules
       .filter((rule) => rule.type === 'forbidden_tool')
-      .map((rule) => rule.value);
+      .map((rule) => rule.value)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
     const response_assertions = scenario.evalRules
-      .filter((rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains')
-      .map((rule) => ({ type: 'regex' as const, pattern: rule.value }));
+      .map((rule) => toCoreResponseAssertion(rule))
+      .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
 
     return {
       id: scenario.id,
@@ -651,16 +714,16 @@ export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | '
         tool_constraints: {
           required_tools: scenario.evalRules
             .filter((rule) => rule.type === 'required_tool')
-            .map((rule) => rule.value),
+            .map((rule) => rule.value)
+            .filter((value): value is string => typeof value === 'string' && value.length > 0),
           forbidden_tools: scenario.evalRules
             .filter((rule) => rule.type === 'forbidden_tool')
             .map((rule) => rule.value)
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
         },
         response_assertions: scenario.evalRules
-          .filter(
-            (rule) => rule.type === 'response_contains' || rule.type === 'response_not_contains'
-          )
-          .map((rule) => ({ type: 'regex' as const, pattern: rule.value }))
+          .map((rule) => toCoreResponseAssertion(rule))
+          .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule))
       },
       extract: scenario.extractRules.map((rule) => ({
         name: rule.name,

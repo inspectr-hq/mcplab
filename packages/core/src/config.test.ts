@@ -693,4 +693,63 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('preserves all supported response_assertions types when loading config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents: []',
+          'scenarios:',
+          '  - id: scn-assertions',
+          '    servers: []',
+          '    prompt: test',
+          '    eval:',
+          '      response_assertions:',
+          '        - type: contains',
+          '          value: hello',
+          '        - type: not_contains',
+          '          value: error',
+          '        - type: starts_with',
+          '          value: hi',
+          '        - type: ends_with',
+          '          value: bye',
+          '        - type: equals',
+          '          value: exact',
+          '        - type: regex',
+          '          pattern: "foo|bar"',
+          '        - type: jsonpath',
+          '          path: $.status',
+          '          equals: active',
+          '        - type: jsonpath_exists',
+          '          path: $.data.id',
+          '        - type: jsonpath_not_exists',
+          '          path: $.error'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig } = loadConfig(configPath);
+      expect(sourceConfig.scenarios[0] && !('ref' in sourceConfig.scenarios[0])).toBe(true);
+      const inlineScenario = sourceConfig.scenarios[0] as Exclude<
+        (typeof sourceConfig.scenarios)[number],
+        { ref: string }
+      >;
+      expect(inlineScenario.eval?.response_assertions).toEqual([
+        { type: 'contains', value: 'hello' },
+        { type: 'not_contains', value: 'error' },
+        { type: 'starts_with', value: 'hi' },
+        { type: 'ends_with', value: 'bye' },
+        { type: 'equals', value: 'exact' },
+        { type: 'regex', pattern: 'foo|bar' },
+        { type: 'jsonpath', path: '$.status', equals: 'active' },
+        { type: 'jsonpath_exists', path: '$.data.id' },
+        { type: 'jsonpath_not_exists', path: '$.error' }
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

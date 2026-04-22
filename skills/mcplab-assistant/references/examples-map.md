@@ -16,6 +16,9 @@ Map user goals to reliable starting points.
 - "I need to debug failing runs."
   Follow `references/troubleshooting.md` and inspect `results.json` then `trace.jsonl`.
 
+- "I need examples for assertions."
+  Use `references/config-recipes.md` section `eval` and provide copy-ready snippets for tool constraints, tool sequences, and all response assertion types.
+
 ## Selection Heuristic
 
 1. Start from the smallest valid config.

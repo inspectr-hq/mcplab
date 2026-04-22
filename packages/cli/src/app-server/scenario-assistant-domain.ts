@@ -24,7 +24,12 @@ interface ScenarioAssistantContextInput {
     name?: string;
     prompt: string;
     serverNames: string[];
-    evalRules: Array<{ type: string; value: string }>;
+    evalRules: Array<{
+      type: string;
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     extractRules: Array<{ name: string; pattern: string }>;
     snapshotEval?: {
       enabled?: boolean;
@@ -38,7 +43,12 @@ interface ScenarioAssistantContextInput {
 interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
-    replacement: Array<{ type: string; value: string }>;
+    replacement: Array<{
+      type: string;
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     rationale?: string;
   };
   extractRules?: {
@@ -162,12 +172,12 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
     'For suggestions, use keys: prompt, evalRules, extractRules, snapshotEval, notes.',
     'prompt: { replacement: string, rationale?: string }',
-    'evalRules: { replacement: [{ type, value }...], rationale?: string }',
+    'evalRules: { replacement: [{ type, value?, path?, equals? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'snapshotEval: { patch: { enabled?: boolean, baselineSnapshotId?: string }, rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, Value Capture Rules, or snapshot settings), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains.',
+    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists.',
     'IMPORTANT: For required_tool and forbidden_tool eval rules, use the raw MCP tool name (the "tool=" value shown in the tool listing), NOT the prefixed public name. For example, use "value_based_search" not "trendminer__value_based_search".',
     'Ask clarifying questions if the scenario intent is unclear.',
     `Scenario context: ${JSON.stringify({
@@ -241,7 +251,7 @@ function normalizeEvalRuleToolNames(
 ): void {
   if (!suggestions?.evalRules?.replacement) return;
   for (const rule of suggestions.evalRules.replacement) {
-    if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') {
+    if ((rule.type === 'required_tool' || rule.type === 'forbidden_tool') && rule.value) {
       const mapping = toolPublicMap.get(rule.value);
       if (mapping) {
         rule.value = mapping.tool;

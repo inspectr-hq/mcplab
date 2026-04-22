@@ -321,7 +321,8 @@ const scenarioConfiguration: DocPage = {
       id: 'tool-assertions',
       title: 'Tool and Response Assertions',
       paragraphs: [
-        'Add `eval` only after the baseline prompt run works, then tighten expectations incrementally.'
+        'Add `eval` only after the baseline prompt run works, then tighten expectations incrementally.',
+        'For a full assertion catalog with examples for every type, see Reference / Tool and Response Assertions.'
       ],
       codeBlocks: [
         {
@@ -351,8 +352,9 @@ const scenarioConfiguration: DocPage = {
       bullets: [
         'Use `required_tools` to enforce critical tool calls.',
         'Use `forbidden_tools` to block unsafe or irrelevant tools.',
+        'Use literal response assertions (`contains`, `equals`, etc.) for stable text checks.',
         'Use regex assertions for variable outputs (numbers, IDs, timestamps).',
-        'Use jsonpath assertions when the response is structured JSON.'
+        'Use JSONPath assertions when the response is structured JSON.'
       ]
     },
     {
@@ -1541,8 +1543,8 @@ const refConfiguration: DocPage = {
       bullets: [
         'tool_constraints.required_tools (string[], optional) — tool names the agent must call.',
         'tool_constraints.forbidden_tools (string[], optional) — tool names the agent must not call.',
-        'response_assertions[ ].type: "regex" — agent response must match pattern.',
-        'response_assertions[ ].type: "jsonpath" — evaluate JSON output at path and optionally match equals.'
+        'response_assertions supports: contains, not_contains, starts_with, ends_with, equals, regex, jsonpath, jsonpath_exists, jsonpath_not_exists.',
+        'For detailed examples of each assertion, see Reference / Tool and Response Assertions.'
       ]
     },
     {
@@ -1558,6 +1560,155 @@ const refConfiguration: DocPage = {
           code: `servers:
   - $ref: ./shared/servers.yaml#my-server`
         }
+      ]
+    }
+  ]
+};
+
+const refToolAndResponseAssertions: DocPage = {
+  slug: 'reference-tool-and-response-assertions',
+  label: 'Tool and Response Assertions',
+  href: '/docs/reference/tool-and-response-assertions/',
+  description: 'Complete assertion guide with examples for tool checks and response checks.',
+  keywords: [
+    'assertions',
+    'tool constraints',
+    'tool sequence',
+    'response assertions',
+    'jsonpath',
+    'regex',
+    'contains'
+  ],
+  seoTitle: 'Reference — Tool and Response Assertions',
+  track: 'reference',
+  sections: [
+    {
+      id: 'decision-guide',
+      title: 'When To Use Tool vs Response Assertions',
+      bullets: [
+        'Use tool assertions when behavior depends on action correctness (which tools were called, and in which order).',
+        'Use response assertions when behavior depends on final answer quality or format.',
+        'Use both together for high-confidence checks: action correctness plus answer correctness.'
+      ]
+    },
+    {
+      id: 'tool-assertions',
+      title: 'Tool Assertions',
+      paragraphs: [
+        'Tool assertions validate whether the agent used the right tools and sequence of calls.'
+      ],
+      codeBlocks: [
+        {
+          title: 'required and forbidden tools',
+          language: 'yaml',
+          code: `eval:
+  tool_constraints:
+    required_tools: [lookup_account, verify_identity]
+    forbidden_tools: [delete_account]`
+        },
+        {
+          title: 'allowed tool sequences',
+          language: 'yaml',
+          code: `eval:
+  tool_sequence:
+    allow:
+      - [lookup_account, verify_identity, process_refund]
+      - [lookup_account, verify_identity, check_policy, process_refund]`
+        }
+      ]
+    },
+    {
+      id: 'response-assertions',
+      title: 'Response Assertions',
+      paragraphs: [
+        'String response assertions are literal checks and are case-insensitive by default. Use regex only when you need pattern matching.'
+      ],
+      codeBlocks: [
+        {
+          title: 'contains',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: contains
+      value: refund processed`
+        },
+        {
+          title: 'not_contains',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: not_contains
+      value: internal error`
+        },
+        {
+          title: 'starts_with',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: starts_with
+      value: hello`
+        },
+        {
+          title: 'ends_with',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: ends_with
+      value: thank you`
+        },
+        {
+          title: 'equals',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: equals
+      value: success`
+        },
+        {
+          title: 'regex',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: regex
+      pattern: "refund\\s+(processed|completed)"`
+        },
+        {
+          title: 'jsonpath (exists or equals)',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: jsonpath
+      path: $.status
+    - type: jsonpath
+      path: $.status
+      equals: success`
+        },
+        {
+          title: 'jsonpath_exists',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: jsonpath_exists
+      path: $.data.id`
+        },
+        {
+          title: 'jsonpath_not_exists',
+          language: 'yaml',
+          code: `eval:
+  response_assertions:
+    - type: jsonpath_not_exists
+      path: $.error`
+        }
+      ]
+    },
+    {
+      id: 'behavior-notes',
+      title: 'Behavior Notes and Edge Cases',
+      bullets: [
+        'contains/not_contains/starts_with/ends_with/equals are literal, case-insensitive string checks.',
+        'regex is case-insensitive by default and uses JavaScript regular expressions.',
+        'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
+        'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.'
       ]
     }
   ]
@@ -1646,6 +1797,7 @@ const pageIndex: DocPage[] = [
   appToolAnalysis,
   appLibrary,
   refConfiguration,
+  refToolAndResponseAssertions,
   refEnvVars
 ];
 
@@ -1683,7 +1835,7 @@ export const docsNavSections = [
   },
   {
     title: 'Reference',
-    items: [refConfiguration, refEnvVars]
+    items: [refConfiguration, refToolAndResponseAssertions, refEnvVars]
   }
 ] as const;
 

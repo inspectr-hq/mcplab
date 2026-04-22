@@ -347,7 +347,14 @@ export function ScenarioAssistantDialog({
       onApplyPatch({ prompt: suggestions.prompt.replacement });
     }
     if (key === "evalRules" && suggestions.evalRules) {
-      onApplyPatch({ evalRules: suggestions.evalRules.replacement as Array<{ type: EvalRule["type"]; value: string }> });
+      onApplyPatch({
+        evalRules: suggestions.evalRules.replacement as Array<{
+          type: EvalRule["type"];
+          value?: string;
+          path?: string;
+          equals?: string | number | boolean;
+        }>
+      });
     }
     if (key === "extractRules" && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });

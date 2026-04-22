@@ -167,7 +167,12 @@ export interface WorkspaceSettings {
 export interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
-    replacement: Array<{ type: EvalRule['type']; value: string }>;
+    replacement: Array<{
+      type: EvalRule['type'];
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     rationale?: string;
   };
   extractRules?: {
@@ -706,7 +711,12 @@ export interface EvalDataSource {
         name: string;
         prompt: string;
         serverNames: string[];
-        evalRules: Array<{ type: EvalRule['type']; value: string }>;
+        evalRules: Array<{
+          type: EvalRule['type'];
+          value?: string;
+          path?: string;
+          equals?: string | number | boolean;
+        }>;
         extractRules: Array<{ name: string; pattern: string }>;
         snapshotEval?: {
           enabled?: boolean;

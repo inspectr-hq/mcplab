@@ -133,6 +133,8 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const [newRuleType, setNewRuleType] = useState<EvalRule["type"]>("required_tool");
   const [newRuleValue, setNewRuleValue] = useState("");
+  const [newRulePath, setNewRulePath] = useState("");
+  const [newRuleEquals, setNewRuleEquals] = useState("");
   const [toolPickerValue, setToolPickerValue] = useState("");
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -143,6 +145,33 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   const [expanded, setExpanded] = useState(!readOnly);
 
   const addRule = () => {
+    if (
+      newRuleType === "response_jsonpath" ||
+      newRuleType === "response_jsonpath_exists" ||
+      newRuleType === "response_jsonpath_not_exists"
+    ) {
+      const path = newRulePath.trim();
+      if (!path) return;
+      if (newRuleType === "response_jsonpath") {
+        const equalsText = newRuleEquals.trim();
+        let equals: string | number | boolean | undefined = undefined;
+        if (equalsText.length > 0) {
+          if (equalsText === "true") equals = true;
+          else if (equalsText === "false") equals = false;
+          else if (!Number.isNaN(Number(equalsText))) equals = Number(equalsText);
+          else equals = equalsText;
+        }
+        onUpdate({
+          evalRules: [...scenario.evalRules, { type: newRuleType, path, ...(equals !== undefined ? { equals } : {}) }]
+        });
+      } else {
+        onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, path }] });
+      }
+      setNewRulePath("");
+      setNewRuleEquals("");
+      return;
+    }
+
     if (!newRuleValue.trim()) return;
     onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }] });
     setNewRuleValue("");
@@ -176,6 +205,13 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     forbidden_tool: "Forbidden",
     response_contains: "Contains",
     response_not_contains: "Not Contains",
+    response_starts_with: "Starts With",
+    response_ends_with: "Ends With",
+    response_equals: "Equals",
+    response_regex: "Regex",
+    response_jsonpath: "JSONPath",
+    response_jsonpath_exists: "JSONPath Exists",
+    response_jsonpath_not_exists: "JSONPath Not Exists",
   };
 
   const ruleTypeBadgeColor: Record<EvalRule["type"], string> = {
@@ -183,8 +219,19 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     forbidden_tool: "border-rose-300/60 bg-rose-500/10 text-rose-700",
     response_contains: "border-violet-300/60 bg-violet-500/10 text-violet-700",
     response_not_contains: "border-amber-300/60 bg-amber-500/10 text-amber-700",
+    response_starts_with: "border-cyan-300/60 bg-cyan-500/10 text-cyan-700",
+    response_ends_with: "border-indigo-300/60 bg-indigo-500/10 text-indigo-700",
+    response_equals: "border-lime-300/60 bg-lime-500/10 text-lime-700",
+    response_regex: "border-fuchsia-300/60 bg-fuchsia-500/10 text-fuchsia-700",
+    response_jsonpath: "border-emerald-300/60 bg-emerald-500/10 text-emerald-700",
+    response_jsonpath_exists: "border-green-300/60 bg-green-500/10 text-green-700",
+    response_jsonpath_not_exists: "border-orange-300/60 bg-orange-500/10 text-orange-700",
   };
   const isToolRule = newRuleType === "required_tool" || newRuleType === "forbidden_tool";
+  const isJsonPathRule =
+    newRuleType === "response_jsonpath" ||
+    newRuleType === "response_jsonpath_exists" ||
+    newRuleType === "response_jsonpath_not_exists";
   const selectedServerIds = scenario.serverIds
     .filter((sid) => servers.some((srv) => srv.id === sid));
   const canLoadToolNames = selectedServerIds.length > 0;
@@ -215,6 +262,8 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
 
   useEffect(() => {
     setToolPickerValue("");
+    setNewRulePath("");
+    setNewRuleEquals("");
   }, [newRuleType]);
 
   const loadAvailableTools = async () => {
@@ -437,7 +486,13 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                             <span className={`rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ruleTypeBadgeColor[rule.type]}`}>
                               {ruleTypeLabel[rule.type]}
                             </span>
-                            <span className="font-mono break-all">{rule.value}</span>
+                            <span className="font-mono break-all">
+                              {rule.path
+                                ? rule.equals !== undefined
+                                  ? `${rule.path} == ${String(rule.equals)}`
+                                  : rule.path
+                                : rule.value}
+                            </span>
                           </div>
                         </div>
                         {!readOnly && (
@@ -466,11 +521,45 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                         <SelectContent>
                           <SelectItem value="required_tool">Required Tool</SelectItem>
                           <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                          <SelectItem value="response_contains">Text matches pattern</SelectItem>
-                          <SelectItem value="response_not_contains">Text must not match</SelectItem>
+                          <SelectItem value="response_contains">Text contains</SelectItem>
+                          <SelectItem value="response_not_contains">Text does not contain</SelectItem>
+                          <SelectItem value="response_starts_with">Text starts with</SelectItem>
+                          <SelectItem value="response_ends_with">Text ends with</SelectItem>
+                          <SelectItem value="response_equals">Text equals</SelectItem>
+                          <SelectItem value="response_regex">Text matches regex</SelectItem>
+                          <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
+                          <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
+                          <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Input value={newRuleValue} onChange={(e) => setNewRuleValue(e.target.value)} placeholder="Value" className="h-8 text-xs font-mono" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())} />
+                      {isJsonPathRule ? (
+                        <>
+                          <Input
+                            value={newRulePath}
+                            onChange={(e) => setNewRulePath(e.target.value)}
+                            placeholder="JSONPath (e.g. $.status)"
+                            className="h-8 text-xs font-mono"
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())}
+                          />
+                          {newRuleType === "response_jsonpath" && (
+                            <Input
+                              value={newRuleEquals}
+                              onChange={(e) => setNewRuleEquals(e.target.value)}
+                              placeholder="Equals (optional)"
+                              className="h-8 w-[12rem] text-xs font-mono"
+                              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <Input
+                          value={newRuleValue}
+                          onChange={(e) => setNewRuleValue(e.target.value)}
+                          placeholder="Value"
+                          className="h-8 text-xs font-mono"
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addRule())}
+                        />
+                      )}
                       <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={addRule}>Add</Button>
                     </div>
                     {isToolRule && (
