@@ -76,7 +76,9 @@ export function AppSidebar(props: AppSidebarProps = { version: null }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className={`border-b border-sidebar-border py-3 ${collapsed ? "px-2" : "px-4"}`}>
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2.5"} overflow-hidden`}>
+        <div
+          className={`flex items-center ${collapsed ? "justify-center overflow-visible" : "gap-2.5 overflow-hidden"}`}
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent/50 border border-primary/60">
             <IconInspectr width={22} height={22} from="#f97316" to="#fb923c" />
           </div>
