@@ -359,10 +359,10 @@ const ServerDetail = () => {
                     </ul>
                   </div>
                 )}
-                {connectState.mcpServerImplementation && (
+                {(connectState.mcpServerImplementation || connectState.mcpServerVersion) && (
                   <div className="rounded-md border bg-muted/40 p-3">
                     <div className="flex items-start gap-2">
-                      {connectState.mcpServerImplementation.icons?.[0]?.src ? (
+                      {connectState.mcpServerImplementation?.icons?.[0]?.src ? (
                         <img
                           src={connectState.mcpServerImplementation.icons[0].src}
                           alt={connectState.mcpServerImplementation.title || connectState.mcpServerImplementation.name}
@@ -372,9 +372,16 @@ const ServerDetail = () => {
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-muted-foreground">MCP server</p>
                         <p className="truncate text-sm">
-                          {connectState.mcpServerImplementation.title || connectState.mcpServerImplementation.name}
+                          {connectState.mcpServerImplementation
+                            ? connectState.mcpServerImplementation.title || connectState.mcpServerImplementation.name
+                            : "Unknown MCP server"}
                         </p>
-                        {connectState.mcpServerImplementation.description ? (
+                        {connectState.mcpServerVersion ? (
+                          <p className="text-xs text-muted-foreground">
+                            Version: <code className="font-mono">{connectState.mcpServerVersion}</code>
+                          </p>
+                        ) : null}
+                        {connectState.mcpServerImplementation?.description ? (
                           <p className="text-xs text-muted-foreground">
                             {connectState.mcpServerImplementation.description}
                           </p>
@@ -382,11 +389,6 @@ const ServerDetail = () => {
                       </div>
                     </div>
                   </div>
-                )}
-                {connectState.mcpServerVersion && (
-                  <p className="text-xs text-muted-foreground">
-                    MCP server version: <code className="font-mono">{connectState.mcpServerVersion}</code>
-                  </p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   Tested at {new Date(connectState.testedAt).toLocaleString()}
