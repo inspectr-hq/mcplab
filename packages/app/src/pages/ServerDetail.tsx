@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, Loader2, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -90,13 +90,22 @@ const ServerDetail = () => {
   const [authInProgress, setAuthInProgress] = useState(false);
   const [oauthDebugEvents, setOauthDebugEvents] = useState<string[]>([]);
   const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
+  const hydratedRouteRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (existingServer) {
-      setForm(existingServer);
+    const routeKey = isNew ? `new:${decodedParam || "new"}` : `srv:${decodedParam}`;
+    if (hydratedRouteRef.current === routeKey) return;
+    if (isNew) {
+      setForm(emptyServer());
       setShowAdvancedOauth(false);
+      hydratedRouteRef.current = routeKey;
+      return;
     }
-  }, [existingServer]);
+    if (!existingServer) return;
+    setForm(existingServer);
+    setShowAdvancedOauth(false);
+    hydratedRouteRef.current = routeKey;
+  }, [isNew, decodedParam, existingServer]);
 
   const setAuthType = (nextType: ServerConfig["authType"]) => {
     setShowAdvancedOauth(false);
