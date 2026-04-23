@@ -2037,6 +2037,24 @@ components:
         summary:
           type: object
           additionalProperties: true
+          properties:
+            showSensitiveValues: { type: boolean }
+            issuer: { type: string }
+            clientId: { type: string }
+            redirectUri: { type: string }
+            tokenEndpointStatus: { type: integer }
+            tokenType: { type: string }
+            grantedScopes:
+              type: array
+              items: { type: string }
+            accessToken: { type: string }
+            accessTokenExpiresInSeconds: { type: integer, minimum: 0 }
+            accessTokenExpiresAt: { type: string, format: date-time }
+            accessTokenValidForSeconds: { type: integer, minimum: 0 }
+            accessTokenExpirySource:
+              type: string
+              enum: [expires_in, jwt_exp, none]
+            refreshTokenAvailable: { type: boolean }
       additionalProperties: true
     OAuthDebuggerSessionConfigInput:
       type: object

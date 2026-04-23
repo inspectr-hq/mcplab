@@ -58,21 +58,26 @@ const Servers = () => {
     return server.url || "";
   };
   const filteredServers = useMemo(
-    () =>
-      normalizedServerFilter.length === 0
-        ? servers
-        : servers.filter((server) => {
-            const haystack = [
-              displayName(server),
-              server.id,
-              server.transport,
-              getEndpointDisplay(server),
-              server.authType ?? ""
-            ]
-              .join(" ")
-              .toLowerCase();
-            return haystack.includes(normalizedServerFilter);
-          }),
+    () => {
+      const visible =
+        normalizedServerFilter.length === 0
+          ? servers
+          : servers.filter((server) => {
+              const haystack = [
+                displayName(server),
+                server.id,
+                server.transport,
+                getEndpointDisplay(server),
+                server.authType ?? ""
+              ]
+                .join(" ")
+                .toLowerCase();
+              return haystack.includes(normalizedServerFilter);
+            });
+      return [...visible].sort((a, b) =>
+        displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" })
+      );
+    },
     [servers, normalizedServerFilter]
   );
 

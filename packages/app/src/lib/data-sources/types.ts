@@ -526,6 +526,7 @@ export interface OAuthDebuggerSessionView {
     callbackUrl?: string;
   };
   summary?: {
+    showSensitiveValues?: boolean;
     issuer?: string;
     clientId?: string;
     redirectUri?: string;
@@ -533,6 +534,11 @@ export interface OAuthDebuggerSessionView {
     tokenType?: string;
     grantedScopes?: string[];
     accessToken?: string;
+    accessTokenExpiresInSeconds?: number;
+    accessTokenExpiresAt?: string;
+    accessTokenValidForSeconds?: number;
+    accessTokenExpirySource?: 'expires_in' | 'jwt_exp' | 'none';
+    refreshTokenAvailable?: boolean;
   };
 }
 

@@ -156,6 +156,7 @@ export interface OAuthDebuggerSession {
       errorDescription?: string;
     };
     tokenResponse?: any;
+    tokenReceivedAt?: number;
     probeResponse?: { status: number; bodyText: string; url: string };
     callbackUrl?: string;
   };
@@ -180,6 +181,7 @@ export interface OAuthDebuggerSessionView {
     callbackUrl?: string;
   };
   summary?: {
+    showSensitiveValues?: boolean;
     issuer?: string;
     clientId?: string;
     redirectUri?: string;
@@ -187,6 +189,11 @@ export interface OAuthDebuggerSessionView {
     tokenType?: string;
     grantedScopes?: string[];
     accessToken?: string;
+    accessTokenExpiresInSeconds?: number;
+    accessTokenExpiresAt?: string;
+    accessTokenValidForSeconds?: number;
+    accessTokenExpirySource?: 'expires_in' | 'jwt_exp' | 'none';
+    refreshTokenAvailable?: boolean;
   };
 }
 
@@ -203,6 +210,18 @@ function makeId(prefix: string) {
 
 function toBase64Url(buffer: Buffer) {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function parseJwtClaims(token: string): Record<string, unknown> | undefined {
+  const parts = token.split('.');
+  if (parts.length < 2) return undefined;
+  try {
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
 }
 
 function pkcePair() {
@@ -1005,6 +1024,7 @@ async function stepTokenExchange(session: OAuthDebuggerSession) {
     bodyText: form.toString()
   });
   session.context.tokenResponse = responseJson ?? { raw: responseText, status: response.status };
+  session.context.tokenReceivedAt = Date.now();
   if (!response.ok) {
     throw new Error(`Token exchange failed (${response.status})`);
   }
@@ -1228,6 +1248,33 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
     session.context.tokenResponse && typeof session.context.tokenResponse === 'object'
       ? (session.context.tokenResponse as Record<string, unknown>)
       : undefined;
+  const accessTokenRaw = typeof token?.access_token === 'string' ? token.access_token : undefined;
+  const jwtClaims = accessTokenRaw ? parseJwtClaims(accessTokenRaw) : undefined;
+  const expiresInRaw = token?.expires_in;
+  const expiresInSeconds =
+    typeof expiresInRaw === 'number'
+      ? Math.max(0, Math.floor(expiresInRaw))
+      : typeof expiresInRaw === 'string' && /^\d+$/.test(expiresInRaw)
+      ? Math.max(0, Math.floor(Number(expiresInRaw)))
+      : undefined;
+  const jwtExpSecondsRaw = jwtClaims?.exp;
+  const jwtExpSeconds =
+    typeof jwtExpSecondsRaw === 'number'
+      ? Math.floor(jwtExpSecondsRaw)
+      : typeof jwtExpSecondsRaw === 'string' && /^\d+$/.test(jwtExpSecondsRaw)
+      ? Math.floor(Number(jwtExpSecondsRaw))
+      : undefined;
+  const tokenReceivedAt = session.context.tokenReceivedAt ?? session.updatedAt;
+  const expiresAtMs =
+    typeof expiresInSeconds === 'number'
+      ? tokenReceivedAt + expiresInSeconds * 1000
+      : typeof jwtExpSeconds === 'number'
+      ? jwtExpSeconds * 1000
+      : undefined;
+  const validForSeconds =
+    typeof expiresAtMs === 'number' ? Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000)) : undefined;
+  const expirySource: 'expires_in' | 'jwt_exp' | 'none' =
+    typeof expiresInSeconds === 'number' ? 'expires_in' : typeof jwtExpSeconds === 'number' ? 'jwt_exp' : 'none';
   return {
     id: session.id,
     status: session.status,
@@ -1257,6 +1304,7 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
       callbackUrl: session.context.callbackUrl
     },
     summary: {
+      showSensitiveValues: session.config.display.showSensitiveValues,
       issuer:
         session.context.authServerMetadata?.issuer ?? session.context.resourceMetadata?.issuer,
       clientId: session.context.resolvedClient?.clientId,
@@ -1270,9 +1318,16 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
           ? String(token.scope).split(/\s+/).filter(Boolean)
           : undefined,
       accessToken:
-        session.config.display.showSensitiveValues && typeof token?.access_token === 'string'
-          ? token.access_token
-          : undefined
+        session.config.display.showSensitiveValues && typeof accessTokenRaw === 'string'
+          ? accessTokenRaw
+          : undefined,
+      accessTokenExpiresInSeconds: expiresInSeconds,
+      accessTokenExpiresAt:
+        typeof expiresAtMs === 'number' ? new Date(expiresAtMs).toISOString() : undefined,
+      accessTokenValidForSeconds: validForSeconds,
+      accessTokenExpirySource: expirySource,
+      refreshTokenAvailable:
+        token != null && typeof token.refresh_token === 'string' && token.refresh_token.length > 0
     }
   };
 }
