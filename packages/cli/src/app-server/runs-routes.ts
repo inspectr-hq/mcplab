@@ -15,11 +15,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
-import type {
-  RunQueueState,
-  AppRouteDeps,
-  AppRouteRequestContext
-} from './app-context.js';
+import type { RunQueueState, AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
@@ -117,17 +113,8 @@ export async function handleRunsRoutes(params: {
   oauthSessionManager: OAuthSessionManager;
   deps: RunsRouteDeps;
 }): Promise<boolean> {
-  const {
-    req,
-    res,
-    pathname,
-    method,
-    settings,
-    jobs,
-    runQueueState,
-    oauthSessionManager,
-    deps
-  } = params;
+  const { req, res, pathname, method, settings, jobs, runQueueState, oauthSessionManager, deps } =
+    params;
   const {
     parseBody,
     asJson,
@@ -353,14 +340,7 @@ export async function handleRunsRoutes(params: {
           runNote: runNote ?? null
         }
       });
-      void executeRunJob(
-        job,
-        settings,
-        jobs,
-        runQueueState,
-        oauthSessionManager,
-        deps
-      );
+      void executeRunJob(job, settings, jobs, runQueueState, oauthSessionManager, deps);
       asJson(res, 202, { jobId });
     } else {
       // Queue this job
@@ -712,7 +692,9 @@ export async function handleRunsRoutes(params: {
   return false;
 }
 
-function toCoreEvalRules(evalRules: unknown[]): EvalConfig['scenarios'][number]['eval'] | undefined {
+function toCoreEvalRules(
+  evalRules: unknown[]
+): EvalConfig['scenarios'][number]['eval'] | undefined {
   const requiredTools: string[] = [];
   const forbiddenTools: string[] = [];
   const responseAssertions: Array<
@@ -772,11 +754,7 @@ function toCoreEvalRules(evalRules: unknown[]): EvalConfig['scenarios'][number][
         path
       };
       const equals = (rule as { equals?: unknown }).equals;
-      if (
-        typeof equals === 'string' ||
-        typeof equals === 'number' ||
-        typeof equals === 'boolean'
-      ) {
+      if (typeof equals === 'string' || typeof equals === 'number' || typeof equals === 'boolean') {
         assertion.equals = equals;
       }
       responseAssertions.push(assertion);
@@ -808,7 +786,9 @@ function toCoreEvalRules(evalRules: unknown[]): EvalConfig['scenarios'][number][
   };
 }
 
-function toCoreExtractRules(extractRules: unknown[]): Array<{ name: string; from: 'final_text'; regex: string }> {
+function toCoreExtractRules(
+  extractRules: unknown[]
+): Array<{ name: string; from: 'final_text'; regex: string }> {
   const rules: Array<{ name: string; from: 'final_text'; regex: string }> = [];
   for (const raw of extractRules) {
     if (!raw || typeof raw !== 'object') continue;
@@ -847,14 +827,7 @@ function advanceQueue(
         runNote: nextJob.runParams.runNote ?? null
       }
     });
-    void executeRunJob(
-      nextJob,
-      settings,
-      jobs,
-      runQueueState,
-      oauthSessionManager,
-      deps
-    );
+    void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
     return;
   }
 }

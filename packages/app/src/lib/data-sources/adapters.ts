@@ -52,12 +52,16 @@ function toUiEvalRule(assertion: any): EvalRule {
       return { type: 'response_jsonpath_not_exists', path: assertion.path };
     default:
       throw new Error(
-        `Unsupported response assertion type in config: ${String(assertion?.type ?? '(missing type)')}`
+        `Unsupported response assertion type in config: ${String(
+          assertion?.type ?? '(missing type)'
+        )}`
       );
   }
 }
 
-function toCoreResponseAssertion(rule: EvalRule):
+function toCoreResponseAssertion(
+  rule: EvalRule
+):
   | { type: 'regex'; pattern: string }
   | { type: 'contains'; value: string }
   | { type: 'not_contains'; value: string }

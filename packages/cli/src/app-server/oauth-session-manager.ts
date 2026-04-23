@@ -130,8 +130,12 @@ export class OAuthSessionManager {
     return created;
   }
 
-  private updateStateFromTokenPayload(state: OAuthTokenState, tokenResponse: Record<string, unknown>): void {
-    const accessToken = typeof tokenResponse.access_token === 'string' ? tokenResponse.access_token : undefined;
+  private updateStateFromTokenPayload(
+    state: OAuthTokenState,
+    tokenResponse: Record<string, unknown>
+  ): void {
+    const accessToken =
+      typeof tokenResponse.access_token === 'string' ? tokenResponse.access_token : undefined;
     if (!accessToken) return;
     state.accessToken = accessToken;
     if (typeof tokenResponse.refresh_token === 'string' && tokenResponse.refresh_token.trim()) {
@@ -159,7 +163,9 @@ export class OAuthSessionManager {
       delete state.runtimeSessionId;
       return;
     }
-    const debuggerSession = this.params.oauthDebuggerSessions.get(runtimeSession.oauthDebuggerSessionId);
+    const debuggerSession = this.params.oauthDebuggerSessions.get(
+      runtimeSession.oauthDebuggerSessionId
+    );
     if (!debuggerSession) return;
     const tokenResponse = debuggerSession.context.tokenResponse;
     if (
@@ -266,7 +272,10 @@ export class OAuthSessionManager {
     });
   }
 
-  async ensureServerAuthorized(serverName: string, hostHeader?: string): Promise<OAuthEnsureServerResult> {
+  async ensureServerAuthorized(
+    serverName: string,
+    hostHeader?: string
+  ): Promise<OAuthEnsureServerResult> {
     const serverConfig = this.getServerConfig(serverName);
     if (!serverConfig) {
       return {
@@ -352,7 +361,10 @@ export class OAuthSessionManager {
     }
   }
 
-  async ensureServersAuthorized(serverNames: string[], hostHeader?: string): Promise<OAuthEnsureServersResponse> {
+  async ensureServersAuthorized(
+    serverNames: string[],
+    hostHeader?: string
+  ): Promise<OAuthEnsureServersResponse> {
     const uniqueNames = Array.from(new Set(serverNames.filter(Boolean)));
     const servers: OAuthEnsureServerResult[] = [];
     for (const serverName of uniqueNames) {
@@ -360,7 +372,9 @@ export class OAuthSessionManager {
     }
     return {
       servers,
-      allReady: servers.every((server) => server.status === 'ready' || server.status === 'not_oauth')
+      allReady: servers.every(
+        (server) => server.status === 'ready' || server.status === 'not_oauth'
+      )
     };
   }
 

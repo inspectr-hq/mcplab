@@ -199,9 +199,7 @@ async function promptForConfigPath(
   cwd: string,
   loadConfigForValidation: (path: string) => { config: EvalConfig }
 ): Promise<string> {
-  const files = existsSync(evalsDir)
-    ? listYamlConfigFilesRecursive(evalsDir)
-    : [];
+  const files = existsSync(evalsDir) ? listYamlConfigFilesRecursive(evalsDir) : [];
   const choices = files.map((path) => {
     const relativePath = deriveConfigRelativePath(path, evalsDir);
     const suitePath = deriveSuitePathFromRelativePath(relativePath);

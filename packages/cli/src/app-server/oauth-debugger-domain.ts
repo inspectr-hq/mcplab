@@ -1272,9 +1272,15 @@ export function oauthDebuggerSessionView(session: OAuthDebuggerSession): OAuthDe
       ? jwtExpSeconds * 1000
       : undefined;
   const validForSeconds =
-    typeof expiresAtMs === 'number' ? Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000)) : undefined;
+    typeof expiresAtMs === 'number'
+      ? Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000))
+      : undefined;
   const expirySource: 'expires_in' | 'jwt_exp' | 'none' =
-    typeof expiresInSeconds === 'number' ? 'expires_in' : typeof jwtExpSeconds === 'number' ? 'jwt_exp' : 'none';
+    typeof expiresInSeconds === 'number'
+      ? 'expires_in'
+      : typeof jwtExpSeconds === 'number'
+      ? 'jwt_exp'
+      : 'none';
   return {
     id: session.id,
     status: session.status,

@@ -1148,7 +1148,9 @@ describe('config adapters round-trip', () => {
     ]);
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-assertions');
+    const scenario = (roundTripped.scenarios as any[]).find(
+      (item: any) => item.id === 'scn-assertions'
+    );
     expect(scenario?.eval?.response_assertions).toEqual(
       sourceRecord.config.scenarios[0] &&
         !('ref' in sourceRecord.config.scenarios[0]) &&
@@ -1179,7 +1181,9 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-legacy');
+    const scenario = (roundTripped.scenarios as any[]).find(
+      (item: any) => item.id === 'scn-legacy'
+    );
     expect(scenario?.eval?.response_assertions).toEqual([
       { type: 'contains', value: 'must-have' },
       { type: 'not_contains', value: 'must-not-have' }

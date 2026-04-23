@@ -558,10 +558,14 @@ export function normalizeScenarioAssistantEvalRules(
     seen.add(key);
     deduped.push(rule);
   }
-  return lintContradictoryEvalRules(intentDeduplicateEvalRules(collapseOffByOneCountGuards(deduped)));
+  return lintContradictoryEvalRules(
+    intentDeduplicateEvalRules(collapseOffByOneCountGuards(deduped))
+  );
 }
 
-function normalizeEvalRuleSuggestions(suggestions: ScenarioAssistantSuggestionBundle | undefined): void {
+function normalizeEvalRuleSuggestions(
+  suggestions: ScenarioAssistantSuggestionBundle | undefined
+): void {
   if (!suggestions?.evalRules?.replacement) return;
   suggestions.evalRules.replacement = normalizeScenarioAssistantEvalRules(
     suggestions.evalRules.replacement

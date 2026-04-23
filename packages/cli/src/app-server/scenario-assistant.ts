@@ -7,11 +7,7 @@ import {
   type AgentConfig,
   type EvalConfig
 } from '@inspectr/mcplab-core';
-import type {
-  AppRouteDeps,
-  AppRouteRequestContext,
-  AssistantSessionsMap
-} from './app-context.js';
+import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
 import {
@@ -47,16 +43,8 @@ export async function handleScenarioAssistantRoutes(params: {
   oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
-  const {
-    req,
-    res,
-    pathname,
-    method,
-    settings,
-    assistantSessions,
-    oauthSessionManager,
-    deps
-  } = params;
+  const { req, res, pathname, method, settings, assistantSessions, oauthSessionManager, deps } =
+    params;
   const {
     parseBody,
     asJson,

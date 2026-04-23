@@ -122,7 +122,9 @@ describe('OAuthSessionManager', () => {
     const { manager, librariesDir } = setupHarness({ runtimeSession, debuggerSession });
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ access_token: 'tok-new', expires_in: 3600 }), { status: 200 }));
+      .mockResolvedValue(
+        new Response(JSON.stringify({ access_token: 'tok-new', expires_in: 3600 }), { status: 200 })
+      );
     vi.stubGlobal('fetch', fetchMock as any);
 
     try {
@@ -177,7 +179,9 @@ describe('OAuthSessionManager', () => {
       const p1 = manager.refreshIfNeeded('oauth-server');
       const p2 = manager.refreshIfNeeded('oauth-server');
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      resolveFetch?.(new Response(JSON.stringify({ access_token: 'tok-new', expires_in: 3600 }), { status: 200 }));
+      resolveFetch?.(
+        new Response(JSON.stringify({ access_token: 'tok-new', expires_in: 3600 }), { status: 200 })
+      );
       const [r1, r2] = await Promise.all([p1, p2]);
       expect(r1).toBe(true);
       expect(r2).toBe(true);

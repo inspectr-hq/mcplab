@@ -11,10 +11,10 @@ import type {
   SnapshotRecord,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
-    OAuthDebuggerSessionEvent,
-    OAuthDebuggerSessionView,
-    OAuthEnsureServerStatus,
-    OAuthRuntimeSessionView,
+  OAuthDebuggerSessionEvent,
+  OAuthDebuggerSessionView,
+  OAuthEnsureServerStatus,
+  OAuthRuntimeSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
@@ -335,9 +335,7 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }),
-  discoverToolsForAnalysis: (params: {
-    serverNames: string[];
-  }) =>
+  discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',
       body: JSON.stringify(params)

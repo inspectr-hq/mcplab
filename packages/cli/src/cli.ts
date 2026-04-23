@@ -26,10 +26,7 @@ import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
-import {
-  deriveConfigRelativePath,
-  resolveRunConfigPaths
-} from './eval-config-files.js';
+import { deriveConfigRelativePath, resolveRunConfigPaths } from './eval-config-files.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -138,11 +135,7 @@ program
       for (let i = 0; i < configPaths.length; i += 1) {
         const configPath = configPaths[i]!;
         const displayPath = deriveConfigRelativePath(configPath, requestedPath);
-        console.log(
-          kleur.cyan(
-            `\n▶ Batch config ${i + 1}/${configPaths.length}: ${displayPath}`
-          )
-        );
+        console.log(kleur.cyan(`\n▶ Batch config ${i + 1}/${configPaths.length}: ${displayPath}`));
         try {
           const outcome = await executeSingleConfigRun({
             configPath,
@@ -184,15 +177,13 @@ program
         if (row.success) {
           console.log(
             kleur.green(
-              `  ✓ ${row.configPath} (run=${row.runId ?? '-'}${row.runDir ? `, dir=${relative(process.cwd(), row.runDir)}` : ''})`
+              `  ✓ ${row.configPath} (run=${row.runId ?? '-'}${
+                row.runDir ? `, dir=${relative(process.cwd(), row.runDir)}` : ''
+              })`
             )
           );
         } else {
-          console.log(
-            kleur.red(
-              `  ✗ ${row.configPath}${row.error ? ` (${row.error})` : ''}`
-            )
-          );
+          console.log(kleur.red(`  ✗ ${row.configPath}${row.error ? ` (${row.error})` : ''}`));
         }
       }
       console.log(
@@ -787,7 +778,10 @@ async function executeSingleConfigRun(params: {
     if (!policy?.baseline_snapshot_id) {
       console.log(kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.'));
     } else {
-      const snapshot = loadSnapshot(String(policy.baseline_snapshot_id), resolve(options.snapshotsDir));
+      const snapshot = loadSnapshot(
+        String(policy.baseline_snapshot_id),
+        resolve(options.snapshotsDir)
+      );
       const comparison = compareRunToSnapshot(results, snapshot);
       const enabledScenarioIds = new Set(
         selected.scenarios
