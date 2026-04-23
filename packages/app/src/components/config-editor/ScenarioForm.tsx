@@ -1137,6 +1137,15 @@ function formatPreviewFailureReason(reason: string): string {
 }
 
 function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
+  if (rule.type === "response_jsonpath_exists") {
+    const path = String(rule.path ?? "").trim();
+    if (!path) return undefined;
+    return failureReasons.find(
+      (reason) =>
+        reason.startsWith(`JSONPath assertion failed: ${path}`) ||
+        reason.startsWith(`JSONPath assertion failed: invalid JSON for path ${path}`)
+    );
+  }
   const expectedPrefix = (() => {
     if (rule.type === "required_tool") return `Required tool not used: ${rule.value}`;
     if (rule.type === "forbidden_tool") return `Forbidden tool used: ${rule.value}`;
@@ -1152,8 +1161,6 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
       return rule.equals !== undefined
         ? `JSONPath equals assertion failed: ${rule.path}`
         : `JSONPath assertion failed: ${rule.path}`;
-    if (rule.type === "response_jsonpath_exists")
-      return `JSONPath assertion failed: ${rule.path}`;
     if (rule.type === "response_jsonpath_not_exists")
       return `JSONPath not-exists assertion failed: ${rule.path}`;
     return "";

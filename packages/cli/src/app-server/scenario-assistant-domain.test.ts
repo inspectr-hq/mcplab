@@ -128,6 +128,18 @@ describe('normalizeScenarioAssistantEvalRules', () => {
     expect(result).toEqual([{ type: 'response_contains', value: '9 tags' }]);
   });
 
+  it('keeps overlap dedupe stable after replacing a contains rule with a stronger literal rule', () => {
+    const result = normalizeScenarioAssistantEvalRules([
+      { type: 'response_contains', value: 'found 9 tags' },
+      { type: 'response_equals', value: 'found 9 tags' },
+      { type: 'response_contains', value: '9 tags' }
+    ]);
+    expect(result).toEqual([
+      { type: 'response_equals', value: 'found 9 tags' },
+      { type: 'response_contains', value: '9 tags' }
+    ]);
+  });
+
   it('drops contradictory response_not_contains when a positive literal intent exists', () => {
     const result = normalizeScenarioAssistantEvalRules([
       { type: 'response_contains', value: 'refund processed' },

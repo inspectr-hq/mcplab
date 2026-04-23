@@ -28,7 +28,7 @@ export interface McpImplementationIcon {
 
 export interface McpServerImplementation {
   name: string;
-  version: string;
+  version?: string;
   title?: string;
   description?: string;
   websiteUrl?: string;
@@ -446,8 +446,8 @@ function normalizeImplementation(input: unknown): McpServerImplementation | null
   const source = input as Record<string, unknown>;
   const name = typeof source.name === 'string' ? source.name : '';
   const version = typeof source.version === 'string' ? source.version : '';
-  if (!name || !version) return null;
-  const normalized: McpServerImplementation = { name, version };
+  if (!name) return null;
+  const normalized: McpServerImplementation = version ? { name, version } : { name };
   if (typeof source.title === 'string' && source.title.trim()) normalized.title = source.title;
   if (typeof source.description === 'string' && source.description.trim()) {
     normalized.description = source.description;

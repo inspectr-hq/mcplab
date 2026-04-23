@@ -1185,4 +1185,33 @@ describe('config adapters round-trip', () => {
       { type: 'not_contains', value: 'must-not-have' }
     ]);
   });
+
+  it('throws when loading unsupported response assertion types from core config', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-unknown-assertion',
+      name: 'unknown-assertion',
+      path: '/tmp/unknown-assertion.yaml',
+      mtime: '2026-04-23T10:00:00.000Z',
+      hash: 'hash-unknown-assertion',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-unknown',
+            name: 'Unknown assertion',
+            servers: [],
+            prompt: 'test',
+            eval: {
+              response_assertions: [{ type: 'future_type', value: 'x' } as any]
+            }
+          }
+        ]
+      }
+    };
+
+    expect(() => fromCoreConfigYaml(sourceRecord)).toThrow(
+      /Unsupported response assertion type in config: future_type/
+    );
+  });
 });

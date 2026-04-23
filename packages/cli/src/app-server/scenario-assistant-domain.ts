@@ -440,6 +440,10 @@ function intentDeduplicateEvalRules(
         const existing = result[existingIdx];
         if (positiveLiteralRank(rule.type) > positiveLiteralRank(existing.type)) {
           result[existingIdx] = rule;
+          if (existing.type === 'response_contains' && rule.type !== 'response_contains') {
+            const containsIndex = containsIndices.indexOf(existingIdx);
+            if (containsIndex >= 0) containsIndices.splice(containsIndex, 1);
+          }
         }
         continue;
       }

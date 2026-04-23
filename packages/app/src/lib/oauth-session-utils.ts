@@ -1,6 +1,8 @@
 import type { EvalDataSource } from './data-sources/types.js';
 import { waitForOAuthRuntimeSession } from './oauth-runtime-utils.js';
 
+const RECHECK_DELAY_MS = 250;
+
 export async function ensureOAuthForServers(params: {
   serverNames: string[];
   source: Pick<EvalDataSource, 'ensureOAuthServers' | 'getOAuthRuntimeSession'>;
@@ -79,6 +81,9 @@ export async function ensureOAuthForServers(params: {
         timeoutMs: Math.max(10_000, timeoutAt - Date.now())
       });
     }
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, RECHECK_DELAY_MS);
+    });
   }
 
   throw new Error('OAuth login timed out before all required servers were authorized.');

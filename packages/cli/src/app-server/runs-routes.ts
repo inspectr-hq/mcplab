@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import {
   McpClientManager,
   loadConfig,
@@ -472,15 +472,13 @@ export async function handleRunsRoutes(params: {
     };
     const expandedPreviewConfig = expandConfigForAgents(previewConfigBase, [selectedAgentName]);
     const previewRunsRoot = mkdtempSync(join(tmpdir(), 'mcplab-preview-'));
-    const cwdBefore = process.cwd();
 
     try {
-      process.chdir(settings.workspaceRoot);
       const { results } = await runAll(expandedPreviewConfig, {
         runsPerScenario: 1,
         configHash: hashConfig(previewConfigBase),
         cliVersion: pkgVersion,
-        runsDir: previewRunsRoot,
+        runsDir: resolve(previewRunsRoot),
         mcpServerAuthHeaders
       });
       const scenario = results.scenarios[0];
@@ -504,7 +502,6 @@ export async function handleRunsRoutes(params: {
         error: error instanceof Error ? error.message : String(error)
       });
     } finally {
-      process.chdir(cwdBefore);
       rmSync(previewRunsRoot, { recursive: true, force: true });
     }
     return true;

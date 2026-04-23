@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { formatDurationShort } from '@/lib/format-duration';
 import type {
   OAuthDebuggerSessionConfig,
   OAuthDebuggerSessionEvent,
@@ -45,16 +46,6 @@ function InfoTip({ text }: { text: string }) {
 
 function copyText(text: string) {
   return navigator.clipboard.writeText(text);
-}
-
-function formatDurationShort(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
-  if (minutes > 0) return `${minutes}m ${secs}s`;
-  return `${secs}s`;
 }
 
 function oauthDebuggerApiBase(): string {

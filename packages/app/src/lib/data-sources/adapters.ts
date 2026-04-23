@@ -51,7 +51,9 @@ function toUiEvalRule(assertion: any): EvalRule {
     case 'jsonpath_not_exists':
       return { type: 'response_jsonpath_not_exists', path: assertion.path };
     default:
-      return { type: 'response_regex', value: String(assertion?.pattern ?? '') };
+      throw new Error(
+        `Unsupported response assertion type in config: ${String(assertion?.type ?? '(missing type)')}`
+      );
   }
 }
 

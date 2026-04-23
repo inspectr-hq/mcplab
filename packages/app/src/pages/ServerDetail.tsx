@@ -21,6 +21,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { validateServerAuthConfig } from "@/lib/server-auth-validation";
 import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
+import { formatDurationShort } from "@/lib/format-duration";
 import type { ServerConfig } from "@/types/eval";
 
 type ConnectState =
@@ -60,16 +61,6 @@ const emptyServer = (): ServerConfig => ({
   transport: "stdio",
   authType: "none",
 });
-
-function formatSeconds(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "expired";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
 
 const ServerDetail = () => {
   const { serverId } = useParams<{ serverId: string }>();
@@ -150,7 +141,7 @@ const ServerDetail = () => {
             const now = new Date().toLocaleTimeString();
             const expirySuffix =
               typeof entry.tokenExpiresInSeconds === "number"
-                ? ` (valid ${formatSeconds(entry.tokenExpiresInSeconds)}; until ${new Date(
+                ? ` (valid ${formatDurationShort(entry.tokenExpiresInSeconds, { nonPositiveLabel: "expired" })}; until ${new Date(
                     entry.tokenExpiresAt || Date.now()
                   ).toLocaleTimeString()})`
                 : "";
@@ -343,7 +334,7 @@ const ServerDetail = () => {
                 {oauthDebugEvents.length > 0 && (
                   <div className="space-y-0.5">
                     {oauthDebugEvents.map((line, index) => (
-                      <p key={`${line}-${index}`} className="text-xs text-muted-foreground">
+                      <p key={index} className="text-xs text-muted-foreground">
                         {line}
                       </p>
                     ))}
@@ -405,7 +396,7 @@ const ServerDetail = () => {
                 {oauthDebugEvents.length > 0 && (
                   <div className="space-y-0.5">
                     {oauthDebugEvents.map((line, index) => (
-                      <p key={`${line}-${index}`} className="text-xs text-muted-foreground">
+                      <p key={index} className="text-xs text-muted-foreground">
                         {line}
                       </p>
                     ))}
