@@ -139,7 +139,13 @@ export default function OAuthDebuggerPage() {
   }, [events.length]);
 
   const oauthServers = useMemo(
-    () => servers.filter((s) => s.authType === 'oauth2'),
+    () =>
+      servers
+        .filter((s) => s.authType === 'oauth2')
+        .slice()
+        .sort((a, b) =>
+          (a.name || a.id).localeCompare(b.name || b.id, undefined, { sensitivity: 'base' })
+        ),
     [servers]
   );
   const selectedServer = oauthServers.find((s) => s.id === selectedServerId);
@@ -757,7 +763,7 @@ export default function OAuthDebuggerPage() {
       {viewStep === 'run' && (
         <div className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-          <Card className="xl:col-span-1">
+          <Card className="xl:col-span-1 min-w-0">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -896,14 +902,14 @@ export default function OAuthDebuggerPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4 xl:col-span-1">
+          <div className="space-y-4 xl:col-span-1 min-w-0">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Inspect</CardTitle>
                 <CardDescription>Live events and network requests/responses for the OAuth flow.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')}>
+                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')} className="min-w-0">
                   <TabsList className="grid grid-cols-2">
                     <TabsTrigger value="inspector">Network Inspector</TabsTrigger>
                     <TabsTrigger value="events">Live Debug</TabsTrigger>
@@ -957,7 +963,7 @@ export default function OAuthDebuggerPage() {
                       </div>
                     </div>
 
-                    <div className="max-h-[34rem] space-y-2 overflow-auto">
+                    <div className="max-h-[34rem] min-w-0 space-y-2 overflow-auto">
                       {filteredNetwork.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No network exchanges captured yet.</p>
                       ) : (
@@ -984,12 +990,12 @@ export default function OAuthDebuggerPage() {
                             <div className="mt-3 space-y-3">
                               <div>
                                 <div className="mb-1 text-xs font-medium">Headers</div>
-                                <pre className="max-h-40 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.headers, null, 2)}</pre>
+                                <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.headers, null, 2)}</pre>
                               </div>
                               {exchange.bodyText && (
                                 <div>
                                   <div className="mb-1 text-xs font-medium">Body</div>
-                                  <pre className="max-h-64 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{exchange.bodyText}</pre>
+                                  <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{exchange.bodyText}</pre>
                                 </div>
                               )}
                               <div className="flex gap-2">
