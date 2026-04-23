@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import {
   McpClientManager,
@@ -89,6 +90,18 @@ type RunRequestBody = {
   agents?: unknown;
   applySnapshotEval?: unknown;
   runNote?: unknown;
+};
+
+type PreviewRunRequestBody = {
+  selectedAgentName?: unknown;
+  scenario?: {
+    id?: unknown;
+    name?: unknown;
+    prompt?: unknown;
+    serverNames?: unknown;
+    evalRules?: unknown;
+    extractRules?: unknown;
+  };
 };
 
 type ConfigScenario = EvalConfig['scenarios'][number];
@@ -370,6 +383,133 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
+  if (pathname === '/api/runs/preview' && method === 'POST') {
+    const body = (await parseBody(req)) as PreviewRunRequestBody;
+    const scenarioBody = body.scenario;
+    const scenarioId = String(scenarioBody?.id ?? '').trim();
+    const scenarioName = String(scenarioBody?.name ?? '').trim();
+    const scenarioPrompt = String(scenarioBody?.prompt ?? '').trim();
+    const serverNames = Array.isArray(scenarioBody?.serverNames)
+      ? scenarioBody.serverNames.map((name) => String(name).trim()).filter(Boolean)
+      : [];
+    const evalRules = Array.isArray(scenarioBody?.evalRules) ? scenarioBody.evalRules : [];
+    const extractRules = Array.isArray(scenarioBody?.extractRules) ? scenarioBody.extractRules : [];
+    if (!scenarioId) {
+      asJson(res, 400, { error: 'scenario.id is required' });
+      return true;
+    }
+    if (!scenarioPrompt) {
+      asJson(res, 400, { error: 'scenario.prompt is required' });
+      return true;
+    }
+    if (serverNames.length === 0) {
+      asJson(res, 400, { error: 'scenario.serverNames must include at least one server' });
+      return true;
+    }
+
+    const libraries = readLibraries(settings.librariesDir);
+    const selectedAgentName = pickDefaultAssistantAgentName({
+      requested: String(body.selectedAgentName ?? '').trim(),
+      settingsDefault: settings.scenarioAssistantAgentName,
+      agentNames: Object.keys(libraries.agents)
+    });
+    if (!selectedAgentName) {
+      asJson(res, 400, { error: 'No agent available for preview execution' });
+      return true;
+    }
+    const agent = libraries.agents[selectedAgentName];
+    if (!agent) {
+      asJson(res, 400, { error: `Agent not found: ${selectedAgentName}` });
+      return true;
+    }
+
+    const servers: EvalConfig['servers'] = {};
+    for (const serverName of serverNames) {
+      const server = libraries.servers[serverName];
+      if (!server) {
+        asJson(res, 400, { error: `Server not found in libraries: ${serverName}` });
+        return true;
+      }
+      servers[serverName] = server;
+    }
+
+    const oauthServerNames = serverNames.filter(
+      (serverName) => servers[serverName]?.auth?.type === 'oauth_authorization_code'
+    );
+    let mcpServerAuthHeaders: Record<string, Record<string, string>> | undefined;
+    if (oauthServerNames.length > 0) {
+      try {
+        mcpServerAuthHeaders = await oauthSessionManager.getAuthHeadersForServers(
+          oauthServerNames,
+          req.headers.host
+        );
+      } catch (error: unknown) {
+        if (error instanceof OAuthAuthorizationRequiredError) {
+          asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+          return true;
+        }
+        asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        return true;
+      }
+    }
+
+    const coreEval = toCoreEvalRules(evalRules);
+    const coreExtract = toCoreExtractRules(extractRules);
+    const previewConfigBase: EvalConfig = {
+      name: `Preview ${scenarioId}`,
+      servers,
+      agents: { [selectedAgentName]: agent },
+      scenarios: [
+        {
+          id: scenarioId,
+          ...(scenarioName ? { name: scenarioName } : {}),
+          servers: serverNames,
+          prompt: scenarioPrompt,
+          ...(coreEval ? { eval: coreEval } : {}),
+          ...(coreExtract.length > 0 ? { extract: coreExtract } : {})
+        }
+      ]
+    };
+    const expandedPreviewConfig = expandConfigForAgents(previewConfigBase, [selectedAgentName]);
+    const previewRunsRoot = mkdtempSync(join(tmpdir(), 'mcplab-preview-'));
+    const cwdBefore = process.cwd();
+
+    try {
+      process.chdir(settings.workspaceRoot);
+      const { results } = await runAll(expandedPreviewConfig, {
+        runsPerScenario: 1,
+        configHash: hashConfig(previewConfigBase),
+        cliVersion: pkgVersion,
+        runsDir: previewRunsRoot,
+        mcpServerAuthHeaders
+      });
+      const scenario = results.scenarios[0];
+      const run = scenario?.runs?.[0];
+      const traceRecords = getScenarioRunTraceRecords(results.metadata.run_id, previewRunsRoot);
+      const traceRecord =
+        traceRecords.find(
+          (record) => record.scenario_id === scenarioId && record.agent === selectedAgentName
+        ) ?? traceRecords[0];
+      asJson(res, 200, {
+        runId: results.metadata.run_id,
+        scenario: {
+          scenarioId,
+          agent: selectedAgentName,
+          run: run ?? null,
+          traceRecord: traceRecord ?? null
+        }
+      });
+    } catch (error: unknown) {
+      asJson(res, 500, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      process.chdir(cwdBefore);
+      rmSync(previewRunsRoot, { recursive: true, force: true });
+    }
+    return true;
+  }
+
   if (pathname.startsWith('/api/runs/') && pathname.endsWith('/assistant') && method === 'POST') {
     const runId = pathname.split('/')[3];
     const results = getRunResults(runId, settings.runsDir);
@@ -573,6 +713,115 @@ export async function handleRunsRoutes(params: {
   }
 
   return false;
+}
+
+function toCoreEvalRules(evalRules: unknown[]): EvalConfig['scenarios'][number]['eval'] | undefined {
+  const requiredTools: string[] = [];
+  const forbiddenTools: string[] = [];
+  const responseAssertions: Array<
+    | { type: 'contains'; value: string }
+    | { type: 'not_contains'; value: string }
+    | { type: 'starts_with'; value: string }
+    | { type: 'ends_with'; value: string }
+    | { type: 'equals'; value: string }
+    | { type: 'regex'; pattern: string }
+    | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
+    | { type: 'jsonpath_exists'; path: string }
+    | { type: 'jsonpath_not_exists'; path: string }
+  > = [];
+
+  for (const raw of evalRules) {
+    if (!raw || typeof raw !== 'object') continue;
+    const rule = raw as { type?: unknown; value?: unknown; path?: unknown; equals?: unknown };
+    const type = String(rule.type ?? '').trim();
+    const value = String(rule.value ?? '').trim();
+    const path = String(rule.path ?? '').trim();
+    if (!type) continue;
+    if (type === 'required_tool' && value) {
+      requiredTools.push(value);
+      continue;
+    }
+    if (type === 'forbidden_tool' && value) {
+      forbiddenTools.push(value);
+      continue;
+    }
+    if (type === 'response_contains' && value) {
+      responseAssertions.push({ type: 'contains', value });
+      continue;
+    }
+    if (type === 'response_not_contains' && value) {
+      responseAssertions.push({ type: 'not_contains', value });
+      continue;
+    }
+    if (type === 'response_starts_with' && value) {
+      responseAssertions.push({ type: 'starts_with', value });
+      continue;
+    }
+    if (type === 'response_ends_with' && value) {
+      responseAssertions.push({ type: 'ends_with', value });
+      continue;
+    }
+    if (type === 'response_equals' && value) {
+      responseAssertions.push({ type: 'equals', value });
+      continue;
+    }
+    if (type === 'response_regex' && value) {
+      responseAssertions.push({ type: 'regex', pattern: value });
+      continue;
+    }
+    if (type === 'response_jsonpath' && path) {
+      const assertion: { type: 'jsonpath'; path: string; equals?: string | number | boolean } = {
+        type: 'jsonpath',
+        path
+      };
+      const equals = (rule as { equals?: unknown }).equals;
+      if (
+        typeof equals === 'string' ||
+        typeof equals === 'number' ||
+        typeof equals === 'boolean'
+      ) {
+        assertion.equals = equals;
+      }
+      responseAssertions.push(assertion);
+      continue;
+    }
+    if (type === 'response_jsonpath_exists' && path) {
+      responseAssertions.push({ type: 'jsonpath_exists', path });
+      continue;
+    }
+    if (type === 'response_jsonpath_not_exists' && path) {
+      responseAssertions.push({ type: 'jsonpath_not_exists', path });
+      continue;
+    }
+  }
+
+  const hasToolConstraints = requiredTools.length > 0 || forbiddenTools.length > 0;
+  const hasResponseAssertions = responseAssertions.length > 0;
+  if (!hasToolConstraints && !hasResponseAssertions) return undefined;
+  return {
+    ...(hasToolConstraints
+      ? {
+          tool_constraints: {
+            ...(requiredTools.length > 0 ? { required_tools: requiredTools } : {}),
+            ...(forbiddenTools.length > 0 ? { forbidden_tools: forbiddenTools } : {})
+          }
+        }
+      : {}),
+    ...(hasResponseAssertions ? { response_assertions: responseAssertions } : {})
+  };
+}
+
+function toCoreExtractRules(extractRules: unknown[]): Array<{ name: string; from: 'final_text'; regex: string }> {
+  const rules: Array<{ name: string; from: 'final_text'; regex: string }> = [];
+  for (const raw of extractRules) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as { name?: unknown; pattern?: unknown };
+    const name = String(item.name ?? '').trim();
+    const pattern = String(item.pattern ?? '').trim();
+    if (!name || !pattern) continue;
+    rules.push({ name, from: 'final_text', regex: pattern });
+  }
+  return rules;
 }
 
 function advanceQueue(

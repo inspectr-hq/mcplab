@@ -5,6 +5,7 @@ import type { Scenario, AgentConfig, ServerConfig } from "@/types/eval";
 
 const mockSource = {
   discoverToolsForAnalysis: vi.fn().mockResolvedValue({ servers: [] }),
+  runScenarioPreview: vi.fn(),
 };
 const mockEnsureOAuthForServers = vi.fn();
 
@@ -37,6 +38,21 @@ describe("ScenarioForm checks editor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [] });
+    mockSource.runScenarioPreview.mockResolvedValue({
+      runId: "preview-1",
+      scenarioId: "scn-1",
+      agentName: "agent-1",
+      run: {
+        runIndex: 0,
+        passed: true,
+        toolCalls: [],
+        finalAnswer: "ok",
+        conversation: [],
+        duration: 10,
+        extractedValues: {},
+        failureReasons: [],
+      },
+    });
     mockEnsureOAuthForServers.mockResolvedValue(undefined);
   });
 
@@ -88,7 +104,7 @@ describe("ScenarioForm checks editor", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
     fireEvent.click(screen.getByText("Text equals"));
     fireEvent.change(screen.getByPlaceholderText("Value"), {
       target: { value: "success" },
@@ -112,7 +128,7 @@ describe("ScenarioForm checks editor", () => {
       />,
     );
 
-    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
     fireEvent.click(screen.getByText("JSONPath (optional equals)"));
     fireEvent.change(screen.getByPlaceholderText("JSONPath (e.g. $.status)"), {
       target: { value: "$.status" },
@@ -127,5 +143,43 @@ describe("ScenarioForm checks editor", () => {
     expect(updated[0]?.evalRules).toEqual([
       { type: "response_jsonpath", path: "$.status", equals: "active" },
     ]);
+  });
+
+  it("ensures OAuth before running prompt preview", async () => {
+    render(
+      <ScenarioForm
+        scenarios={[{ ...baseScenario(), serverIds: ["oauth-server"] }]}
+        agents={[
+          {
+            id: "agent-1",
+            name: "Agent 1",
+            provider: "openai",
+            model: "gpt-4o-mini",
+            temperature: 0,
+            maxTokens: 1024,
+          },
+        ] as AgentConfig[]}
+        servers={[
+          {
+            id: "oauth-server",
+            name: "OAuth Server",
+            transport: "streamable-http",
+            url: "https://example.com/mcp",
+            authType: "oauth2",
+          },
+        ] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Run Prompt" }));
+
+    await waitFor(() =>
+      expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
+        serverNames: ["oauth-server"],
+        source: mockSource,
+      })
+    );
+    await waitFor(() => expect(mockSource.runScenarioPreview).toHaveBeenCalled());
   });
 });

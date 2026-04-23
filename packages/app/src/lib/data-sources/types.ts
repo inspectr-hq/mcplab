@@ -291,6 +291,23 @@ export interface ResultAssistantTurnResponse {
   pendingToolCall?: ResultAssistantPendingToolCall;
 }
 
+export interface ScenarioPreviewCoreRunResponse {
+  runId: string;
+  scenario: {
+    scenarioId: string;
+    agent: string;
+    run: CoreScenarioRun | null;
+    traceRecord: ScenarioRunTraceRecord | null;
+  };
+}
+
+export interface ScenarioPreviewResult {
+  runId: string;
+  scenarioId: string;
+  agentName: string;
+  run: ScenarioRun;
+}
+
 export interface ToolAnalysisFinding {
   id: string;
   scope:
@@ -777,6 +794,22 @@ export interface EvalDataSource {
     sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
+  runScenarioPreview: (params: {
+    selectedAgentName: string;
+    scenario: {
+      id: string;
+      name: string;
+      prompt: string;
+      serverNames: string[];
+      evalRules: Array<{
+        type: EvalRule['type'];
+        value?: string;
+        path?: string;
+        equals?: string | number | boolean;
+      }>;
+      extractRules: Array<{ name: string; pattern: string }>;
+    };
+  }) => Promise<ScenarioPreviewResult>;
   discoverToolsForAnalysis: (params: {
     serverNames: string[];
   }) => Promise<ToolAnalysisDiscoverResponse>;

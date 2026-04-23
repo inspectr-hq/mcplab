@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
 import { useEffect, useState } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
+import { RunConversationPreview } from "@/components/results/RunConversationPreview";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
@@ -143,6 +144,14 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   const [newExtractName, setNewExtractName] = useState("");
   const [newExtractPattern, setNewExtractPattern] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [previewAgentName, setPreviewAgentName] = useState<string>(
+    defaultAssistantAgentName || agents[0]?.id || ""
+  );
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewResult, setPreviewResult] = useState<Awaited<
+    ReturnType<typeof source.runScenarioPreview>
+  > | null>(null);
   const [expanded, setExpanded] = useState(!readOnly);
 
   const addRule = () => {
@@ -235,6 +244,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     newRuleType === "response_jsonpath_not_exists";
   const selectedServerIds = scenario.serverIds
     .filter((sid) => servers.some((srv) => srv.id === sid));
+  const availableAgentIds = agents.map((agent) => agent.id).filter(Boolean);
   const canLoadToolNames = selectedServerIds.length > 0;
   const hasScenarioBaselineOverride = scenario.snapshotEval?.baselineSnapshotId !== undefined;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>("");
@@ -266,6 +276,41 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     setNewRulePath("");
     setNewRuleEquals("");
   }, [newRuleType]);
+
+  useEffect(() => {
+    if (previewAgentName && availableAgentIds.includes(previewAgentName)) return;
+    setPreviewAgentName(defaultAssistantAgentName || agents[0]?.id || "");
+  }, [previewAgentName, defaultAssistantAgentName, agents, availableAgentIds]);
+
+  const runPromptPreview = async () => {
+    if (!previewAgentName) return;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const oauthServerIds = scenario.serverIds.filter((serverId) => {
+        const server = servers.find((entry) => entry.id === serverId);
+        return server?.authType === "oauth2";
+      });
+      await ensureOAuthForServers({ serverNames: oauthServerIds, source });
+
+      const preview = await source.runScenarioPreview({
+        selectedAgentName: previewAgentName,
+        scenario: {
+          id: scenario.id,
+          name: scenario.name,
+          prompt: scenario.prompt,
+          serverNames: scenario.serverIds,
+          evalRules: scenario.evalRules,
+          extractRules: scenario.extractRules
+        }
+      });
+      setPreviewResult(preview);
+    } catch (error: unknown) {
+      setPreviewError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const loadAvailableTools = async () => {
     if (!canLoadToolNames || readOnly) return;
@@ -445,6 +490,150 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
             />
           </CardContent>
         </Card>
+
+        {!readOnly && (
+          <Card className="border bg-muted/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Run Prompt Preview</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Execute the current draft prompt once and inspect final answer, conversation trace, tool calls, and check outcomes.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <div className="space-y-1">
+                  <Label className="text-xs">Agent</Label>
+                  <Select value={previewAgentName} onValueChange={setPreviewAgentName}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name || agent.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 px-2 text-xs"
+                    onClick={() => void runPromptPreview()}
+                    disabled={
+                      previewLoading ||
+                      !previewAgentName ||
+                      !scenario.prompt.trim() ||
+                      scenario.serverIds.length === 0
+                    }
+                  >
+                    {previewLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Running...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3.5 w-3.5" />
+                        Run Prompt
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              {!scenario.prompt.trim() && (
+                <p className="text-[11px] text-muted-foreground">Add a prompt to run preview.</p>
+              )}
+              {scenario.serverIds.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">Select at least one server to run preview.</p>
+              )}
+              {previewError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {previewError}
+                </div>
+              )}
+              {previewResult && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant={previewResult.run.passed ? "default" : "destructive"}>
+                      {previewResult.run.passed ? "Passed" : "Failed"}
+                    </Badge>
+                    <Badge variant="outline">{previewResult.run.duration}ms</Badge>
+                    <Badge variant="outline">{previewResult.run.toolCalls.length} tool calls</Badge>
+                    <Badge variant="outline" className="font-mono">
+                      {previewResult.agentName}
+                    </Badge>
+                  </div>
+                  <div className="rounded-md border bg-background p-2">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Check results
+                    </p>
+                    {scenario.evalRules.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No checks configured for this scenario.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons).map(
+                          ({ rule, status, failureReason }, idx) => (
+                            <div
+                              key={`${scenario.id}-preview-check-${idx}`}
+                              className="rounded border bg-muted/20 px-2 py-1.5 text-xs"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <code className="font-mono text-[11px]">
+                                  {renderEvalRulePreview(rule)}
+                                </code>
+                                <Badge
+                                  variant={status === "passed" ? "default" : "destructive"}
+                                  className="h-5 text-[10px]"
+                                >
+                                  {status}
+                                </Badge>
+                              </div>
+                              {failureReason && (
+                                <p className="mt-1 text-[11px] text-destructive">{failureReason}</p>
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {previewResult.run.failureReasons.length > 0 && (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                        Check failures
+                      </p>
+                      <ul className="list-disc space-y-1 pl-4 text-xs text-destructive">
+                        {previewResult.run.failureReasons.map((reason, idx) => (
+                          <li key={`${previewResult.runId}-failure-${idx}`}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {Object.keys(previewResult.run.extractedValues).length > 0 && (
+                    <div className="rounded-md border bg-background p-2">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Extracted values
+                      </p>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
+                        {Object.entries(previewResult.run.extractedValues).map(([key, value]) => (
+                          <div key={key} className="rounded border bg-muted/20 px-2 py-1 text-xs">
+                            <div className="font-mono text-[11px] text-muted-foreground">{key}</div>
+                            <div className="break-all">{String(value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <RunConversationPreview run={previewResult.run} fallbackUserPrompt={scenario.prompt} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-3 lg:grid-cols-2">
           <Card className="border bg-muted/20">
@@ -796,4 +985,50 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
       </Card>
     </Collapsible>
   );
+}
+
+function buildPreviewCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+  return evalRules.map((rule) => {
+    const failureReason = matchFailureReasonForRule(rule, failureReasons);
+    return {
+      rule,
+      status: failureReason ? ("failed" as const) : ("passed" as const),
+      failureReason
+    };
+  });
+}
+
+function renderEvalRulePreview(rule: EvalRule): string {
+  if (rule.path) {
+    return rule.equals !== undefined
+      ? `${rule.type}: ${rule.path} == ${String(rule.equals)}`
+      : `${rule.type}: ${rule.path}`;
+  }
+  return `${rule.type}: ${rule.value ?? ""}`;
+}
+
+function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
+  const expectedPrefix = (() => {
+    if (rule.type === "required_tool") return `Required tool not used: ${rule.value}`;
+    if (rule.type === "forbidden_tool") return `Forbidden tool used: ${rule.value}`;
+    if (rule.type === "response_contains") return `Contains assertion failed: ${rule.value}`;
+    if (rule.type === "response_not_contains")
+      return `Not-contains assertion failed: ${rule.value}`;
+    if (rule.type === "response_starts_with")
+      return `Starts-with assertion failed: ${rule.value}`;
+    if (rule.type === "response_ends_with") return `Ends-with assertion failed: ${rule.value}`;
+    if (rule.type === "response_equals") return `Equals assertion failed: ${rule.value}`;
+    if (rule.type === "response_regex") return `Regex assertion failed: ${rule.value}`;
+    if (rule.type === "response_jsonpath")
+      return rule.equals !== undefined
+        ? `JSONPath equals assertion failed: ${rule.path}`
+        : `JSONPath assertion failed: ${rule.path}`;
+    if (rule.type === "response_jsonpath_exists")
+      return `JSONPath assertion failed: ${rule.path}`;
+    if (rule.type === "response_jsonpath_not_exists")
+      return `JSONPath not-exists assertion failed: ${rule.path}`;
+    return "";
+  })();
+  if (!expectedPrefix) return undefined;
+  return failureReasons.find((reason) => reason.startsWith(expectedPrefix));
 }

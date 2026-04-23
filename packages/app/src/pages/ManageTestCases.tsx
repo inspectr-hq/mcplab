@@ -496,8 +496,40 @@ const ManageTestCases = () => {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <CardTitle className="text-base">Edit Test Case</CardTitle>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">
+                    Edit Test Case ·{" "}
+                    <code className="font-mono text-muted-foreground">{selectedScenario.id}</code>
+                  </CardTitle>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] ${
+                      saveStatus === "saving"
+                        ? "border-amber-300 text-amber-700"
+                        : saveStatus === "saved"
+                          ? "border-emerald-300 text-emerald-700"
+                          : saveStatus === "error"
+                            ? "border-destructive/40 text-destructive"
+                            : saveStatus === "dirty"
+                              ? "border-sky-300 text-sky-700"
+                              : ""
+                    }`}
+                  >
+                    {saveStatus === "saving"
+                      ? "Saving..."
+                      : saveStatus === "saved"
+                        ? "Saved"
+                        : saveStatus === "error"
+                          ? "Save failed"
+                          : saveStatus === "dirty"
+                            ? "Unsaved changes"
+                            : "Ready"}
+                  </Badge>
+                </div>
+                {saveStatus === "error" && saveError && (
+                  <div className="text-[11px] text-destructive">{saveError}</div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -519,40 +551,6 @@ const ManageTestCases = () => {
                   <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                   Delete
                 </Button>
-              </div>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              <div className="flex flex-wrap items-center gap-2">
-                <span>
-                  Focused editor for <code className="font-mono">{selectedScenario.id}</code>.
-                </span>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] ${
-                    saveStatus === "saving"
-                      ? "border-amber-300 text-amber-700"
-                      : saveStatus === "saved"
-                        ? "border-emerald-300 text-emerald-700"
-                        : saveStatus === "error"
-                          ? "border-destructive/40 text-destructive"
-                          : saveStatus === "dirty"
-                            ? "border-sky-300 text-sky-700"
-                            : ""
-                  }`}
-                >
-                  {saveStatus === "saving"
-                    ? "Saving..."
-                    : saveStatus === "saved"
-                      ? "Saved"
-                      : saveStatus === "error"
-                        ? "Save failed"
-                        : saveStatus === "dirty"
-                          ? "Unsaved changes"
-                          : "Ready"}
-                </Badge>
-                {saveStatus === "error" && saveError && (
-                  <span className="text-[11px] text-destructive">{saveError}</span>
-                )}
               </div>
             </div>
           </CardHeader>

@@ -25,7 +25,8 @@ import type {
   MarkdownReportContent,
   ResultAssistantApplyReportResponse,
   ResultAssistantSessionView,
-  ResultAssistantTurnResponse
+  ResultAssistantTurnResponse,
+  ScenarioPreviewCoreRunResponse
 } from './types';
 
 function getBaseUrl(): string {
@@ -253,6 +254,26 @@ export const workspaceApiClient = {
     runNote?: string;
   }) =>
     request<{ jobId: string }>('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }),
+  runScenarioPreview: (params: {
+    selectedAgentName: string;
+    scenario: {
+      id: string;
+      name: string;
+      prompt: string;
+      serverNames: string[];
+      evalRules: Array<{
+        type: string;
+        value?: string;
+        path?: string;
+        equals?: string | number | boolean;
+      }>;
+      extractRules: Array<{ name: string; pattern: string }>;
+    };
+  }) =>
+    request<ScenarioPreviewCoreRunResponse>('/api/runs/preview', {
       method: 'POST',
       body: JSON.stringify(params)
     }),

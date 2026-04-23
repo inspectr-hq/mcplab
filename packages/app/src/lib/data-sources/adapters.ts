@@ -1160,3 +1160,25 @@ export function fromCoreResultsJson(
       : undefined
   };
 }
+
+export function fromCoreScenarioRunPreview(
+  run: CoreScenarioRun,
+  traceRecord?: ScenarioRunTraceRecord | null
+): ScenarioRun {
+  const tokenUsage = estimateRunTokenUsage(traceRecord ?? undefined);
+  return {
+    runIndex: run.run_index,
+    passed: run.pass,
+    toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
+    assistantTokenUsage: tokenUsage.assistant,
+    toolTokenUsage: tokenUsage.tool,
+    toolTokenUsageByTool: tokenUsage.perTool,
+    finalAnswer: run.final_text,
+    conversation: toConversationItemsFromRecord(traceRecord ?? undefined),
+    duration: run.tool_durations_ms.reduce((sum, value) => sum + value, 0),
+    extractedValues: Object.fromEntries(
+      Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
+    ),
+    failureReasons: run.failures
+  };
+}
