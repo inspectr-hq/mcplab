@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Check, ChevronDown, Loader2, RefreshCw, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,10 +84,20 @@ const AgentDetail = () => {
   const [loadingModels, setLoadingModels] = useState(false);
   const [openModelPicker, setOpenModelPicker] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+  const hydratedRouteRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (existingAgent) setForm(existingAgent);
-  }, [existingAgent]);
+    const routeKey = isNew ? `new:${decodedParam || "new"}` : `agt:${decodedParam}`;
+    if (hydratedRouteRef.current === routeKey) return;
+    if (isNew) {
+      setForm(emptyAgent());
+      hydratedRouteRef.current = routeKey;
+      return;
+    }
+    if (!existingAgent) return;
+    setForm(existingAgent);
+    hydratedRouteRef.current = routeKey;
+  }, [isNew, decodedParam, existingAgent]);
 
   const supportsDiscovery =
     form.provider === "anthropic" || form.provider === "openai" || form.provider === "azure";

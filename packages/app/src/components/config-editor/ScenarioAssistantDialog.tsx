@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
+import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 import { cn } from "@/lib/utils";
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
 import type {
@@ -100,8 +101,18 @@ export function ScenarioAssistantDialog({
     if (!resolvedAssistantAgentName || sessionId) return;
     let cancelled = false;
     setLoading(true);
-    source
-      .createScenarioAssistantSession({
+    const bootstrap = async () => {
+      const selectedOauthServers = Array.from(
+        new Set(
+          scenario.serverIds.filter((serverId) => {
+            const server = servers.find((entry) => entry.id === serverId);
+            return server?.authType === "oauth2";
+          })
+        )
+      );
+      await ensureOAuthForServers({ serverNames: selectedOauthServers, source });
+
+      const resp = await source.createScenarioAssistantSession({
         configId,
         configPath,
         scenarioId: scenario.id,
@@ -135,12 +146,12 @@ export function ScenarioAssistantDialog({
             model: agent.model
           }))
         }
-      })
-      .then((resp) => {
-        if (cancelled) return;
-        setSessionId(resp.sessionId);
-        setSession(resp.session);
-      })
+      });
+      if (cancelled) return;
+      setSessionId(resp.sessionId);
+      setSession(resp.session);
+    };
+    void bootstrap()
       .catch((error: unknown) => {
         if (cancelled) return;
         toast({
@@ -347,7 +358,14 @@ export function ScenarioAssistantDialog({
       onApplyPatch({ prompt: suggestions.prompt.replacement });
     }
     if (key === "evalRules" && suggestions.evalRules) {
-      onApplyPatch({ evalRules: suggestions.evalRules.replacement as Array<{ type: EvalRule["type"]; value: string }> });
+      onApplyPatch({
+        evalRules: suggestions.evalRules.replacement as Array<{
+          type: EvalRule["type"];
+          value?: string;
+          path?: string;
+          equals?: string | number | boolean;
+        }>
+      });
     }
     if (key === "extractRules" && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });

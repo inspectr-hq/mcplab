@@ -276,11 +276,17 @@ scenarios:
 
       # Validate response content
       response_assertions:
+        - type: "contains"
+          value: "found"
+        - type: "not_contains"
+          value: "error"
         - type: "regex"
           pattern: "found \\d+ items"
         - type: "jsonpath"
           path: "$.summary.count"
           equals: 10
+        - type: "jsonpath_exists"
+          path: "$.summary.items"
 
     # Extract metrics
     extract:
@@ -303,8 +309,15 @@ run_defaults:
   - `allow`: List of allowed sequences (e.g., `[["search", "analyze"]]`)
 
 - **`response_assertions`** - Validate the final response
+  - `contains`: Final text must include a literal substring (case-insensitive)
+  - `not_contains`: Final text must not include a literal substring (case-insensitive)
+  - `starts_with`: Final text must start with a literal substring (case-insensitive)
+  - `ends_with`: Final text must end with a literal substring (case-insensitive)
+  - `equals`: Final text must exactly equal a literal string (case-insensitive)
   - `regex`: Pattern matching on response text
-  - `jsonpath`: Query and validate JSON responses
+  - `jsonpath`: Query and validate JSON responses (with optional `equals`)
+  - `jsonpath_exists`: JSONPath must resolve at least one value
+  - `jsonpath_not_exists`: JSONPath must resolve no values
 
 - **`extract`** - Extract metrics from responses
   - Capture values using regex named groups: `(?<value>...)`

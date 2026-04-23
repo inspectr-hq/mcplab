@@ -1053,7 +1053,9 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('email');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const writtenScenario = (roundTripped.scenarios as any[]).find((s: any) => s.id === 'scn-oauth');
+    const writtenScenario = (roundTripped.scenarios as any[]).find(
+      (s: any) => s.id === 'scn-oauth'
+    );
     const writtenServer = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'inline-oauth');
     expect(writtenServer?.auth).toEqual({
       type: 'oauth_authorization_code',
@@ -1096,5 +1098,120 @@ describe('config adapters round-trip', () => {
     expect(written?.auth?.mode).toBeUndefined();
     expect(written?.auth?.authorization_url).toBeUndefined();
     expect(written?.auth?.token_url).toBeUndefined();
+  });
+
+  it('round-trips all response_assertions types without lossy conversion', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-assertions',
+      name: 'assertions-roundtrip',
+      path: '/tmp/assertions.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-assertions',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-assertions',
+            name: 'Assertions',
+            servers: [],
+            prompt: 'test',
+            eval: {
+              response_assertions: [
+                { type: 'contains', value: 'hello' },
+                { type: 'not_contains', value: 'error' },
+                { type: 'starts_with', value: 'start' },
+                { type: 'ends_with', value: 'end' },
+                { type: 'equals', value: 'exact' },
+                { type: 'regex', pattern: 'foo|bar' },
+                { type: 'jsonpath', path: '$.status', equals: 'active' },
+                { type: 'jsonpath_exists', path: '$.id' },
+                { type: 'jsonpath_not_exists', path: '$.error' }
+              ]
+            }
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    expect(uiConfig.scenarios[0]?.evalRules).toEqual([
+      { type: 'response_contains', value: 'hello' },
+      { type: 'response_not_contains', value: 'error' },
+      { type: 'response_starts_with', value: 'start' },
+      { type: 'response_ends_with', value: 'end' },
+      { type: 'response_equals', value: 'exact' },
+      { type: 'response_regex', value: 'foo|bar' },
+      { type: 'response_jsonpath', path: '$.status', equals: 'active' },
+      { type: 'response_jsonpath_exists', path: '$.id' },
+      { type: 'response_jsonpath_not_exists', path: '$.error' }
+    ]);
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-assertions');
+    expect(scenario?.eval?.response_assertions).toEqual(
+      sourceRecord.config.scenarios[0] &&
+        !('ref' in sourceRecord.config.scenarios[0]) &&
+        sourceRecord.config.scenarios[0].eval?.response_assertions
+    );
+  });
+
+  it('maps legacy response_contains/not_contains to new core contains/not_contains', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-legacy',
+      name: 'legacy-rules',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-legacy',
+          name: 'Legacy',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'response_contains', value: 'must-have' },
+            { type: 'response_not_contains', value: 'must-not-have' }
+          ],
+          extractRules: []
+        }
+      ]
+    });
+
+    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-legacy');
+    expect(scenario?.eval?.response_assertions).toEqual([
+      { type: 'contains', value: 'must-have' },
+      { type: 'not_contains', value: 'must-not-have' }
+    ]);
+  });
+
+  it('throws when loading unsupported response assertion types from core config', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-unknown-assertion',
+      name: 'unknown-assertion',
+      path: '/tmp/unknown-assertion.yaml',
+      mtime: '2026-04-23T10:00:00.000Z',
+      hash: 'hash-unknown-assertion',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-unknown',
+            name: 'Unknown assertion',
+            servers: [],
+            prompt: 'test',
+            eval: {
+              response_assertions: [{ type: 'future_type', value: 'x' } as any]
+            }
+          }
+        ]
+      }
+    };
+
+    expect(() => fromCoreConfigYaml(sourceRecord)).toThrow(
+      /Unsupported response assertion type in config: future_type/
+    );
   });
 });

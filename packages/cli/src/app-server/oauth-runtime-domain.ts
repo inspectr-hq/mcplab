@@ -165,9 +165,7 @@ export async function createOAuthRuntimeSession(params: {
               ...(serverConfig.auth.authorization_url
                 ? { authorizationEndpoint: serverConfig.auth.authorization_url }
                 : {}),
-              ...(serverConfig.auth.token_url
-                ? { tokenEndpoint: serverConfig.auth.token_url }
-                : {})
+              ...(serverConfig.auth.token_url ? { tokenEndpoint: serverConfig.auth.token_url } : {})
             }
           }
         : {})
@@ -303,6 +301,8 @@ export function getOAuthRuntimeSessionToken(params: {
   runtimeSession: OAuthRuntimeSession;
   oauthDebuggerSessions: OAuthDebuggerSessionsMap;
 }): string | undefined {
-  const debuggerSession = params.oauthDebuggerSessions.get(params.runtimeSession.oauthDebuggerSessionId);
+  const debuggerSession = params.oauthDebuggerSessions.get(
+    params.runtimeSession.oauthDebuggerSessionId
+  );
   return getAccessToken(debuggerSession);
 }

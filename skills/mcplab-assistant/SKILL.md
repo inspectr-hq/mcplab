@@ -83,8 +83,9 @@ When the request is about analyzing results, the assistant must:
 - at least one `servers` entry (labels available to the scenario)
 - `prompt`
 5. Add optional `eval` and `extract` blocks after baseline run succeeds.
-6. Validate references and shape against `config-schema.json`.
-7. Prefer minimal deterministic edits over large rewrites.
+6. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
+7. Validate references and shape against `config-schema.json`.
+8. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
 

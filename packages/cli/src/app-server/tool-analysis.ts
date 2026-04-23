@@ -3,12 +3,13 @@ import { resolve } from 'node:path';
 import type {
   AppRouteDeps,
   AppRouteRequestContext,
-  ToolAnalysisJobsMap,
-  OAuthRuntimeSessionsMap,
-  OAuthDebuggerSessionsMap
+  ToolAnalysisJobsMap
 } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
-import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
+import {
+  OAuthAuthorizationRequiredError,
+  type OAuthSessionManager
+} from './oauth-session-manager.js';
 import {
   createToolAnalysisReportId,
   deleteToolAnalysisReportRecord,
@@ -54,8 +55,7 @@ export async function handleToolAnalysisRoutes(params: {
   method: string;
   settings: AppRouteRequestContext['settings'];
   toolAnalysisJobs: ToolAnalysisJobsMap;
-  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
-  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
+  oauthSessionManager: OAuthSessionManager;
   deps: ToolAnalysisRouteDeps;
 }): Promise<boolean> {
   const {
@@ -65,8 +65,7 @@ export async function handleToolAnalysisRoutes(params: {
     method,
     settings,
     toolAnalysisJobs,
-    oauthRuntimeSessions,
-    oauthDebuggerSessions,
+    oauthSessionManager,
     deps
   } = params;
   const {
@@ -91,28 +90,33 @@ export async function handleToolAnalysisRoutes(params: {
       return true;
     }
     const libraries = readLibraries(settings.librariesDir);
-    const oauthRuntimeSessionsByServer =
-      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
-        ? (body.oauthRuntimeSessions as Record<string, string>)
-        : undefined;
     const oauthServers = serverNames.filter(
-      (serverName: string) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
+      (serverName: string) =>
+        libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
-    const serverAuthHeaders =
-      oauthServers.length > 0
-        ? resolveRuntimeOAuthAuthHeaders({
-            requiredServerNames: oauthServers,
-            oauthRuntimeSessionsByServer,
-            runtimeSessions: oauthRuntimeSessions,
-            oauthDebuggerSessions
-          })
-        : undefined;
-    const { servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
+    let serverAuthHeaders: Record<string, Record<string, string>> | undefined;
+    try {
+      serverAuthHeaders =
+        oauthServers.length > 0
+          ? await oauthSessionManager.getAuthHeadersForServers(oauthServers, req.headers.host)
+          : undefined;
+    } catch (error: unknown) {
+      if (error instanceof OAuthAuthorizationRequiredError) {
+        asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+        return true;
+      }
+      throw error;
+    }
+    const { mcp, servers } = await discoverMcpToolsForServers(libraries.servers, serverNames, {
       serverAuthHeaders
     });
+    const mcpServerVersions = mcp.getServerVersions();
+    const mcpServerImplementations = mcp.getServerImplementations();
     asJson(res, 200, {
       servers: servers.map((entry) => ({
         serverName: entry.serverName,
+        mcpServerVersion: mcpServerVersions[entry.serverName] ?? null,
+        mcpServerImplementation: mcpServerImplementations[entry.serverName] ?? null,
         warnings: entry.warnings,
         tools: entry.tools.map((tool) => ({
           name: tool.tool.name,
@@ -149,10 +153,6 @@ export async function handleToolAnalysisRoutes(params: {
       body.selectedToolsByServer && typeof body.selectedToolsByServer === 'object'
         ? (body.selectedToolsByServer as Record<string, string[]>)
         : undefined;
-    const oauthRuntimeSessionsByServer =
-      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
-        ? (body.oauthRuntimeSessions as Record<string, string>)
-        : undefined;
     const deeperOptions = body.deeperAnalysisOptions ?? {};
     const maxParallelTools = Math.max(
       1,
@@ -186,9 +186,8 @@ export async function handleToolAnalysisRoutes(params: {
             ? String(body.assistantAgentName)
             : undefined,
           serverNames,
-          oauthRuntimeSessionsByServer,
-          oauthRuntimeSessions,
-          oauthDebuggerSessions,
+          oauthSessionManager,
+          hostHeader: req.headers.host,
           selectedToolsByServer,
           modes,
           deeper: {

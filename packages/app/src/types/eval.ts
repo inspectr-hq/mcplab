@@ -42,8 +42,21 @@ export interface AgentConfig {
 }
 
 export interface EvalRule {
-  type: 'required_tool' | 'forbidden_tool' | 'response_contains' | 'response_not_contains';
-  value: string;
+  type:
+    | 'required_tool'
+    | 'forbidden_tool'
+    | 'response_contains'
+    | 'response_not_contains'
+    | 'response_starts_with'
+    | 'response_ends_with'
+    | 'response_equals'
+    | 'response_regex'
+    | 'response_jsonpath'
+    | 'response_jsonpath_exists'
+    | 'response_jsonpath_not_exists';
+  value?: string;
+  path?: string;
+  equals?: string | number | boolean;
 }
 
 export interface ExtractRule {

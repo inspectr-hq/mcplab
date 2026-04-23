@@ -55,6 +55,7 @@ function evaluateToolSequence(actual: string[], allowed: string[][]): string[] {
 
 function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[]): string[] {
   const failures: string[] = [];
+  const normalizedText = text.toLowerCase();
   for (const assertion of assertions) {
     if (assertion.type === 'regex') {
       try {
@@ -67,7 +68,42 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
         failures.push(`Invalid regex: ${assertion.pattern}`);
       }
     }
-    if (assertion.type === 'jsonpath') {
+
+    if (assertion.type === 'contains') {
+      if (!normalizedText.includes(assertion.value.toLowerCase())) {
+        failures.push(`Contains assertion failed: ${assertion.value}`);
+      }
+    }
+
+    if (assertion.type === 'not_contains') {
+      if (normalizedText.includes(assertion.value.toLowerCase())) {
+        failures.push(`Not-contains assertion failed: ${assertion.value}`);
+      }
+    }
+
+    if (assertion.type === 'starts_with') {
+      if (!normalizedText.startsWith(assertion.value.toLowerCase())) {
+        failures.push(`Starts-with assertion failed: ${assertion.value}`);
+      }
+    }
+
+    if (assertion.type === 'ends_with') {
+      if (!normalizedText.endsWith(assertion.value.toLowerCase())) {
+        failures.push(`Ends-with assertion failed: ${assertion.value}`);
+      }
+    }
+
+    if (assertion.type === 'equals') {
+      if (normalizedText !== assertion.value.toLowerCase()) {
+        failures.push(`Equals assertion failed: ${assertion.value}`);
+      }
+    }
+
+    if (
+      assertion.type === 'jsonpath' ||
+      assertion.type === 'jsonpath_exists' ||
+      assertion.type === 'jsonpath_not_exists'
+    ) {
       let json: any;
       try {
         json = JSON.parse(text);
@@ -76,10 +112,14 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
         continue;
       }
       const result = JSONPath({ path: assertion.path, json });
-      if (assertion.equals !== undefined) {
+      if (assertion.type === 'jsonpath' && assertion.equals !== undefined) {
         const matched = result.some((value: unknown) => value === assertion.equals);
         if (!matched) {
           failures.push(`JSONPath equals assertion failed: ${assertion.path}`);
+        }
+      } else if (assertion.type === 'jsonpath_not_exists') {
+        if (result && result.length > 0) {
+          failures.push(`JSONPath not-exists assertion failed: ${assertion.path}`);
         }
       } else if (!result || result.length === 0) {
         failures.push(`JSONPath assertion failed: ${assertion.path}`);

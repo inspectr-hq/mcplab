@@ -11,9 +11,10 @@ import type {
   SnapshotRecord,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
-  OAuthDebuggerSessionEvent,
-  OAuthDebuggerSessionView,
-  OAuthRuntimeSessionView,
+    OAuthDebuggerSessionEvent,
+    OAuthDebuggerSessionView,
+    OAuthEnsureServerStatus,
+    OAuthRuntimeSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
@@ -24,7 +25,8 @@ import type {
   MarkdownReportContent,
   ResultAssistantApplyReportResponse,
   ResultAssistantSessionView,
-  ResultAssistantTurnResponse
+  ResultAssistantTurnResponse,
+  ScenarioPreviewCoreRunResponse
 } from './types';
 
 function getBaseUrl(): string {
@@ -250,9 +252,28 @@ export const workspaceApiClient = {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
-    oauthRuntimeSessions?: Record<string, string>;
   }) =>
     request<{ jobId: string }>('/api/runs', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }),
+  runScenarioPreview: (params: {
+    selectedAgentName: string;
+    scenario: {
+      id: string;
+      name: string;
+      prompt: string;
+      serverNames: string[];
+      evalRules: Array<{
+        type: string;
+        value?: string;
+        path?: string;
+        equals?: string | number | boolean;
+      }>;
+      extractRules: Array<{ name: string; pattern: string }>;
+    };
+  }) =>
+    request<ScenarioPreviewCoreRunResponse>('/api/runs/preview', {
       method: 'POST',
       body: JSON.stringify(params)
     }),
@@ -316,7 +337,6 @@ export const workspaceApiClient = {
     }),
   discoverToolsForAnalysis: (params: {
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
   }) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',
@@ -325,7 +345,6 @@ export const workspaceApiClient = {
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
     selectedToolsByServer?: Record<string, string[]>;
     maxParallelTools?: number;
     modes: { metadataReview: boolean; deeperAnalysis: boolean };
@@ -510,6 +529,14 @@ export const workspaceApiClient = {
       {
         method: 'POST',
         body: JSON.stringify({})
+      }
+    ),
+  ensureOAuthServers: (params: { serverNames: string[] }) =>
+    request<{ servers: OAuthEnsureServerStatus[]; allReady: boolean }>(
+      '/api/oauth-runtime/servers/ensure',
+      {
+        method: 'POST',
+        body: JSON.stringify(params)
       }
     ),
   stopRun: (jobId: string) =>

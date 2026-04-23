@@ -158,6 +158,139 @@ describe('evaluateScenario — response_assertions jsonpath', () => {
   });
 });
 
+describe('evaluateScenario — response_assertions contains/not_contains', () => {
+  it('passes contains when literal text exists (case-insensitive)', () => {
+    const result = evaluateScenario('Refund PROCESSED successfully', [], {
+      response_assertions: [{ type: 'contains', value: 'refund processed' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails contains when literal text is missing', () => {
+    const result = evaluateScenario('Refund queued', [], {
+      response_assertions: [{ type: 'contains', value: 'refund processed' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/Contains assertion failed/);
+  });
+
+  it('passes not_contains when literal text is absent (case-insensitive)', () => {
+    const result = evaluateScenario('Operation complete', [], {
+      response_assertions: [{ type: 'not_contains', value: 'error' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails not_contains when literal text is present', () => {
+    const result = evaluateScenario('Operation ERROR: timeout', [], {
+      response_assertions: [{ type: 'not_contains', value: 'error' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/Not-contains assertion failed/);
+  });
+});
+
+describe('evaluateScenario — response_assertions starts_with/ends_with/equals', () => {
+  it('passes starts_with when prefix matches (case-insensitive)', () => {
+    const result = evaluateScenario('Hello customer, refund complete', [], {
+      response_assertions: [{ type: 'starts_with', value: 'hello customer' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails starts_with when prefix does not match', () => {
+    const result = evaluateScenario('Customer hello', [], {
+      response_assertions: [{ type: 'starts_with', value: 'hello customer' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/Starts-with assertion failed/);
+  });
+
+  it('passes ends_with when suffix matches (case-insensitive)', () => {
+    const result = evaluateScenario('status: complete', [], {
+      response_assertions: [{ type: 'ends_with', value: 'COMPLETE' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails ends_with when suffix does not match', () => {
+    const result = evaluateScenario('status: complete!', [], {
+      response_assertions: [{ type: 'ends_with', value: 'complete' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/Ends-with assertion failed/);
+  });
+
+  it('passes equals when full text matches (case-insensitive)', () => {
+    const result = evaluateScenario('SUCCESS', [], {
+      response_assertions: [{ type: 'equals', value: 'success' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails equals when full text does not match', () => {
+    const result = evaluateScenario('success!', [], {
+      response_assertions: [{ type: 'equals', value: 'success' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/Equals assertion failed/);
+  });
+});
+
+describe('evaluateScenario — response_assertions jsonpath_exists/jsonpath_not_exists', () => {
+  it('passes jsonpath_exists when path resolves', () => {
+    const result = evaluateScenario('{"data":{"id":123}}', [], {
+      response_assertions: [{ type: 'jsonpath_exists', path: '$.data.id' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails jsonpath_exists when path does not resolve', () => {
+    const result = evaluateScenario('{"data":{"id":123}}', [], {
+      response_assertions: [{ type: 'jsonpath_exists', path: '$.data.missing' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/JSONPath assertion failed/);
+  });
+
+  it('passes jsonpath_not_exists when path does not resolve', () => {
+    const result = evaluateScenario('{"data":{"id":123}}', [], {
+      response_assertions: [{ type: 'jsonpath_not_exists', path: '$.data.missing' }]
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails jsonpath_not_exists when path resolves', () => {
+    const result = evaluateScenario('{"data":{"id":123}}', [], {
+      response_assertions: [{ type: 'jsonpath_not_exists', path: '$.data.id' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/JSONPath not-exists assertion failed/);
+  });
+
+  it('fails jsonpath_exists with invalid JSON', () => {
+    const result = evaluateScenario('not json', [], {
+      response_assertions: [{ type: 'jsonpath_exists', path: '$.data.id' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toMatch(/invalid JSON/);
+  });
+});
+
+describe('evaluateScenario — response_assertions mixed stack', () => {
+  it('reports failures from multiple assertion types in one run', () => {
+    const result = evaluateScenario('status: queued', [], {
+      response_assertions: [
+        { type: 'contains', value: 'processed' },
+        { type: 'not_contains', value: 'queued' },
+        { type: 'starts_with', value: 'ok' }
+      ]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.failures).toHaveLength(3);
+  });
+});
+
 describe('extractValues', () => {
   it('returns empty object when no rules are given', () => {
     expect(extractValues('some text')).toEqual({});

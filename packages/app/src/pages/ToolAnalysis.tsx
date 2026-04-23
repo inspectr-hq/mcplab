@@ -15,7 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
 import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
-import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
+import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
 
 type ProgressEvent = { payload?: { message?: unknown } };
@@ -128,9 +128,6 @@ const ToolAnalysisPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [viewStep, setViewStep] = useState<"configure" | "run" | "report">("configure");
   const [runState, setRunState] = useState<"idle" | "running" | "stopped" | "error">("idle");
-  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<
-    Record<string, string>
-  >({});
   const [authInProgress, setAuthInProgress] = useState(false);
   const cleanupRef = useRef<null | (() => void)>(null);
   const eventsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -246,56 +243,24 @@ const ToolAnalysisPage = () => {
       setSelectedToolsByServer({});
       return;
     }
-    const ensureOAuthRuntimeSession = async (serverName: string) => {
-      const openBrowserOnce = (() => {
-        let opened = false;
-        return (launchUrl: string) => {
-          if (opened || !launchUrl) return;
-          opened = true;
-          const absoluteUrl = launchUrl.startsWith("http")
-            ? launchUrl
-            : `${window.location.origin}${launchUrl}`;
-          window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-          toast({
-            title: `OAuth login required for ${serverName}`,
-            description: "Complete login in the opened browser tab. Discovery will continue automatically."
-          });
-        };
-      })();
-
-      let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
-      if (runtimeSessionId) {
-        try {
-          const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
-          if (session.status === "completed" && session.hasAccessToken) {
-            return runtimeSessionId;
-          }
-        } catch {
-          runtimeSessionId = undefined;
-        }
-      }
-
-      const created = await source.createOAuthRuntimeSession({ serverName });
-      runtimeSessionId = created.session.id;
-      setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
-      openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
-      await waitForOAuthRuntimeSession({
-        sessionId: runtimeSessionId,
-        source,
-        serverName,
-        onLaunchUrl: openBrowserOnce,
-      });
-      return runtimeSessionId;
-    };
-
-    let oauthSessions: Record<string, string> | undefined;
-    const selectedServerName = selectedServerNames[0];
-    const selectedServer = servers.find((server) => server.id === selectedServerName);
+    const oauthServerNames = selectedServerNames.filter((serverName) => {
+      const selectedServer = servers.find((server) => server.id === serverName);
+      return selectedServer?.authType === "oauth2";
+    });
     try {
-      if (selectedServer?.authType === "oauth2") {
+      if (oauthServerNames.length > 0) {
         setAuthInProgress(true);
-        const sessionId = await ensureOAuthRuntimeSession(selectedServerName);
-        oauthSessions = { [selectedServerName]: sessionId };
+        await ensureOAuthForServers({
+          serverNames: oauthServerNames,
+          source,
+          onServerAuthStart: (serverName) => {
+            toast({
+              title: `OAuth login required for ${serverName}`,
+              description:
+                "Complete login in the opened browser tab. Discovery will continue automatically."
+            });
+          }
+        });
       }
     } catch (error: unknown) {
       toast({
@@ -311,10 +276,7 @@ const ToolAnalysisPage = () => {
 
     setDiscovering(true);
     try {
-      const response = await source.discoverToolsForAnalysis({
-        serverNames: selectedServerNames,
-        oauthRuntimeSessions: oauthSessions
-      });
+      const response = await source.discoverToolsForAnalysis({ serverNames: selectedServerNames });
       setDiscovered(response.servers);
       setSelectedToolsByServer((prev) => {
         const next: Record<string, string[]> = {};
@@ -384,22 +346,24 @@ const ToolAnalysisPage = () => {
     setViewStep("run");
     setRunState("running");
     try {
-      let oauthSessions: Record<string, string> | undefined;
       const selectedServerName = selectedServerNames[0];
       const selectedServer = servers.find((server) => server.id === selectedServerName);
       if (selectedServer?.authType === "oauth2") {
         setAuthInProgress(true);
-        const existing = oauthRuntimeSessionsByServer[selectedServerName];
-        if (!existing) {
-          throw new Error(
-            `OAuth login for '${selectedServerName}' is required. Click Discover Tools first to authenticate.`
-          );
-        }
-        oauthSessions = { [selectedServerName]: existing };
+        await ensureOAuthForServers({
+          serverNames: [selectedServerName],
+          source,
+          onServerAuthStart: (serverName) => {
+            toast({
+              title: `OAuth login required for ${serverName}`,
+              description:
+                "Complete login in the opened browser tab. Analysis will continue automatically."
+            });
+          }
+        });
       }
       const { jobId } = await source.startToolAnalysis({
         serverNames: selectedServerNames,
-        oauthRuntimeSessions: oauthSessions,
         selectedToolsByServer,
         maxParallelTools,
         modes: { metadataReview, deeperAnalysis },

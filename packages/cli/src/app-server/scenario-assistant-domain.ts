@@ -24,7 +24,12 @@ interface ScenarioAssistantContextInput {
     name?: string;
     prompt: string;
     serverNames: string[];
-    evalRules: Array<{ type: string; value: string }>;
+    evalRules: Array<{
+      type: string;
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     extractRules: Array<{ name: string; pattern: string }>;
     snapshotEval?: {
       enabled?: boolean;
@@ -38,7 +43,12 @@ interface ScenarioAssistantContextInput {
 interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
-    replacement: Array<{ type: string; value: string }>;
+    replacement: Array<{
+      type: string;
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     rationale?: string;
   };
   extractRules?: {
@@ -53,6 +63,13 @@ interface ScenarioAssistantSuggestionBundle {
     rationale?: string;
   };
   notes?: string[];
+}
+
+interface ScenarioAssistantEvalRuleSuggestion {
+  type: string;
+  value?: string;
+  path?: string;
+  equals?: string | number | boolean;
 }
 
 interface ParsedAssistantToolCall {
@@ -162,12 +179,16 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
     'For suggestions, use keys: prompt, evalRules, extractRules, snapshotEval, notes.',
     'prompt: { replacement: string, rationale?: string }',
-    'evalRules: { replacement: [{ type, value }...], rationale?: string }',
+    'evalRules: { replacement: [{ type, value?, path?, equals? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'snapshotEval: { patch: { enabled?: boolean, baselineSnapshotId?: string }, rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, Value Capture Rules, or snapshot settings), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains.',
+    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists.',
+    'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
+    'Use response_regex only for genuinely variable/complex patterns (IDs, dates, currency, alternation, optional tokens, quantifiers, character classes).',
+    'Never include both response_regex and an equivalent literal check for the same intent.',
+    'Prefer concise, positive checks over brittle near-miss negatives. Avoid paired off-by-one guards like "not 8 tags" and "not 10 tags" when "contains 9 tags" captures intent.',
     'IMPORTANT: For required_tool and forbidden_tool eval rules, use the raw MCP tool name (the "tool=" value shown in the tool listing), NOT the prefixed public name. For example, use "value_based_search" not "trendminer__value_based_search".',
     'Ask clarifying questions if the scenario intent is unclear.',
     `Scenario context: ${JSON.stringify({
@@ -208,7 +229,8 @@ function formatAssistantMcpPreloadError(serverName: string, error: unknown): str
 export async function preloadAssistantTools(
   session: ScenarioAssistantSession,
   serversByName: Record<string, EvalConfig['servers'][string]>,
-  selectedServerNames: string[]
+  selectedServerNames: string[],
+  options?: { serverAuthHeaders?: Record<string, Record<string, string>> }
 ): Promise<void> {
   const usedNames = new Set<string>();
   for (const serverName of selectedServerNames) {
@@ -218,7 +240,9 @@ export async function preloadAssistantTools(
       continue;
     }
     try {
-      await session.mcp.connectAll({ [serverName]: server });
+      await session.mcp.connectAll({ [serverName]: server }, undefined, {
+        serverAuthHeaders: options?.serverAuthHeaders
+      });
       const tools = await session.mcp.listTools(serverName);
       for (const tool of tools) {
         const publicName = makeAssistantToolPublicName(serverName, tool.name, usedNames);
@@ -241,13 +265,307 @@ function normalizeEvalRuleToolNames(
 ): void {
   if (!suggestions?.evalRules?.replacement) return;
   for (const rule of suggestions.evalRules.replacement) {
-    if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') {
+    if ((rule.type === 'required_tool' || rule.type === 'forbidden_tool') && rule.value) {
       const mapping = toolPublicMap.get(rule.value);
       if (mapping) {
         rule.value = mapping.tool;
       }
     }
   }
+}
+
+function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: boolean } | null {
+  const trimmed = pattern.trim();
+  if (!trimmed) return null;
+  const anchoredStart = trimmed.startsWith('^');
+  const anchoredEnd = trimmed.endsWith('$');
+  const body =
+    anchoredStart || anchoredEnd
+      ? trimmed.slice(anchoredStart ? 1 : 0, anchoredEnd ? -1 : undefined)
+      : trimmed;
+
+  const regexSpecial = new Set(['.', '^', '$', '*', '+', '?', '(', ')', '[', ']', '{', '}', '|']);
+  const complexEscapes = new Set(['d', 'D', 's', 'S', 'w', 'W', 'b', 'B', 'p', 'P']);
+  let literal = '';
+  let escaped = false;
+
+  for (const char of body) {
+    if (escaped) {
+      if (complexEscapes.has(char)) return null;
+      literal += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (regexSpecial.has(char)) {
+      return null;
+    }
+    literal += char;
+  }
+  if (escaped) return null;
+  return { literal, anchored: anchoredStart && anchoredEnd };
+}
+
+function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
+  return `${rule.type}::${rule.value ?? ''}::${rule.path ?? ''}::${
+    rule.equals === undefined ? '' : String(rule.equals)
+  }`;
+}
+
+function hasEquivalentLiteralRule(
+  rules: ScenarioAssistantEvalRuleSuggestion[],
+  literalValue: string
+): boolean {
+  return rules.some(
+    (rule) =>
+      (rule.type === 'response_contains' ||
+        rule.type === 'response_not_contains' ||
+        rule.type === 'response_starts_with' ||
+        rule.type === 'response_ends_with' ||
+        rule.type === 'response_equals') &&
+      rule.value === literalValue
+  );
+}
+
+function parseCountWithSuffix(value: string): { count: number; suffix: string } | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d+)(\s+.+)$/);
+  if (!match) return null;
+  return {
+    count: Number.parseInt(match[1], 10),
+    suffix: match[2]
+  };
+}
+
+function collapseOffByOneCountGuards(
+  rules: ScenarioAssistantEvalRuleSuggestion[]
+): ScenarioAssistantEvalRuleSuggestion[] {
+  const removeIndices = new Set<number>();
+  const replaceContains = new Map<number, string>();
+
+  for (let i = 0; i < rules.length; i += 1) {
+    const rule = rules[i];
+    if (rule.type !== 'response_contains' || !rule.value) continue;
+
+    const explicitPositive = parseCountWithSuffix(rule.value);
+    const numericOnly = !explicitPositive && rule.value.trim().match(/^\d+$/);
+    if (!explicitPositive && !numericOnly) continue;
+
+    const count = explicitPositive
+      ? explicitPositive.count
+      : Number.parseInt(rule.value.trim(), 10);
+    const preferredSuffix = explicitPositive?.suffix;
+
+    const offByOneCandidates = new Map<string, { lowerIdx?: number; upperIdx?: number }>();
+    for (let j = 0; j < rules.length; j += 1) {
+      const candidate = rules[j];
+      if (candidate.type !== 'response_not_contains' || !candidate.value) continue;
+      const parsed = parseCountWithSuffix(candidate.value);
+      if (!parsed) continue;
+      if (preferredSuffix && parsed.suffix !== preferredSuffix) continue;
+      if (parsed.count !== count - 1 && parsed.count !== count + 1) continue;
+
+      const bucket = offByOneCandidates.get(parsed.suffix) ?? {};
+      if (parsed.count === count - 1) bucket.lowerIdx = j;
+      if (parsed.count === count + 1) bucket.upperIdx = j;
+      offByOneCandidates.set(parsed.suffix, bucket);
+    }
+
+    const selected = [...offByOneCandidates.entries()].find(
+      ([, pair]) => pair.lowerIdx !== undefined && pair.upperIdx !== undefined
+    );
+    if (!selected) continue;
+
+    const [suffix, pair] = selected;
+    removeIndices.add(pair.lowerIdx!);
+    removeIndices.add(pair.upperIdx!);
+    if (!explicitPositive) {
+      replaceContains.set(i, `${count}${suffix}`);
+    }
+  }
+
+  const result: ScenarioAssistantEvalRuleSuggestion[] = [];
+  for (let i = 0; i < rules.length; i += 1) {
+    if (removeIndices.has(i)) continue;
+    const rule = rules[i];
+    const replacement = replaceContains.get(i);
+    if (replacement) {
+      result.push({ ...rule, value: replacement });
+      continue;
+    }
+    result.push(rule);
+  }
+  return result;
+}
+
+function normalizeIntentValue(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function positiveLiteralRank(type: string): number {
+  switch (type) {
+    case 'response_equals':
+      return 4;
+    case 'response_starts_with':
+    case 'response_ends_with':
+      return 3;
+    case 'response_contains':
+      return 2;
+    default:
+      return 1;
+  }
+}
+
+function intentDeduplicateEvalRules(
+  rules: ScenarioAssistantEvalRuleSuggestion[]
+): ScenarioAssistantEvalRuleSuggestion[] {
+  const result: ScenarioAssistantEvalRuleSuggestion[] = [];
+  const positiveByIntent = new Map<string, number>();
+  const containsIndices: number[] = [];
+
+  for (const rule of rules) {
+    if (
+      (rule.type === 'response_contains' ||
+        rule.type === 'response_starts_with' ||
+        rule.type === 'response_ends_with' ||
+        rule.type === 'response_equals') &&
+      rule.value
+    ) {
+      const intent = normalizeIntentValue(rule.value);
+      const existingIdx = positiveByIntent.get(intent);
+      if (existingIdx !== undefined) {
+        const existing = result[existingIdx];
+        if (positiveLiteralRank(rule.type) > positiveLiteralRank(existing.type)) {
+          result[existingIdx] = rule;
+          if (existing.type === 'response_contains' && rule.type !== 'response_contains') {
+            const containsIndex = containsIndices.indexOf(existingIdx);
+            if (containsIndex >= 0) containsIndices.splice(containsIndex, 1);
+          }
+        }
+        continue;
+      }
+
+      if (rule.type === 'response_contains') {
+        const newIntent = intent;
+        let droppedAsMoreSpecific = false;
+        for (const idx of containsIndices) {
+          const existing = result[idx];
+          if (!existing?.value) continue;
+          const existingIntent = normalizeIntentValue(existing.value);
+          if (newIntent.includes(existingIntent)) {
+            droppedAsMoreSpecific = true;
+            break;
+          }
+          if (existingIntent.includes(newIntent)) {
+            positiveByIntent.delete(existingIntent);
+            result[idx] = rule;
+            positiveByIntent.set(newIntent, idx);
+            droppedAsMoreSpecific = true;
+            break;
+          }
+        }
+        if (droppedAsMoreSpecific) {
+          continue;
+        }
+      }
+
+      const idx = result.push(rule) - 1;
+      positiveByIntent.set(intent, idx);
+      if (rule.type === 'response_contains') containsIndices.push(idx);
+      continue;
+    }
+
+    result.push(rule);
+  }
+  return result;
+}
+
+function lintContradictoryEvalRules(
+  rules: ScenarioAssistantEvalRuleSuggestion[]
+): ScenarioAssistantEvalRuleSuggestion[] {
+  const requiredTools = new Set<string>();
+  const positiveLiteralIntents = new Set<string>();
+  const existingJsonPaths = new Set<string>();
+
+  for (const rule of rules) {
+    if (rule.type === 'required_tool' && rule.value) {
+      requiredTools.add(rule.value.trim());
+    }
+    if (
+      (rule.type === 'response_contains' ||
+        rule.type === 'response_starts_with' ||
+        rule.type === 'response_ends_with' ||
+        rule.type === 'response_equals') &&
+      rule.value
+    ) {
+      positiveLiteralIntents.add(normalizeIntentValue(rule.value));
+    }
+    if (rule.type === 'response_jsonpath_exists' && rule.path) {
+      existingJsonPaths.add(rule.path.trim());
+    }
+  }
+
+  return rules.filter((rule) => {
+    if (rule.type === 'forbidden_tool' && rule.value) {
+      return !requiredTools.has(rule.value.trim());
+    }
+    if (rule.type === 'response_not_contains' && rule.value) {
+      return !positiveLiteralIntents.has(normalizeIntentValue(rule.value));
+    }
+    if (rule.type === 'response_jsonpath_not_exists' && rule.path) {
+      return !existingJsonPaths.has(rule.path.trim());
+    }
+    return true;
+  });
+}
+
+export function normalizeScenarioAssistantEvalRules(
+  replacement: ScenarioAssistantEvalRuleSuggestion[]
+): ScenarioAssistantEvalRuleSuggestion[] {
+  const normalized: ScenarioAssistantEvalRuleSuggestion[] = [];
+
+  for (const rawRule of replacement) {
+    const rule: ScenarioAssistantEvalRuleSuggestion = {
+      ...rawRule,
+      ...(typeof rawRule.value === 'string' ? { value: rawRule.value.trim() } : {}),
+      ...(typeof rawRule.path === 'string' ? { path: rawRule.path.trim() } : {})
+    };
+
+    if (rule.type === 'response_regex' && rule.value) {
+      const parsed = tryParseRegexAsLiteral(rule.value);
+      if (parsed) {
+        if (hasEquivalentLiteralRule(normalized, parsed.literal)) {
+          continue;
+        }
+        normalized.push({
+          type: parsed.anchored ? 'response_equals' : 'response_contains',
+          value: parsed.literal
+        });
+        continue;
+      }
+    }
+    normalized.push(rule);
+  }
+
+  const deduped: ScenarioAssistantEvalRuleSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const rule of normalized) {
+    const key = evalRuleKey(rule);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(rule);
+  }
+  return lintContradictoryEvalRules(intentDeduplicateEvalRules(collapseOffByOneCountGuards(deduped)));
+}
+
+function normalizeEvalRuleSuggestions(suggestions: ScenarioAssistantSuggestionBundle | undefined): void {
+  if (!suggestions?.evalRules?.replacement) return;
+  suggestions.evalRules.replacement = normalizeScenarioAssistantEvalRules(
+    suggestions.evalRules.replacement
+  );
 }
 
 function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
@@ -322,6 +640,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
   }
   const modelOutput = await assistantChatModel(session);
   normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
+  normalizeEvalRuleSuggestions(modelOutput.suggestions);
   if (modelOutput.type === 'tool_call_request') {
     const requestedCalls =
       'toolCalls' in modelOutput && Array.isArray(modelOutput.toolCalls)

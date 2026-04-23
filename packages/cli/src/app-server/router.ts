@@ -90,6 +90,7 @@ import {
   type OAuthDebuggerSession
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
+import { OAuthSessionManager } from './oauth-session-manager.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -185,6 +186,11 @@ export async function startAppServer(options: AppServerOptions) {
   const toolAnalysisJobs = new Map<string, ToolAnalysisJob>();
   const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();
   const oauthRuntimeSessions = new Map<string, OAuthRuntimeSession>();
+  const oauthSessionManager = new OAuthSessionManager({
+    librariesDir: settings.librariesDir,
+    runtimeSessions: oauthRuntimeSessions,
+    oauthDebuggerSessions
+  });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
   const runQueueState: RunQueueState = { activeJobId: null, queue: [] };
@@ -321,6 +327,7 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(settings.librariesDir, { recursive: true });
           mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
           applySettingsOverrides(settings);
+          oauthSessionManager.setLibrariesDir(settings.librariesDir);
         }
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
           const next = String(body.scenarioAssistantAgentName ?? '').trim();
@@ -356,6 +363,7 @@ export async function startAppServer(options: AppServerOptions) {
           settings,
           runtimeSessions: oauthRuntimeSessions,
           oauthDebuggerSessions,
+          oauthSessionManager,
           deps: routeDeps
         })
       ) {
@@ -397,8 +405,7 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           toolAnalysisJobs,
-          oauthRuntimeSessions,
-          oauthDebuggerSessions,
+          oauthSessionManager,
           deps: routeDeps
         })
       ) {
@@ -427,6 +434,7 @@ export async function startAppServer(options: AppServerOptions) {
           method,
           settings,
           assistantSessions,
+          oauthSessionManager,
           deps: routeDeps
         })
       ) {
@@ -468,8 +476,7 @@ export async function startAppServer(options: AppServerOptions) {
           settings,
           jobs,
           runQueueState,
-          oauthRuntimeSessions,
-          oauthDebuggerSessions,
+          oauthSessionManager,
           deps: routeDeps
         })
       ) {

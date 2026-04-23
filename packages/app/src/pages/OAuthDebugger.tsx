@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { formatDurationShort } from '@/lib/format-duration';
 import type {
   OAuthDebuggerSessionConfig,
   OAuthDebuggerSessionEvent,
@@ -139,7 +140,13 @@ export default function OAuthDebuggerPage() {
   }, [events.length]);
 
   const oauthServers = useMemo(
-    () => servers.filter((s) => s.authType === 'oauth2'),
+    () =>
+      servers
+        .filter((s) => s.authType === 'oauth2')
+        .slice()
+        .sort((a, b) =>
+          (a.name || a.id).localeCompare(b.name || b.id, undefined, { sensitivity: 'base' })
+        ),
     [servers]
   );
   const selectedServer = oauthServers.find((s) => s.id === selectedServerId);
@@ -177,16 +184,80 @@ export default function OAuthDebuggerPage() {
 
   const filteredNetwork = useMemo(() => {
     const exchanges = session?.network ?? [];
-    return exchanges.filter((e) => {
-      if (inspectorStepFilter !== 'all' && e.stepId !== inspectorStepFilter) return false;
-      if (inspectorStatusFilter === 'error' && !(e.phase === 'response' && (e.status ?? 0) >= 400)) return false;
-      if (inspectorStatusFilter === 'ok' && !(e.phase === 'response' && (e.status ?? 0) < 400)) return false;
+    const pendingRequestIndexes = new Map<string, number[]>();
+    const grouped: Array<{
+      key: string;
+      stepId: string;
+      label: string;
+      method?: string;
+      url: string;
+      request?: OAuthDebuggerSessionView['network'][number];
+      response?: OAuthDebuggerSessionView['network'][number];
+    }> = [];
+
+    const requestKey = (e: OAuthDebuggerSessionView['network'][number]) => `${e.stepId}::${e.label}::${e.url}`;
+
+    for (const exchange of exchanges) {
+      if (exchange.phase === 'request') {
+        const groupIndex = grouped.length;
+        grouped.push({
+          key: exchange.id,
+          stepId: exchange.stepId,
+          label: exchange.label,
+          method: exchange.method,
+          url: exchange.url,
+          request: exchange
+        });
+        const key = requestKey(exchange);
+        const pending = pendingRequestIndexes.get(key) ?? [];
+        pending.push(groupIndex);
+        pendingRequestIndexes.set(key, pending);
+        continue;
+      }
+
+      const key = requestKey(exchange);
+      const pending = pendingRequestIndexes.get(key);
+      const requestGroupIndex = pending?.shift();
+      if (typeof requestGroupIndex === 'number') {
+        grouped[requestGroupIndex] = {
+          ...grouped[requestGroupIndex],
+          response: exchange
+        };
+        if (pending && pending.length > 0) {
+          pendingRequestIndexes.set(key, pending);
+        } else {
+          pendingRequestIndexes.delete(key);
+        }
+        continue;
+      }
+
+      grouped.push({
+        key: exchange.id,
+        stepId: exchange.stepId,
+        label: exchange.label,
+        method: exchange.method,
+        url: exchange.url,
+        response: exchange
+      });
+    }
+
+    return grouped.filter((group) => {
+      if (inspectorStepFilter !== 'all' && group.stepId !== inspectorStepFilter) return false;
+      if (inspectorStatusFilter === 'error') return typeof group.response?.status === 'number' && group.response.status >= 400;
+      if (inspectorStatusFilter === 'ok') return typeof group.response?.status === 'number' && group.response.status < 400;
       return true;
     });
   }, [session?.network, inspectorStepFilter, inspectorStatusFilter]);
 
   const canGoRun = Boolean(sessionId);
   const canGoReport = Boolean(session && (session.status === 'completed' || session.status === 'error' || session.status === 'stopped'));
+  const stepNumberById = useMemo(() => {
+    const mapping = new Map<string, number>();
+    (session?.stepStates ?? []).forEach((stepItem, index) => {
+      mapping.set(stepItem.id, index + 1);
+    });
+    return mapping;
+  }, [session?.stepStates]);
 
   const setStepIfAllowed = (next: ViewStep) => {
     if (next === 'configure') return setViewStep(next);
@@ -757,7 +828,7 @@ export default function OAuthDebuggerPage() {
       {viewStep === 'run' && (
         <div className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-          <Card className="xl:col-span-1">
+          <Card className="xl:col-span-1 min-w-0">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -858,12 +929,19 @@ export default function OAuthDebuggerPage() {
               )}
 
               <div className="space-y-2">
-                {session?.stepStates.map((s) => (
+                {session?.stepStates.map((s) => {
+                  const stepNumber = stepNumberById.get(s.id);
+                  return (
                   <div key={s.id} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex items-start gap-2">
+                        <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
+                          {stepNumber}
+                        </div>
+                        <div className="min-w-0">
                         <div className="text-sm font-medium">{s.title}</div>
                         <div className="text-xs text-muted-foreground">{s.description}</div>
+                        </div>
                       </div>
                       <Badge
                         variant={
@@ -888,7 +966,7 @@ export default function OAuthDebuggerPage() {
                       <p className="mt-2 text-xs text-muted-foreground break-all">{s.outcomeSummary}</p>
                     )}
                   </div>
-                )) || (
+                )}) || (
                   <p className="text-sm text-muted-foreground">No steps yet.</p>
                 )}
               </div>
@@ -896,14 +974,28 @@ export default function OAuthDebuggerPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4 xl:col-span-1">
+          <div className="space-y-4 xl:col-span-1 min-w-0">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Inspect</CardTitle>
-                <CardDescription>Live events and network requests/responses for the OAuth flow.</CardDescription>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">Inspect</CardTitle>
+                    <CardDescription>Live events and network requests/responses for the OAuth flow.</CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void exportReport('raw')}
+                    disabled={!sessionId || !session}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Copy/Export Raw Trace
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')}>
+                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')} className="min-w-0">
                   <TabsList className="grid grid-cols-2">
                     <TabsTrigger value="inspector">Network Inspector</TabsTrigger>
                     <TabsTrigger value="events">Live Debug</TabsTrigger>
@@ -935,11 +1027,13 @@ export default function OAuthDebuggerPage() {
                       <div className="space-y-1">
                         <Label className="text-xs">Filter by step</Label>
                         <Select value={inspectorStepFilter} onValueChange={setInspectorStepFilter}>
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">All steps</SelectItem>
                             {(session?.stepStates ?? []).map((s) => (
-                              <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>
+                              <SelectItem key={s.id} value={s.id}>
+                                {stepNumberById.get(s.id)}. {s.title}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -957,25 +1051,31 @@ export default function OAuthDebuggerPage() {
                       </div>
                     </div>
 
-                    <div className="max-h-[34rem] space-y-2 overflow-auto">
+                    <div className="max-h-[34rem] min-w-0 space-y-2 overflow-auto">
                       {filteredNetwork.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No network exchanges captured yet.</p>
                       ) : (
                         filteredNetwork.map((exchange) => (
-                          <details key={exchange.id} className="rounded-md border p-3">
+                          <details key={exchange.key} className="rounded-md border p-3">
                             <summary className="cursor-pointer list-none">
                               <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex items-start gap-2">
+                                  <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
+                                    {stepNumberById.get(exchange.stepId)}
+                                  </div>
+                                  <div className="min-w-0">
                                   <div className="text-sm font-medium">{exchange.label}</div>
                                   <div className="text-xs text-muted-foreground break-all">
                                     {exchange.method ? `${exchange.method} ` : ''}{exchange.url}
                                   </div>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="outline">{exchange.phase}</Badge>
-                                  {typeof exchange.status === 'number' && (
-                                    <Badge variant={exchange.status >= 400 ? 'destructive' : 'secondary'}>
-                                      {exchange.status}
+                                  <Badge variant="outline">request</Badge>
+                                  <Badge variant="outline">response</Badge>
+                                  {typeof exchange.response?.status === 'number' && (
+                                    <Badge variant={exchange.response.status >= 400 ? 'destructive' : 'secondary'}>
+                                      {exchange.response.status}
                                     </Badge>
                                   )}
                                 </div>
@@ -983,13 +1083,23 @@ export default function OAuthDebuggerPage() {
                             </summary>
                             <div className="mt-3 space-y-3">
                               <div>
-                                <div className="mb-1 text-xs font-medium">Headers</div>
-                                <pre className="max-h-40 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.headers, null, 2)}</pre>
+                                <div className="mb-1 text-xs font-medium">Request Headers</div>
+                                <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.request?.headers ?? {}, null, 2)}</pre>
                               </div>
-                              {exchange.bodyText && (
+                              {exchange.request?.bodyText && (
                                 <div>
-                                  <div className="mb-1 text-xs font-medium">Body</div>
-                                  <pre className="max-h-64 overflow-auto whitespace-pre rounded bg-muted p-2 text-xs">{exchange.bodyText}</pre>
+                                  <div className="mb-1 text-xs font-medium">Request Body</div>
+                                  <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{exchange.request.bodyText}</pre>
+                                </div>
+                              )}
+                              <div>
+                                <div className="mb-1 text-xs font-medium">Response Headers</div>
+                                <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.response?.headers ?? {}, null, 2)}</pre>
+                              </div>
+                              {exchange.response?.bodyText && (
+                                <div>
+                                  <div className="mb-1 text-xs font-medium">Response Body</div>
+                                  <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{exchange.response.bodyText}</pre>
                                 </div>
                               )}
                               <div className="flex gap-2">
@@ -1045,7 +1155,7 @@ export default function OAuthDebuggerPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Secrets display mode</AlertTitle>
             <AlertDescription>
-              {showSensitiveValues
+              {session.summary?.showSensitiveValues
                 ? 'This session is configured to show full tokens and secrets in network logs/exports.'
                 : 'Sensitive values are hidden in the inspector for this session.'}
             </AlertDescription>
@@ -1069,6 +1179,35 @@ export default function OAuthDebuggerPage() {
               <div><Label className="text-xs">Token endpoint status</Label><p className="text-sm">{session.summary?.tokenEndpointStatus ?? '-'}</p></div>
               <div><Label className="text-xs">Token type</Label><p className="text-sm">{session.summary?.tokenType || '-'}</p></div>
               <div><Label className="text-xs">Scopes granted</Label><p className="text-sm break-all">{(session.summary?.grantedScopes ?? []).join(', ') || '-'}</p></div>
+              <div>
+                <Label className="text-xs">Token validity</Label>
+                <p className="text-sm">
+                  {typeof session.summary?.accessTokenValidForSeconds === 'number'
+                    ? `${formatDurationShort(session.summary.accessTokenValidForSeconds)} remaining`
+                    : typeof session.summary?.accessTokenExpiresInSeconds === 'number'
+                    ? `${formatDurationShort(session.summary.accessTokenExpiresInSeconds)} from issuance`
+                    : 'No expiry advertised by token endpoint'}
+                  {session.summary?.accessTokenExpiresAt
+                    ? ` (until ${new Date(session.summary.accessTokenExpiresAt).toLocaleTimeString()})`
+                    : ''}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Source:{' '}
+                  {session.summary?.accessTokenExpirySource === 'expires_in'
+                    ? 'token endpoint expires_in'
+                    : session.summary?.accessTokenExpirySource === 'jwt_exp'
+                    ? 'JWT exp claim'
+                    : 'not available'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs">Refresh option</Label>
+                <p className="text-sm">
+                  {session.summary?.refreshTokenAvailable
+                    ? 'Refresh token available (silent refresh possible)'
+                    : 'No refresh token in response (full login likely required after expiry)'}
+                </p>
+              </div>
               {session.summary?.accessToken && (
                 <div className="md:col-span-2 space-y-1">
                   <Label className="text-xs">Access token</Label>

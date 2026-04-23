@@ -19,6 +19,17 @@ describe('handleToolAnalysisRoutes', () => {
     deps.parseBody.mockResolvedValue({ serverNames: ['demo-server'] });
     deps.readLibraries.mockReturnValue({ servers: {}, agents: {} });
     deps.discoverMcpToolsForServers.mockResolvedValue({
+      mcp: {
+        getServerVersions: () => ({ 'demo-server': '1.2.3' }),
+        getServerImplementations: () => ({
+          'demo-server': {
+            name: 'demo-server',
+            title: 'Demo Server',
+            version: '1.2.3',
+            icons: [{ src: 'https://example.com/icon.png' }]
+          }
+        })
+      },
       servers: [
         {
           serverName: 'demo-server',
@@ -54,6 +65,9 @@ describe('handleToolAnalysisRoutes', () => {
         librariesDir: '/tmp/ws/libraries'
       } as any,
       toolAnalysisJobs: new Map(),
+      oauthSessionManager: {
+        getAuthHeadersForServers: vi.fn().mockResolvedValue({})
+      } as any,
       deps: deps as any
     });
 
@@ -65,6 +79,11 @@ describe('handleToolAnalysisRoutes', () => {
         servers: [
           expect.objectContaining({
             serverName: 'demo-server',
+            mcpServerVersion: '1.2.3',
+            mcpServerImplementation: expect.objectContaining({
+              name: 'demo-server',
+              title: 'Demo Server'
+            }),
             tools: [
               expect.objectContaining({
                 name: 'get_user_profile',

@@ -55,8 +55,16 @@ Source of truth: `config-schema.json`.
 - `tool_constraints.forbidden_tools`: string[]
 - `tool_sequence.allow`: string[][]
 - `response_assertions`:
+  - contains assertion: `{ type: "contains", value: string }`
+  - not_contains assertion: `{ type: "not_contains", value: string }`
+  - starts_with assertion: `{ type: "starts_with", value: string }`
+  - ends_with assertion: `{ type: "ends_with", value: string }`
+  - equals assertion: `{ type: "equals", value: string }`
   - regex assertion: `{ type: "regex", pattern: string }`
   - jsonpath assertion: `{ type: "jsonpath", path: string, equals?: string|number|boolean }`
+  - jsonpath_exists assertion: `{ type: "jsonpath_exists", path: string }`
+  - jsonpath_not_exists assertion: `{ type: "jsonpath_not_exists", path: string }`
+- String assertions (`contains`, `not_contains`, `starts_with`, `ends_with`, `equals`) are literal and case-insensitive.
 
 ### `extract`
 
@@ -112,11 +120,25 @@ scenarios:
         allow:
           - [search_items, summarize_items]
       response_assertions:
+        - type: contains
+          value: Found
+        - type: not_contains
+          value: error
+        - type: starts_with
+          value: Found
+        - type: ends_with
+          value: items
+        - type: equals
+          value: Found 10 items
         - type: regex
           pattern: Found [0-9]+ items
         - type: jsonpath
           path: $.summary.count
           equals: 10
+        - type: jsonpath_exists
+          path: $.summary.items
+        - type: jsonpath_not_exists
+          path: $.error
     extract:
       - name: item_count
         from: final_text

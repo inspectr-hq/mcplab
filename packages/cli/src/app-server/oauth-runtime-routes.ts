@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteRequestContext, OAuthDebuggerSessionsMap } from './app-context.js';
 import type { OAuthRuntimeSessionsMap } from './oauth-runtime-domain.js';
+import { OAuthAuthorizationRequiredError, type OAuthSessionManager } from './oauth-session-manager.js';
 import {
   cleanupOAuthRuntimeSessions,
   createOAuthRuntimeSession,
@@ -23,11 +24,44 @@ export async function handleOAuthRuntimeRoutes(params: {
   settings: AppRouteRequestContext['settings'];
   runtimeSessions: OAuthRuntimeSessionsMap;
   oauthDebuggerSessions: OAuthDebuggerSessionsMap;
+  oauthSessionManager: OAuthSessionManager;
   deps: OAuthRuntimeRouteDeps;
 }): Promise<boolean> {
-  const { req, res, pathname, method, settings, runtimeSessions, oauthDebuggerSessions, deps } =
-    params;
+  const {
+    req,
+    res,
+    pathname,
+    method,
+    settings,
+    runtimeSessions,
+    oauthDebuggerSessions,
+    oauthSessionManager,
+    deps
+  } = params;
   const { parseBody, asJson } = deps;
+
+  if (pathname === '/api/oauth-runtime/servers/ensure' && method === 'POST') {
+    cleanupOAuthRuntimeSessions(runtimeSessions, oauthDebuggerSessions);
+    const body = await parseBody(req);
+    const serverNames = Array.isArray(body?.serverNames)
+      ? body.serverNames.map((v: unknown) => String(v).trim()).filter(Boolean)
+      : [];
+    if (serverNames.length === 0) {
+      asJson(res, 400, { error: 'serverNames[] is required' });
+      return true;
+    }
+    try {
+      const result = await oauthSessionManager.ensureServersAuthorized(serverNames, req.headers.host);
+      asJson(res, 200, result);
+    } catch (error: unknown) {
+      if (error instanceof OAuthAuthorizationRequiredError) {
+        asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+        return true;
+      }
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
 
   if (pathname === '/api/oauth-runtime/sessions' && method === 'POST') {
     cleanupOAuthRuntimeSessions(runtimeSessions, oauthDebuggerSessions);
@@ -45,6 +79,7 @@ export async function handleOAuthRuntimeRoutes(params: {
         runtimeSessions,
         oauthDebuggerSessions
       });
+      oauthSessionManager.noteRuntimeSession(serverName, session.id);
       asJson(res, 201, { session });
     } catch (error: unknown) {
       asJson(res, 400, {
@@ -110,6 +145,7 @@ export async function handleOAuthRuntimeRoutes(params: {
         state: typeof body?.state === 'string' ? body.state : undefined,
         hostHeader: req.headers.host
       });
+      oauthSessionManager.noteRuntimeSession(runtimeSession.serverName, runtimeSession.id);
       asJson(res, 200, {
         session: oauthRuntimeSessionView({ runtimeSession, oauthDebuggerSessions })
       });

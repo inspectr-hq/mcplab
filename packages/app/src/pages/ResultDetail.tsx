@@ -1244,7 +1244,7 @@ const ResultDetail = () => {
                                           <div className="space-y-1">
                                             {checks.map((check, idx) => (
                                               <div
-                                                key={`${check.rule.type}-${check.rule.value}-${idx}`}
+                                                key={`${check.rule.type}-${check.rule.value ?? check.rule.path ?? ""}-${idx}`}
                                                 className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                   check.status === "failed"
                                                     ? "border-destructive/20 bg-destructive/5"
@@ -2336,22 +2336,45 @@ function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
 }
 
 function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
-  const expectedPrefix =
-    rule.type === "required_tool"
-      ? `Required tool not used: ${rule.value}`
-      : rule.type === "forbidden_tool"
-        ? `Forbidden tool used: ${rule.value}`
-        : `Regex assertion failed: ${rule.value}`;
+  const expectedPrefix = (() => {
+    if (rule.type === "required_tool") return `Required tool not used: ${rule.value}`;
+    if (rule.type === "forbidden_tool") return `Forbidden tool used: ${rule.value}`;
+    if (rule.type === "response_contains") return `Contains assertion failed: ${rule.value}`;
+    if (rule.type === "response_not_contains")
+      return `Not-contains assertion failed: ${rule.value}`;
+    if (rule.type === "response_starts_with")
+      return `Starts-with assertion failed: ${rule.value}`;
+    if (rule.type === "response_ends_with") return `Ends-with assertion failed: ${rule.value}`;
+    if (rule.type === "response_equals") return `Equals assertion failed: ${rule.value}`;
+    if (rule.type === "response_regex") return `Regex assertion failed: ${rule.value}`;
+    if (rule.type === "response_jsonpath")
+      return rule.equals !== undefined
+        ? `JSONPath equals assertion failed: ${rule.path}`
+        : `JSONPath assertion failed: ${rule.path}`;
+    if (rule.type === "response_jsonpath_exists")
+      return `JSONPath assertion failed: ${rule.path}`;
+    if (rule.type === "response_jsonpath_not_exists")
+      return `JSONPath not-exists assertion failed: ${rule.path}`;
+    return "";
+  })();
 
   const exact = failureReasons.find((reason) => reason === expectedPrefix);
   if (exact) return exact;
 
-  if (rule.type === "response_contains" || rule.type === "response_not_contains") {
+  if (rule.type === "response_regex") {
     return failureReasons.find(
       (reason) =>
         reason.startsWith("Regex assertion failed:") &&
-        reason.includes(rule.value)
+        reason.includes(rule.value ?? "")
     );
+  }
+
+  if (
+    rule.type === "response_jsonpath" ||
+    rule.type === "response_jsonpath_exists" ||
+    rule.type === "response_jsonpath_not_exists"
+  ) {
+    return failureReasons.find((reason) => reason.includes(rule.path ?? ""));
   }
 
   return undefined;
@@ -2360,8 +2383,18 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
 function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
   if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
-  if (rule.type === "response_contains") return `Text must match pattern · ${rule.value}`;
-  if (rule.type === "response_not_contains") return `Text must not match pattern · ${rule.value}`;
+  if (rule.type === "response_contains") return `Text contains · ${rule.value}`;
+  if (rule.type === "response_not_contains") return `Text does not contain · ${rule.value}`;
+  if (rule.type === "response_starts_with") return `Text starts with · ${rule.value}`;
+  if (rule.type === "response_ends_with") return `Text ends with · ${rule.value}`;
+  if (rule.type === "response_equals") return `Text equals · ${rule.value}`;
+  if (rule.type === "response_regex") return `Text matches regex · ${rule.value}`;
+  if (rule.type === "response_jsonpath")
+    return rule.equals !== undefined
+      ? `JSONPath equals · ${rule.path} == ${String(rule.equals)}`
+      : `JSONPath exists · ${rule.path}`;
+  if (rule.type === "response_jsonpath_exists") return `JSONPath exists · ${rule.path}`;
+  if (rule.type === "response_jsonpath_not_exists") return `JSONPath not exists · ${rule.path}`;
   return `${rule.type} · ${rule.value}`;
 }
 

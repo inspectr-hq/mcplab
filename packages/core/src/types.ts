@@ -94,13 +94,57 @@ export interface ResponseAssertionRegex {
   pattern: string;
 }
 
+export interface ResponseAssertionContains {
+  type: 'contains';
+  value: string;
+}
+
+export interface ResponseAssertionNotContains {
+  type: 'not_contains';
+  value: string;
+}
+
+export interface ResponseAssertionStartsWith {
+  type: 'starts_with';
+  value: string;
+}
+
+export interface ResponseAssertionEndsWith {
+  type: 'ends_with';
+  value: string;
+}
+
+export interface ResponseAssertionEquals {
+  type: 'equals';
+  value: string;
+}
+
 export interface ResponseAssertionJsonPath {
   type: 'jsonpath';
   path: string;
   equals?: string | number | boolean;
 }
 
-export type ResponseAssertion = ResponseAssertionRegex | ResponseAssertionJsonPath;
+export interface ResponseAssertionJsonPathExists {
+  type: 'jsonpath_exists';
+  path: string;
+}
+
+export interface ResponseAssertionJsonPathNotExists {
+  type: 'jsonpath_not_exists';
+  path: string;
+}
+
+export type ResponseAssertion =
+  | ResponseAssertionRegex
+  | ResponseAssertionContains
+  | ResponseAssertionNotContains
+  | ResponseAssertionStartsWith
+  | ResponseAssertionEndsWith
+  | ResponseAssertionEquals
+  | ResponseAssertionJsonPath
+  | ResponseAssertionJsonPathExists
+  | ResponseAssertionJsonPathNotExists;
 
 export interface EvalRules {
   tool_constraints?: ToolConstraints;

@@ -12,7 +12,7 @@ Use this table to map symptoms to likely causes and fastest fixes.
 | `Runs must be a positive number` | `-n/--runs` is `0`, negative, or non-numeric | Set `-n` to integer `>= 1` |
 | `Port must be a positive number` | Invalid `--port` value for `mcplab app` | Use port integer `>= 1` |
 | OAuth token retrieval failures | Wrong token URL or missing client env vars | Confirm `token_url`, `client_id_env`, `client_secret_env`, and optional scope/audience |
-| Assertion failures with otherwise valid response | Regex/jsonpath mismatch | Update assertion pattern/path to match actual output format |
+| Assertion failures with otherwise valid response | Literal/regex/jsonpath mismatch | Prefer literal assertions (`contains`, `equals`, etc.) for stable text, use regex only for variable text, and verify JSONPath against valid JSON output |
 
 ## Fast Triage Procedure
 

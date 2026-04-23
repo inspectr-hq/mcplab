@@ -1421,6 +1421,29 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
+  /api/oauth-runtime/servers/ensure:
+    post:
+      tags: [OAuth Runtime]
+      summary: Ensure OAuth runtime authorization for selected servers
+      operationId: ensureOAuthRuntimeServers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthEnsureServersRequest"
+      responses:
+        "200":
+          description: OAuth readiness by server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthEnsureServersResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error400"
+
 components:
   parameters:
     ConfigId:
@@ -1910,6 +1933,31 @@ components:
             required: [serverName, warnings, tools]
             properties:
               serverName: { type: string }
+              mcpServerVersion:
+                type: string
+                nullable: true
+              mcpServerImplementation:
+                type: object
+                nullable: true
+                properties:
+                  name: { type: string }
+                  title: { type: string }
+                  version: { type: string }
+                  description: { type: string }
+                  websiteUrl: { type: string }
+                  icons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        src: { type: string }
+                        mimeType: { type: string }
+                        sizes:
+                          type: array
+                          items: { type: string }
+                        theme:
+                          type: string
+                          enum: [light, dark]
               warnings:
                 type: array
                 items: { type: string }
@@ -1989,6 +2037,24 @@ components:
         summary:
           type: object
           additionalProperties: true
+          properties:
+            showSensitiveValues: { type: boolean }
+            issuer: { type: string }
+            clientId: { type: string }
+            redirectUri: { type: string }
+            tokenEndpointStatus: { type: integer }
+            tokenType: { type: string }
+            grantedScopes:
+              type: array
+              items: { type: string }
+            accessToken: { type: string }
+            accessTokenExpiresInSeconds: { type: integer, minimum: 0 }
+            accessTokenExpiresAt: { type: string, format: date-time }
+            accessTokenValidForSeconds: { type: integer, minimum: 0 }
+            accessTokenExpirySource:
+              type: string
+              enum: [expires_in, jwt_exp, none]
+            refreshTokenAvailable: { type: boolean }
       additionalProperties: true
     OAuthDebuggerSessionConfigInput:
       type: object
@@ -2111,3 +2177,41 @@ components:
           type: object
           additionalProperties: true
       additionalProperties: true
+    OAuthEnsureServersRequest:
+      type: object
+      required: [serverNames]
+      properties:
+        serverNames:
+          type: array
+          items:
+            type: string
+    OAuthEnsureServerStatus:
+      type: object
+      required: [serverName, status]
+      properties:
+        serverName: { type: string }
+        status:
+          type: string
+          enum: [ready, auth_required, not_oauth]
+        debugState:
+          type: string
+          enum: [reused, refreshed, auth_required, not_oauth]
+        tokenExpiresAt:
+          type: string
+          format: date-time
+        tokenExpiresInSeconds:
+          type: integer
+          minimum: 0
+        runtimeSessionId: { type: string }
+        authorizationUrl: { type: string }
+        authorizeLaunchUrl: { type: string }
+        message: { type: string }
+    OAuthEnsureServersResponse:
+      type: object
+      required: [servers, allReady]
+      properties:
+        allReady: { type: boolean }
+        servers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OAuthEnsureServerStatus"

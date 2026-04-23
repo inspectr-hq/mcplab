@@ -140,7 +140,7 @@ program
       const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
       const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
       const oauthTokens: Record<string, string> = {};
-      for (const entry of (options.oauthToken as string[])) {
+      for (const entry of options.oauthToken as string[]) {
         const eqIdx = entry.indexOf('=');
         if (eqIdx < 1) {
           throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);

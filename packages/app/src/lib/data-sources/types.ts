@@ -167,7 +167,12 @@ export interface WorkspaceSettings {
 export interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
-    replacement: Array<{ type: EvalRule['type']; value: string }>;
+    replacement: Array<{
+      type: EvalRule['type'];
+      value?: string;
+      path?: string;
+      equals?: string | number | boolean;
+    }>;
     rationale?: string;
   };
   extractRules?: {
@@ -284,6 +289,23 @@ export interface ResultAssistantTurnResponse {
   type: 'assistant_message' | 'tool_call_request';
   text: string;
   pendingToolCall?: ResultAssistantPendingToolCall;
+}
+
+export interface ScenarioPreviewCoreRunResponse {
+  runId: string;
+  scenario: {
+    scenarioId: string;
+    agent: string;
+    run: CoreScenarioRun | null;
+    traceRecord: ScenarioRunTraceRecord | null;
+  };
+}
+
+export interface ScenarioPreviewResult {
+  runId: string;
+  scenarioId: string;
+  agentName: string;
+  run: ScenarioRun;
 }
 
 export interface ToolAnalysisFinding {
@@ -422,6 +444,20 @@ export interface ToolAnalysisDiscoveredTool {
 export interface ToolAnalysisDiscoverResponse {
   servers: Array<{
     serverName: string;
+    mcpServerVersion?: string | null;
+    mcpServerImplementation?: {
+      name: string;
+      version: string;
+      title?: string;
+      description?: string;
+      websiteUrl?: string;
+      icons?: Array<{
+        src: string;
+        mimeType?: string;
+        sizes?: string[];
+        theme?: 'light' | 'dark';
+      }>;
+    } | null;
     warnings: string[];
     tools: ToolAnalysisDiscoveredTool[];
   }>;
@@ -507,6 +543,7 @@ export interface OAuthDebuggerSessionView {
     callbackUrl?: string;
   };
   summary?: {
+    showSensitiveValues?: boolean;
     issuer?: string;
     clientId?: string;
     redirectUri?: string;
@@ -514,6 +551,11 @@ export interface OAuthDebuggerSessionView {
     tokenType?: string;
     grantedScopes?: string[];
     accessToken?: string;
+    accessTokenExpiresInSeconds?: number;
+    accessTokenExpiresAt?: string;
+    accessTokenValidForSeconds?: number;
+    accessTokenExpirySource?: 'expires_in' | 'jwt_exp' | 'none';
+    refreshTokenAvailable?: boolean;
   };
 }
 
@@ -602,6 +644,18 @@ export interface OAuthRuntimeSessionView {
   lastError?: string;
 }
 
+export interface OAuthEnsureServerStatus {
+  serverName: string;
+  status: 'ready' | 'auth_required' | 'not_oauth';
+  debugState?: 'reused' | 'refreshed' | 'auth_required' | 'not_oauth';
+  tokenExpiresAt?: string;
+  tokenExpiresInSeconds?: number;
+  runtimeSessionId?: string;
+  authorizationUrl?: string;
+  authorizeLaunchUrl?: string;
+  message?: string;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -619,7 +673,6 @@ export interface EvalDataSource {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
-    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
@@ -706,7 +759,12 @@ export interface EvalDataSource {
         name: string;
         prompt: string;
         serverNames: string[];
-        evalRules: Array<{ type: EvalRule['type']; value: string }>;
+        evalRules: Array<{
+          type: EvalRule['type'];
+          value?: string;
+          path?: string;
+          equals?: string | number | boolean;
+        }>;
         extractRules: Array<{ name: string; pattern: string }>;
         snapshotEval?: {
           enabled?: boolean;
@@ -736,14 +794,28 @@ export interface EvalDataSource {
     sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
+  runScenarioPreview: (params: {
+    selectedAgentName: string;
+    scenario: {
+      id: string;
+      name: string;
+      prompt: string;
+      serverNames: string[];
+      evalRules: Array<{
+        type: EvalRule['type'];
+        value?: string;
+        path?: string;
+        equals?: string | number | boolean;
+      }>;
+      extractRules: Array<{ name: string; pattern: string }>;
+    };
+  }) => Promise<ScenarioPreviewResult>;
   discoverToolsForAnalysis: (params: {
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<ToolAnalysisDiscoverResponse>;
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
     selectedToolsByServer?: Record<string, string[]>;
     maxParallelTools?: number;
     modes: {
@@ -799,4 +871,7 @@ export interface EvalDataSource {
     payload: { redirectUrl?: string; code?: string; state?: string }
   ) => Promise<{ session: OAuthRuntimeSessionView }>;
   cancelOAuthRuntimeSession: (sessionId: string) => Promise<{ session: OAuthRuntimeSessionView }>;
+  ensureOAuthServers: (params: {
+    serverNames: string[];
+  }) => Promise<{ servers: OAuthEnsureServerStatus[]; allReady: boolean }>;
 }

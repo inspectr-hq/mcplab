@@ -3,6 +3,7 @@ import {
   fromCoreConfigYaml,
   fromCoreLibraries,
   fromCoreResultsJson,
+  fromCoreScenarioRunPreview,
   toCoreConfigYaml,
   toCoreLibraries
 } from './adapters';
@@ -83,6 +84,19 @@ export const workspaceSource: EvalDataSource = {
   },
   async startRun(params) {
     return workspaceApiClient.startRun(params);
+  },
+  async runScenarioPreview(params) {
+    const response = await workspaceApiClient.runScenarioPreview(params);
+    const run = response.scenario.run;
+    if (!run) {
+      throw new Error('Preview run did not return a run result');
+    }
+    return {
+      runId: response.runId,
+      scenarioId: response.scenario.scenarioId,
+      agentName: response.scenario.agent,
+      run: fromCoreScenarioRunPreview(run, response.scenario.traceRecord)
+    };
   },
   async stopRun(jobId) {
     await workspaceApiClient.stopRun(jobId);
@@ -243,5 +257,8 @@ export const workspaceSource: EvalDataSource = {
   },
   async cancelOAuthRuntimeSession(sessionId) {
     return workspaceApiClient.cancelOAuthRuntimeSession(sessionId);
+  },
+  async ensureOAuthServers(params) {
+    return workspaceApiClient.ensureOAuthServers(params);
   }
 };

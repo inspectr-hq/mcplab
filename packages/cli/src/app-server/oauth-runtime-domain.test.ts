@@ -137,10 +137,24 @@ describe('resolveRuntimeOAuthAuthHeaders', () => {
   });
 
   it('resolves headers for multiple servers in one call', () => {
-    const session1 = makeRuntimeSession({ id: 'rt-1', serverName: 'server-a', oauthDebuggerSessionId: 'dbg-a' });
-    const session2 = makeRuntimeSession({ id: 'rt-2', serverName: 'server-b', oauthDebuggerSessionId: 'dbg-b' });
-    const dbg1 = makeDebuggerSession({ id: 'dbg-a', context: { tokenResponse: { access_token: 'token-a' } } });
-    const dbg2 = makeDebuggerSession({ id: 'dbg-b', context: { tokenResponse: { access_token: 'token-b' } } });
+    const session1 = makeRuntimeSession({
+      id: 'rt-1',
+      serverName: 'server-a',
+      oauthDebuggerSessionId: 'dbg-a'
+    });
+    const session2 = makeRuntimeSession({
+      id: 'rt-2',
+      serverName: 'server-b',
+      oauthDebuggerSessionId: 'dbg-b'
+    });
+    const dbg1 = makeDebuggerSession({
+      id: 'dbg-a',
+      context: { tokenResponse: { access_token: 'token-a' } }
+    });
+    const dbg2 = makeDebuggerSession({
+      id: 'dbg-b',
+      context: { tokenResponse: { access_token: 'token-b' } }
+    });
 
     const runtimeSessions: OAuthRuntimeSessionsMap = new Map([
       [session1.id, session1],
@@ -328,7 +342,9 @@ describe('oauthRuntimeSessionView', () => {
 
     const view = oauthRuntimeSessionView({ runtimeSession: session, oauthDebuggerSessions });
 
-    expect(view.authorizeLaunchUrl).toBe(`/api/oauth-debugger/sessions/${debuggerSession.id}/authorize`);
+    expect(view.authorizeLaunchUrl).toBe(
+      `/api/oauth-debugger/sessions/${debuggerSession.id}/authorize`
+    );
     expect(view.authorizationUrl).toBe('https://auth.example.com/authorize?foo=bar');
   });
 });

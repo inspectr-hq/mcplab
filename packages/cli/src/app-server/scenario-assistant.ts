@@ -7,9 +7,17 @@ import {
   type AgentConfig,
   type EvalConfig
 } from '@inspectr/mcplab-core';
-import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
+import type {
+  AppRouteDeps,
+  AppRouteRequestContext,
+  AssistantSessionsMap
+} from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
+import {
+  OAuthAuthorizationRequiredError,
+  type OAuthSessionManager
+} from './oauth-session-manager.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -36,9 +44,19 @@ export async function handleScenarioAssistantRoutes(params: {
   method: string;
   settings: AppRouteRequestContext['settings'];
   assistantSessions: AssistantSessionsMap;
+  oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
-  const { req, res, pathname, method, settings, assistantSessions, deps } = params;
+  const {
+    req,
+    res,
+    pathname,
+    method,
+    settings,
+    assistantSessions,
+    oauthSessionManager,
+    deps
+  } = params;
   const {
     parseBody,
     asJson,
@@ -159,7 +177,26 @@ export async function handleScenarioAssistantRoutes(params: {
           : []
       )
     );
-    await preloadAssistantTools(session, serversByName, selectedServerNames);
+    const oauthServerNames = selectedServerNames.filter(
+      (serverName) => serversByName[serverName]?.auth?.type === 'oauth_authorization_code'
+    );
+    let serverAuthHeaders: Record<string, Record<string, string>> | undefined;
+    if (oauthServerNames.length > 0) {
+      try {
+        serverAuthHeaders = await oauthSessionManager.getAuthHeadersForServers(
+          oauthServerNames,
+          req.headers.host
+        );
+      } catch (error: unknown) {
+        if (error instanceof OAuthAuthorizationRequiredError) {
+          asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+          return true;
+        }
+        asJson(res, 400, { error: errorMessage(error) });
+        return true;
+      }
+    }
+    await preloadAssistantTools(session, serversByName, selectedServerNames, { serverAuthHeaders });
     assistantSessions.set(session.id, session);
     asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
     return true;
