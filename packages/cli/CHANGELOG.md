@@ -1,5 +1,24 @@
 # @inspectr/mcplab
 
+## 1.8.0
+
+### Minor Changes
+
+- feat: Extend response assertions
+- feat: Oauth flow for scenario assistant session
+- feat: Introduce OAuth session management
+- feat: Show MCP server info on server detail page
+- feat: Add prompt preview functionality for scenarios
+- fix: Prevent reloading in the Library edit screens when Window focus changes
+- fix: Improve OAuthDebugger sort OAuth servers alphabetically
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.6.0
+  - @inspectr/mcplab-mcp-server@1.1.4
+  - @inspectr/mcplab-reporting@1.1.5
+
 ## 1.7.0
 
 ### Minor Changes
