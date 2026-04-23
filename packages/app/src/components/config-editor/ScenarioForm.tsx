@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Loader2, Play, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Loader2, Play, Plus, Sparkles, Trash2, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,6 +149,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewAssistantPrompt, setPreviewAssistantPrompt] = useState<string>("");
   const [previewResult, setPreviewResult] = useState<Awaited<
     ReturnType<typeof source.runScenarioPreview>
   > | null>(null);
@@ -312,6 +313,55 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     }
   };
 
+  const sendPreviewToAssistant = () => {
+    if (!previewResult) return;
+    const checkItems = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
+    const checkSummary = checkItems.length
+      ? checkItems
+          .map((item) =>
+            `${item.status.toUpperCase()} - ${renderEvalRulePreview(item.rule)}${
+              item.failureReason ? ` (${item.failureReason})` : ""
+            }`
+          )
+          .join("\n")
+      : "No checks configured.";
+    const extractedSummary =
+      Object.keys(previewResult.run.extractedValues).length > 0
+        ? Object.entries(previewResult.run.extractedValues)
+            .map(([key, value]) => `${key}: ${String(value)}`)
+            .join("\n")
+        : "No extracted values.";
+    const toolSummary =
+      previewResult.run.toolCalls.length > 0
+        ? previewResult.run.toolCalls
+            .map((call, idx) => `${idx + 1}. ${call.name} (${call.duration}ms)`)
+            .join("\n")
+        : "No tool calls.";
+    const prompt = [
+      `I ran a prompt preview for scenario '${scenario.id}' and want you to suggest concrete updates.`,
+      `Run ID: ${previewResult.runId}`,
+      `Agent: ${previewResult.agentName}`,
+      `Outcome: ${previewResult.run.passed ? "passed" : "failed"}`,
+      `Duration: ${previewResult.run.duration}ms`,
+      "",
+      "Current check outcomes:",
+      checkSummary,
+      "",
+      "Tool sequence:",
+      toolSummary,
+      "",
+      "Extracted values:",
+      extractedSummary,
+      "",
+      "Final answer:",
+      previewResult.run.finalAnswer || "(empty)",
+      "",
+      "Please propose concrete updates to the Prompt, Checks, and/or Value Capture Rules based on this preview."
+    ].join("\n");
+    setPreviewAssistantPrompt(prompt);
+    setAssistantOpen(true);
+  };
+
   const loadAvailableTools = async () => {
     if (!canLoadToolNames || readOnly) return;
     setToolNamesLoading(true);
@@ -425,7 +475,10 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
           <CardContent className="space-y-3">
         <ScenarioAssistantDialog
           open={assistantOpen}
-          onOpenChange={setAssistantOpen}
+          onOpenChange={(nextOpen) => {
+            setAssistantOpen(nextOpen);
+            if (!nextOpen) setPreviewAssistantPrompt("");
+          }}
           configId={configId}
           configPath={configPath}
           scenario={scenario}
@@ -433,7 +486,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
           servers={servers}
           snapshotEval={snapshotEval}
           defaultAssistantAgentName={defaultAssistantAgentName}
-          initialUserMessage={assistantInitialPrompt}
+          initialUserMessage={previewAssistantPrompt || assistantInitialPrompt}
           onApplyPatch={(patch) =>
             onUpdate({
               ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
@@ -566,41 +619,90 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                     <Badge variant="outline" className="font-mono">
                       {previewResult.agentName}
                     </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1.5 px-2 text-[11px]"
+                      onClick={sendPreviewToAssistant}
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Send to Assistant
+                    </Button>
                   </div>
-                  <div className="rounded-md border bg-background p-2">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Check results
-                    </p>
-                    {scenario.evalRules.length === 0 ? (
+                  {scenario.evalRules.length === 0 ? (
+                    <div className="rounded-md border bg-muted/20 p-2">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Check results
+                      </p>
                       <p className="text-xs text-muted-foreground">No checks configured for this scenario.</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons).map(
-                          ({ rule, status, failureReason }, idx) => (
-                            <div
-                              key={`${scenario.id}-preview-check-${idx}`}
-                              className="rounded border bg-muted/20 px-2 py-1.5 text-xs"
+                    </div>
+                  ) : (
+                    (() => {
+                      const checks = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
+                      const passedChecks = checks.filter((check) => check.status === "passed");
+                      const failedChecks = checks.filter((check) => check.status === "failed");
+                      return (
+                        <div className="rounded-md border bg-muted/20 p-2">
+                          <div className="mb-2 flex items-center gap-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Checks
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
                             >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <code className="font-mono text-[11px]">
-                                  {renderEvalRulePreview(rule)}
-                                </code>
+                              {passedChecks.length} passed
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
+                            >
+                              {failedChecks.length} failed
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            {checks.map((check, idx) => (
+                              <div
+                                key={`${scenario.id}-preview-check-${idx}`}
+                                className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                  check.status === "failed"
+                                    ? "border-destructive/20 bg-destructive/5"
+                                    : "border-success/20 bg-success/5"
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    {check.status === "failed" ? (
+                                      <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                    ) : (
+                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                                    )}
+                                    <span className="font-medium">{formatPreviewEvalRuleLabel(check.rule)}</span>
+                                  </div>
+                                  {check.failureReason && (
+                                    <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                      {formatPreviewFailureReason(check.failureReason)}
+                                    </p>
+                                  )}
+                                </div>
                                 <Badge
-                                  variant={status === "passed" ? "default" : "destructive"}
-                                  className="h-5 text-[10px]"
+                                  variant="outline"
+                                  className={`shrink-0 text-[10px] ${
+                                    check.status === "failed"
+                                      ? "border-destructive/30 text-destructive"
+                                      : "border-success/30 text-success"
+                                  }`}
                                 >
-                                  {status}
+                                  {check.status}
                                 </Badge>
                               </div>
-                              {failureReason && (
-                                <p className="mt-1 text-[11px] text-destructive">{failureReason}</p>
-                              )}
-                            </div>
-                          )
-                        )}
-                      </div>
-                    )}
-                  </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
                   {previewResult.run.failureReasons.length > 0 && (
                     <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
@@ -1005,6 +1107,33 @@ function renderEvalRulePreview(rule: EvalRule): string {
       : `${rule.type}: ${rule.path}`;
   }
   return `${rule.type}: ${rule.value ?? ""}`;
+}
+
+function formatPreviewEvalRuleLabel(rule: EvalRule): string {
+  if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
+  if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
+  if (rule.type === "response_contains") return `Text contains · ${rule.value}`;
+  if (rule.type === "response_not_contains") return `Text does not contain · ${rule.value}`;
+  if (rule.type === "response_starts_with") return `Text starts with · ${rule.value}`;
+  if (rule.type === "response_ends_with") return `Text ends with · ${rule.value}`;
+  if (rule.type === "response_equals") return `Text equals · ${rule.value}`;
+  if (rule.type === "response_regex") return `Text matches regex · ${rule.value}`;
+  if (rule.type === "response_jsonpath")
+    return rule.equals !== undefined
+      ? `JSONPath equals · ${rule.path} == ${String(rule.equals)}`
+      : `JSONPath exists · ${rule.path}`;
+  if (rule.type === "response_jsonpath_exists") return `JSONPath exists · ${rule.path}`;
+  if (rule.type === "response_jsonpath_not_exists") return `JSONPath not exists · ${rule.path}`;
+  return `${rule.type} · ${rule.value}`;
+}
+
+function formatPreviewFailureReason(reason: string): string {
+  const trimmed = String(reason ?? "").trim();
+  const regexMatch = trimmed.match(/^Regex assertion failed:\s*(.+)$/i);
+  if (regexMatch) {
+    return `Text match failed: ${regexMatch[1]}`;
+  }
+  return trimmed;
 }
 
 function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
