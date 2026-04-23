@@ -346,6 +346,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     name: configName || record.name,
     configName,
     description: record.path,
+    ...(record.relativePath ? { relativePath: record.relativePath } : {}),
+    ...(record.suitePath !== undefined ? { suitePath: record.suitePath } : {}),
     loadError: record.error,
     loadWarnings: record.warnings,
     servers,

@@ -102,6 +102,8 @@ export interface EvalConfig {
   configName?: string;
   description?: string;
   sourcePath?: string;
+  relativePath?: string;
+  suitePath?: string;
   loadError?: string;
   loadWarnings?: string[];
   servers?: ServerConfig[]; // deprecated: computed union from scenario mcpServers

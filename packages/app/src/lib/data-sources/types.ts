@@ -38,6 +38,8 @@ export interface WorkspaceConfigRecord {
   id: string;
   name: string;
   path: string;
+  relativePath?: string;
+  suitePath?: string;
   mtime: string;
   hash: string;
   config: CoreSourceEvalConfig;

@@ -1,24 +1,64 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfigs } from "@/contexts/ConfigContext";
+import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
+const ROOT_SUITE_LABEL = "(root)";
+const COLLAPSED_SUITES_STORAGE_KEY = "mcplab.configurations.collapsedSuites";
+
+const suiteLabelForConfig = (cfg: { suitePath?: string }) =>
+  cfg.suitePath && cfg.suitePath.trim().length > 0 ? cfg.suitePath.trim() : ROOT_SUITE_LABEL;
+
+const SUITE_ACCENT_CLASSES = [
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-indigo-500",
+  "bg-cyan-500",
+  "bg-lime-500",
+  "bg-fuchsia-500",
+];
+
+function suiteAccentClass(suiteName: string): string {
+  if (suiteName === ROOT_SUITE_LABEL) return "bg-slate-400";
+  const hash = suiteName
+    .split("")
+    .reduce((sum, char) => (sum + char.charCodeAt(0)) % SUITE_ACCENT_CLASSES.length, 0);
+  return SUITE_ACCENT_CLASSES[hash] ?? "bg-slate-400";
+}
 
 const Configurations = () => {
   const { configs, deleteConfig, cloneConfig, loading, reload } = useConfigs();
+  const { source } = useDataSource();
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<"name" | "scenarios" | "agents" | "updatedAt">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [configFilter, setConfigFilter] = useState("");
+  const [suiteFilter, setSuiteFilter] = useState<string>("all");
+  const [collapsedSuites, setCollapsedSuites] = useState<Set<string>>(() => {
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_SUITES_STORAGE_KEY);
+      if (!raw) return new Set<string>();
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return new Set<string>();
+      return new Set(parsed.filter((item): item is string => typeof item === "string"));
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
   const toggleSort = (next: typeof sortBy) => {
@@ -58,20 +98,32 @@ const Configurations = () => {
   const scenarioCount = (cfg: (typeof configs)[number]) =>
     cfg.scenarioEntries?.length ?? cfg.scenarios?.length ?? 0;
 
+  const suiteOptions = useMemo(() => {
+    const next = new Set<string>();
+    for (const cfg of configs) next.add(suiteLabelForConfig(cfg));
+    return Array.from(next).sort((a, b) => a.localeCompare(b));
+  }, [configs]);
+
   const filteredConfigs = useMemo(() => {
-    if (normalizedConfigFilter.length === 0) return configs;
     return configs.filter((cfg) => {
+      const suiteLabel = suiteLabelForConfig(cfg);
+      if (suiteFilter !== "all" && suiteLabel !== suiteFilter) {
+        return false;
+      }
+      if (normalizedConfigFilter.length === 0) return true;
       const haystack = [
         displayConfigName(cfg),
         cfg.id,
         cfg.description ?? "",
-        cfg.loadError ?? ""
+        cfg.loadError ?? "",
+        suiteLabel,
+        cfg.relativePath ?? ""
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(normalizedConfigFilter);
     });
-  }, [configs, normalizedConfigFilter]);
+  }, [configs, normalizedConfigFilter, suiteFilter]);
 
   const sortedConfigs = useMemo(() => {
     const sorted = [...filteredConfigs].sort((a, b) => {
@@ -90,6 +142,78 @@ const Configurations = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
+  const toggleSuiteCollapsed = (suiteName: string) => {
+    setCollapsedSuites((prev) => {
+      const next = new Set(prev);
+      if (next.has(suiteName)) next.delete(suiteName);
+      else next.add(suiteName);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        COLLAPSED_SUITES_STORAGE_KEY,
+        JSON.stringify(Array.from(collapsedSuites))
+      );
+    } catch {
+      // ignore storage errors (private mode/quota)
+    }
+  }, [collapsedSuites]);
+
+  const runSuite = async (suiteName: string, items: typeof sortedConfigs) => {
+    if (runningSuites.has(suiteName)) return;
+    setRunningSuites((prev) => new Set(prev).add(suiteName));
+    try {
+      const runnable = items.filter((cfg) => typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0);
+      if (runnable.length === 0) {
+        toast({
+          title: "No runnable evaluations",
+          description: `Suite "${suiteName}" has no evaluation files with a source path.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      for (const cfg of runnable) {
+        await source.startRun({
+          configPath: String(cfg.sourcePath),
+          runsPerScenario: 1,
+          applySnapshotEval: true,
+        });
+      }
+
+      toast({
+        title: "Suite queued",
+        description: `Queued ${runnable.length} evaluation${runnable.length === 1 ? "" : "s"} for suite "${suiteName}".`,
+      });
+    } catch (error: unknown) {
+      toast({
+        title: "Could not queue suite",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setRunningSuites((prev) => {
+        const next = new Set(prev);
+        next.delete(suiteName);
+        return next;
+      });
+    }
+  };
+
+  const groupedConfigs = useMemo(() => {
+    const grouped = new Map<string, typeof sortedConfigs>();
+    for (const cfg of sortedConfigs) {
+      const suite = suiteLabelForConfig(cfg);
+      const bucket = grouped.get(suite);
+      if (bucket) bucket.push(cfg);
+      else grouped.set(suite, [cfg]);
+    }
+    return Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [sortedConfigs]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -102,6 +226,19 @@ const Configurations = () => {
         </div>
         <div className="flex gap-2">
           <SearchInput value={configFilter} onValueChange={setConfigFilter} placeholder="Search evaluations..." />
+          <Select value={suiteFilter} onValueChange={setSuiteFilter}>
+            <SelectTrigger className="h-9 w-[200px]">
+              <SelectValue placeholder="All suites" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All suites</SelectItem>
+              {suiteOptions.map((suiteName) => (
+                <SelectItem key={suiteName} value={suiteName}>
+                  {suiteName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" size="sm" onClick={() => void reload()}>
             <RefreshCw className="mr-2 h-4 w-4" />Refresh
           </Button>
@@ -147,59 +284,109 @@ const Configurations = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedConfigs.map((cfg) => (
-                <TableRow key={cfg.id}>
-                  <TableCell>
-                    <div>
-                      <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{displayConfigName(cfg)}</Link>
-                      {cfg.loadError && (
-                        <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
-                          <AlertTriangle className="mr-1 h-3 w-3" />
-                          Broken
-                        </Badge>
-                      )}
-                      {cfg.description && <p className="text-xs text-muted-foreground mt-0.5">{cfg.description}</p>}
-                      {cfg.loadError && (
-                        <p className="text-xs text-destructive mt-0.5 break-all">
-                          {cfg.loadError}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">{scenarioCount(cfg)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm">{agentCount(cfg)}</TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
-                    {new Date(cfg.updatedAt).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-2">
-                      <Button size="sm" variant="outline" asChild>
-                        <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
-                          <Play className="h-3.5 w-3.5" />
-                          Run
-                        </Link>
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
+              {groupedConfigs.map(([suiteName, items]) => (
+                <Fragment key={`suite-group-${suiteName}`}>
+                  <TableRow key={`suite-${suiteName}`} className="bg-muted/40 hover:bg-muted/40">
+                    <TableCell colSpan={5} className="py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-6 items-center gap-2 text-xs leading-none hover:text-foreground"
+                          onClick={() => toggleSuiteCollapsed(suiteName)}
+                          aria-expanded={!collapsedSuites.has(suiteName)}
+                          aria-label={`${collapsedSuites.has(suiteName) ? "Expand" : "Collapse"} suite ${suiteName}`}
+                        >
+                          <ChevronRight
+                            className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
+                              collapsedSuites.has(suiteName) ? "" : "rotate-90"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span
+                            className={`h-2 w-2 rounded-full ${suiteAccentClass(suiteName)}`}
+                            aria-hidden="true"
+                          />
+                          {suiteName === ROOT_SUITE_LABEL ? (
+                            <Home className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                          ) : (
+                            <Folder className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                          )}
+                          <span className="font-medium">{suiteName}</span>
+                          <span className="text-muted-foreground">({items.length})</span>
+                        </button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          disabled={runningSuites.has(suiteName)}
+                          onClick={() => void runSuite(suiteName, items)}
+                        >
+                          <Play className="mr-1 h-3.5 w-3.5" />
+                          {runningSuites.has(suiteName) ? "Queueing..." : "Run Suite"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {!collapsedSuites.has(suiteName) && items.map((cfg) => (
+                    <TableRow key={cfg.id}>
+                      <TableCell>
+                        <div>
+                          <Link to={`/mcp-evaluations/${cfg.id}`} className="font-medium text-sm hover:text-primary">{displayConfigName(cfg)}</Link>
+                          {cfg.loadError && (
+                            <Badge variant="destructive" className="ml-2 align-middle text-[10px]">
+                              <AlertTriangle className="mr-1 h-3 w-3" />
+                              Broken
+                            </Badge>
+                          )}
+                          {cfg.relativePath && (
+                            <div className="mt-0.5">
+                              <span className="text-xs text-muted-foreground font-mono">{cfg.relativePath}</span>
+                            </div>
+                          )}
+                          {cfg.loadError && (
+                            <p className="text-xs text-destructive mt-0.5 break-all">
+                              {cfg.loadError}
+                            </p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{scenarioCount(cfg)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">{agentCount(cfg)}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {new Date(cfg.updatedAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
+                              <Play className="h-3.5 w-3.5" />
+                              Run
+                            </Link>
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/mcp-evaluations/${cfg.id}`)}>
-                            <Pencil className="mr-2 h-3.5 w-3.5" />Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
-                            <Copy className="mr-2 h-3.5 w-3.5" />Clone
-                          </DropdownMenuItem>
-<DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => navigate(`/mcp-evaluations/${cfg.id}`)}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" />Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
+                                <Copy className="mr-2 h-3.5 w-3.5" />Clone
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
               ))}
               {!loading && configs.length === 0 && (
                 <TableRow>

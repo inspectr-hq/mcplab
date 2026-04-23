@@ -60,7 +60,9 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
     if (assertion.type === 'regex') {
       try {
         // Default text pattern checks to case-insensitive to reduce brittle LLM-output casing failures.
-        const re = new RegExp(assertion.pattern, 'i');
+        // Strip inline flags like (?i), (?m), (?s) — not valid in JS; 'i' is already applied.
+        const sanitized = assertion.pattern.replace(/^\(\?[imsx]+\)/, '');
+        const re = new RegExp(sanitized, 'i');
         if (!re.test(text)) {
           failures.push(`Regex assertion failed: ${assertion.pattern}`);
         }

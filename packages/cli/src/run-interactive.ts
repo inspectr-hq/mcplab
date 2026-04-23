@@ -1,9 +1,14 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import kleur from 'kleur';
 import type { EvalConfig } from '@inspectr/mcplab-core';
 import { parse } from 'yaml';
+import {
+  deriveConfigRelativePath,
+  deriveSuitePathFromRelativePath,
+  listYamlConfigFilesRecursive
+} from './eval-config-files.js';
 
 export const INTERACTIVE_ABORT_ERROR = 'Interactive input cancelled.';
 
@@ -195,15 +200,17 @@ async function promptForConfigPath(
   loadConfigForValidation: (path: string) => { config: EvalConfig }
 ): Promise<string> {
   const files = existsSync(evalsDir)
-    ? readdirSync(evalsDir)
-        .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-        .sort((a, b) => a.localeCompare(b))
+    ? listYamlConfigFilesRecursive(evalsDir)
     : [];
-  const choices = files.map((fileName) => {
-    const path = resolve(evalsDir, fileName);
+  const choices = files.map((path) => {
+    const relativePath = deriveConfigRelativePath(path, evalsDir);
+    const suitePath = deriveSuitePathFromRelativePath(relativePath);
+    const fileName = relativePath.split('/').slice(-1)[0] || relativePath;
     return {
       path,
       fileName,
+      relativePath,
+      suitePath,
       label: readConfigName(path) ?? fileName
     };
   });
@@ -212,8 +219,11 @@ async function promptForConfigPath(
     console.log(kleur.cyan('\nSelect an evaluation config:'));
     choices.forEach((choice, index) => {
       const suffix =
-        choice.label === choice.fileName ? '' : ` ${kleur.gray(`(${choice.fileName})`)}`;
-      console.log(`${index + 1}. ${choice.label}${suffix}`);
+        choice.label === choice.fileName
+          ? ''
+          : ` ${kleur.gray(`(${choice.suitePath || '(root)'} · ${choice.fileName})`)}`;
+      const prefix = `${choice.suitePath || '(root)'} · `;
+      console.log(`${index + 1}. ${prefix}${choice.label}${suffix}`);
     });
   } else {
     console.log(kleur.yellow(`\nNo configs found in ${evalsDir}. Enter a path manually.`));
