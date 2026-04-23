@@ -2,28 +2,26 @@ import { render, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScenarioAssistantDialog } from './ScenarioAssistantDialog';
 import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
+import type { ScenarioAssistantSessionView } from '@/lib/data-sources/types';
 
 const mockSource = {
   createScenarioAssistantSession: vi.fn(),
   closeScenarioAssistantSession: vi.fn().mockResolvedValue(undefined),
-  getOAuthRuntimeSession: vi.fn(),
-  createOAuthRuntimeSession: vi.fn(),
-  getOAuthRuntimeSessionToken: vi.fn(),
   sendScenarioAssistantMessage: vi.fn(),
   approveScenarioAssistantToolCall: vi.fn(),
   denyScenarioAssistantToolCall: vi.fn(),
   approveAllScenarioAssistantToolCalls: vi.fn()
 };
 
-const mockWaitForOAuthRuntimeSession = vi.fn();
+const mockEnsureOAuthForServers = vi.fn();
 const mockToast = vi.fn();
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({ source: mockSource })
 }));
 
-vi.mock('@/lib/oauth-runtime-utils', () => ({
-  waitForOAuthRuntimeSession: (...args: unknown[]) => mockWaitForOAuthRuntimeSession(...args)
+vi.mock('@/lib/oauth-session-utils', () => ({
+  ensureOAuthForServers: (...args: unknown[]) => mockEnsureOAuthForServers(...args)
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -63,7 +61,7 @@ const servers: ServerConfig[] = [
   }
 ];
 
-function makeAssistantSession() {
+function makeAssistantSession(): ScenarioAssistantSessionView {
   return {
     id: 'sas-1',
     selectedAssistantAgentName: 'assistant-1',
@@ -73,7 +71,7 @@ function makeAssistantSession() {
     messages: [],
     createdAt: new Date().toISOString(),
     lastTouchedAt: new Date().toISOString()
-  } as any;
+  };
 }
 
 describe('ScenarioAssistantDialog OAuth startup', () => {
@@ -89,17 +87,7 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
       sessionId: 'sas-1',
       session: makeAssistantSession()
     });
-    mockSource.getOAuthRuntimeSession.mockRejectedValue(new Error('missing session'));
-    mockSource.createOAuthRuntimeSession.mockResolvedValue({
-      session: {
-        id: 'oauthrt-1',
-        authorizationUrl: 'https://auth.example.com',
-        authorizeLaunchUrl: 'https://auth.example.com',
-        status: 'waiting_for_user',
-        hasAccessToken: false
-      }
-    });
-    mockWaitForOAuthRuntimeSession.mockResolvedValue(undefined);
+    mockEnsureOAuthForServers.mockResolvedValue(undefined);
   });
 
   it('runs OAuth bootstrap before creating scenario assistant session', async () => {
@@ -114,14 +102,16 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
       />
     );
 
-    await waitFor(() => expect(mockSource.createOAuthRuntimeSession).toHaveBeenCalledWith({ serverName: 'oauth-server' }));
-    await waitFor(() => expect(mockWaitForOAuthRuntimeSession).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
+        serverNames: ['oauth-server'],
+        source: mockSource
+      })
+    );
     await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
 
     expect(mockSource.createScenarioAssistantSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        oauthRuntimeSessions: { 'oauth-server': 'oauthrt-1' }
-      })
+      expect.objectContaining({ scenarioId: 'scenario-1' })
     );
   });
 
@@ -152,10 +142,6 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
 
     await waitFor(() => expect(mockSource.closeScenarioAssistantSession).toHaveBeenCalled());
 
-    mockSource.getOAuthRuntimeSession.mockResolvedValue({
-      session: { status: 'completed', hasAccessToken: true }
-    });
-
     rerender(
       <ScenarioAssistantDialog
         open
@@ -168,14 +154,11 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     );
 
     await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalledTimes(2));
-    expect(mockSource.createOAuthRuntimeSession).toHaveBeenCalledTimes(1);
-    expect(mockSource.createScenarioAssistantSession).toHaveBeenLastCalledWith(
-      expect.objectContaining({ oauthRuntimeSessions: { 'oauth-server': 'oauthrt-1' } })
-    );
+    expect(mockEnsureOAuthForServers).toHaveBeenCalledTimes(2);
   });
 
   it('does not create scenario assistant session when OAuth bootstrap fails', async () => {
-    mockWaitForOAuthRuntimeSession.mockRejectedValue(new Error('OAuth timed out'));
+    mockEnsureOAuthForServers.mockRejectedValue(new Error('OAuth timed out'));
 
     render(
       <ScenarioAssistantDialog
@@ -223,10 +206,10 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     );
 
     await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
-    expect(mockSource.createOAuthRuntimeSession).toHaveBeenCalledTimes(1);
-    expect(mockSource.createOAuthRuntimeSession).toHaveBeenCalledWith({ serverName: 'oauth-server' });
-    expect(mockSource.createScenarioAssistantSession).toHaveBeenCalledWith(
-      expect.objectContaining({ oauthRuntimeSessions: { 'oauth-server': 'oauthrt-1' } })
+    expect(mockEnsureOAuthForServers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serverNames: ['oauth-server']
+      })
     );
   });
 });

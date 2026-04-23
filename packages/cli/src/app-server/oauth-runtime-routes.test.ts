@@ -63,8 +63,18 @@ async function callRoute(params: {
   body?: unknown;
   runtimeSessions?: OAuthRuntimeSessionsMap;
   oauthDebuggerSessions?: OAuthDebuggerSessionsMap;
+  oauthSessionManager?: {
+    ensureServersAuthorized: ReturnType<typeof vi.fn>;
+    noteRuntimeSession: ReturnType<typeof vi.fn>;
+  };
 }) {
   const deps = makeDeps(params.body);
+  const oauthSessionManager =
+    params.oauthSessionManager ??
+    ({
+      ensureServersAuthorized: vi.fn().mockResolvedValue({ servers: [], allReady: true }),
+      noteRuntimeSession: vi.fn()
+    } as any);
   const handled = await handleOAuthRuntimeRoutes({
     req: { headers: { host: 'localhost:8787' } } as any,
     res: {} as any,
@@ -73,6 +83,7 @@ async function callRoute(params: {
     settings: { librariesDir: '/tmp/test-libs' } as any,
     runtimeSessions: params.runtimeSessions ?? new Map(),
     oauthDebuggerSessions: params.oauthDebuggerSessions ?? new Map(),
+    oauthSessionManager: oauthSessionManager as any,
     deps
   });
   return { handled, response: deps.captured[0] };
@@ -247,6 +258,20 @@ describe('POST /api/oauth-runtime/sessions', () => {
     expect(handled).toBe(true);
     expect(response.status).toBe(400);
     expect((response.body as any).error).toMatch(/serverName is required/i);
+  });
+});
+
+describe('POST /api/oauth-runtime/servers/ensure', () => {
+  it('returns 400 when serverNames is missing', async () => {
+    const { handled, response } = await callRoute({
+      pathname: '/api/oauth-runtime/servers/ensure',
+      method: 'POST',
+      body: {}
+    });
+
+    expect(handled).toBe(true);
+    expect(response.status).toBe(400);
+    expect((response.body as any).error).toMatch(/serverNames/i);
   });
 });
 

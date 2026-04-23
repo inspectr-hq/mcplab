@@ -19,6 +19,22 @@ export interface McpConnectAllOptions {
   serverAuthHeaders?: Record<string, Record<string, string>>;
 }
 
+export interface McpImplementationIcon {
+  src: string;
+  mimeType?: string;
+  sizes?: string[];
+  theme?: 'light' | 'dark';
+}
+
+export interface McpServerImplementation {
+  name: string;
+  version: string;
+  title?: string;
+  description?: string;
+  websiteUrl?: string;
+  icons?: McpImplementationIcon[];
+}
+
 export function normalizeListedTool(tool: any): ToolDef {
   return {
     name: tool.name,
@@ -41,6 +57,7 @@ export class McpClientManager {
   private servers = new Map<string, ServerConfig>();
   private authHeaders = new Map<string, Record<string, string>>();
   private serverVersions = new Map<string, string | null>();
+  private serverImplementations = new Map<string, McpServerImplementation | null>();
   private oauthCache = new Map<string, { token: string; expiresAt: number }>();
   private static readonly MAX_CONNECT_RETRIES = 3;
   private static readonly MAX_SCOPED_CLIENTS = 100;
@@ -60,6 +77,7 @@ export class McpClientManager {
     throwIfAborted(signal);
     this.servers = new Map(Object.entries(servers));
     this.serverVersions.clear();
+    this.serverImplementations.clear();
     for (const [name, server] of Object.entries(servers)) {
       throwIfAborted(signal);
       if (server.transport !== 'http') {
@@ -80,7 +98,9 @@ export class McpClientManager {
           signal
         );
         this.clients.set(name, client);
-        this.serverVersions.set(name, client.getServerVersion()?.version ?? null);
+        const implementation = client.getServerVersion();
+        this.serverVersions.set(name, implementation?.version ?? null);
+        this.serverImplementations.set(name, implementation ? normalizeImplementation(implementation) : null);
       } catch (err: any) {
         throw new Error(
           formatMcpError(
@@ -170,6 +190,7 @@ export class McpClientManager {
     this.servers.clear();
     this.authHeaders.clear();
     this.serverVersions.clear();
+    this.serverImplementations.clear();
     await Promise.all(
       clients.map(async (client) => {
         try {
@@ -186,6 +207,10 @@ export class McpClientManager {
 
   getServerVersions(): Record<string, string | null> {
     return Object.fromEntries(this.serverVersions.entries());
+  }
+
+  getServerImplementations(): Record<string, McpServerImplementation | null> {
+    return Object.fromEntries(this.serverImplementations.entries());
   }
 
   private async connectClient(
@@ -414,6 +439,43 @@ export class McpClientManager {
       );
     }
   }
+}
+
+function normalizeImplementation(input: unknown): McpServerImplementation | null {
+  if (!input || typeof input !== 'object') return null;
+  const source = input as Record<string, unknown>;
+  const name = typeof source.name === 'string' ? source.name : '';
+  const version = typeof source.version === 'string' ? source.version : '';
+  if (!name || !version) return null;
+  const normalized: McpServerImplementation = { name, version };
+  if (typeof source.title === 'string' && source.title.trim()) normalized.title = source.title;
+  if (typeof source.description === 'string' && source.description.trim()) {
+    normalized.description = source.description;
+  }
+  if (typeof source.websiteUrl === 'string' && source.websiteUrl.trim()) {
+    normalized.websiteUrl = source.websiteUrl;
+  }
+  if (Array.isArray(source.icons)) {
+    const icons = source.icons
+      .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+      .map((entry) => {
+        const src = typeof entry.src === 'string' ? entry.src : '';
+        if (!src) return null;
+        const icon: McpImplementationIcon = { src };
+        if (typeof entry.mimeType === 'string' && entry.mimeType.trim()) icon.mimeType = entry.mimeType;
+        if (Array.isArray(entry.sizes)) {
+          const sizes = entry.sizes
+            .map((size) => String(size).trim())
+            .filter(Boolean);
+          if (sizes.length > 0) icon.sizes = sizes;
+        }
+        if (entry.theme === 'light' || entry.theme === 'dark') icon.theme = entry.theme;
+        return icon;
+      })
+      .filter((icon): icon is McpImplementationIcon => !!icon);
+    if (icons.length > 0) normalized.icons = icons;
+  }
+  return normalized;
 }
 
 function getStaticHeaders(server: ServerConfig): Record<string, string> {

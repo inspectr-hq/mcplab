@@ -5,10 +5,8 @@ import type { Scenario, AgentConfig, ServerConfig } from "@/types/eval";
 
 const mockSource = {
   discoverToolsForAnalysis: vi.fn().mockResolvedValue({ servers: [] }),
-  getOAuthRuntimeSession: vi.fn(),
-  createOAuthRuntimeSession: vi.fn(),
 };
-const mockWaitForOAuthRuntimeSession = vi.fn();
+const mockEnsureOAuthForServers = vi.fn();
 
 vi.mock("@/contexts/DataSourceContext", () => ({
   useDataSource: () => ({
@@ -16,8 +14,8 @@ vi.mock("@/contexts/DataSourceContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/oauth-runtime-utils", () => ({
-  waitForOAuthRuntimeSession: (...args: unknown[]) => mockWaitForOAuthRuntimeSession(...args),
+vi.mock("@/lib/oauth-session-utils", () => ({
+  ensureOAuthForServers: (...args: unknown[]) => mockEnsureOAuthForServers(...args),
 }));
 
 vi.mock("@/components/config-editor/ScenarioAssistantDialog", () => ({
@@ -39,20 +37,11 @@ describe("ScenarioForm checks editor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [] });
-    mockSource.getOAuthRuntimeSession.mockRejectedValue(new Error("missing"));
-    mockSource.createOAuthRuntimeSession.mockResolvedValue({
-      session: {
-        id: "oauthrt-1",
-        authorizeLaunchUrl: "https://auth.example.com",
-        authorizationUrl: "https://auth.example.com",
-      },
-    });
-    mockWaitForOAuthRuntimeSession.mockResolvedValue(undefined);
+    mockEnsureOAuthForServers.mockResolvedValue(undefined);
   });
 
-  it("loads tools with OAuth runtime sessions for oauth2 servers", async () => {
+  it("loads tools after ensuring OAuth for oauth2 servers", async () => {
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [{ tools: [] }] });
-    vi.spyOn(window, "open").mockImplementation(() => null);
 
     const onChange = vi.fn();
     render(
@@ -75,12 +64,14 @@ describe("ScenarioForm checks editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load tools" }));
 
     await waitFor(() =>
-      expect(mockSource.createOAuthRuntimeSession).toHaveBeenCalledWith({ serverName: "oauth-server" })
+      expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
+        serverNames: ["oauth-server"],
+        source: mockSource,
+      })
     );
     await waitFor(() =>
       expect(mockSource.discoverToolsForAnalysis).toHaveBeenCalledWith({
         serverNames: ["oauth-server"],
-        oauthRuntimeSessions: { "oauth-server": "oauthrt-1" },
       })
     );
   });

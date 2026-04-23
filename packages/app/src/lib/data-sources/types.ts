@@ -427,6 +427,20 @@ export interface ToolAnalysisDiscoveredTool {
 export interface ToolAnalysisDiscoverResponse {
   servers: Array<{
     serverName: string;
+    mcpServerVersion?: string | null;
+    mcpServerImplementation?: {
+      name: string;
+      version: string;
+      title?: string;
+      description?: string;
+      websiteUrl?: string;
+      icons?: Array<{
+        src: string;
+        mimeType?: string;
+        sizes?: string[];
+        theme?: 'light' | 'dark';
+      }>;
+    } | null;
     warnings: string[];
     tools: ToolAnalysisDiscoveredTool[];
   }>;
@@ -607,6 +621,18 @@ export interface OAuthRuntimeSessionView {
   lastError?: string;
 }
 
+export interface OAuthEnsureServerStatus {
+  serverName: string;
+  status: 'ready' | 'auth_required' | 'not_oauth';
+  debugState?: 'reused' | 'refreshed' | 'auth_required' | 'not_oauth';
+  tokenExpiresAt?: string;
+  tokenExpiresInSeconds?: number;
+  runtimeSessionId?: string;
+  authorizationUrl?: string;
+  authorizeLaunchUrl?: string;
+  message?: string;
+}
+
 export interface EvalDataSource {
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -624,7 +650,6 @@ export interface EvalDataSource {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
-    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
@@ -700,7 +725,6 @@ export interface EvalDataSource {
     configPath?: string;
     scenarioId: string;
     selectedAssistantAgentName: string;
-    oauthRuntimeSessions?: Record<string, string>;
     context: {
       configSnapshotPolicy?: {
         enabled: boolean;
@@ -749,12 +773,10 @@ export interface EvalDataSource {
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
   discoverToolsForAnalysis: (params: {
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
   }) => Promise<ToolAnalysisDiscoverResponse>;
   startToolAnalysis: (params: {
     assistantAgentName?: string;
     serverNames: string[];
-    oauthRuntimeSessions?: Record<string, string>;
     selectedToolsByServer?: Record<string, string[]>;
     maxParallelTools?: number;
     modes: {
@@ -810,4 +832,7 @@ export interface EvalDataSource {
     payload: { redirectUrl?: string; code?: string; state?: string }
   ) => Promise<{ session: OAuthRuntimeSessionView }>;
   cancelOAuthRuntimeSession: (sessionId: string) => Promise<{ session: OAuthRuntimeSessionView }>;
+  ensureOAuthServers: (params: {
+    serverNames: string[];
+  }) => Promise<{ servers: OAuthEnsureServerStatus[]; allReady: boolean }>;
 }

@@ -5,8 +5,10 @@ import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
 import { truncateJson } from './assistant-common.js';
-import type { OAuthRuntimeSessionsMap, OAuthDebuggerSessionsMap } from './app-context.js';
-import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
+import {
+  OAuthAuthorizationRequiredError,
+  type OAuthSessionManager
+} from './oauth-session-manager.js';
 import {
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromLibraries
@@ -626,9 +628,8 @@ export async function runToolAnalysisJob(params: {
   settings: AppSettings;
   requestedAssistantAgentName?: string;
   serverNames: string[];
-  oauthRuntimeSessionsByServer?: Record<string, string>;
-  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
-  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
+  oauthSessionManager: OAuthSessionManager;
+  hostHeader?: string;
   selectedToolsByServer?: Record<string, string[]>;
   modes: { metadataReview: boolean; deeperAnalysis: boolean };
   deeper: {
@@ -663,15 +664,18 @@ export async function runToolAnalysisJob(params: {
   const oauthServers = serverNames.filter(
     (serverName) => libraries.servers[serverName]?.auth?.type === 'oauth_authorization_code'
   );
-  const serverAuthHeaders =
-    oauthServers.length > 0
-      ? resolveRuntimeOAuthAuthHeaders({
-          requiredServerNames: oauthServers,
-          oauthRuntimeSessionsByServer: params.oauthRuntimeSessionsByServer,
-          runtimeSessions: params.oauthRuntimeSessions,
-          oauthDebuggerSessions: params.oauthDebuggerSessions
-        })
-      : undefined;
+  let serverAuthHeaders: Record<string, Record<string, string>> | undefined;
+  try {
+    serverAuthHeaders =
+      oauthServers.length > 0
+        ? await params.oauthSessionManager.getAuthHeadersForServers(oauthServers, params.hostHeader)
+        : undefined;
+  } catch (error: unknown) {
+    if (error instanceof OAuthAuthorizationRequiredError) {
+      throw new Error(error.details[0]?.message || error.message);
+    }
+    throw error;
+  }
 
   const { mcp, servers: discoveredServers } = await discoverMcpToolsForServers(
     libraries.servers,

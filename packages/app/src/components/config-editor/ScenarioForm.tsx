@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
+import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -140,7 +140,6 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
   const [toolNamesError, setToolNamesError] = useState<string | null>(null);
-  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
   const [newExtractName, setNewExtractName] = useState("");
   const [newExtractPattern, setNewExtractPattern] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -273,59 +272,15 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
     setToolNamesLoading(true);
     setToolNamesError(null);
     try {
-      const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
-        const openBrowserOnce = (() => {
-          let opened = false;
-          return (launchUrl: string) => {
-            if (opened || !launchUrl) return;
-            opened = true;
-            const absoluteUrl = launchUrl.startsWith("http")
-              ? launchUrl
-              : `${window.location.origin}${launchUrl}`;
-            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-          };
-        })();
-
-        let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServer[serverName];
-        if (runtimeSessionId) {
-          try {
-            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
-            if (session.status === "completed" && session.hasAccessToken) {
-              return runtimeSessionId;
-            }
-          } catch {
-            runtimeSessionId = undefined;
-          }
-        }
-
-        const created = await source.createOAuthRuntimeSession({ serverName });
-        runtimeSessionId = created.session.id;
-        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
-        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
-        await waitForOAuthRuntimeSession({
-          sessionId: runtimeSessionId,
-          source,
-          serverName,
-          onLaunchUrl: openBrowserOnce
-        });
-        return runtimeSessionId;
-      };
-
-      const oauthRuntimeSessions: Record<string, string> = {};
       const oauthServerIds = selectedServerIds.filter((serverId) => {
         const server = servers.find((entry) => entry.id === serverId);
         return server?.authType === "oauth2";
       });
-      for (const serverId of oauthServerIds) {
-        oauthRuntimeSessions[serverId] = await ensureOAuthRuntimeSession(serverId);
-      }
+      await ensureOAuthForServers({ serverNames: oauthServerIds, source });
 
       const discovered = new Set<string>();
       for (const serverId of selectedServerIds) {
-        const res = await source.discoverToolsForAnalysis({
-          serverNames: [serverId],
-          oauthRuntimeSessions: Object.keys(oauthRuntimeSessions).length > 0 ? oauthRuntimeSessions : undefined
-        });
+        const res = await source.discoverToolsForAnalysis({ serverNames: [serverId] });
         for (const server of res.servers) {
           for (const tool of server.tools) discovered.add(tool.name);
         }

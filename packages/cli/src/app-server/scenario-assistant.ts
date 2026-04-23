@@ -10,13 +10,14 @@ import {
 import type {
   AppRouteDeps,
   AppRouteRequestContext,
-  AssistantSessionsMap,
-  OAuthDebuggerSessionsMap,
-  OAuthRuntimeSessionsMap
+  AssistantSessionsMap
 } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
-import { resolveRuntimeOAuthAuthHeaders } from './oauth-runtime-domain.js';
+import {
+  OAuthAuthorizationRequiredError,
+  type OAuthSessionManager
+} from './oauth-session-manager.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -43,8 +44,7 @@ export async function handleScenarioAssistantRoutes(params: {
   method: string;
   settings: AppRouteRequestContext['settings'];
   assistantSessions: AssistantSessionsMap;
-  oauthRuntimeSessions: OAuthRuntimeSessionsMap;
-  oauthDebuggerSessions: OAuthDebuggerSessionsMap;
+  oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
   const {
@@ -54,8 +54,7 @@ export async function handleScenarioAssistantRoutes(params: {
     method,
     settings,
     assistantSessions,
-    oauthRuntimeSessions,
-    oauthDebuggerSessions,
+    oauthSessionManager,
     deps
   } = params;
   const {
@@ -86,15 +85,10 @@ export async function handleScenarioAssistantRoutes(params: {
       scenarioId?: unknown;
       selectedAssistantAgentName?: unknown;
       context?: unknown;
-      oauthRuntimeSessions?: unknown;
     };
     const configPathRaw = body.configPath ? String(body.configPath).trim() : '';
     const scenarioId = String(body.scenarioId ?? '').trim();
     const requestedAssistantAgentName = String(body.selectedAssistantAgentName ?? '').trim();
-    const oauthRuntimeSessionsByServer =
-      body.oauthRuntimeSessions && typeof body.oauthRuntimeSessions === 'object'
-        ? (body.oauthRuntimeSessions as Record<string, string>)
-        : undefined;
     const contextRaw = body.context ?? {};
     if (!scenarioId) {
       asJson(res, 400, { error: 'scenarioId is required' });
@@ -189,13 +183,15 @@ export async function handleScenarioAssistantRoutes(params: {
     let serverAuthHeaders: Record<string, Record<string, string>> | undefined;
     if (oauthServerNames.length > 0) {
       try {
-        serverAuthHeaders = resolveRuntimeOAuthAuthHeaders({
-          requiredServerNames: oauthServerNames,
-          oauthRuntimeSessionsByServer,
-          runtimeSessions: oauthRuntimeSessions,
-          oauthDebuggerSessions
-        });
+        serverAuthHeaders = await oauthSessionManager.getAuthHeadersForServers(
+          oauthServerNames,
+          req.headers.host
+        );
       } catch (error: unknown) {
+        if (error instanceof OAuthAuthorizationRequiredError) {
+          asJson(res, 401, { error: error.message, oauth: { required: error.details } });
+          return true;
+        }
         asJson(res, 400, { error: errorMessage(error) });
         return true;
       }

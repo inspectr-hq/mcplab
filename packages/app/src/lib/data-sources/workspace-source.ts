@@ -243,5 +243,8 @@ export const workspaceSource: EvalDataSource = {
   },
   async cancelOAuthRuntimeSession(sessionId) {
     return workspaceApiClient.cancelOAuthRuntimeSession(sessionId);
+  },
+  async ensureOAuthServers(params) {
+    return workspaceApiClient.ensureOAuthServers(params);
   }
 };

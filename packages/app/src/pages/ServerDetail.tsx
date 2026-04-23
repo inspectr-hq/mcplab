@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, Copy, Loader2, Wifi, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Wifi, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,13 +20,32 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { validateServerAuthConfig } from "@/lib/server-auth-validation";
-import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
+import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 import type { ServerConfig } from "@/types/eval";
 
 type ConnectState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; toolNames: string[]; toolCount: number; testedAt: string }
+  | {
+      status: "success";
+      toolNames: string[];
+      toolCount: number;
+      mcpServerVersion?: string | null;
+      mcpServerImplementation?: {
+        name: string;
+        version: string;
+        title?: string;
+        description?: string;
+        websiteUrl?: string;
+        icons?: Array<{
+          src: string;
+          mimeType?: string;
+          sizes?: string[];
+          theme?: "light" | "dark";
+        }>;
+      } | null;
+      testedAt: string;
+    }
   | { status: "error"; message: string; testedAt: string };
 
 const transportHints: Record<string, string> = {
@@ -41,6 +60,16 @@ const emptyServer = (): ServerConfig => ({
   transport: "stdio",
   authType: "none",
 });
+
+function formatSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "expired";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
 
 const ServerDetail = () => {
   const { serverId } = useParams<{ serverId: string }>();
@@ -58,9 +87,8 @@ const ServerDetail = () => {
   const [saving, setSaving] = useState(false);
   const [connectState, setConnectState] = useState<ConnectState>({ status: "idle" });
   const [showConnectPanel, setShowConnectPanel] = useState(false);
-  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<Record<string, string>>({});
-  const [oauthAccessToken, setOauthAccessToken] = useState<string | undefined>(undefined);
   const [authInProgress, setAuthInProgress] = useState(false);
+  const [oauthDebugEvents, setOauthDebugEvents] = useState<string[]>([]);
   const [showAdvancedOauth, setShowAdvancedOauth] = useState(false);
 
   useEffect(() => {
@@ -101,56 +129,49 @@ const ServerDetail = () => {
   const handleConnect = async () => {
     setShowConnectPanel(true);
     setConnectState({ status: "loading" });
-
-    let oauthSessions: Record<string, string> | undefined;
+    setOauthDebugEvents([]);
 
     if (form.authType === "oauth2") {
-      const ensureOAuthRuntimeSession = async (serverName: string): Promise<string> => {
-        const openBrowserOnce = (() => {
-          let opened = false;
-          return (launchUrl: string) => {
-            if (opened || !launchUrl) return;
-            opened = true;
-            const absoluteUrl = launchUrl.startsWith("http")
-              ? launchUrl
-              : `${window.location.origin}${launchUrl}`;
-            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-          };
-        })();
-
-        let runtimeSessionId: string | undefined = oauthRuntimeSessionsByServer[serverName];
-        if (runtimeSessionId) {
-          try {
-            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
-            if (session.status === "completed" && session.hasAccessToken) return runtimeSessionId;
-          } catch {
-            runtimeSessionId = undefined;
-          }
-        }
-
-        const created = await source.createOAuthRuntimeSession({ serverName });
-        runtimeSessionId = created.session.id;
-        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId }));
-        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
-        await waitForOAuthRuntimeSession({
-          sessionId: runtimeSessionId,
-          source,
-          serverName,
-          onLaunchUrl: openBrowserOnce,
-        });
-        try {
-          const { accessToken } = await source.getOAuthRuntimeSessionToken(runtimeSessionId);
-          if (accessToken) setOauthAccessToken(accessToken);
-        } catch {
-          // token unavailable — copy button simply won't show
-        }
-        return runtimeSessionId;
-      };
-
       try {
         setAuthInProgress(true);
-        const sessionId = await ensureOAuthRuntimeSession(form.id);
-        oauthSessions = { [form.id]: sessionId };
+        await ensureOAuthForServers({
+          serverNames: [form.id],
+          source,
+          onServerStatus: (entry) => {
+            const now = new Date().toLocaleTimeString();
+            const expirySuffix =
+              typeof entry.tokenExpiresInSeconds === "number"
+                ? ` (valid ${formatSeconds(entry.tokenExpiresInSeconds)}; until ${new Date(
+                    entry.tokenExpiresAt || Date.now()
+                  ).toLocaleTimeString()})`
+                : "";
+            if (entry.status === "auth_required") {
+              setOauthDebugEvents((prev) => [
+                ...prev,
+                `[${now}] OAuth debug: callback required for '${entry.serverName}'`
+              ]);
+              return;
+            }
+            if (entry.status === "ready") {
+              if (entry.debugState === "refreshed") {
+                setOauthDebugEvents((prev) => [
+                  ...prev,
+                  `[${now}] OAuth debug: token refreshed (no callback)${expirySuffix}`
+                ]);
+              } else if (entry.debugState === "reused") {
+                setOauthDebugEvents((prev) => [
+                  ...prev,
+                  `[${now}] OAuth debug: session/token reused${expirySuffix}`
+                ]);
+              } else {
+                setOauthDebugEvents((prev) => [
+                  ...prev,
+                  `[${now}] OAuth debug: authorized${expirySuffix}`
+                ]);
+              }
+            }
+          }
+        });
       } catch (err) {
         setConnectState({
           status: "error",
@@ -165,16 +186,15 @@ const ServerDetail = () => {
     }
 
     try {
-      const result = await source.discoverToolsForAnalysis({
-        serverNames: [form.id],
-        oauthRuntimeSessions: oauthSessions,
-      });
+      const result = await source.discoverToolsForAnalysis({ serverNames: [form.id] });
       const serverResult = result.servers[0];
       if (serverResult && serverResult.warnings.length === 0) {
         setConnectState({
           status: "success",
           toolNames: serverResult.tools.map((t) => t.name),
           toolCount: serverResult.tools.length,
+          mcpServerVersion: serverResult.mcpServerVersion,
+          mcpServerImplementation: serverResult.mcpServerImplementation,
           testedAt: new Date().toISOString(),
         });
       } else {
@@ -306,9 +326,20 @@ const ServerDetail = () => {
             </div>
 
             {connectState.status === "loading" && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {authInProgress ? "Waiting for OAuth login in browser…" : "Connecting to MCP server…"}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {authInProgress ? "Waiting for OAuth login in browser…" : "Connecting to MCP server…"}
+                </div>
+                {oauthDebugEvents.length > 0 && (
+                  <div className="space-y-0.5">
+                    {oauthDebugEvents.map((line, index) => (
+                      <p key={`${line}-${index}`} className="text-xs text-muted-foreground">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -328,27 +359,47 @@ const ServerDetail = () => {
                     </ul>
                   </div>
                 )}
-                {oauthAccessToken && (
-                  <div className="rounded-md border bg-muted/40 p-3 space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">OAuth access token</p>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 truncate text-xs font-mono text-muted-foreground">{oauthAccessToken.slice(0, 32)}…</code>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0 h-7 px-2 text-xs"
-                        onClick={() => void navigator.clipboard.writeText(oauthAccessToken)}
-                      >
-                        <Copy className="mr-1 h-3 w-3" />
-                        Copy token
-                      </Button>
+                {connectState.mcpServerImplementation && (
+                  <div className="rounded-md border bg-muted/40 p-3">
+                    <div className="flex items-start gap-2">
+                      {connectState.mcpServerImplementation.icons?.[0]?.src ? (
+                        <img
+                          src={connectState.mcpServerImplementation.icons[0].src}
+                          alt={connectState.mcpServerImplementation.title || connectState.mcpServerImplementation.name}
+                          className="h-7 w-7 rounded-sm border bg-background object-contain"
+                        />
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">MCP server</p>
+                        <p className="truncate text-sm">
+                          {connectState.mcpServerImplementation.title || connectState.mcpServerImplementation.name}
+                        </p>
+                        {connectState.mcpServerImplementation.description ? (
+                          <p className="text-xs text-muted-foreground">
+                            {connectState.mcpServerImplementation.description}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
+                )}
+                {connectState.mcpServerVersion && (
+                  <p className="text-xs text-muted-foreground">
+                    MCP server version: <code className="font-mono">{connectState.mcpServerVersion}</code>
+                  </p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   Tested at {new Date(connectState.testedAt).toLocaleString()}
                 </p>
+                {oauthDebugEvents.length > 0 && (
+                  <div className="space-y-0.5">
+                    {oauthDebugEvents.map((line, index) => (
+                      <p key={`${line}-${index}`} className="text-xs text-muted-foreground">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

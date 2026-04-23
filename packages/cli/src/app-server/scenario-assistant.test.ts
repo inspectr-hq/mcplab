@@ -1,50 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import type {
-  OAuthDebuggerSessionsMap,
-  OAuthRuntimeSessionsMap,
-  AssistantSessionsMap
-} from './app-context.js';
-import type { OAuthDebuggerSession } from './oauth-debugger-domain.js';
-import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
+import type { AssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
-
-function makeRuntimeSession(overrides: Partial<OAuthRuntimeSession> = {}): OAuthRuntimeSession {
-  return {
-    id: 'oauthrt-1',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    serverName: 'oauth-server',
-    oauthDebuggerSessionId: 'dbg-1',
-    status: 'completed',
-    ...overrides
-  };
-}
-
-function makeDebuggerSession(overrides: Partial<OAuthDebuggerSession> = {}): OAuthDebuggerSession {
-  return {
-    id: 'dbg-1',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    status: 'completed',
-    config: {
-      profile: 'latest',
-      target: { serverName: 'oauth-server' },
-      registrationMethod: 'pre_registered',
-      clientConfig: { preRegistered: { clientId: 'cid' } },
-      runtime: { redirectMode: 'local_callback', usePkce: true, codeChallengeMethod: 'S256' },
-      display: { showSensitiveValues: false }
-    } as any,
-    steps: [],
-    validations: [],
-    network: [],
-    sequence: [],
-    events: [],
-    clients: new Set(),
-    abortController: new AbortController(),
-    context: {},
-    ...overrides
-  };
-}
+import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 
 function makeBody(overrides: Record<string, unknown> = {}) {
   return {
@@ -110,9 +67,8 @@ function makeDeps(options?: {
 async function callCreateSessionRoute(params?: {
   body?: unknown;
   servers?: Record<string, any>;
-  runtimeSessions?: OAuthRuntimeSessionsMap;
-  oauthDebuggerSessions?: OAuthDebuggerSessionsMap;
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
+  oauthSessionManager?: { getAuthHeadersForServers: ReturnType<typeof vi.fn> };
 }) {
   const { deps, captured, preloadAssistantTools } = makeDeps({
     body: params?.body,
@@ -120,6 +76,9 @@ async function callCreateSessionRoute(params?: {
     preloadAssistantTools: params?.preloadAssistantTools
   });
   const assistantSessions: AssistantSessionsMap = new Map();
+  const oauthSessionManager =
+    params?.oauthSessionManager ??
+    ({ getAuthHeadersForServers: vi.fn().mockResolvedValue({}) } as any);
 
   const handled = await handleScenarioAssistantRoutes({
     req: { headers: { host: 'localhost:8787' } } as any,
@@ -132,8 +91,7 @@ async function callCreateSessionRoute(params?: {
       scenarioAssistantAgentName: 'assistant-1'
     } as any,
     assistantSessions,
-    oauthRuntimeSessions: params?.runtimeSessions ?? new Map(),
-    oauthDebuggerSessions: params?.oauthDebuggerSessions ?? new Map(),
+    oauthSessionManager: oauthSessionManager as any,
     deps: deps as any
   });
 
@@ -141,32 +99,35 @@ async function callCreateSessionRoute(params?: {
     handled,
     response: captured[0],
     preloadAssistantTools,
-    assistantSessions
+    assistantSessions,
+    oauthSessionManager
   };
 }
 
-describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
-  it('creates session for non-OAuth servers without runtime mapping', async () => {
-    const { handled, response, preloadAssistantTools } = await callCreateSessionRoute({
-      body: makeBody({
-        context: {
-          scenario: {
-            id: 'scenario-1',
-            name: 'Scenario',
-            prompt: 'Prompt',
-            serverNames: ['server-1'],
-            evalRules: [],
-            extractRules: []
+describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
+  it('creates session for non-OAuth servers without auth headers', async () => {
+    const { handled, response, preloadAssistantTools, oauthSessionManager } =
+      await callCreateSessionRoute({
+        body: makeBody({
+          context: {
+            scenario: {
+              id: 'scenario-1',
+              name: 'Scenario',
+              prompt: 'Prompt',
+              serverNames: ['server-1'],
+              evalRules: [],
+              extractRules: []
+            }
           }
+        }),
+        servers: {
+          'server-1': { transport: 'http', url: 'https://example.com/mcp' }
         }
-      }),
-      servers: {
-        'server-1': { transport: 'http', url: 'https://example.com/mcp' }
-      }
-    });
+      });
 
     expect(handled).toBe(true);
     expect(response.status).toBe(201);
+    expect(oauthSessionManager.getAuthHeadersForServers).not.toHaveBeenCalled();
     expect(preloadAssistantTools).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
@@ -175,11 +136,12 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
     );
   });
 
-  it('injects runtime OAuth headers for oauth_authorization_code server', async () => {
-    const runtimeSession = makeRuntimeSession();
-    const debuggerSession = makeDebuggerSession({
-      context: { tokenResponse: { access_token: 'tok-123' } }
-    });
+  it('injects OAuth headers for oauth_authorization_code server', async () => {
+    const oauthSessionManager = {
+      getAuthHeadersForServers: vi
+        .fn()
+        .mockResolvedValue({ 'oauth-server': { authorization: 'Bearer tok-123' } })
+    };
 
     const { response, preloadAssistantTools } = await callCreateSessionRoute({
       body: makeBody({
@@ -192,8 +154,7 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
             evalRules: [],
             extractRules: []
           }
-        },
-        oauthRuntimeSessions: { 'oauth-server': runtimeSession.id }
+        }
       }),
       servers: {
         'oauth-server': {
@@ -202,8 +163,7 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
           auth: { type: 'oauth_authorization_code' }
         }
       },
-      runtimeSessions: new Map([[runtimeSession.id, runtimeSession]]),
-      oauthDebuggerSessions: new Map([[debuggerSession.id, debuggerSession]])
+      oauthSessionManager: oauthSessionManager as any
     });
 
     expect(response.status).toBe(201);
@@ -215,7 +175,20 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
     );
   });
 
-  it('returns 400 when oauth runtime mapping is missing for oauth server', async () => {
+  it('returns 401 when OAuth authorization is required', async () => {
+    const oauthSessionManager = {
+      getAuthHeadersForServers: vi.fn().mockRejectedValue(
+        new OAuthAuthorizationRequiredError([
+          {
+            serverName: 'oauth-server',
+            runtimeSessionId: 'oauthrt-1',
+            authorizeLaunchUrl: 'http://localhost:8787/api/oauth-runtime/sessions/oauthrt-1/authorize',
+            message: "OAuth login required for server 'oauth-server'."
+          }
+        ])
+      )
+    };
+
     const { response, preloadAssistantTools } = await callCreateSessionRoute({
       body: makeBody({
         context: {
@@ -228,67 +201,6 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
             extractRules: []
           }
         }
-      }),
-      servers: {
-        'oauth-server': {
-          transport: 'http',
-          url: 'https://example.com/mcp',
-          auth: { type: 'oauth_authorization_code' }
-        }
-      }
-    });
-
-    expect(response.status).toBe(400);
-    expect((response.body as any).error).toMatch(/OAuth login required for server 'oauth-server'/i);
-    expect(preloadAssistantTools).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 when oauth runtime mapping points to an invalid session', async () => {
-    const { response, preloadAssistantTools } = await callCreateSessionRoute({
-      body: makeBody({
-        context: {
-          scenario: {
-            id: 'scenario-1',
-            name: 'Scenario',
-            prompt: 'Prompt',
-            serverNames: ['oauth-server'],
-            evalRules: [],
-            extractRules: []
-          }
-        },
-        oauthRuntimeSessions: { 'oauth-server': 'oauthrt-missing' }
-      }),
-      servers: {
-        'oauth-server': {
-          transport: 'http',
-          url: 'https://example.com/mcp',
-          auth: { type: 'oauth_authorization_code' }
-        }
-      }
-    });
-
-    expect(response.status).toBe(400);
-    expect((response.body as any).error).toMatch(/invalid for 'oauth-server'/i);
-    expect(preloadAssistantTools).not.toHaveBeenCalled();
-  });
-
-  it('returns 400 when runtime session has no access token yet', async () => {
-    const runtimeSession = makeRuntimeSession();
-    const debuggerSession = makeDebuggerSession({ context: {} });
-
-    const { response, preloadAssistantTools } = await callCreateSessionRoute({
-      body: makeBody({
-        context: {
-          scenario: {
-            id: 'scenario-1',
-            name: 'Scenario',
-            prompt: 'Prompt',
-            serverNames: ['oauth-server'],
-            evalRules: [],
-            extractRules: []
-          }
-        },
-        oauthRuntimeSessions: { 'oauth-server': runtimeSession.id }
       }),
       servers: {
         'oauth-server': {
@@ -297,12 +209,12 @@ describe('POST /api/scenario-assistant/sessions OAuth runtime handling', () => {
           auth: { type: 'oauth_authorization_code' }
         }
       },
-      runtimeSessions: new Map([[runtimeSession.id, runtimeSession]]),
-      oauthDebuggerSessions: new Map([[debuggerSession.id, debuggerSession]])
+      oauthSessionManager: oauthSessionManager as any
     });
 
-    expect(response.status).toBe(400);
-    expect((response.body as any).error).toMatch(/has no access token yet/i);
+    expect(response.status).toBe(401);
+    expect((response.body as any).error).toMatch(/OAuth login required/i);
+    expect((response.body as any).oauth.required[0].serverName).toBe('oauth-server');
     expect(preloadAssistantTools).not.toHaveBeenCalled();
   });
 });

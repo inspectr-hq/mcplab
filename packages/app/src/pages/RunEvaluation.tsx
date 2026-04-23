@@ -15,7 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import type { QueueEntry } from "@/lib/data-sources/types";
-import { waitForOAuthRuntimeSession } from "@/lib/oauth-runtime-utils";
+import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 
 const RUN_EVAL_ACTIVE_JOB_KEY = "mcplab.runEvaluation.activeJobId";
 
@@ -38,9 +38,6 @@ const RunEvaluation = () => {
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
-  const [oauthRuntimeSessionsByServer, setOauthRuntimeSessionsByServer] = useState<
-    Record<string, string>
-  >({});
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -144,59 +141,6 @@ const RunEvaluation = () => {
       setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one test.`]);
       return;
     }
-    const ensureOAuthRuntimeSessions = async (serverNames: string[]) => {
-      const mapping: Record<string, string> = {};
-      for (const serverName of serverNames) {
-        let runtimeSessionId = oauthRuntimeSessionsByServer[serverName];
-        if (runtimeSessionId) {
-          try {
-            const { session } = await source.getOAuthRuntimeSession(runtimeSessionId);
-            if (session.status === "completed" && session.hasAccessToken) {
-              mapping[serverName] = runtimeSessionId;
-              continue;
-            }
-          } catch {
-            runtimeSessionId = undefined;
-          }
-        }
-
-        const openBrowserOnce = (() => {
-          let opened = false;
-          return (launchUrl: string) => {
-            if (opened || !launchUrl) return;
-            opened = true;
-            const absoluteUrl = launchUrl.startsWith("http")
-              ? launchUrl
-              : `${window.location.origin}${launchUrl}`;
-            window.open(absoluteUrl, "_blank", "noopener,noreferrer");
-            setLogs((prev) => [
-              ...prev,
-              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
-            ]);
-          };
-        })();
-
-        const created = await source.createOAuthRuntimeSession({ serverName });
-        runtimeSessionId = created.session.id;
-        mapping[serverName] = runtimeSessionId;
-        setOauthRuntimeSessionsByServer((prev) => ({ ...prev, [serverName]: runtimeSessionId! }));
-        openBrowserOnce(created.session.authorizeLaunchUrl || created.session.authorizationUrl || "");
-        await waitForOAuthRuntimeSession({
-          sessionId: runtimeSessionId,
-          source,
-          serverName,
-          onLaunchUrl: openBrowserOnce,
-        });
-
-        setLogs((prev) => [
-          ...prev,
-          `[${new Date().toLocaleTimeString()}] OAuth login completed for '${serverName}'.`,
-        ]);
-      }
-      setOauthRuntimeSessionsByServer((prev) => ({ ...prev, ...mapping }));
-      return mapping;
-    };
-
     const oauthServerNames = Array.from(
       new Set(
         selectedScenarios
@@ -211,11 +155,23 @@ const RunEvaluation = () => {
       )
     );
 
-    let oauthSessionsByServer: Record<string, string> | undefined;
     try {
       if (oauthServerNames.length > 0) {
         setOauthAuthInProgress(true);
-        oauthSessionsByServer = await ensureOAuthRuntimeSessions(oauthServerNames);
+        await ensureOAuthForServers({
+          serverNames: oauthServerNames,
+          source,
+          onServerAuthStart: (serverName) => {
+            setLogs((prev) => [
+              ...prev,
+              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
+            ]);
+          }
+        });
+        setLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] OAuth login completed for required server(s): ${oauthServerNames.join(", ")}.`,
+        ]);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -252,7 +208,6 @@ const RunEvaluation = () => {
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
         runNote: runNote.trim() ? runNote.trim() : undefined,
-        oauthRuntimeSessions: oauthSessionsByServer,
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
