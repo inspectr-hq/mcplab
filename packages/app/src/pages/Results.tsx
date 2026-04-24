@@ -9,6 +9,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  Plus,
   BarChart3,
   Sparkles,
   Bot,
@@ -22,7 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Command,
   CommandEmpty,
@@ -107,6 +108,32 @@ const Results = () => {
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const RESULT_ASSISTANT_SNIPPETS = [
+    {
+      label: "Summarize Run Trends",
+      description: "Highlight the main changes across the selected runs.",
+      prompt:
+        "Summarize the main trends across these runs. Call out pass-rate changes, latency, and tool usage shifts."
+    },
+    {
+      label: "Explain Failures",
+      description: "Identify the most important failures and likely root causes.",
+      prompt:
+        "Identify the most important failures across these runs and explain likely root causes from the traces."
+    },
+    {
+      label: "Compare Agents",
+      description: "Compare agent behavior, tool use, and answer quality across runs.",
+      prompt:
+        "Compare agent behavior across these runs. Highlight differences in tool use, answer quality, and consistency."
+    },
+    {
+      label: "Spot Anomalies",
+      description: "Find outliers in latency, tool calls, or pass rate.",
+      prompt:
+        "Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out."
+    }
+  ] as const;
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -276,6 +303,12 @@ const Results = () => {
         }
       ];
     });
+  };
+
+  const applyResultAssistantSnippet = (snippet: string) => {
+    setAssistantOpen(true);
+    setAssistantInput(snippet);
+    requestAnimationFrame(() => assistantInputRef.current?.focus());
   };
 
   const askAssistant = async () => {
@@ -751,10 +784,43 @@ const Results = () => {
                       }
                     }}
                   />
-                  <div className="mt-1 flex items-center justify-end gap-2 px-1 pt-1">
-                    <Button
-                      type="button"
-                      size="icon"
+                <div className="mt-1 flex items-center justify-between gap-2 px-1 pt-1">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground/80 hover:text-muted-foreground"
+                        disabled={assistantLoading}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Snippets
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[360px]">
+                      <DropdownMenuLabel>Result Assistant Snippets</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {RESULT_ASSISTANT_SNIPPETS.map((snippet) => (
+                        <DropdownMenuItem
+                          key={snippet.label}
+                          className="items-start whitespace-normal px-2 py-2"
+                          onSelect={() => applyResultAssistantSnippet(snippet.prompt)}
+                        >
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium leading-tight">{snippet.label}</div>
+                            <div className="text-[11px] leading-snug text-muted-foreground">
+                              {snippet.description}
+                            </div>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    type="button"
+                    size="icon"
                       className="h-8 w-8 shrink-0 rounded-full"
                       onClick={() => void askAssistant()}
                       disabled={assistantLoading || !assistantInput.trim()}
