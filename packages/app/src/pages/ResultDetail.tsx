@@ -842,19 +842,22 @@ const ResultDetail = () => {
               )}
             </div>
           </div>
-          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="flex w-full min-w-0 flex-col items-start gap-2 sm:ml-auto sm:w-auto sm:items-end">
             {mcpVersionSummary ? (
-              <span className="inline-flex items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
-                <span className="font-medium">MCP:</span>
-                <span className="ml-1 font-mono">{mcpVersionSummary}</span>
-              </span>
+              <div className="w-full sm:w-auto">
+                <span className="inline-flex max-w-full min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
+                  <span className="font-medium">MCP:</span>
+                  <span className="ml-1 min-w-0 truncate font-mono">{mcpVersionSummary}</span>
+                </span>
+              </div>
             ) : null}
+            <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
             {snapshotsUiEnabled && result.snapshotEval?.applied && (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="shrink-0 gap-1.5"
+                className="max-w-full gap-1.5"
                 onClick={() => void reviewDrift()}
                 disabled={comparing}
               >
@@ -862,7 +865,7 @@ const ResultDetail = () => {
                 {comparing ? "Reviewing drift..." : "Review Drift"}
               </Button>
             )}
-            <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => {
+            <Button variant="outline" size="sm" className="max-w-full gap-1.5" onClick={() => {
               const html = generateHtmlReport(result);
               const blob = new Blob([html], { type: "text/html" });
               const url = URL.createObjectURL(blob);
@@ -878,7 +881,7 @@ const ResultDetail = () => {
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 gap-1.5"
+              className="max-w-full gap-1.5"
               onClick={() => openReportsPanel()}
               disabled={referenceReportsLoading}
             >
@@ -891,7 +894,7 @@ const ResultDetail = () => {
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 gap-1.5"
+              className="max-w-full gap-1.5"
               onClick={() => openRunNotePanel()}
             >
               <NotepadText className="h-3.5 w-3.5" />
@@ -901,12 +904,13 @@ const ResultDetail = () => {
               type="button"
               variant="outline"
               size="sm"
-              className="shrink-0 gap-1.5"
+              className="max-w-full gap-1.5"
               onClick={() => openAssistantWithPrompt()}
             >
               <Sparkles className="h-4 w-4 text-amber-500" />
               MCP Lab Assistant
             </Button>
+            </div>
           </div>
         </div>
       </div>
