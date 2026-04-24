@@ -88,6 +88,7 @@ const ResultDetail = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
+  const isEmbedded = searchParams.get("embed") === "1";
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
@@ -820,7 +821,13 @@ const ResultDetail = () => {
       <div className={`${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <Button variant="ghost" size="icon" asChild><Link to="/results"><ArrowLeft className="h-4 w-4" /></Link></Button>
+            {!isEmbedded && (
+              <Button variant="ghost" size="icon" asChild>
+                <Link to="/results">
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
@@ -842,16 +849,14 @@ const ResultDetail = () => {
               )}
             </div>
           </div>
-          <div className="flex w-full min-w-0 flex-col items-start gap-2 sm:ml-auto sm:w-auto sm:items-end">
+          <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
             {mcpVersionSummary ? (
-              <div className="w-full sm:w-auto">
-                <span className="inline-flex max-w-full min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
-                  <span className="font-medium">MCP:</span>
-                  <span className="ml-1 min-w-0 truncate font-mono">{mcpVersionSummary}</span>
-                </span>
-              </div>
+              <span className="inline-flex max-w-[18rem] min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
+                <span className="font-medium">MCP:</span>
+                <span className="ml-1 min-w-0 truncate font-mono">{mcpVersionSummary}</span>
+              </span>
             ) : null}
-            <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
             {snapshotsUiEnabled && result.snapshotEval?.applied && (
               <Button
                 type="button"
@@ -865,17 +870,25 @@ const ResultDetail = () => {
                 {comparing ? "Reviewing drift..." : "Review Drift"}
               </Button>
             )}
-            <Button variant="outline" size="sm" className="max-w-full gap-1.5" onClick={() => {
-              const html = generateHtmlReport(result);
-              const blob = new Blob([html], { type: "text/html" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `mcplab-report-${result.id}.html`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}>
-              <Download className="h-3.5 w-3.5" />Download Report
+            <Button
+              variant="outline"
+              size="sm"
+              className={`max-w-full gap-1.5 ${isEmbedded ? "px-2" : ""}`}
+              onClick={() => {
+                const html = generateHtmlReport(result);
+                const blob = new Blob([html], { type: "text/html" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `mcplab-report-${result.id}.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              aria-label="Download Report"
+              title="Download Report"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {!isEmbedded && "Download Report"}
             </Button>
             <Button
               type="button"
@@ -1009,7 +1022,7 @@ const ResultDetail = () => {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+      <div className={`grid gap-4 ${assistantOpen ? "grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-6"}`}>
         <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
         <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
         <StatCard title="Pass Rate" value={`${Math.round(displayPassRate * 100)}%`} icon={BarChart3} />
