@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "@/hooks/use-toast";
-import type { EvalDataSource, ResultAssistantPendingToolCall, ResultAssistantSessionView, ResultAssistantTurnResponse } from "@/lib/data-sources/types";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from '@/hooks/use-toast';
+import type {
+  EvalDataSource,
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse
+} from '@/lib/data-sources/types';
 
 type ResultAssistantTurnPayload = {
   session: ResultAssistantSessionView;
@@ -9,25 +14,25 @@ type ResultAssistantTurnPayload = {
 
 function isSessionNotFoundError(error: unknown): boolean {
   const text = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return text.includes("404") && text.includes("session not found");
+  return text.includes('404') && text.includes('session not found');
 }
 
 export function useResultAssistant(params: {
   source: EvalDataSource;
   open: boolean;
-  scope: "run" | "all_runs";
+  scope: 'run' | 'all_runs';
   runId?: string;
   onSessionSync?: (session: ResultAssistantSessionView) => void;
 }) {
   const { source, open, scope, runId, onSessionSync } = params;
   const [assistantSessionId, setAssistantSessionId] = useState<string | null>(null);
-  const [assistantMessages, setAssistantMessages] = useState<ResultAssistantSessionView["messages"]>(
-    []
-  );
+  const [assistantMessages, setAssistantMessages] = useState<
+    ResultAssistantSessionView['messages']
+  >([]);
   const [assistantPendingToolCalls, setAssistantPendingToolCalls] = useState<
     ResultAssistantPendingToolCall[]
   >([]);
-  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
   const sourceRef = useRef(source);
@@ -63,24 +68,24 @@ export function useResultAssistant(params: {
   const askAssistant = useCallback(async () => {
     const question = assistantInput.trim();
     if (!question) return;
-    if (scope === "run" && !runId) return;
+    if (scope === 'run' && !runId) return;
     const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMessage = {
       id: optimisticMessageId,
-      role: "user" as const,
+      role: 'user' as const,
       text: question,
       createdAt: new Date().toISOString()
     };
-    setAssistantInput("");
+    setAssistantInput('');
     setAssistantMessages((prev) => [...prev, optimisticMessage]);
     setAssistantLoading(true);
     try {
       let sessionId = assistantSessionId;
       if (!sessionId) {
         const created =
-          scope === "run" && runId
-            ? await source.createResultAssistantSession({ runId, scope: "run" })
-            : await source.createResultAssistantSession({ scope: "all_runs" });
+          scope === 'run' && runId
+            ? await source.createResultAssistantSession({ runId, scope: 'run' })
+            : await source.createResultAssistantSession({ scope: 'all_runs' });
         sessionId = created.sessionId || created.session.id;
         syncResultAssistantSession(created.session, sessionId);
         setAssistantMessages((prev) => {
@@ -95,9 +100,9 @@ export function useResultAssistant(params: {
       } catch (error: unknown) {
         if (!isSessionNotFoundError(error)) throw error;
         const recreated =
-          scope === "run" && runId
-            ? await source.createResultAssistantSession({ runId, scope: "run" })
-            : await source.createResultAssistantSession({ scope: "all_runs" });
+          scope === 'run' && runId
+            ? await source.createResultAssistantSession({ runId, scope: 'run' })
+            : await source.createResultAssistantSession({ scope: 'all_runs' });
         const recoveredSessionId = recreated.sessionId || recreated.session.id;
         syncResultAssistantSession(recreated.session, recoveredSessionId);
         setAssistantMessages((prev) => {
@@ -111,9 +116,9 @@ export function useResultAssistant(params: {
     } catch (error: unknown) {
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
-        title: "MCP Lab Assistant error",
+        title: 'MCP Lab Assistant error',
         description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        variant: 'destructive'
       });
     } finally {
       setAssistantLoading(false);
@@ -141,13 +146,13 @@ export function useResultAssistant(params: {
           setAssistantPendingToolCalls([]);
         }
         toast({
-          title: "Could not approve assistant action",
+          title: 'Could not approve assistant action',
           description: isSessionNotFoundError(error)
-            ? "Assistant session expired. Ask a new question to start a fresh session."
+            ? 'Assistant session expired. Ask a new question to start a fresh session.'
             : error instanceof Error
-              ? error.message
-              : String(error),
-          variant: "destructive"
+            ? error.message
+            : String(error),
+          variant: 'destructive'
         });
       } finally {
         setAssistantLoading(false);
@@ -169,13 +174,13 @@ export function useResultAssistant(params: {
           setAssistantPendingToolCalls([]);
         }
         toast({
-          title: "Could not deny assistant action",
+          title: 'Could not deny assistant action',
           description: isSessionNotFoundError(error)
-            ? "Assistant session expired. Ask a new question to start a fresh session."
+            ? 'Assistant session expired. Ask a new question to start a fresh session.'
             : error instanceof Error
-              ? error.message
-              : String(error),
-          variant: "destructive"
+            ? error.message
+            : String(error),
+          variant: 'destructive'
         });
       } finally {
         setAssistantLoading(false);
@@ -193,7 +198,7 @@ export function useResultAssistant(params: {
     setAssistantSessionId(null);
     setAssistantMessages([]);
     setAssistantPendingToolCalls([]);
-    setAssistantInput("");
+    setAssistantInput('');
   }, [source]);
 
   const ensureIntroMessage = useCallback((text: string) => {
@@ -202,7 +207,7 @@ export function useResultAssistant(params: {
       return [
         {
           id: `msg-${Date.now()}`,
-          role: "assistant",
+          role: 'assistant',
           text,
           createdAt: new Date().toISOString()
         }
@@ -218,7 +223,7 @@ export function useResultAssistant(params: {
   useEffect(() => {
     if (!open) return;
     const t = window.setTimeout(() => {
-      assistantChatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      assistantChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 0);
     return () => window.clearTimeout(t);
   }, [open, assistantMessages.length, assistantLoading]);
@@ -226,7 +231,7 @@ export function useResultAssistant(params: {
   useEffect(() => {
     const el = assistantInputRef.current;
     if (!el) return;
-    el.style.height = "0px";
+    el.style.height = '0px';
     const next = Math.min(el.scrollHeight, 160);
     el.style.height = `${Math.max(40, next)}px`;
   }, [assistantInput, open]);

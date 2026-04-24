@@ -173,7 +173,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), Value Capture Rules, and snapshot settings.',
     'Use the available MCP tools and schemas to ground suggestions.',
     'If you need live MCP information, call a tool and wait for approval.',
-    "Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.",
+    'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
     'Respond ONLY as JSON with one of these envelopes:',
     `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,

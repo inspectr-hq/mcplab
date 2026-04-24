@@ -615,7 +615,9 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   };
 }
 
-export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>): CoreLibraryBundle {
+export function toCoreLibraries(
+  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>
+): CoreLibraryBundle {
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
       server.id,

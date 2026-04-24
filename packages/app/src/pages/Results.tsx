@@ -524,6 +524,8 @@ const Results = () => {
                             className="text-destructive"
                             onSelect={(e) => {
                               e.preventDefault();
+                              const active = document.activeElement;
+                              if (active instanceof HTMLElement) active.blur();
                               setPendingDeleteRunId(r.id);
                             }}
                           >

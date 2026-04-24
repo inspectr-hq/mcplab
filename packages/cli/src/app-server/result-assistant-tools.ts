@@ -1,10 +1,4 @@
-export type ResultAssistantToolRole =
-  | 'search'
-  | 'list'
-  | 'read'
-  | 'analysis'
-  | 'catalog'
-  | 'write';
+export type ResultAssistantToolRole = 'search' | 'list' | 'read' | 'analysis' | 'catalog' | 'write';
 
 export interface ResultAssistantToolCapability {
   name: string;

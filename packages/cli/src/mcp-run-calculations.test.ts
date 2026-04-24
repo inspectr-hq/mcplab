@@ -78,7 +78,11 @@ function makeResults(
   };
 }
 
-function makeLoadedRun(runId: string, timestamp: string, scenarios: ScenarioAggregate[]): LoadedRunResult {
+function makeLoadedRun(
+  runId: string,
+  timestamp: string,
+  scenarios: ScenarioAggregate[]
+): LoadedRunResult {
   return {
     run_id: runId,
     path: `/tmp/${runId}`,
@@ -193,8 +197,12 @@ describe('mcp run calculation helpers', () => {
     };
     expect(classifyCompareRow(null, base)).toBe('new');
     expect(classifyCompareRow(base, null)).toBe('missing');
-    expect(classifyCompareRow({ ...base, pass_rate: 0.3 }, { ...base, pass_rate: 0.6 })).toBe('improved');
-    expect(classifyCompareRow({ ...base, pass_rate: 0.8 }, { ...base, pass_rate: 0.2 })).toBe('regressed');
+    expect(classifyCompareRow({ ...base, pass_rate: 0.3 }, { ...base, pass_rate: 0.6 })).toBe(
+      'improved'
+    );
+    expect(classifyCompareRow({ ...base, pass_rate: 0.8 }, { ...base, pass_rate: 0.2 })).toBe(
+      'regressed'
+    );
     expect(classifyCompareRow(base, { ...base })).toBe('unchanged');
   });
 });

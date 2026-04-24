@@ -62,7 +62,9 @@ export function buildAggregateRunsReport(params: {
     config_hash: run.results.metadata.config_hash
   }));
   const overallMetrics = computeMetricSummary(
-    params.runs.flatMap((run) => filterScenarios(run.results.scenarios, scenarioFilter, agentFilter))
+    params.runs.flatMap((run) =>
+      filterScenarios(run.results.scenarios, scenarioFilter, agentFilter)
+    )
   );
   const rows = buildAggregateRows(params.runs, params.groupBy, scenarioFilter, agentFilter);
   const worstRows = [...rows]
@@ -104,7 +106,11 @@ export function buildCompareRunsReport(params: {
   const scenarioFilter = normalizeOptionalFilterSet(params.scenarioIds);
   const agentFilter = normalizeOptionalFilterSet(params.agents);
   const leftScenarios = filterScenarios(params.left.results.scenarios, scenarioFilter, agentFilter);
-  const rightScenarios = filterScenarios(params.right.results.scenarios, scenarioFilter, agentFilter);
+  const rightScenarios = filterScenarios(
+    params.right.results.scenarios,
+    scenarioFilter,
+    agentFilter
+  );
   const leftSummary = computeMetricSummary(leftScenarios);
   const rightSummary = computeMetricSummary(rightScenarios);
 
@@ -115,7 +121,10 @@ export function buildCompareRunsReport(params: {
   for (const key of keys) {
     const leftEntry = leftMap.get(key) ?? null;
     const rightEntry = rightMap.get(key) ?? null;
-    const classification = classifyCompareRow(leftEntry?.summary ?? null, rightEntry?.summary ?? null);
+    const classification = classifyCompareRow(
+      leftEntry?.summary ?? null,
+      rightEntry?.summary ?? null
+    );
     rows.push({
       key,
       scenario_id: leftEntry?.scenario_id ?? rightEntry?.scenario_id ?? '',
@@ -247,7 +256,10 @@ export function buildAggregateRows(
   scenarioFilter: Set<string> | null,
   agentFilter: Set<string> | null
 ): AggregateGroupRow[] {
-  const grouped = new Map<string, { scenarios: ResultsJson['scenarios']; run_ids: string[]; timestamps: string[] }>();
+  const grouped = new Map<
+    string,
+    { scenarios: ResultsJson['scenarios']; run_ids: string[]; timestamps: string[] }
+  >();
   for (const run of runs) {
     const selected = filterScenarios(run.results.scenarios, scenarioFilter, agentFilter);
     if (groupBy === 'run') {

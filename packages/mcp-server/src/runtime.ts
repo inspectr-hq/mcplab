@@ -332,9 +332,15 @@ export function registerTools(server: McpServer): void {
         const root = resolveMarkdownReportsDir(reports_dir);
         const all = listMarkdownReportsFromDisk(root);
         const runFilter = String(run_id ?? '').trim();
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         const filtered = all.filter((item) => {
-          if (runFilter && !item.relativePath.includes(runFilter) && !item.name.includes(runFilter)) {
+          if (
+            runFilter &&
+            !item.relativePath.includes(runFilter) &&
+            !item.name.includes(runFilter)
+          ) {
             return false;
           }
           if (!searchQuery) return true;
@@ -359,9 +365,7 @@ export function registerTools(server: McpServer): void {
       description:
         'Search markdown reports by query text and optional run id filter; optimized for discovery workflows.',
       inputSchema: {
-        query: z
-          .string()
-          .describe('Case-insensitive search query across report path/name fields.'),
+        query: z.string().describe('Case-insensitive search query across report path/name fields.'),
         reports_dir: z
           .string()
           .optional()
@@ -384,10 +388,16 @@ export function registerTools(server: McpServer): void {
         const root = resolveMarkdownReportsDir(reports_dir);
         const all = listMarkdownReportsFromDisk(root);
         const runFilter = String(run_id ?? '').trim();
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         if (!searchQuery) throw new Error('query is required');
         const filtered = all.filter((item) => {
-          if (runFilter && !item.relativePath.includes(runFilter) && !item.name.includes(runFilter)) {
+          if (
+            runFilter &&
+            !item.relativePath.includes(runFilter) &&
+            !item.name.includes(runFilter)
+          ) {
             return false;
           }
           const hay = `${item.path}\n${item.relativePath}\n${item.name}`.toLowerCase();
@@ -567,8 +577,7 @@ export function registerTools(server: McpServer): void {
             if (!value.bearer_token && !value.bearer_env) {
               ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message:
-                  'auth_type=bearer requires at least one of bearer_token or bearer_env.'
+                message: 'auth_type=bearer requires at least one of bearer_token or bearer_env.'
               });
             }
           }
@@ -864,7 +873,9 @@ export function registerTools(server: McpServer): void {
         query: z
           .string()
           .optional()
-          .describe('Optional case-insensitive search query across run id/path (and summary fields when include_summary=true).'),
+          .describe(
+            'Optional case-insensitive search query across run id/path (and summary fields when include_summary=true).'
+          ),
         limit: z
           .number()
           .int()
@@ -882,7 +893,9 @@ export function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const base = resolveRunsDir(runs_dir);
         const entries = listRunsWithFallback(base, limit ?? 10, Boolean(include_summary));
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         const filtered = searchQuery
           ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
           : entries;
@@ -899,8 +912,7 @@ export function registerTools(server: McpServer): void {
   registerTool(
     'mcplab_search_runs',
     {
-      description:
-        'Search MCPLab run artifacts with a text query across run metadata and paths.',
+      description: 'Search MCPLab run artifacts with a text query across run metadata and paths.',
       inputSchema: {
         query: z
           .string()
@@ -925,7 +937,9 @@ export function registerTools(server: McpServer): void {
     async ({ query, runs_dir, limit, include_summary }) => {
       return withToolHandling(async () => {
         const base = resolveRunsDir(runs_dir);
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         if (!searchQuery) throw new Error('query is required');
         const entries = listRunsWithFallback(base, limit ?? 10, include_summary ?? true);
         const filtered = entries.filter((entry) => searchableText(entry).includes(searchQuery));
@@ -1083,7 +1097,9 @@ export function registerTools(server: McpServer): void {
         query: z
           .string()
           .optional()
-          .describe('Optional case-insensitive search query across report id/path/summary metadata.'),
+          .describe(
+            'Optional case-insensitive search query across report id/path/summary metadata.'
+          ),
         limit: z
           .number()
           .int()
@@ -1097,7 +1113,9 @@ export function registerTools(server: McpServer): void {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
         const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         const filtered = searchQuery
           ? reports.filter((report) => searchableText(report).includes(searchQuery))
           : reports;
@@ -1136,7 +1154,9 @@ export function registerTools(server: McpServer): void {
     async ({ query, tool_analysis_results_dir, limit }) => {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
-        const searchQuery = String(query ?? '').trim().toLowerCase();
+        const searchQuery = String(query ?? '')
+          .trim()
+          .toLowerCase();
         if (!searchQuery) throw new Error('query is required');
         const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
         const filtered = reports.filter((report) => searchableText(report).includes(searchQuery));
@@ -1839,29 +1859,28 @@ function inferToolAnnotations(
   const readOnly = !MUTATING_TOOLS.has(toolName) && !DESTRUCTIVE_TOOLS.has(toolName);
   const openWorld = OPEN_WORLD_TOOLS.has(toolName);
   const title = normalizeOptionalNonEmpty(override?.title) ?? resolvedTitle;
-  const baseHints: ToolAnnotationHints =
-    readOnly
-      ? {
-          title,
-          readOnlyHint: true,
-          idempotentHint: true,
-          openWorldHint: openWorld
-        }
-      : DESTRUCTIVE_TOOLS.has(toolName)
-      ? {
-          title,
-          readOnlyHint: false,
-          destructiveHint: true,
-          idempotentHint: false,
-          openWorldHint: openWorld
-        }
-      : {
-          title,
-          readOnlyHint: false,
-          destructiveHint: false,
-          idempotentHint: false,
-          openWorldHint: openWorld
-        };
+  const baseHints: ToolAnnotationHints = readOnly
+    ? {
+        title,
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: openWorld
+      }
+    : DESTRUCTIVE_TOOLS.has(toolName)
+    ? {
+        title,
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: openWorld
+      }
+    : {
+        title,
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: openWorld
+      };
   return {
     ...baseHints,
     ...override,

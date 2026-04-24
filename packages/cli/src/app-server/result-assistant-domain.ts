@@ -165,7 +165,9 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       status: 'pending',
       createdAt: new Date().toISOString()
     };
-    const toolRequestText = `I need to call '${formatAssistantToolName(pending.publicToolName)}' to help with this request.`;
+    const toolRequestText = `I need to call '${formatAssistantToolName(
+      pending.publicToolName
+    )}' to help with this request.`;
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
@@ -256,7 +258,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
-    "Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.",
+    'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
@@ -302,7 +304,8 @@ async function resultAssistantChatModel(
   if (response.tool_calls && response.tool_calls.length > 0) {
     const [first] = response.tool_calls;
     const baseText =
-      response.content?.trim() || `I need to call '${formatAssistantToolName(first.name)}' to help with this request.`;
+      response.content?.trim() ||
+      `I need to call '${formatAssistantToolName(first.name)}' to help with this request.`;
     return {
       type: 'tool_call_request',
       text: baseText,

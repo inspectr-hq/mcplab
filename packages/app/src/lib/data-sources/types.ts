@@ -1,4 +1,4 @@
-import type {EvalConfig, EvalResult, EvalRule, ScenarioRun} from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule, ScenarioRun } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
