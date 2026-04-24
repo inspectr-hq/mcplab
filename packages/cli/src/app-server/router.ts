@@ -528,12 +528,13 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   const url = `http://${options.host}:${options.port}`;
+  const logPrefix = '[mcplab-app]';
   const logPath = (label: string, value: string) => {
     // Keep startup paths visually aligned in terminal output.
-    console.log(`  ${label.padEnd(8)}\t${value}`);
+    console.log(`${logPrefix}  ${label.padEnd(8)}\t${value}`);
   };
   // eslint-disable-next-line no-console
-  console.log(`mcplab app running at ${url}`);
+  console.log(`${logPrefix} App running at ${url}`);
   logPath('evals:', settings.evalsDir);
   logPath('runs:', settings.runsDir);
   logPath('analysis:', settings.toolAnalysisResultsDir);
