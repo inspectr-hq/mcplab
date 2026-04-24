@@ -20,7 +20,6 @@ import {
 } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
-  chatWithAgent,
   loadConfig,
   runAll,
   selectScenarios,
@@ -111,41 +110,6 @@ type CompareRow = {
     avg_tool_calls_per_run: number | null;
     avg_tool_latency_ms: number | null;
   };
-};
-
-type QualityDimension = 'factuality' | 'completeness' | 'actionability' | 'clarity';
-
-type QualityScoreSet = Record<QualityDimension, number>;
-
-type QualityJudgeResponse = {
-  answer_a: {
-    dimension_scores: QualityScoreSet;
-    overall_score: number;
-  };
-  answer_b: {
-    dimension_scores: QualityScoreSet;
-    overall_score: number;
-  };
-  confidence: number;
-  rationale: string;
-};
-
-type QualityCompareClass = 'regressed' | 'improved' | 'unchanged' | 'new' | 'missing';
-
-type QualityCompareRow = {
-  key: string;
-  scenario_id: string;
-  agent: string;
-  classification: QualityCompareClass;
-  left: { dimension_scores: QualityScoreSet; overall_score: number } | null;
-  right: { dimension_scores: QualityScoreSet; overall_score: number } | null;
-  deltas: {
-    overall_score: number | null;
-    dimension_scores: Record<QualityDimension, number | null>;
-  };
-  confidence: number | null;
-  rationale?: string;
-  judge_error?: string;
 };
 
 const DEFAULT_MCP_PATH = '/mcp';
@@ -800,7 +764,7 @@ export function registerTools(server: McpServer): void {
         passed_runs: z.number().int().nonnegative(),
         failed_runs: z.number().int().nonnegative(),
         skipped_runs: z.number().int().nonnegative(),
-        duration_ms: z.number().nonnegative().nullable(),
+        duration_ms: z.number().nonnegative(),
         summary: z.record(z.unknown()),
         metadata: z.record(z.unknown()),
         scenarios: z.array(
@@ -851,14 +815,28 @@ export function registerTools(server: McpServer): void {
         const allRuns = results.scenarios.flatMap((scenario) => scenario.runs);
         const passedRuns = allRuns.filter((run) => run.pass === true).length;
         const failedRuns = allRuns.filter((run) => run.pass === false).length;
+        const skippedRuns = Math.max(0, allRuns.length - passedRuns - failedRuns);
+        const durationMs = allRuns.reduce((sum, run) => {
+          const directRaw = (run as { duration_ms?: unknown }).duration_ms;
+          const direct = typeof directRaw === 'number' ? directRaw : null;
+          if (direct !== null) return sum + Math.max(0, direct);
+          const fromToolDurations = Array.isArray(run.tool_durations_ms)
+            ? run.tool_durations_ms.reduce(
+                (runSum, value) =>
+                  runSum + (typeof value === 'number' && Number.isFinite(value) ? value : 0),
+                0
+              )
+            : 0;
+          return sum + Math.max(0, fromToolDurations);
+        }, 0);
         return ok(`MCPLab run completed: ${runDir}`, {
           run_dir: runDir,
           total_scenarios: results.summary.total_scenarios,
           total_runs: results.summary.total_runs,
           passed_runs: passedRuns,
           failed_runs: failedRuns,
-          skipped_runs: 0,
-          duration_ms: null,
+          skipped_runs: skippedRuns,
+          duration_ms: durationMs,
           summary: results.summary,
           metadata: results.metadata,
           scenarios: results.scenarios.map((scenario) => ({
@@ -906,7 +884,7 @@ export function registerTools(server: McpServer): void {
         const entries = listRunsWithFallback(base, limit ?? 10, Boolean(include_summary));
         const searchQuery = String(query ?? '').trim().toLowerCase();
         const filtered = searchQuery
-          ? entries.filter((entry) => JSON.stringify(entry).toLowerCase().includes(searchQuery))
+          ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
           : entries;
         return ok(`Found ${filtered.length} run(s) in ${base}`, {
           runsDir: base,
@@ -950,9 +928,7 @@ export function registerTools(server: McpServer): void {
         const searchQuery = String(query ?? '').trim().toLowerCase();
         if (!searchQuery) throw new Error('query is required');
         const entries = listRunsWithFallback(base, limit ?? 10, include_summary ?? true);
-        const filtered = entries.filter((entry) =>
-          JSON.stringify(entry).toLowerCase().includes(searchQuery)
-        );
+        const filtered = entries.filter((entry) => searchableText(entry).includes(searchQuery));
         return ok(`Found ${filtered.length} run(s) in ${base}`, {
           runsDir: base,
           query: searchQuery,
@@ -1123,7 +1099,7 @@ export function registerTools(server: McpServer): void {
         const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
         const searchQuery = String(query ?? '').trim().toLowerCase();
         const filtered = searchQuery
-          ? reports.filter((report) => JSON.stringify(report).toLowerCase().includes(searchQuery))
+          ? reports.filter((report) => searchableText(report).includes(searchQuery))
           : reports;
         return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
@@ -1163,9 +1139,7 @@ export function registerTools(server: McpServer): void {
         const searchQuery = String(query ?? '').trim().toLowerCase();
         if (!searchQuery) throw new Error('query is required');
         const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
-        const filtered = reports.filter((report) =>
-          JSON.stringify(report).toLowerCase().includes(searchQuery)
-        );
+        const filtered = reports.filter((report) => searchableText(report).includes(searchQuery));
         return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
           query: searchQuery,
@@ -2176,6 +2150,25 @@ function summarizeConfig(config: EvalConfig): Record<string, unknown> {
   };
 }
 
+function normalizeOptionalFilterSet(values?: string[]): Set<string> | null {
+  if (!values || values.length === 0) return null;
+  const normalized = values.map((value) => value.trim()).filter(Boolean);
+  return normalized.length > 0 ? new Set(normalized) : null;
+}
+
+function filterScenarios(
+  scenarios: ResultsJson['scenarios'],
+  scenarioFilter: Set<string> | null,
+  agentFilter: Set<string> | null
+): ResultsJson['scenarios'] {
+  if (!scenarioFilter && !agentFilter) return scenarios;
+  return scenarios.filter((scenario) => {
+    const scenarioMatch = !scenarioFilter || scenarioFilter.has(scenario.scenario_id);
+    const agentMatch = !agentFilter || agentFilter.has(scenario.agent);
+    return scenarioMatch && agentMatch;
+  });
+}
+
 function loadRunsForAnalysis(params: {
   runsDirInput?: string;
   runIds?: string[];
@@ -2421,667 +2414,6 @@ function buildCompareRunsReport(params: {
           )
           .map(toSerializableCompareRow)
       : undefined
-  });
-}
-
-const QUALITY_DIMENSIONS: QualityDimension[] = [
-  'factuality',
-  'completeness',
-  'actionability',
-  'clarity'
-];
-const QUALITY_RUBRIC_ID = 'quality_v1_4d';
-const QUALITY_CLASSIFY_EPSILON = 0.15;
-const MAX_QUALITY_COMPARE_PAIRS = 100;
-
-function loadDefaultQualityJudgeAgent(): { agentName: string; agentConfig: AgentConfig } {
-  const bundleRoot = resolveBundleRoot();
-  const agentsPath = join(bundleRoot, 'agents.yaml');
-  if (!existsSync(agentsPath)) {
-    throw new Error(`No agents.yaml found at ${agentsPath}; cannot resolve default judge agent.`);
-  }
-  const raw = readFileSync(agentsPath, 'utf8');
-  const agents = ((parseYaml(raw) as Record<string, unknown>) ?? {}) as Record<string, unknown>;
-  const agentNames = Object.keys(agents);
-  const agentName = agentNames[0];
-  if (!agentName) {
-    throw new Error(`No agents found in ${agentsPath}; cannot resolve default judge agent.`);
-  }
-  const value = agents[agentName];
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Agent '${agentName}' in ${agentsPath} is invalid.`);
-  }
-  const cfg = value as Record<string, unknown>;
-  const provider = cfg.provider;
-  const model = cfg.model;
-  if (
-    typeof provider !== 'string' ||
-    (provider !== 'openai' && provider !== 'anthropic' && provider !== 'azure_openai')
-  ) {
-    throw new Error(`Agent '${agentName}' provider is invalid in ${agentsPath}.`);
-  }
-  if (typeof model !== 'string' || !model.trim()) {
-    throw new Error(`Agent '${agentName}' model is invalid in ${agentsPath}.`);
-  }
-  const normalized: AgentConfig = {
-    ...(cfg as unknown as AgentConfig),
-    provider,
-    model
-  };
-  return {
-    agentName,
-    agentConfig: { ...normalized, temperature: 0 }
-  };
-}
-
-async function buildCompareAnswerQualityReport(params: {
-  left: LoadedRunResult;
-  right: LoadedRunResult;
-  scenarioIds?: string[];
-  agents?: string[];
-  topN: number;
-  includeRationales: boolean;
-  includeDetails: boolean;
-  judge: { agentName: string; agentConfig: AgentConfig };
-}): Promise<Record<string, unknown>> {
-  const scenarioFilter = normalizeOptionalFilterSet(params.scenarioIds);
-  const agentFilter = normalizeOptionalFilterSet(params.agents);
-  const leftMap = buildScenarioAgentAnswerMap(
-    params.left.results.scenarios,
-    scenarioFilter,
-    agentFilter
-  );
-  const rightMap = buildScenarioAgentAnswerMap(
-    params.right.results.scenarios,
-    scenarioFilter,
-    agentFilter
-  );
-  const keys = Array.from(new Set([...leftMap.keys(), ...rightMap.keys()])).sort();
-  const cappedKeys = keys.slice(0, MAX_QUALITY_COMPARE_PAIRS);
-  const rows: QualityCompareRow[] = [];
-
-  for (const key of cappedKeys) {
-    const left = leftMap.get(key) ?? null;
-    const right = rightMap.get(key) ?? null;
-    if (!left && right) {
-      rows.push({
-        key,
-        scenario_id: right.scenario_id,
-        agent: right.agent,
-        classification: 'new',
-        left: null,
-        right: null,
-        deltas: {
-          overall_score: null,
-          dimension_scores: {
-            factuality: null,
-            completeness: null,
-            actionability: null,
-            clarity: null
-          }
-        },
-        confidence: null
-      });
-      continue;
-    }
-    if (left && !right) {
-      rows.push({
-        key,
-        scenario_id: left.scenario_id,
-        agent: left.agent,
-        classification: 'missing',
-        left: null,
-        right: null,
-        deltas: {
-          overall_score: null,
-          dimension_scores: {
-            factuality: null,
-            completeness: null,
-            actionability: null,
-            clarity: null
-          }
-        },
-        confidence: null
-      });
-      continue;
-    }
-    if (!left || !right) continue;
-
-    const judged = await judgeAnswerPairDualOrder({
-      scenarioId: left.scenario_id,
-      agent: left.agent,
-      leftAnswer: left.answer_text,
-      rightAnswer: right.answer_text,
-      judgeAgent: params.judge.agentConfig
-    });
-
-    if ('judge_error' in judged) {
-      rows.push({
-        key,
-        scenario_id: left.scenario_id,
-        agent: left.agent,
-        classification: 'unchanged',
-        left: null,
-        right: null,
-        deltas: {
-          overall_score: null,
-          dimension_scores: {
-            factuality: null,
-            completeness: null,
-            actionability: null,
-            clarity: null
-          }
-        },
-        confidence: null,
-        judge_error: judged.judge_error
-      });
-      continue;
-    }
-
-    const classification = classifyQualityCompareByDelta(judged.deltas.overall_score);
-    rows.push({
-      key,
-      scenario_id: left.scenario_id,
-      agent: left.agent,
-      classification,
-      left: judged.left,
-      right: judged.right,
-      deltas: judged.deltas,
-      confidence: judged.confidence,
-      rationale: params.includeRationales ? judged.rationale : undefined
-    });
-  }
-
-  return buildQualityReportFromRows({
-    left: params.left,
-    right: params.right,
-    rows,
-    topN: params.topN,
-    includeRationales: params.includeRationales,
-    includeDetails: params.includeDetails,
-    judgeAgentName: params.judge.agentName,
-    truncatedByPairCap: keys.length > cappedKeys.length
-  });
-}
-
-function buildScenarioAgentAnswerMap(
-  scenarios: ResultsJson['scenarios'],
-  scenarioFilter: Set<string> | null,
-  agentFilter: Set<string> | null
-): Map<string, { scenario_id: string; agent: string; answer_text: string }> {
-  const filtered = filterScenarios(scenarios, scenarioFilter, agentFilter);
-  const out = new Map<string, { scenario_id: string; agent: string; answer_text: string }>();
-  for (const scenario of filtered) {
-    const answerText =
-      scenario.last_final_answer ||
-      scenario.runs
-        .map((run) => run.final_text)
-        .filter((text) => String(text).trim().length > 0)
-        .at(-1) ||
-      '';
-    const key = `${scenario.scenario_id}::${scenario.agent}`;
-    out.set(key, {
-      scenario_id: scenario.scenario_id,
-      agent: scenario.agent,
-      answer_text: answerText
-    });
-  }
-  return out;
-}
-
-async function judgeAnswerPairDualOrder(params: {
-  scenarioId: string;
-  agent: string;
-  leftAnswer: string;
-  rightAnswer: string;
-  judgeAgent: AgentConfig;
-}): Promise<
-  | {
-      left: { dimension_scores: QualityScoreSet; overall_score: number };
-      right: { dimension_scores: QualityScoreSet; overall_score: number };
-      deltas: {
-        overall_score: number;
-        dimension_scores: Record<QualityDimension, number>;
-      };
-      confidence: number;
-      rationale: string;
-    }
-  | { judge_error: string }
-> {
-  try {
-    const forward = await judgeAnswerPairOrdered({
-      scenarioId: params.scenarioId,
-      agent: params.agent,
-      answerA: params.leftAnswer,
-      answerB: params.rightAnswer,
-      judgeAgent: params.judgeAgent
-    });
-    const reverse = await judgeAnswerPairOrdered({
-      scenarioId: params.scenarioId,
-      agent: params.agent,
-      answerA: params.rightAnswer,
-      answerB: params.leftAnswer,
-      judgeAgent: params.judgeAgent
-    });
-    const normalizedReverse = {
-      answer_a: reverse.answer_b,
-      answer_b: reverse.answer_a,
-      confidence: reverse.confidence,
-      rationale: reverse.rationale
-    };
-    const merged = mergeQualityJudgeResponses(forward, normalizedReverse);
-    return merged;
-  } catch (error) {
-    return { judge_error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-async function judgeAnswerPairOrdered(params: {
-  scenarioId: string;
-  agent: string;
-  answerA: string;
-  answerB: string;
-  judgeAgent: AgentConfig;
-}): Promise<QualityJudgeResponse> {
-  const system = qualityJudgeSystemPrompt();
-  const user = qualityJudgeUserPrompt({
-    scenarioId: params.scenarioId,
-    agent: params.agent,
-    answerA: params.answerA,
-    answerB: params.answerB
-  });
-  const first = await chatWithAgent({
-    agent: params.judgeAgent,
-    system,
-    messages: [{ role: 'user', content: user }]
-  });
-  try {
-    return parseAndValidateQualityJudgeResponse(first.content ?? '');
-  } catch {
-    const retry = await chatWithAgent({
-      agent: params.judgeAgent,
-      system,
-      messages: [
-        { role: 'user', content: user },
-        { role: 'assistant', content: first.content ?? '' },
-        {
-          role: 'user',
-          content:
-            'Return valid JSON only. No prose. No markdown. Use exactly the requested schema.'
-        }
-      ]
-    });
-    return parseAndValidateQualityJudgeResponse(retry.content ?? '');
-  }
-}
-
-function qualityJudgeSystemPrompt(): string {
-  return [
-    'You are an answer-quality judge for MCP evaluation outputs.',
-    `Rubric id: ${QUALITY_RUBRIC_ID}. Score each answer independently.`,
-    'Dimensions (integer 1-5): factuality, completeness, actionability, clarity.',
-    'Overall score is also integer 1-5.',
-    'Confidence is 0..1.',
-    'Be concise and objective. Avoid style bias.',
-    'Return JSON only with keys:',
-    'answer_a: { dimension_scores: { factuality, completeness, actionability, clarity }, overall_score }',
-    'answer_b: { dimension_scores: { factuality, completeness, actionability, clarity }, overall_score }',
-    'confidence',
-    'rationale'
-  ].join('\n');
-}
-
-function qualityJudgeUserPrompt(params: {
-  scenarioId: string;
-  agent: string;
-  answerA: string;
-  answerB: string;
-}): string {
-  return [
-    `Scenario: ${params.scenarioId}`,
-    `Agent: ${params.agent}`,
-    '',
-    'Answer A:',
-    params.answerA || '(empty)',
-    '',
-    'Answer B:',
-    params.answerB || '(empty)'
-  ].join('\n');
-}
-
-function parseAndValidateQualityJudgeResponse(text: string): QualityJudgeResponse {
-  const parsed = parseJsonFromAssistantText(text);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Judge response must be a JSON object');
-  }
-  const obj = parsed as Record<string, unknown>;
-  const answerA = validateQualityAnswerScore(obj.answer_a, 'answer_a');
-  const answerB = validateQualityAnswerScore(obj.answer_b, 'answer_b');
-  const confidence = validateNumberInRange(obj.confidence, 0, 1, 'confidence');
-  const rationaleRaw = typeof obj.rationale === 'string' ? obj.rationale.trim() : '';
-  const rationale = truncate(rationaleRaw || 'No rationale provided.', 400);
-  return {
-    answer_a: answerA,
-    answer_b: answerB,
-    confidence: roundedDelta(confidence),
-    rationale
-  };
-}
-
-function validateQualityAnswerScore(
-  value: unknown,
-  path: string
-): {
-  dimension_scores: QualityScoreSet;
-  overall_score: number;
-} {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${path} must be an object`);
-  }
-  const obj = value as Record<string, unknown>;
-  const dims = obj.dimension_scores;
-  if (!dims || typeof dims !== 'object' || Array.isArray(dims)) {
-    throw new Error(`${path}.dimension_scores must be an object`);
-  }
-  const dimObj = dims as Record<string, unknown>;
-  const scores = {} as QualityScoreSet;
-  for (const dim of QUALITY_DIMENSIONS) {
-    scores[dim] = validateIntegerInRange(dimObj[dim], 1, 5, `${path}.dimension_scores.${dim}`);
-  }
-  const overall = validateIntegerInRange(obj.overall_score, 1, 5, `${path}.overall_score`);
-  return { dimension_scores: scores, overall_score: overall };
-}
-
-function validateIntegerInRange(value: unknown, min: number, max: number, path: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value)) {
-    throw new Error(`${path} must be an integer`);
-  }
-  if (value < min || value > max) {
-    throw new Error(`${path} must be between ${min} and ${max}`);
-  }
-  return value;
-}
-
-function validateNumberInRange(value: unknown, min: number, max: number, path: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(`${path} must be a number`);
-  }
-  if (value < min || value > max) {
-    throw new Error(`${path} must be between ${min} and ${max}`);
-  }
-  return value;
-}
-
-function mergeQualityJudgeResponses(
-  first: QualityJudgeResponse,
-  second: QualityJudgeResponse
-): {
-  left: { dimension_scores: QualityScoreSet; overall_score: number };
-  right: { dimension_scores: QualityScoreSet; overall_score: number };
-  deltas: {
-    overall_score: number;
-    dimension_scores: Record<QualityDimension, number>;
-  };
-  confidence: number;
-  rationale: string;
-} {
-  const leftDims = {} as QualityScoreSet;
-  const rightDims = {} as QualityScoreSet;
-  const deltas = {} as Record<QualityDimension, number>;
-  for (const dim of QUALITY_DIMENSIONS) {
-    const leftAvg =
-      (first.answer_a.dimension_scores[dim] + second.answer_a.dimension_scores[dim]) / 2;
-    const rightAvg =
-      (first.answer_b.dimension_scores[dim] + second.answer_b.dimension_scores[dim]) / 2;
-    leftDims[dim] = roundedDelta(leftAvg);
-    rightDims[dim] = roundedDelta(rightAvg);
-    deltas[dim] = roundedDelta(rightAvg - leftAvg);
-  }
-  const leftOverall = roundedDelta(
-    (first.answer_a.overall_score + second.answer_a.overall_score) / 2
-  );
-  const rightOverall = roundedDelta(
-    (first.answer_b.overall_score + second.answer_b.overall_score) / 2
-  );
-  return {
-    left: { dimension_scores: leftDims, overall_score: leftOverall },
-    right: { dimension_scores: rightDims, overall_score: rightOverall },
-    deltas: {
-      overall_score: roundedDelta(rightOverall - leftOverall),
-      dimension_scores: deltas
-    },
-    confidence: roundedDelta((first.confidence + second.confidence) / 2),
-    rationale: truncate(`${first.rationale}\n---\n${second.rationale}`, 500)
-  };
-}
-
-function classifyQualityCompareByDelta(delta: number): QualityCompareClass {
-  if (delta > QUALITY_CLASSIFY_EPSILON) return 'improved';
-  if (delta < -QUALITY_CLASSIFY_EPSILON) return 'regressed';
-  return 'unchanged';
-}
-
-function buildQualityReportFromRows(params: {
-  left: LoadedRunResult;
-  right: LoadedRunResult;
-  rows: QualityCompareRow[];
-  topN: number;
-  includeRationales: boolean;
-  includeDetails: boolean;
-  judgeAgentName: string;
-  truncatedByPairCap: boolean;
-}): Record<string, unknown> {
-  const comparable = params.rows.filter((row) => row.left && row.right && !row.judge_error);
-  const leftOverallAvg =
-    comparable.length === 0
-      ? null
-      : roundedDelta(
-          comparable.reduce((sum, row) => sum + (row.left?.overall_score ?? 0), 0) /
-            comparable.length
-        );
-  const rightOverallAvg =
-    comparable.length === 0
-      ? null
-      : roundedDelta(
-          comparable.reduce((sum, row) => sum + (row.right?.overall_score ?? 0), 0) /
-            comparable.length
-        );
-  const dimensionAverages = QUALITY_DIMENSIONS.reduce<Record<QualityDimension, number | null>>(
-    (acc, dim) => {
-      acc[dim] =
-        comparable.length === 0
-          ? null
-          : roundedDelta(
-              comparable.reduce((sum, row) => sum + (row.deltas.dimension_scores[dim] ?? 0), 0) /
-                comparable.length
-            );
-      return acc;
-    },
-    { factuality: null, completeness: null, actionability: null, clarity: null }
-  );
-  const counts = params.rows.reduce<Record<QualityCompareClass, number>>(
-    (acc, row) => {
-      acc[row.classification] += 1;
-      return acc;
-    },
-    { regressed: 0, improved: 0, unchanged: 0, new: 0, missing: 0 }
-  );
-  const regressions = params.rows
-    .filter((row) => row.classification === 'regressed')
-    .sort(
-      (a, b) =>
-        (a.deltas.overall_score ?? 0) - (b.deltas.overall_score ?? 0) || a.key.localeCompare(b.key)
-    )
-    .slice(0, params.topN);
-  const improvements = params.rows
-    .filter((row) => row.classification === 'improved')
-    .sort(
-      (a, b) =>
-        (b.deltas.overall_score ?? 0) - (a.deltas.overall_score ?? 0) || a.key.localeCompare(b.key)
-    )
-    .slice(0, params.topN);
-  const newItems = params.rows
-    .filter((row) => row.classification === 'new')
-    .sort((a, b) => a.key.localeCompare(b.key))
-    .slice(0, params.topN);
-  const missingItems = params.rows
-    .filter((row) => row.classification === 'missing')
-    .sort((a, b) => a.key.localeCompare(b.key))
-    .slice(0, params.topN);
-
-  return removeUndefined({
-    left_run: {
-      run_id: params.left.run_id,
-      timestamp: params.left.results.metadata.timestamp,
-      config_hash: params.left.results.metadata.config_hash
-    },
-    right_run: {
-      run_id: params.right.run_id,
-      timestamp: params.right.results.metadata.timestamp,
-      config_hash: params.right.results.metadata.config_hash
-    },
-    rubric: {
-      rubric_id: QUALITY_RUBRIC_ID,
-      scale: { min: 1, max: 5 },
-      dimensions: QUALITY_DIMENSIONS
-    },
-    judge: {
-      source: 'assistant_default_agent',
-      agent_name: params.judgeAgentName
-    },
-    summary: {
-      comparable_pairs: comparable.length,
-      classification_counts: counts,
-      left_avg_overall: leftOverallAvg,
-      right_avg_overall: rightOverallAvg,
-      delta_overall_avg:
-        leftOverallAvg === null || rightOverallAvg === null
-          ? null
-          : roundedDelta(rightOverallAvg - leftOverallAvg),
-      delta_dimension_avgs: dimensionAverages,
-      judge_error_count: params.rows.filter((row) => Boolean(row.judge_error)).length
-    },
-    truncated_by_pair_cap: params.truncatedByPairCap || undefined,
-    top_regressions: regressions.map((row) =>
-      toSerializableQualityCompareRow(row, params.includeRationales)
-    ),
-    top_improvements: improvements.map((row) =>
-      toSerializableQualityCompareRow(row, params.includeRationales)
-    ),
-    new_items: newItems.map((row) =>
-      toSerializableQualityCompareRow(row, params.includeRationales)
-    ),
-    missing_items: missingItems.map((row) =>
-      toSerializableQualityCompareRow(row, params.includeRationales)
-    ),
-    details: params.includeDetails
-      ? params.rows
-          .slice()
-          .sort(
-            (a, b) =>
-              compareQualityClassPriority(a.classification) -
-                compareQualityClassPriority(b.classification) || a.key.localeCompare(b.key)
-          )
-          .map((row) => toSerializableQualityCompareRow(row, params.includeRationales))
-      : undefined
-  });
-}
-
-function compareQualityClassPriority(classification: QualityCompareClass): number {
-  if (classification === 'regressed') return 0;
-  if (classification === 'improved') return 1;
-  if (classification === 'new') return 2;
-  if (classification === 'missing') return 3;
-  return 4;
-}
-
-function toSerializableQualityCompareRow(
-  row: QualityCompareRow,
-  includeRationales: boolean
-): Record<string, unknown> {
-  return removeUndefined({
-    key: row.key,
-    scenario_id: row.scenario_id,
-    agent: row.agent,
-    classification: row.classification,
-    left: row.left,
-    right: row.right,
-    deltas: row.deltas,
-    confidence: row.confidence,
-    rationale: includeRationales ? row.rationale : undefined,
-    judge_error: row.judge_error
-  });
-}
-
-function extractFirstBalancedJsonCandidate(text: string): string | null {
-  const starts: Array<{ idx: number; open: '{' | '['; close: '}' | ']' }> = [];
-  const firstObj = text.indexOf('{');
-  if (firstObj >= 0) starts.push({ idx: firstObj, open: '{', close: '}' });
-  const firstArr = text.indexOf('[');
-  if (firstArr >= 0) starts.push({ idx: firstArr, open: '[', close: ']' });
-  starts.sort((a, b) => a.idx - b.idx);
-
-  for (const start of starts) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start.idx; i < text.length; i += 1) {
-      const ch = text[i];
-      if (inString) {
-        if (escaped) {
-          escaped = false;
-          continue;
-        }
-        if (ch === '\\') {
-          escaped = true;
-          continue;
-        }
-        if (ch === '"') inString = false;
-        continue;
-      }
-      if (ch === '"') {
-        inString = true;
-        continue;
-      }
-      if (ch === start.open) depth += 1;
-      if (ch === start.close) {
-        depth -= 1;
-        if (depth === 0) return text.slice(start.idx, i + 1);
-      }
-    }
-  }
-  return null;
-}
-
-function parseJsonFromAssistantText(text: string): unknown {
-  const cleaned = text.trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const fenced =
-      cleaned.match(/```json\s*([\s\S]+?)```/i) ?? cleaned.match(/```\s*([\s\S]+?)```/i);
-    if (fenced) return JSON.parse(fenced[1].trim());
-    const candidate = extractFirstBalancedJsonCandidate(cleaned);
-    if (candidate) return JSON.parse(candidate);
-    throw new Error('Assistant returned invalid JSON');
-  }
-}
-
-function normalizeOptionalFilterSet(values?: string[]): Set<string> | null {
-  if (!values || values.length === 0) return null;
-  const set = new Set(values.map((v) => String(v).trim()).filter(Boolean));
-  return set.size > 0 ? set : null;
-}
-
-function filterScenarios(
-  scenarios: ResultsJson['scenarios'],
-  scenarioFilter: Set<string> | null,
-  agentFilter: Set<string> | null
-): ResultsJson['scenarios'] {
-  return scenarios.filter((scenario) => {
-    const scenarioOk = !scenarioFilter || scenarioFilter.has(scenario.scenario_id);
-    const agentOk = !agentFilter || agentFilter.has(scenario.agent);
-    return scenarioOk && agentOk;
   });
 }
 
@@ -3925,6 +3257,33 @@ function removeUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
 
+function searchableText(value: unknown): string {
+  const tokens: string[] = [];
+  const visit = (node: unknown): void => {
+    if (node === null || node === undefined) return;
+    if (typeof node === 'string') {
+      const trimmed = node.trim();
+      if (trimmed) tokens.push(trimmed.toLowerCase());
+      return;
+    }
+    if (typeof node === 'number' || typeof node === 'boolean') {
+      tokens.push(String(node).toLowerCase());
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (typeof node === 'object') {
+      for (const entryValue of Object.values(node as Record<string, unknown>)) {
+        visit(entryValue);
+      }
+    }
+  };
+  visit(value);
+  return tokens.join(' ');
+}
+
 function normalizeStringArray(values?: string[]): string[] | undefined {
   if (!values) return undefined;
   const out = values.map((value) => value.trim()).filter(Boolean);
@@ -3951,20 +3310,6 @@ function truncate(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n...[truncated ${text.length - maxChars} chars]`;
 }
-
-export const __testExports = {
-  selectRunIdsForAnalysis,
-  resolveRunIdToken,
-  computeMetricSummary,
-  buildAggregateRows,
-  classifyCompareRow,
-  buildAggregateRunsReport,
-  buildCompareRunsReport,
-  parseAndValidateQualityJudgeResponse,
-  mergeQualityJudgeResponses,
-  classifyQualityCompareByDelta,
-  buildQualityReportFromRows
-};
 
 export async function handleMcplabMcpHttpRequest(
   req: IncomingMessage,

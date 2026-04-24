@@ -648,7 +648,11 @@ const Compare = () => {
                     <TableCell className="font-mono text-xs">{r.id}</TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
                       {(() => {
-                        const scope = runScopesById.get(r.id)!;
+                        const scope = runScopesById.get(r.id) ?? {
+                          scenarioCount: 0,
+                          agentCount: 0,
+                          scenarioPreview: "n/a"
+                        };
                         return (
                           <div className="space-y-0.5">
                             <div>

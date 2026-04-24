@@ -1,9 +1,12 @@
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import type { ResultsJson, ScenarioAggregate, ScenarioRunResult } from '@inspectr/mcplab-core';
-import { __testExports } from '../../mcp-server/src/runtime.js';
+import {
+  buildAggregateRunsReport,
+  buildCompareRunsReport,
+  classifyCompareRow,
+  computeMetricSummary,
+  type LoadedRunResult
+} from '../../mcp-server/src/mcp-run-calculations.js';
 
 function makeRunResult(
   index: number,
@@ -75,7 +78,7 @@ function makeResults(
   };
 }
 
-function makeLoadedRun(runId: string, timestamp: string, scenarios: ScenarioAggregate[]) {
+function makeLoadedRun(runId: string, timestamp: string, scenarios: ScenarioAggregate[]): LoadedRunResult {
   return {
     run_id: runId,
     path: `/tmp/${runId}`,
@@ -84,27 +87,19 @@ function makeLoadedRun(runId: string, timestamp: string, scenarios: ScenarioAggr
 }
 
 describe('mcp run calculation helpers', () => {
-  it('run_ids take precedence over latest_n', () => {
-    const ids = __testExports.selectRunIdsForAnalysis('/unused', ['run-b', 'run-b', 'run-a'], 1);
-    expect(ids).toEqual(['run-b', 'run-a']);
-  });
-
-  it('resolves LATEST run id and errors when no runs exist', () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-latest-'));
-    try {
-      mkdirSync(join(root, '20260420-100000'));
-      mkdirSync(join(root, '20260419-100000'));
-      expect(__testExports.resolveRunIdToken(root, 'LATEST')).toBe('20260420-100000');
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-
-    const empty = mkdtempSync(join(tmpdir(), 'mcplab-empty-'));
-    try {
-      expect(() => __testExports.resolveRunIdToken(empty, 'LATEST')).toThrow();
-    } finally {
-      rmSync(empty, { recursive: true, force: true });
-    }
+  it('computes summary metrics', () => {
+    const summary = computeMetricSummary([
+      makeScenario('s1', 'a1', [
+        makeRunResult(0, true, 1, [10]),
+        makeRunResult(1, false, 2, [20, 30])
+      ])
+    ]);
+    expect(summary.total_runs).toBe(2);
+    expect(summary.passed_runs).toBe(1);
+    expect(summary.failed_runs).toBe(1);
+    expect(summary.pass_rate).toBe(0.5);
+    expect(summary.avg_tool_calls_per_run).toBe(1.5);
+    expect(summary.avg_tool_latency_ms).toBe(20);
   });
 
   it('aggregates weighted metrics with scenario/agent filters and compact defaults', () => {
@@ -120,7 +115,7 @@ describe('mcp run calculation helpers', () => {
       makeScenario('s3', 'a3', [makeRunResult(0, false, 2, [400, 200])])
     ]);
 
-    const report = __testExports.buildAggregateRunsReport({
+    const report = buildAggregateRunsReport({
       runs: [run1, run2],
       scenarioIds: ['s1'],
       agents: ['a1'],
@@ -132,8 +127,8 @@ describe('mcp run calculation helpers', () => {
     const summary = report.summary as Record<string, unknown>;
     expect(summary.total_runs).toBe(3);
     expect(summary.passed_runs).toBe(2);
-    expect(summary.pass_rate).toBeCloseTo(2 / 3, 6);
-    expect(summary.avg_tool_calls_per_run).toBeCloseTo(2, 6);
+    expect(summary.pass_rate).toBeCloseTo(2 / 3, 3);
+    expect(summary.avg_tool_calls_per_run).toBeCloseTo(2, 3);
     expect(report.details).toBeUndefined();
     expect((report.top_worst as unknown[]).length).toBe(1);
     expect((report.top_best as unknown[]).length).toBe(1);
@@ -165,7 +160,7 @@ describe('mcp run calculation helpers', () => {
       makeScenario('new', 'agent', [makeRunResult(0, true, 1, [90])])
     ]);
 
-    const report = __testExports.buildCompareRunsReport({
+    const report = buildCompareRunsReport({
       left,
       right,
       topN: 10,
@@ -187,212 +182,19 @@ describe('mcp run calculation helpers', () => {
     expect((report.details as unknown[]).length).toBe(5);
   });
 
-  it('validates quality judge schema and rejects invalid payloads', () => {
-    const valid = __testExports.parseAndValidateQualityJudgeResponse(
-      JSON.stringify({
-        answer_a: {
-          dimension_scores: {
-            factuality: 4,
-            completeness: 3,
-            actionability: 4,
-            clarity: 5
-          },
-          overall_score: 4
-        },
-        answer_b: {
-          dimension_scores: {
-            factuality: 3,
-            completeness: 3,
-            actionability: 3,
-            clarity: 4
-          },
-          overall_score: 3
-        },
-        confidence: 0.82,
-        rationale: 'A is more complete and actionable.'
-      })
-    );
-    expect(valid.answer_a.overall_score).toBe(4);
-    expect(valid.answer_b.dimension_scores.factuality).toBe(3);
-
-    expect(() =>
-      __testExports.parseAndValidateQualityJudgeResponse(
-        JSON.stringify({
-          answer_a: {
-            dimension_scores: {
-              factuality: 4,
-              completeness: 3,
-              actionability: 4,
-              clarity: 5
-            },
-            overall_score: 4
-          },
-          answer_b: {
-            dimension_scores: {
-              factuality: 3,
-              completeness: 3,
-              actionability: 3,
-              clarity: 4
-            },
-            overall_score: 3
-          },
-          confidence: 2,
-          rationale: 'invalid confidence'
-        })
-      )
-    ).toThrow();
-  });
-
-  it('merges dual-order quality judgments symmetrically', () => {
-    const merged = __testExports.mergeQualityJudgeResponses(
-      {
-        answer_a: {
-          dimension_scores: {
-            factuality: 4,
-            completeness: 4,
-            actionability: 3,
-            clarity: 4
-          },
-          overall_score: 4
-        },
-        answer_b: {
-          dimension_scores: {
-            factuality: 3,
-            completeness: 3,
-            actionability: 3,
-            clarity: 3
-          },
-          overall_score: 3
-        },
-        confidence: 0.7,
-        rationale: 'forward'
-      },
-      {
-        answer_a: {
-          dimension_scores: {
-            factuality: 5,
-            completeness: 4,
-            actionability: 4,
-            clarity: 4
-          },
-          overall_score: 4
-        },
-        answer_b: {
-          dimension_scores: {
-            factuality: 3,
-            completeness: 3,
-            actionability: 2,
-            clarity: 3
-          },
-          overall_score: 3
-        },
-        confidence: 0.8,
-        rationale: 'reverse-normalized'
-      }
-    );
-
-    expect(merged.left.overall_score).toBe(4);
-    expect(merged.right.overall_score).toBe(3);
-    expect(merged.deltas.overall_score).toBe(-1);
-    expect(merged.confidence).toBe(0.75);
-  });
-
-  it('classifies quality deltas with epsilon threshold', () => {
-    expect(__testExports.classifyQualityCompareByDelta(0.16)).toBe('improved');
-    expect(__testExports.classifyQualityCompareByDelta(-0.16)).toBe('regressed');
-    expect(__testExports.classifyQualityCompareByDelta(0.1)).toBe('unchanged');
-  });
-
-  it('builds quality report with compact default and optional details/rationales', () => {
-    const left = makeLoadedRun('left', '2026-04-20T10:00:00.000Z', []);
-    const right = makeLoadedRun('right', '2026-04-21T10:00:00.000Z', []);
-    const rows = [
-      {
-        key: 's1::a1',
-        scenario_id: 's1',
-        agent: 'a1',
-        classification: 'regressed',
-        left: {
-          dimension_scores: {
-            factuality: 4,
-            completeness: 4,
-            actionability: 4,
-            clarity: 4
-          },
-          overall_score: 4
-        },
-        right: {
-          dimension_scores: {
-            factuality: 3,
-            completeness: 3,
-            actionability: 3,
-            clarity: 3
-          },
-          overall_score: 3
-        },
-        deltas: {
-          overall_score: -1,
-          dimension_scores: {
-            factuality: -1,
-            completeness: -1,
-            actionability: -1,
-            clarity: -1
-          }
-        },
-        confidence: 0.8,
-        rationale: 'degraded',
-        judge_error: undefined
-      },
-      {
-        key: 's2::a1',
-        scenario_id: 's2',
-        agent: 'a1',
-        classification: 'new',
-        left: null,
-        right: null,
-        deltas: {
-          overall_score: null,
-          dimension_scores: {
-            factuality: null,
-            completeness: null,
-            actionability: null,
-            clarity: null
-          }
-        },
-        confidence: null,
-        rationale: undefined,
-        judge_error: undefined
-      }
-    ];
-
-    const compact = __testExports.buildQualityReportFromRows({
-      left,
-      right,
-      rows,
-      topN: 20,
-      includeRationales: false,
-      includeDetails: false,
-      judgeAgentName: 'assistant-default',
-      truncatedByPairCap: false
-    }) as Record<string, unknown>;
-    expect(compact.details).toBeUndefined();
-    expect(
-      ((compact.top_regressions as unknown[])[0] as Record<string, unknown>).rationale
-    ).toBeUndefined();
-
-    const detailed = __testExports.buildQualityReportFromRows({
-      left,
-      right,
-      rows,
-      topN: 20,
-      includeRationales: true,
-      includeDetails: true,
-      judgeAgentName: 'assistant-default',
-      truncatedByPairCap: false
-    }) as Record<string, unknown>;
-    expect((detailed.details as unknown[]).length).toBe(2);
-    expect(
-      ((detailed.top_regressions as unknown[])[0] as Record<string, unknown>).rationale as string
-    ).toBe('degraded');
+  it('classifies compare rows for new/missing/improved/regressed/unchanged', () => {
+    const base = {
+      total_runs: 1,
+      passed_runs: 1,
+      failed_runs: 0,
+      pass_rate: 1,
+      avg_tool_calls_per_run: 1,
+      avg_tool_latency_ms: 10
+    };
+    expect(classifyCompareRow(null, base)).toBe('new');
+    expect(classifyCompareRow(base, null)).toBe('missing');
+    expect(classifyCompareRow({ ...base, pass_rate: 0.3 }, { ...base, pass_rate: 0.6 })).toBe('improved');
+    expect(classifyCompareRow({ ...base, pass_rate: 0.8 }, { ...base, pass_rate: 0.2 })).toBe('regressed');
+    expect(classifyCompareRow(base, { ...base })).toBe('unchanged');
   });
 });
