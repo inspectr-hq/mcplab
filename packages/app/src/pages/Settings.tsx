@@ -51,8 +51,8 @@ const SettingsPage = () => {
       toast({
         title: "Settings updated",
         description: nextAgentName
-          ? `Scenario Assistant Agent set to ${nextAgentName}.`
-          : "Scenario Assistant Agent cleared (will use first available agent by default)."
+          ? `Default assistant agent set to ${nextAgentName}.`
+          : "Default assistant agent cleared (will use first available agent by default)."
       });
     } catch (error: unknown) {
       toast({
@@ -95,14 +95,14 @@ const SettingsPage = () => {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Scenario Assistant</CardTitle>
+          <CardTitle className="text-base">Assistant Defaults</CardTitle>
           <CardDescription>
-            Default assistant model used on library test case pages. If unset, MCP Lab uses the first available agent automatically.
+            Default assistant agent used across assistant flows. If unset, MCP Lab uses the first available agent automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
           <div className="space-y-1.5">
-            <Label className="text-xs">Assistant Agent</Label>
+            <Label className="text-xs">Default Assistant Agent</Label>
             <Select
               value={effectiveAssistantAgentName || "__none__"}
               onValueChange={(value) =>
@@ -123,7 +123,7 @@ const SettingsPage = () => {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Applies to `/libraries/test-cases/:testCaseId`. MCP Evaluation editors can still override the assistant agent from their evaluation context.
+              Applies to the assistant flows that use the workspace default. MCP Evaluation editors can still override the assistant agent from their evaluation context.
             </p>
           </div>
           <div className="text-xs text-muted-foreground">
