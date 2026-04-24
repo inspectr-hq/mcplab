@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
@@ -46,6 +46,22 @@ program
   .description('Laboratory for testing Model Context Protocol servers')
   .version(pkgVersion);
 
+interface RunCommandOptions {
+  config?: string;
+  scenario?: string;
+  runs: string;
+  agents?: string;
+  agentsAll: boolean;
+  interactive: boolean;
+  snapshotEval: boolean;
+  compareSnapshot?: string;
+  bail: boolean;
+  runNote?: string;
+  runsDir: string;
+  snapshotsDir: string;
+  oauthToken: string[];
+}
+
 program
   .command('run')
   .description('Run evaluation scenarios')
@@ -70,7 +86,7 @@ program
     (val: string, acc: string[]) => [...acc, val],
     [] as string[]
   )
-  .action(async (options) => {
+  .action(async (options: RunCommandOptions) => {
     try {
       const hasAgentOverride = Boolean(options.agents) || Boolean(options.agentsAll);
       const needsConfigPrompt = Boolean(options.interactive) && !options.config;
@@ -102,9 +118,10 @@ program
         interactiveSelection
       });
 
-      const requestedPath = resolve(process.cwd(), resolvedOptions.config);
       const configPaths = resolveRunConfigPaths(resolvedOptions.config, process.cwd());
-      const isBatch = configPaths.length > 1;
+      const requestedPath = resolve(process.cwd(), resolvedOptions.config);
+      const requestedPathIsDirectory = statSync(requestedPath).isDirectory();
+      const isBatch = requestedPathIsDirectory;
 
       if (isBatch && options.compareSnapshot) {
         throw new Error('--compare-snapshot is not supported when running a config folder');
@@ -695,7 +712,7 @@ program.parse();
 
 async function executeSingleConfigRun(params: {
   configPath: string;
-  options: any;
+  options: RunCommandOptions;
   resolvedOptions: { agents?: string; agentsAll?: boolean };
 }): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
   const { configPath, options, resolvedOptions } = params;
@@ -739,7 +756,7 @@ async function executeSingleConfigRun(params: {
   const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
   const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
   const oauthTokens: Record<string, string> = {};
-  for (const entry of options.oauthToken as string[]) {
+  for (const entry of options.oauthToken) {
     const eqIdx = entry.indexOf('=');
     if (eqIdx < 1) {
       throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 
 function isYamlFile(name: string): boolean {
@@ -16,7 +16,14 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
   if (!stat.isDirectory()) return [];
 
   const files: string[] = [];
+  const visitedDirs = new Set<string>();
   const walk = (currentDir: string) => {
+    const currentRealPath = realpathSync(currentDir);
+    if (visitedDirs.has(currentRealPath)) {
+      return;
+    }
+    visitedDirs.add(currentRealPath);
+
     const entries = readdirSync(currentDir, { withFileTypes: true }).sort((a, b) =>
       a.name.localeCompare(b.name)
     );
