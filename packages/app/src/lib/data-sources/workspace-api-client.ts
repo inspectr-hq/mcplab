@@ -175,14 +175,6 @@ export const workspaceApiClient = {
         body: JSON.stringify({ message })
       }
     ),
-  continueResultAssistantSession: (sessionId: string) =>
-    request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
-      `/api/result-assistant/sessions/${sessionId}/continue`,
-      {
-        method: 'POST',
-        body: JSON.stringify({})
-      }
-    ),
   approveResultAssistantToolCall: (
     sessionId: string,
     callId: string,

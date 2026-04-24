@@ -46,6 +46,7 @@ import { ResultAssistantPanel } from "@/components/results/ResultAssistantPanel"
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
+import { formatAssistantToolName } from "@/lib/assistant-tool-name";
 import type { EvalResult } from "@/types/eval";
 
 type RunScopeSummary = {
@@ -77,13 +78,32 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
   };
 }
 
-function formatAssistantToolName(name: string | null | undefined): string {
-  const raw = String(name ?? "").trim();
-  if (!raw) return "unknown_tool";
-  const scoped = raw.split("::").pop() ?? raw;
-  const stripped = scoped.replace(/^mcplab__/, "").replace(/^mcplab_/, "");
-  return stripped.replace(/_/g, " ").replace(/\s+/g, " ").trim() || "unknown_tool";
-}
+const RESULT_ASSISTANT_SNIPPETS = [
+  {
+    label: "Summarize Run Trends",
+    description: "Highlight the main changes across the selected runs.",
+    prompt:
+      "Summarize the main trends across these runs. Call out pass-rate changes, latency, and tool usage shifts."
+  },
+  {
+    label: "Explain Failures",
+    description: "Identify the most important failures and likely root causes.",
+    prompt:
+      "Identify the most important failures across these runs and explain likely root causes from the traces."
+  },
+  {
+    label: "Compare Agents",
+    description: "Compare agent behavior, tool use, and answer quality across runs.",
+    prompt:
+      "Compare agent behavior across these runs. Highlight differences in tool use, answer quality, and consistency."
+  },
+  {
+    label: "Spot Anomalies",
+    description: "Find outliers in latency, tool calls, or pass rate.",
+    prompt:
+      "Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out."
+  }
+] as const;
 
 const Results = () => {
   const { source } = useDataSource();
@@ -97,33 +117,6 @@ const Results = () => {
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
-  const RESULT_ASSISTANT_SNIPPETS = [
-    {
-      label: "Summarize Run Trends",
-      description: "Highlight the main changes across the selected runs.",
-      prompt:
-        "Summarize the main trends across these runs. Call out pass-rate changes, latency, and tool usage shifts."
-    },
-    {
-      label: "Explain Failures",
-      description: "Identify the most important failures and likely root causes.",
-      prompt:
-        "Identify the most important failures across these runs and explain likely root causes from the traces."
-    },
-    {
-      label: "Compare Agents",
-      description: "Compare agent behavior, tool use, and answer quality across runs.",
-      prompt:
-        "Compare agent behavior across these runs. Highlight differences in tool use, answer quality, and consistency."
-    },
-    {
-      label: "Spot Anomalies",
-      description: "Find outliers in latency, tool calls, or pass rate.",
-      prompt:
-        "Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out."
-    }
-  ] as const;
-
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));

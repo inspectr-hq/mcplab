@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
@@ -26,7 +26,10 @@ import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
-import { deriveConfigRelativePath, resolveRunConfigPaths } from './eval-config-files.js';
+import {
+  deriveConfigRelativePath,
+  resolveRunConfigSelection
+} from './eval-config-files.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -118,9 +121,10 @@ program
         interactiveSelection
       });
 
-      const configPaths = resolveRunConfigPaths(resolvedOptions.config, process.cwd());
-      const requestedPath = resolve(process.cwd(), resolvedOptions.config);
-      const requestedPathIsDirectory = statSync(requestedPath).isDirectory();
+      const selection = resolveRunConfigSelection(resolvedOptions.config, process.cwd());
+      const configPaths = selection.configPaths;
+      const requestedPath = selection.requestedPath;
+      const requestedPathIsDirectory = selection.requestedPathIsDirectory;
       const isBatch = requestedPathIsDirectory;
 
       if (isBatch && options.compareSnapshot) {
@@ -840,10 +844,15 @@ async function executeSingleConfigRun(params: {
     console.log(formatSnapshotComparisonTable(comparison));
   }
 
+  const failedRuns = results.scenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
+    0
+  );
+
   return {
     runDir,
     runId: results.metadata.run_id,
-    passed: results.summary.pass_rate === 1,
+    passed: failedRuns === 0,
     shouldFailOnDrift
   };
 }

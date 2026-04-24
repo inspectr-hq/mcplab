@@ -32,7 +32,6 @@ type ResultAssistantTurnRouteResponse = {
     type: 'assistant_message' | 'tool_call_request';
     text: string;
     pendingToolCall?: ResultAssistantSession['pendingToolCalls'][number];
-    autoContinue?: boolean;
   };
 };
 
@@ -117,13 +116,7 @@ export async function handleResultAssistantRoutes(params: {
         !pending ||
         !isResultAssistantAutoApprovedTool(pending.tool)
       ) {
-        return {
-          session: output.session,
-          response: {
-            ...output.response,
-            autoContinue: false
-          }
-        };
+        return output;
       }
       await executePendingToolCall(session, pending, 'Auto-approved read-only', {
         emitApprovalChatMessage: false
@@ -131,13 +124,7 @@ export async function handleResultAssistantRoutes(params: {
       touchResultAssistantSession(session);
       output = await continueResultAssistantTurn(session);
     }
-    return {
-      session: output.session,
-      response: {
-        ...output.response,
-        autoContinue: false
-      }
-    };
+    return output;
   };
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
@@ -255,24 +242,6 @@ export async function handleResultAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueWithAutoApprovedReads(session);
-    asJson(res, 200, output);
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/result-assistant/sessions/') &&
-    pathname.endsWith('/continue') &&
-    method === 'POST'
-  ) {
-    cleanupResultAssistantSessions(resultAssistantSessions);
-    const parts = pathname.split('/');
-    const sessionId = parts[4];
-    const session = resultAssistantSessions.get(sessionId);
-    if (!session) {
-      asJson(res, 404, { error: 'Result Assistant session not found' });
-      return true;
-    }
     const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;

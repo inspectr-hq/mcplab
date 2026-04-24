@@ -45,12 +45,21 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
 }
 
 export function resolveRunConfigPaths(configPath: string, cwd = process.cwd()): string[] {
+  return resolveRunConfigSelection(configPath, cwd).configPaths;
+}
+
+export function resolveRunConfigSelection(
+  configPath: string,
+  cwd = process.cwd()
+): { requestedPath: string; requestedPathIsDirectory: boolean; configPaths: string[] } {
   const resolved = resolve(cwd, configPath);
   if (!existsSync(resolved)) {
     throw new Error(`Config path not found: ${resolved}`);
   }
   const stat = statSync(resolved);
-  if (stat.isFile()) return [resolved];
+  if (stat.isFile()) {
+    return { requestedPath: resolved, requestedPathIsDirectory: false, configPaths: [resolved] };
+  }
   if (!stat.isDirectory()) {
     throw new Error(`Config path must be a file or directory: ${resolved}`);
   }
@@ -58,7 +67,7 @@ export function resolveRunConfigPaths(configPath: string, cwd = process.cwd()): 
   if (files.length === 0) {
     throw new Error(`No .yaml/.yml files found under config directory: ${resolved}`);
   }
-  return files;
+  return { requestedPath: resolved, requestedPathIsDirectory: true, configPaths: files };
 }
 
 export function deriveConfigRelativePath(configPath: string, rootDir: string): string {

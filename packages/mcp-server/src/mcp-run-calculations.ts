@@ -90,7 +90,7 @@ export function buildAggregateRunsReport(params: {
     top_worst: worstRows,
     top_best: bestRows,
     details: params.includeDetails
-      ? rows.sort(compareRowsWorstFirst).map(toSerializableAggregateRow)
+      ? [...rows].sort(compareRowsWorstFirst).map(toSerializableAggregateRow)
       : undefined
   });
 }
@@ -219,7 +219,7 @@ export function buildCompareRunsReport(params: {
     new_items: newItems.map(toSerializableCompareRow),
     missing_items: missingItems.map(toSerializableCompareRow),
     details: params.includeDetails
-      ? rows
+      ? [...rows]
           .sort(
             (a, b) =>
               compareClassPriority(a.classification) - compareClassPriority(b.classification) ||
@@ -444,9 +444,9 @@ function roundedDelta(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-function nullableRoundedDelta(left: number | null, right: number | null): number | null {
-  if (left === null || right === null) return null;
-  return roundedDelta(left - right);
+function nullableRoundedDelta(right: number | null, left: number | null): number | null {
+  if (right === null || left === null) return null;
+  return roundedDelta(right - left);
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): T {

@@ -323,7 +323,6 @@ export interface ResultAssistantTurnResponse {
   type: 'assistant_message' | 'tool_call_request';
   text: string;
   pendingToolCall?: ResultAssistantPendingToolCall;
-  autoContinue?: boolean;
 }
 
 export interface ScenarioPreviewCoreRunResponse {
@@ -733,9 +732,6 @@ export interface EvalDataSource {
   sendResultAssistantMessage: (
     sessionId: string,
     message: string
-  ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
-  continueResultAssistantSession: (
-    sessionId: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   approveResultAssistantToolCall: (
     sessionId: string,

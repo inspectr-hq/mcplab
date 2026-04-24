@@ -27,6 +27,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import { formatAssistantToolName } from "@/lib/assistant-tool-name";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
   MarkdownReportContent,
@@ -75,14 +76,6 @@ function formatCompactOneDecimal(value: number): string {
 
 function formatTokenCount(value: number | null | undefined): string {
   return typeof value === "number" ? value.toLocaleString() : "n/a";
-}
-
-function formatAssistantToolName(name: string | null | undefined): string {
-  const raw = String(name ?? "").trim();
-  if (!raw) return "unknown_tool";
-  const scoped = raw.split("::").pop() ?? raw;
-  const stripped = scoped.replace(/^mcplab__/, "").replace(/^mcplab_/, "");
-  return stripped.replace(/_/g, " ").replace(/\s+/g, " ").trim() || "unknown_tool";
 }
 
 const ResultDetail = () => {
