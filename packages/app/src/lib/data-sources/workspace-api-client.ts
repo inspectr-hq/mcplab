@@ -27,7 +27,8 @@ import type {
   ResultAssistantSessionView,
   ResultAssistantTurnResponse,
   ScenarioPreviewCoreRunResponse,
-  WorkspaceHealthResponse
+  WorkspaceHealthResponse,
+  LibraryBundle
 } from './types';
 
 function getBaseUrl(): string {
@@ -238,17 +239,8 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(policy)
     }),
-  getLibraries: () =>
-    request<{
-      servers: CoreEvalConfig['servers'];
-      agents: CoreEvalConfig['agents'];
-      scenarios: CoreEvalConfig['scenarios'];
-    }>('/api/libraries'),
-  saveLibraries: (libraries: {
-    servers: CoreEvalConfig['servers'];
-    agents: CoreEvalConfig['agents'];
-    scenarios: CoreEvalConfig['scenarios'];
-  }) =>
+  getLibraries: () => request<LibraryBundle>('/api/libraries'),
+  saveLibraries: (libraries: LibraryBundle) =>
     request<{ ok: boolean }>('/api/libraries', {
       method: 'PUT',
       body: JSON.stringify(libraries)

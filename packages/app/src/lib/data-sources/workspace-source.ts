@@ -8,7 +8,7 @@ import {
   toCoreLibraries
 } from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
-import type { EvalDataSource } from './types';
+import type { EvalDataSource, LibraryBundle } from './types';
 
 function configFileName(config: EvalConfig): string {
   if (config.sourcePath) {
@@ -164,7 +164,7 @@ export const workspaceSource: EvalDataSource = {
     const record = await workspaceApiClient.updateSnapshotPolicy(configId, policy);
     return fromCoreConfigYaml(record);
   },
-  async getLibraries() {
+  async getLibraries(): Promise<LibraryBundle> {
     const libraries = await workspaceApiClient.getLibraries();
     return fromCoreLibraries(libraries);
   },

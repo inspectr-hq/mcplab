@@ -190,6 +190,18 @@ export interface WorkspaceSettings {
   scenarioAssistantAgentName?: string;
 }
 
+export interface LibraryBundle {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+  scenarios: EvalConfig['scenarios'];
+}
+
+export interface CoreLibraryBundle {
+  servers: CoreEvalConfig['servers'];
+  agents: CoreEvalConfig['agents'];
+  scenarios: CoreEvalConfig['scenarios'];
+}
+
 export interface ScenarioAssistantSuggestionBundle {
   prompt?: { replacement: string; rationale?: string };
   evalRules?: {
@@ -758,16 +770,8 @@ export interface EvalDataSource {
       baselineSourceRunId?: string;
     }
   ) => Promise<EvalConfig>;
-  getLibraries: () => Promise<{
-    servers: EvalConfig['servers'];
-    agents: EvalConfig['agents'];
-    scenarios: EvalConfig['scenarios'];
-  }>;
-  saveLibraries: (libraries: {
-    servers: EvalConfig['servers'];
-    agents: EvalConfig['agents'];
-    scenarios: EvalConfig['scenarios'];
-  }) => Promise<void>;
+  getLibraries: () => Promise<LibraryBundle>;
+  saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
     provider: 'anthropic' | 'openai' | 'azure'
   ) => Promise<ProviderModelsResponse>;

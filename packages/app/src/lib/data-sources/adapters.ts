@@ -23,7 +23,8 @@ import type {
   ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
-  WorkspaceConfigRecord
+  WorkspaceConfigRecord,
+  LibraryBundle
 } from './types';
 
 function toId(base: string, index: number): string {
@@ -382,11 +383,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   };
 }
 
-export function fromCoreLibraries(libraries: {
-  servers: CoreEvalConfig['servers'];
-  agents: CoreEvalConfig['agents'];
-  scenarios: CoreEvalConfig['scenarios'];
-}): Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'> {
+export function fromCoreLibraries(libraries: LibraryBundle): LibraryBundle {
   const record: WorkspaceConfigRecord = {
     id: 'library',
     name: 'library',
