@@ -37,8 +37,10 @@ type ResultAssistantTurnRouteResponse = {
 
 const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
   'mcplab_list_markdown_reports',
+  'mcplab_search_markdown_reports',
   'mcplab_read_markdown_report',
   'mcplab_list_runs',
+  'mcplab_search_runs',
   'mcplab_aggregate_runs',
   'mcplab_compare_runs',
   'mcplab_compare_answer_quality',
@@ -50,6 +52,7 @@ const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
   'mcplab_trace_list_events',
   'mcplab_trace_search',
   'mcplab_list_tool_analysis_results',
+  'mcplab_search_tool_analysis_results',
   'mcplab_read_tool_analysis_result',
   'mcplab_list_library',
   'mcplab_get_library_item'

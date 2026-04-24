@@ -74,8 +74,10 @@ const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
 const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_write_markdown_report',
   'mcplab_list_markdown_reports',
+  'mcplab_search_markdown_reports',
   'mcplab_read_markdown_report',
   'mcplab_list_runs',
+  'mcplab_search_runs',
   'mcplab_aggregate_runs',
   'mcplab_compare_runs',
   'mcplab_compare_answer_quality',
@@ -87,6 +89,7 @@ const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_trace_list_events',
   'mcplab_trace_search',
   'mcplab_list_tool_analysis_results',
+  'mcplab_search_tool_analysis_results',
   'mcplab_read_tool_analysis_result',
   'mcplab_list_library',
   'mcplab_get_library_item'
@@ -274,6 +277,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
+    "Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.",
     'When asked about answer quality evolution (clarity/completeness/factuality/actionability), prefer mcplab_compare_answer_quality over ad-hoc manual text reading.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
