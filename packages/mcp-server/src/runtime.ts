@@ -578,14 +578,17 @@ export function registerTools(server: McpServer): void {
           .describe(
             'Target .md/.markdown path, relative to the current workspace or absolute within it.'
           ),
-        markdown: z.string().describe('Markdown content to write.'),
+        markdown: z
+          .string()
+          .max(10485760, 'Markdown must not exceed 10 MiB')
+          .describe('Markdown content to write. Maximum 10 MiB.'),
         overwrite: z
           .boolean()
-          .optional()
+          .default(false)
           .describe('Overwrite existing file if true. Defaults to false.'),
         create_dirs: z
           .boolean()
-          .optional()
+          .default(true)
           .describe('Create missing parent directories if true. Defaults to true.')
       }
     },
@@ -608,7 +611,7 @@ export function registerTools(server: McpServer): void {
           };
         }
         const parentDir = dirname(targetPath);
-        if (Boolean(create_dirs ?? true)) {
+        if (create_dirs) {
           try {
             mkdirSync(parentDir, { recursive: true });
           } catch (error: unknown) {
@@ -644,7 +647,7 @@ export function registerTools(server: McpServer): void {
           };
         }
         const fileExists = existsSync(targetPath);
-        if (fileExists && !Boolean(overwrite)) {
+        if (fileExists && !overwrite) {
           const structured = {
             ok: false as const,
             error_code: 'FILE_EXISTS' as const,
@@ -1237,10 +1240,10 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_list_runs',
+    'mcplab_search_runs',
     {
       description:
-        'List MCPLab run artifact directories and optionally summarize each run from results.json when present.',
+        'Search MCPLab run artifact directories with results.json summary metrics. Use the optional query parameter to filter by run_id, path, or summary fields (case-insensitive substring). Set include_summary=false to skip reading results.json for faster listing.',
       outputSchema: {
         runsDir: z.string(),
         query: z.string().optional(),
@@ -1256,86 +1259,35 @@ export function registerTools(server: McpServer): void {
           .string()
           .optional()
           .describe(
-            'Optional case-insensitive search query across run id/path (and summary fields when include_summary=true).'
+            'Optional case-insensitive search query across run id/path and summary fields.'
           ),
         limit: z
           .number()
           .int()
           .positive()
           .max(100)
-          .optional()
-          .describe('Max runs to return (default 10).'),
+          .default(10)
+          .describe('Max runs to return. Defaults to 10.'),
         include_summary: z
           .boolean()
-          .optional()
-          .describe('Read results.json summary for each run when available.')
+          .default(true)
+          .describe('Read results.json summary for each run when available. Defaults to true.')
       }
     },
     async ({ runs_dir, query, limit, include_summary }) => {
       return withToolHandling(async () => {
         const base = resolveRunsDir(runs_dir);
-        const entries = listRunsWithFallback(base, undefined, Boolean(include_summary));
+        const entries = listRunsWithFallback(base, undefined, include_summary);
         const searchQuery = String(query ?? '')
           .trim()
           .toLowerCase();
         const filtered = searchQuery
           ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
           : entries;
-        const capped = filtered.slice(0, limit ?? 10);
+        const capped = filtered.slice(0, limit);
         return ok(`Found ${filtered.length} run(s) in ${base}`, {
           runsDir: base,
           query: searchQuery || undefined,
-          total_matching: filtered.length,
-          runs: capped
-        });
-      });
-    }
-  );
-
-  registerTool(
-    'mcplab_search_runs',
-    {
-      description: 'Search MCPLab run artifacts with a text query across run metadata and paths.',
-      outputSchema: {
-        runsDir: z.string(),
-        query: z.string(),
-        total_matching: z.number().int().nonnegative(),
-        runs: z.array(RunListEntrySchema)
-      },
-      inputSchema: {
-        query: z
-          .string()
-          .describe('Case-insensitive search query across run id/path and summary fields.'),
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(100)
-          .optional()
-          .describe('Max runs to return (default 10).'),
-        include_summary: z
-          .boolean()
-          .optional()
-          .describe('Read results.json summary for each run when available (default true).')
-      }
-    },
-    async ({ query, runs_dir, limit, include_summary }) => {
-      return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
-        const searchQuery = String(query ?? '')
-          .trim()
-          .toLowerCase();
-        if (!searchQuery) throw new Error('query is required');
-        const entries = listRunsWithFallback(base, undefined, include_summary ?? true);
-        const filtered = entries.filter((entry) => searchableText(entry).includes(searchQuery));
-        const capped = filtered.slice(0, limit ?? 10);
-        return ok(`Found ${filtered.length} run(s) in ${base}`, {
-          runsDir: base,
-          query: searchQuery,
           total_matching: filtered.length,
           runs: capped
         });
@@ -1532,10 +1484,10 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_list_tool_analysis_results',
+    'mcplab_search_tool_analysis_results',
     {
       description:
-        'List saved MCP tool analysis reports persisted by the MCPLab app (default: mcplab/results/tool-analysis).',
+        'Search saved MCP tool analysis reports from mcplab/results/tool-analysis. Use the optional query parameter to filter by report_id, server name, agent name, or summary metadata (case-insensitive substring).',
       outputSchema: {
         tool_analysis_results_dir: z.string(),
         total: z.number().int().nonnegative(),
@@ -1557,8 +1509,8 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .max(100)
-          .optional()
-          .describe('Max reports to return (default 20).')
+          .default(20)
+          .describe('Max reports to return. Defaults to 20.')
       }
     },
     async ({ tool_analysis_results_dir, query, limit }) => {
@@ -1571,58 +1523,10 @@ export function registerTools(server: McpServer): void {
         const filtered = searchQuery
           ? reports.filter((report) => searchableText(report).includes(searchQuery))
           : reports;
-        const capped = filtered.slice(0, limit ?? 20);
+        const capped = filtered.slice(0, limit);
         return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
           query: searchQuery || undefined,
-          total: filtered.length,
-          items: capped
-        });
-      });
-    }
-  );
-
-  registerTool(
-    'mcplab_search_tool_analysis_results',
-    {
-      description:
-        'Search saved MCP tool analysis reports by query text across ids, paths, and summary fields.',
-      outputSchema: {
-        tool_analysis_results_dir: z.string(),
-        query: z.string(),
-        total: z.number().int().nonnegative(),
-        items: z.array(ToolAnalysisListItemSchema)
-      },
-      inputSchema: {
-        query: z
-          .string()
-          .describe('Case-insensitive search query across report id/path/summary fields.'),
-        tool_analysis_results_dir: z
-          .string()
-          .optional()
-          .describe('Directory containing saved tool analysis report folders.'),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(100)
-          .optional()
-          .describe('Max reports to return (default 20).')
-      }
-    },
-    async ({ query, tool_analysis_results_dir, limit }) => {
-      return withToolHandling(async () => {
-        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
-        const searchQuery = String(query ?? '')
-          .trim()
-          .toLowerCase();
-        if (!searchQuery) throw new Error('query is required');
-        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, undefined);
-        const filtered = reports.filter((report) => searchableText(report).includes(searchQuery));
-        const capped = filtered.slice(0, limit ?? 20);
-        return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
-          tool_analysis_results_dir: baseDir,
-          query: searchQuery,
           total: filtered.length,
           items: capped
         });
@@ -2444,9 +2348,7 @@ const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_list_markdown_reports: 'Search Markdown Reports',
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
-  mcplab_list_runs: 'Search Evaluation Runs',
   mcplab_search_runs: 'Search Evaluation Runs',
-  mcplab_list_tool_analysis_results: 'Search Tool Analysis Results',
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
   mcplab_trace_search: 'Search Trace Events',
   mcplab_grep_run_artifact: 'Search Run Artifact Text'

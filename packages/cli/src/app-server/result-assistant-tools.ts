@@ -12,7 +12,6 @@ export const RESULT_ASSISTANT_TOOL_CAPABILITIES: ResultAssistantToolCapability[]
   { name: 'mcplab_list_markdown_reports', role: 'list', readOnly: true, search: false },
   { name: 'mcplab_search_markdown_reports', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_read_markdown_report', role: 'read', readOnly: true, search: false },
-  { name: 'mcplab_list_runs', role: 'list', readOnly: true, search: false },
   { name: 'mcplab_search_runs', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_aggregate_runs', role: 'analysis', readOnly: true, search: false },
   { name: 'mcplab_compare_runs', role: 'analysis', readOnly: true, search: false },
@@ -23,13 +22,7 @@ export const RESULT_ASSISTANT_TOOL_CAPABILITIES: ResultAssistantToolCapability[]
   { name: 'mcplab_trace_get_conversation', role: 'read', readOnly: true, search: false },
   { name: 'mcplab_trace_list_events', role: 'list', readOnly: true, search: false },
   { name: 'mcplab_trace_search', role: 'search', readOnly: true, search: true },
-  { name: 'mcplab_list_tool_analysis_results', role: 'list', readOnly: true, search: false },
-  {
-    name: 'mcplab_search_tool_analysis_results',
-    role: 'search',
-    readOnly: true,
-    search: true
-  },
+  { name: 'mcplab_search_tool_analysis_results', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_read_tool_analysis_result', role: 'read', readOnly: true, search: false },
   { name: 'mcplab_list_library', role: 'catalog', readOnly: true, search: false },
   { name: 'mcplab_get_library_item', role: 'read', readOnly: true, search: false }

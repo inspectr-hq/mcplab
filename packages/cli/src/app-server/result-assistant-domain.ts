@@ -262,7 +262,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
-      ? 'Scope: all historical runs. Prefer mcplab_search_runs first, and fall back to mcplab_list_runs for unknown/broad queries or full coverage. Then inspect specific runs via mcplab_read_run_artifact / trace tools.'
+      ? 'Scope: all historical runs. Use mcplab_search_runs to list or filter runs (no query needed for full listing). Then inspect specific runs via mcplab_read_run_artifact / trace tools.'
       : omittedScenarioCount > 0
       ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
       : 'All scenarios are included in the prompt context.',
