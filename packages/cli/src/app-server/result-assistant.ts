@@ -109,30 +109,33 @@ export async function handleResultAssistantRoutes(params: {
   const continueWithAutoApprovedReads = async (
     session: ResultAssistantSession
   ): Promise<ResultAssistantTurnRouteResponse> => {
-    const output = await continueResultAssistantTurn(session);
-    const pending = output.response.pendingToolCall;
-    if (
-      output.response.type !== 'tool_call_request' ||
-      !pending ||
-      !isResultAssistantAutoApprovedTool(pending.tool)
-    ) {
-      return {
-        session: output.session,
-        response: {
-          ...output.response,
-          autoContinue: false
-        }
-      };
+    let output = await continueResultAssistantTurn(session);
+    for (let i = 0; i < 25; i += 1) {
+      const pending = output.response.pendingToolCall;
+      if (
+        output.response.type !== 'tool_call_request' ||
+        !pending ||
+        !isResultAssistantAutoApprovedTool(pending.tool)
+      ) {
+        return {
+          session: output.session,
+          response: {
+            ...output.response,
+            autoContinue: false
+          }
+        };
+      }
+      await executePendingToolCall(session, pending, 'Auto-approved read-only', {
+        emitApprovalChatMessage: false
+      });
+      touchResultAssistantSession(session);
+      output = await continueResultAssistantTurn(session);
     }
-    await executePendingToolCall(session, pending, 'Auto-approved read-only', {
-      emitApprovalChatMessage: false
-    });
-    touchResultAssistantSession(session);
     return {
-      session: resultAssistantSessionView(session),
+      session: output.session,
       response: {
         ...output.response,
-        autoContinue: true
+        autoContinue: false
       }
     };
   };

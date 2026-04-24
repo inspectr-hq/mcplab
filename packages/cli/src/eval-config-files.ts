@@ -24,9 +24,7 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
     }
     visitedDirs.add(currentRealPath);
 
-    const entries = readdirSync(currentDir, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    const entries = readdirSync(currentDir, { withFileTypes: true });
     for (const entry of entries) {
       const absPath = resolve(currentDir, entry.name);
       if (entry.isDirectory()) {

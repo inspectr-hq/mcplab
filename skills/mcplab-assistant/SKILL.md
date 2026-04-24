@@ -59,7 +59,6 @@ When the request is about analyzing results, the assistant must:
 1. Prefer MCP analysis tools first to reduce context/token usage:
 - `mcplab_aggregate_runs` for multi-run trends and compact metric summaries
 - `mcplab_compare_runs` for structured run-to-run regressions/improvements
-- `mcplab_compare_answer_quality` for semantic answer quality comparison
 2. Read artifacts directly only when needed:
 - `results.json`
 - `summary.md`
@@ -120,7 +119,6 @@ When the request is about analyzing results, the assistant must:
 1. Start with MCP comparison tools:
 - `mcplab_aggregate_runs` for historical trends
 - `mcplab_compare_runs` for deterministic run deltas
-- `mcplab_compare_answer_quality` for rubric-based answer quality evolution
 2. Read run directory artifacts only when tool output is insufficient:
 - `results.json` for structured metrics and pass/fail
 - `summary.md` for quick human scan
@@ -128,7 +126,7 @@ When the request is about analyzing results, the assistant must:
 - `report.html` for interactive investigation
 3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
 4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
-5. When quality drift is requested, include `mcplab_compare_answer_quality` findings (overall + per-dimension deltas).
+5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
 
 ## Source Of Truth
 
@@ -165,7 +163,7 @@ User request:
 Assistant behavior:
 1. Use `mcplab_aggregate_runs` for compact trend metrics over selected runs.
 2. Use `mcplab_compare_runs` to identify deterministic regressions/improvements.
-3. If semantic output quality is requested, use `mcplab_compare_answer_quality`.
+3. If semantic output quality is requested, inspect `results.json` and targeted `trace.jsonl` entries for representative scenario deltas.
 4. Return top regressions first with scenario IDs and suggested next checks.
 
 ### Pattern 3: Failure Triage Request

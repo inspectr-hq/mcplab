@@ -257,7 +257,6 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     "Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.",
-    'When asked about answer quality evolution (clarity/completeness/factuality/actionability), prefer mcplab_compare_answer_quality over ad-hoc manual text reading.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'

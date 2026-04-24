@@ -22,7 +22,6 @@ export const RESULT_ASSISTANT_TOOL_CAPABILITIES: ResultAssistantToolCapability[]
   { name: 'mcplab_search_runs', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_aggregate_runs', role: 'analysis', readOnly: true, search: false },
   { name: 'mcplab_compare_runs', role: 'analysis', readOnly: true, search: false },
-  { name: 'mcplab_compare_answer_quality', role: 'analysis', readOnly: true, search: false },
   { name: 'mcplab_read_run_artifact', role: 'read', readOnly: true, search: false },
   { name: 'mcplab_grep_run_artifact', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_trace_stats', role: 'analysis', readOnly: true, search: false },
@@ -53,4 +52,3 @@ export function isResultAssistantAllowedTool(name: string): boolean {
 export function isResultAssistantAutoApprovedTool(name: string): boolean {
   return CAPABILITY_BY_NAME.get(name)?.readOnly === true;
 }
-

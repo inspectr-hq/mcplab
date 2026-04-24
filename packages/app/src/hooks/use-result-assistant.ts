@@ -30,12 +30,17 @@ export function useResultAssistant(params: {
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
+  const sourceRef = useRef(source);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     assistantSessionIdRef.current = assistantSessionId;
   }, [assistantSessionId]);
+
+  useEffect(() => {
+    sourceRef.current = source;
+  }, [source]);
 
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
@@ -49,27 +54,10 @@ export function useResultAssistant(params: {
 
   const syncAndContinueAssistantTurn = useCallback(
     async (sessionId: string, payload: ResultAssistantTurnPayload) => {
-      let current = payload;
-      let activeSessionId = current.session.id || sessionId;
-      syncResultAssistantSession(current.session);
-      for (let i = 0; i < 25 && current.response.autoContinue; i += 1) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-        try {
-          current = await source.continueResultAssistantSession(activeSessionId);
-        } catch (error: unknown) {
-          if (isSessionNotFoundError(error)) {
-            // Session may expire server-side between turns; stop auto-continue quietly.
-            setAssistantSessionId(null);
-            setAssistantPendingToolCalls([]);
-            return;
-          }
-          throw error;
-        }
-        activeSessionId = current.session.id || activeSessionId;
-        syncResultAssistantSession(current.session);
-      }
+      const activeSessionId = payload.session.id || sessionId;
+      syncResultAssistantSession(payload.session, activeSessionId);
     },
-    [source, syncResultAssistantSession]
+    [syncResultAssistantSession]
   );
 
   const askAssistant = useCallback(async () => {
@@ -246,9 +234,9 @@ export function useResultAssistant(params: {
   useEffect(() => {
     return () => {
       if (!assistantSessionId) return;
-      void source.closeResultAssistantSession(assistantSessionId).catch(() => undefined);
+      void sourceRef.current.closeResultAssistantSession(assistantSessionId).catch(() => undefined);
     };
-  }, [assistantSessionId, source]);
+  }, [assistantSessionId]);
 
   return {
     assistantSessionId,

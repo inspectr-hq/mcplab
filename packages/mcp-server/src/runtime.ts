@@ -795,7 +795,6 @@ export function registerTools(server: McpServer): void {
         'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics.',
       outputSchema: {
         run_dir: z.string(),
-        runDir: z.string(),
         total_scenarios: z.number().int().nonnegative(),
         total_runs: z.number().int().nonnegative(),
         passed_runs: z.number().int().nonnegative(),
@@ -854,7 +853,6 @@ export function registerTools(server: McpServer): void {
         const failedRuns = allRuns.filter((run) => run.pass === false).length;
         return ok(`MCPLab run completed: ${runDir}`, {
           run_dir: runDir,
-          runDir,
           total_scenarios: results.summary.total_scenarios,
           total_runs: results.summary.total_runs,
           passed_runs: passedRuns,
@@ -1092,70 +1090,6 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_compare_answer_quality',
-    {
-      description:
-        'Compare final answer quality between two runs using server-side pairwise judging with compact summary-first output.',
-      inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
-        left_run_id: z.string().describe("Left run id or 'LATEST'."),
-        right_run_id: z.string().describe("Right run id or 'LATEST'."),
-        scenario_ids: z.array(z.string()).optional().describe('Optional scenario id filter.'),
-        agents: z.array(z.string()).optional().describe('Optional agent filter.'),
-        top_n: z
-          .number()
-          .int()
-          .positive()
-          .max(100)
-          .optional()
-          .describe('Max rows for regressions/improvements (default 20).'),
-        include_rationales: z
-          .boolean()
-          .optional()
-          .describe('Include short judge rationale text. Defaults to false.'),
-        include_details: z
-          .boolean()
-          .optional()
-          .describe('Include full row set. Defaults to false (summary-first).')
-      }
-    },
-    async ({
-      runs_dir,
-      left_run_id,
-      right_run_id,
-      scenario_ids,
-      agents,
-      top_n,
-      include_rationales,
-      include_details
-    }) => {
-      return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
-        const left = loadSingleRunForAnalysis(base, left_run_id);
-        const right = loadSingleRunForAnalysis(base, right_run_id);
-        const judge = loadDefaultQualityJudgeAgent();
-        const report = await buildCompareAnswerQualityReport({
-          left,
-          right,
-          scenarioIds: scenario_ids,
-          agents,
-          topN: top_n ?? 20,
-          includeRationales: include_rationales ?? false,
-          includeDetails: include_details ?? false,
-          judge
-        });
-        return ok(
-          `Compared answer quality for run ${left.run_id} against ${right.run_id} using ${judge.agentName}`,
-          report
-        );
-      });
-    }
-  );
-
-  registerTool(
     'mcplab_list_tool_analysis_results',
     {
       description:
@@ -1163,7 +1097,6 @@ export function registerTools(server: McpServer): void {
       outputSchema: {
         tool_analysis_results_dir: z.string(),
         total: z.number().int().nonnegative(),
-        results: z.array(z.record(z.unknown())),
         items: z.array(z.record(z.unknown()))
       },
       inputSchema: {
@@ -1196,7 +1129,6 @@ export function registerTools(server: McpServer): void {
           tool_analysis_results_dir: baseDir,
           query: searchQuery || undefined,
           total: filtered.length,
-          results: filtered,
           items: filtered
         });
       });
@@ -1238,7 +1170,6 @@ export function registerTools(server: McpServer): void {
           tool_analysis_results_dir: baseDir,
           query: searchQuery,
           total: filtered.length,
-          results: filtered,
           items: filtered
         });
       });
@@ -1892,7 +1823,7 @@ const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_run_eval'
 ]);
 const MUTATING_TOOLS = new Set<string>(['mcplab_write_markdown_report', 'mcplab_run_eval']);
-const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval', 'mcplab_compare_answer_quality']);
+const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
   mcplab_list_markdown_reports: 'Search Markdown Reports',
