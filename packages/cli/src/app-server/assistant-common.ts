@@ -16,6 +16,14 @@ export function normalizeAssistantToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60) || `tool_${Date.now()}`;
 }
 
+export function formatAssistantToolName(name: string): string {
+  const raw = String(name ?? '').trim();
+  if (!raw) return 'unknown_tool';
+  const scoped = raw.split('::').pop() ?? raw;
+  const stripped = scoped.replace(/^mcplab__/, '').replace(/^mcplab_/, '');
+  return stripped.replace(/_/g, ' ').replace(/\s+/g, ' ').trim() || 'unknown_tool';
+}
+
 export function makeAssistantToolPublicName(
   serverName: string,
   toolName: string,

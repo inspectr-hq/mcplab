@@ -13,6 +13,7 @@ import {
   summarizeToolResultForResultAssistant,
   touchResultAssistantSession
 } from './result-assistant-domain.js';
+import { isResultAssistantAutoApprovedTool } from './result-assistant-tools.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
 
 export type ResultAssistantRouteDeps = Pick<
@@ -34,29 +35,6 @@ type ResultAssistantTurnRouteResponse = {
     autoContinue?: boolean;
   };
 };
-
-const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
-  'mcplab_list_markdown_reports',
-  'mcplab_search_markdown_reports',
-  'mcplab_read_markdown_report',
-  'mcplab_list_runs',
-  'mcplab_search_runs',
-  'mcplab_aggregate_runs',
-  'mcplab_compare_runs',
-  'mcplab_compare_answer_quality',
-  'mcplab_read_run_artifact',
-  'mcplab_grep_run_artifact',
-  'mcplab_trace_stats',
-  'mcplab_trace_get_final_answers',
-  'mcplab_trace_get_conversation',
-  'mcplab_trace_list_events',
-  'mcplab_trace_search',
-  'mcplab_list_tool_analysis_results',
-  'mcplab_search_tool_analysis_results',
-  'mcplab_read_tool_analysis_result',
-  'mcplab_list_library',
-  'mcplab_get_library_item'
-]);
 
 export async function handleResultAssistantRoutes(params: {
   req: IncomingMessage;
@@ -136,7 +114,7 @@ export async function handleResultAssistantRoutes(params: {
     if (
       output.response.type !== 'tool_call_request' ||
       !pending ||
-      !RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)
+      !isResultAssistantAutoApprovedTool(pending.tool)
     ) {
       return {
         session: output.session,

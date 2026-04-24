@@ -28,7 +28,7 @@ import type {
   ResultAssistantTurnResponse,
   ScenarioPreviewCoreRunResponse,
   WorkspaceHealthResponse,
-  LibraryBundle
+  CoreLibraryBundle
 } from './types';
 
 function getBaseUrl(): string {
@@ -140,17 +140,6 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify({ runId })
     }),
-  askResultAssistant: (
-    runId: string,
-    messages: Array<{ role: 'user' | 'assistant'; text: string }>
-  ) =>
-    request<{ reply: string; assistantAgentName: string; provider: string; model: string }>(
-      `/api/runs/${encodeURIComponent(runId)}/assistant`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ messages })
-      }
-    ),
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;
@@ -239,8 +228,8 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(policy)
     }),
-  getLibraries: () => request<LibraryBundle>('/api/libraries'),
-  saveLibraries: (libraries: LibraryBundle) =>
+  getLibraries: () => request<CoreLibraryBundle>('/api/libraries'),
+  saveLibraries: (libraries: CoreLibraryBundle) =>
     request<{ ok: boolean }>('/api/libraries', {
       method: 'PUT',
       body: JSON.stringify(libraries)

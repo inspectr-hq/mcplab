@@ -10,7 +10,6 @@ import {
   runAll,
   renderSummaryMarkdown,
   type EvalConfig,
-  type LlmMessage,
   type RunProgressEvent
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -39,8 +38,6 @@ export type RunsRouteDeps = Pick<
   | 'applySnapshotPolicyToRunResult'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
-  | 'resolveAssistantAgentFromLibraries'
-  | 'chatWithAgent'
   | 'pkgVersion'
 >;
 
@@ -132,8 +129,6 @@ export async function handleRunsRoutes(params: {
     applySnapshotPolicyToRunResult,
     readLibraries,
     pickDefaultAssistantAgentName,
-    resolveAssistantAgentFromLibraries,
-    chatWithAgent,
     pkgVersion
   } = deps;
 
@@ -483,95 +478,6 @@ export async function handleRunsRoutes(params: {
       });
     } finally {
       rmSync(previewRunsRoot, { recursive: true, force: true });
-    }
-    return true;
-  }
-
-  if (pathname.startsWith('/api/runs/') && pathname.endsWith('/assistant') && method === 'POST') {
-    const runId = pathname.split('/')[3];
-    const results = getRunResults(runId, settings.runsDir);
-    const body = (await parseBody(req)) as {
-      messages?: unknown;
-    };
-    const messagesRaw = Array.isArray(body.messages) ? body.messages : [];
-    const messages: LlmMessage[] = messagesRaw
-      .filter((m): m is { role?: unknown; text?: unknown } => !!m && typeof m === 'object')
-      .map(
-        (m): LlmMessage => ({
-          role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
-          content: String(m.text ?? '')
-        })
-      )
-      .filter((m) => m.content.trim().length > 0);
-    if (messages.length === 0) {
-      asJson(res, 400, { error: 'messages are required' });
-      return true;
-    }
-
-    const libraries = readLibraries(settings.librariesDir);
-    const assistantAgentName = pickDefaultAssistantAgentName({
-      settingsDefault: settings.scenarioAssistantAgentName,
-      agentNames: Object.keys(libraries.agents)
-    });
-    if (!assistantAgentName) {
-      asJson(res, 400, {
-        error:
-          'No assistant agent available. Add an agent in Libraries > Agents or configure the Scenario Assistant Agent in Settings.'
-      });
-      return true;
-    }
-    const agentConfig = resolveAssistantAgentFromLibraries(libraries, assistantAgentName);
-
-    const scenarioSummaries = results.scenarios.slice(0, 30).map((sc) => ({
-      scenario_id: sc.scenario_id,
-      agent: sc.agent,
-      pass_rate: sc.pass_rate,
-      runs: sc.runs.map((r) => ({
-        run_index: r.run_index,
-        pass: r.pass,
-        failures: r.failures,
-        tool_calls: r.tool_calls,
-        final_text_preview:
-          typeof r.final_text === 'string' && r.final_text.length > 600
-            ? `${r.final_text.slice(0, 600)}…`
-            : r.final_text,
-        extracted: r.extracted
-      }))
-    }));
-
-    const system = [
-      'You are the MCP Labs Result Assistant.',
-      'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
-      'Be concise, practical, and explain what happened and what to check next.',
-      'If the user asks for fixes, suggest concrete config/scenario/eval adjustments.',
-      'Use markdown for readability when helpful.',
-      `Run result context: ${JSON.stringify({
-        run_id: results.metadata.run_id,
-        timestamp: results.metadata.timestamp,
-        run_note: results.metadata.run_note ?? null,
-        config_hash: results.metadata.config_hash,
-        summary: results.summary,
-        snapshot_eval: results.metadata.snapshot_eval ?? null,
-        scenarios: scenarioSummaries
-      })}`
-    ].join('\n');
-
-    try {
-      const reply = await chatWithAgent({
-        agent: agentConfig,
-        messages,
-        system
-      });
-      asJson(res, 200, {
-        reply: reply.content ?? '',
-        assistantAgentName,
-        provider: agentConfig.provider,
-        model: agentConfig.model
-      });
-    } catch (error: unknown) {
-      asJson(res, 500, {
-        error: error instanceof Error ? error.message : String(error)
-      });
     }
     return true;
   }

@@ -126,9 +126,6 @@ export const workspaceSource: EvalDataSource = {
   async compareSnapshot(snapshotId, runId) {
     return workspaceApiClient.compareSnapshot(snapshotId, runId);
   },
-  async askResultAssistant(runId, messages) {
-    return workspaceApiClient.askResultAssistant(runId, messages);
-  },
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },

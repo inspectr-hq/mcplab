@@ -274,11 +274,6 @@ export interface ScenarioAssistantTurnResponse {
   pendingToolCalls?: ScenarioAssistantPendingToolCall[];
 }
 
-export interface ResultAssistantChatMessage {
-  role: 'user' | 'assistant';
-  text: string;
-}
-
 export interface ResultAssistantApplyReportResponse {
   ok: boolean;
   runId: string;
@@ -722,10 +717,6 @@ export interface EvalDataSource {
   createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;
   getSnapshot: (id: string) => Promise<SnapshotRecord | undefined>;
   compareSnapshot: (snapshotId: string, runId: string) => Promise<SnapshotComparison>;
-  askResultAssistant: (
-    runId: string,
-    messages: ResultAssistantChatMessage[]
-  ) => Promise<{ reply: string; assistantAgentName: string; provider: string; model: string }>;
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;

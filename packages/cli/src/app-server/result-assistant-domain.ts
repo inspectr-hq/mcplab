@@ -3,10 +3,12 @@ import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
+  formatAssistantToolName,
   newAssistantEntityId,
   touchSession,
   truncateJson
 } from './assistant-common.js';
+import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
 
 interface ParsedAssistantToolCall {
   name: string;
@@ -71,29 +73,6 @@ const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 const RESULT_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
 const RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS = 3;
 const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
-const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
-  'mcplab_write_markdown_report',
-  'mcplab_list_markdown_reports',
-  'mcplab_search_markdown_reports',
-  'mcplab_read_markdown_report',
-  'mcplab_list_runs',
-  'mcplab_search_runs',
-  'mcplab_aggregate_runs',
-  'mcplab_compare_runs',
-  'mcplab_compare_answer_quality',
-  'mcplab_read_run_artifact',
-  'mcplab_grep_run_artifact',
-  'mcplab_trace_stats',
-  'mcplab_trace_get_final_answers',
-  'mcplab_trace_get_conversation',
-  'mcplab_trace_list_events',
-  'mcplab_trace_search',
-  'mcplab_list_tool_analysis_results',
-  'mcplab_search_tool_analysis_results',
-  'mcplab_read_tool_analysis_result',
-  'mcplab_list_library',
-  'mcplab_get_library_item'
-]);
 
 export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
@@ -134,7 +113,7 @@ export async function preloadResultAssistantTools(
   const discovered = await session.mcp.listTools(RESULT_ASSISTANT_MCP_SERVER_NAME);
   const usedNames = new Set<string>();
   for (const tool of discovered) {
-    if (!RESULT_ASSISTANT_ALLOWED_TOOLS.has(tool.name)) continue;
+    if (!isResultAssistantAllowedTool(tool.name)) continue;
     const publicName = makeAssistantToolPublicName(
       RESULT_ASSISTANT_MCP_SERVER_NAME,
       tool.name,
@@ -186,7 +165,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       status: 'pending',
       createdAt: new Date().toISOString()
     };
-    const toolRequestText = `I need to call '${pending.publicToolName}' to help with this request.`;
+    const toolRequestText = `I need to call '${formatAssistantToolName(pending.publicToolName)}' to help with this request.`;
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
@@ -282,7 +261,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
-      ? 'Scope: all historical runs. Use mcplab_list_runs first, then inspect specific runs via mcplab_read_run_artifact / trace tools.'
+      ? 'Scope: all historical runs. Prefer mcplab_search_runs first, and fall back to mcplab_list_runs for unknown/broad queries or full coverage. Then inspect specific runs via mcplab_read_run_artifact / trace tools.'
       : omittedScenarioCount > 0
       ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
       : 'All scenarios are included in the prompt context.',
@@ -302,8 +281,8 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
           linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
         })}`,
     session.scope === 'all_runs'
-      ? 'For custom markdown reports across runs, call mcplab_list_markdown_reports without run_id or with a specific run_id when needed.'
-      : 'For custom markdown reports linked to this run, prefer mcplab_list_markdown_reports with run_id set to the current run id, then mcplab_read_markdown_report for selected files.',
+      ? 'For custom markdown reports across runs, prefer mcplab_search_markdown_reports first; fall back to mcplab_list_markdown_reports without run_id (or with a specific run_id) when needed for complete coverage.'
+      : 'For custom markdown reports linked to this run, prefer mcplab_search_markdown_reports with run_id set to the current run id; fall back to mcplab_list_markdown_reports, then mcplab_read_markdown_report for selected files.',
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'
@@ -324,7 +303,7 @@ async function resultAssistantChatModel(
   if (response.tool_calls && response.tool_calls.length > 0) {
     const [first] = response.tool_calls;
     const baseText =
-      response.content?.trim() || `I need to call '${first.name}' to help with this request.`;
+      response.content?.trim() || `I need to call '${formatAssistantToolName(first.name)}' to help with this request.`;
     return {
       type: 'tool_call_request',
       text: baseText,

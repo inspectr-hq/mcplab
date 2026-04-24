@@ -24,6 +24,7 @@ import type {
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
   WorkspaceConfigRecord,
+  CoreLibraryBundle,
   LibraryBundle
 } from './types';
 
@@ -383,7 +384,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   };
 }
 
-export function fromCoreLibraries(libraries: LibraryBundle): LibraryBundle {
+export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
   const record: WorkspaceConfigRecord = {
     id: 'library',
     name: 'library',
@@ -614,11 +615,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   };
 }
 
-export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>): {
-  servers: CoreEvalConfig['servers'];
-  agents: CoreEvalConfig['agents'];
-  scenarios: CoreEvalConfig['scenarios'];
-} {
+export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>): CoreLibraryBundle {
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
       server.id,

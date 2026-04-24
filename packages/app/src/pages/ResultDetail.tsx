@@ -8,7 +8,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatCard } from "@/components/StatCard";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -76,6 +75,14 @@ function formatCompactOneDecimal(value: number): string {
 
 function formatTokenCount(value: number | null | undefined): string {
   return typeof value === "number" ? value.toLocaleString() : "n/a";
+}
+
+function formatAssistantToolName(name: string | null | undefined): string {
+  const raw = String(name ?? "").trim();
+  if (!raw) return "unknown_tool";
+  const scoped = raw.split("::").pop() ?? raw;
+  const stripped = scoped.replace(/^mcplab__/, "").replace(/^mcplab_/, "");
+  return stripped.replace(/_/g, " ").replace(/\s+/g, " ").trim() || "unknown_tool";
 }
 
 type ResultAssistantTurnPayload = {
@@ -1599,7 +1606,7 @@ const ResultDetail = () => {
             </div>
           </CardHeader>
           <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
-            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-muted/15 px-4 py-4">
               <div className="space-y-3 pr-2">
                 {assistantMessages.map((message, index) => {
                   const isUser = message.role === "user";
@@ -1622,10 +1629,10 @@ const ResultDetail = () => {
                     !isAssistantToolRequest &&
                     isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
                   if (isAssistantToolRequest) {
-                    const displayToolName = toolStepName ?? toolStepPublicName ?? "unknown_tool";
-                    const compactTitle = toolStepName
-                      ? toolStepName.replace(/^mcplab_/, "").replace(/_/g, " ")
-                      : toolStepPublicName ?? "tool call";
+                    const displayToolName = formatAssistantToolName(
+                      toolStepName ?? toolStepPublicName ?? "unknown_tool"
+                    );
+                    const compactTitle = displayToolName;
                     return (
                       <div
                         key={`${message.id ?? `${message.role}-${index}`}:${linkedPendingToolCall ? "pending" : "completed"}`}
@@ -1789,9 +1796,11 @@ const ResultDetail = () => {
                         <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
                           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
                             <div className="min-w-0 flex-1">
-                              <p className="break-all font-mono text-xs font-semibold">{call.publicToolName}</p>
+                              <p className="break-all font-mono text-xs font-semibold">
+                                {formatAssistantToolName(call.publicToolName)}
+                              </p>
                               <p className="break-all text-xs text-muted-foreground">
-                                {call.server}::{call.tool}
+                                {call.server}::{formatAssistantToolName(call.tool)}
                               </p>
                             </div>
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
@@ -1839,7 +1848,7 @@ const ResultDetail = () => {
                 )}
                 <div ref={assistantChatEndRef} />
               </div>
-            </ScrollArea>
+            </div>
             <div className="border-t bg-background px-4 py-3">
               <div className="rounded-xl border bg-background p-2 shadow-sm">
                 <Textarea
