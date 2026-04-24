@@ -282,8 +282,8 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
           linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
         })}`,
     session.scope === 'all_runs'
-      ? 'For custom markdown reports across runs, prefer mcplab_search_markdown_reports first; fall back to mcplab_list_markdown_reports without run_id (or with a specific run_id) when needed for complete coverage.'
-      : 'For custom markdown reports linked to this run, prefer mcplab_search_markdown_reports with run_id set to the current run id; fall back to mcplab_list_markdown_reports, then mcplab_read_markdown_report for selected files.',
+      ? 'For custom markdown reports across runs, use mcplab_search_markdown_reports (no query needed for full listing, or filter by run_id/name). Then read selected files with mcplab_read_markdown_report.'
+      : 'For custom markdown reports linked to this run, use mcplab_search_markdown_reports with run_id set to the current run id. Then read selected files with mcplab_read_markdown_report.',
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'

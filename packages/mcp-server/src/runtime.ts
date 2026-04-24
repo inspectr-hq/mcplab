@@ -710,7 +710,7 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_list_markdown_reports',
+    'mcplab_search_markdown_reports',
     {
       description:
         'List saved markdown reports under mcplab/reports. Supports filtering by run id substring to find reports linked to a result.',
@@ -2345,7 +2345,7 @@ const MUTATING_TOOLS = new Set<string>(['mcplab_write_markdown_report', 'mcplab_
 const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
-  mcplab_list_markdown_reports: 'Search Markdown Reports',
+  mcplab_search_markdown_reports: 'Search Markdown Reports',
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
   mcplab_search_runs: 'Search Evaluation Runs',
