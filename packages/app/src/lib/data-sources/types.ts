@@ -157,6 +157,7 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
+// Mirror: packages/cli/src/app-server/types.ts HealthResponse (CLI-side condensed form, mcp uses HealthMcpConnectionInfo)
 export interface WorkspaceHealthResponse {
   ok: boolean;
   version: string;

@@ -40,6 +40,7 @@ export type HealthMcpConnectionInfo =
       };
     };
 
+// Mirror: packages/app/src/lib/data-sources/types.ts WorkspaceHealthResponse (app-side superset with extra mcp fields)
 export interface HealthResponse {
   ok: boolean;
   version: string;
