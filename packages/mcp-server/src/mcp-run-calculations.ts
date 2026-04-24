@@ -258,23 +258,23 @@ export function buildAggregateRows(
 ): AggregateGroupRow[] {
   const grouped = new Map<
     string,
-    { scenarios: ResultsJson['scenarios']; run_ids: string[]; timestamps: string[] }
+    { scenarios: ResultsJson['scenarios']; run_ids: Set<string>; timestamps: string[] }
   >();
   for (const run of runs) {
     const selected = filterScenarios(run.results.scenarios, scenarioFilter, agentFilter);
     if (groupBy === 'run') {
       grouped.set(run.run_id, {
         scenarios: selected,
-        run_ids: [run.run_id],
+        run_ids: new Set([run.run_id]),
         timestamps: [run.results.metadata.timestamp]
       });
       continue;
     }
     for (const scenario of selected) {
       const key = groupBy === 'scenario' ? scenario.scenario_id : scenario.agent;
-      const existing = grouped.get(key) ?? { scenarios: [], run_ids: [], timestamps: [] };
+      const existing = grouped.get(key) ?? { scenarios: [], run_ids: new Set<string>(), timestamps: [] };
       existing.scenarios.push({ ...scenario, runs: [...scenario.runs] });
-      existing.run_ids.push(run.run_id);
+      existing.run_ids.add(run.run_id);
       existing.timestamps.push(run.results.metadata.timestamp);
       grouped.set(key, existing);
     }
@@ -285,7 +285,7 @@ export function buildAggregateRows(
     const out: AggregateGroupRow = {
       key,
       ...summary,
-      run_count: value.run_ids.length
+      run_count: value.run_ids.size
     };
     if (groupBy === 'run') {
       out.run_id = key;

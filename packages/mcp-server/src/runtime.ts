@@ -926,10 +926,7 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         id: z.string().describe('Server id key (kebab-case recommended).'),
         url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
-        transport: z
-          .enum(['http'])
-          .optional()
-          .describe('MCPLab transport type (currently http).'),
+        transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).'),
         auth_type: z
           .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
           .optional()

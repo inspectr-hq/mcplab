@@ -24,7 +24,11 @@ import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
-import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
+import {
+  resolveRunOptions,
+  runInteractiveSelection,
+  type ResolveRunOptionsResult
+} from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
 import { deriveConfigRelativePath, resolveRunConfigSelection } from './eval-config-files.js';
 import {
@@ -714,7 +718,7 @@ program.parse();
 async function executeSingleConfigRun(params: {
   configPath: string;
   options: RunCommandOptions;
-  resolvedOptions: { agents?: string; agentsAll?: boolean };
+  resolvedOptions: ResolveRunOptionsResult;
 }): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
   const { configPath, options, resolvedOptions } = params;
   const loaded = loadConfig(resolve(configPath));

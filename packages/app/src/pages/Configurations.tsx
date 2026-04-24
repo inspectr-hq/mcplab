@@ -15,10 +15,19 @@ import { toast } from "@/hooks/use-toast";
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
 const ROOT_SUITE_LABEL = "(root)";
+const ROOT_SUITE_SELECT_VALUE = "__ROOT__";
 const COLLAPSED_SUITES_STORAGE_KEY = "mcplab.configurations.collapsedSuites";
 
-const suiteLabelForConfig = (cfg: { suitePath?: string }) =>
-  cfg.suitePath && cfg.suitePath.trim().length > 0 ? cfg.suitePath.trim() : ROOT_SUITE_LABEL;
+type SuiteKey = string | null;
+
+const suiteKeyForConfig = (cfg: { suitePath?: string }): SuiteKey =>
+  cfg.suitePath && cfg.suitePath.trim().length > 0 ? cfg.suitePath.trim() : null;
+
+const suiteLabelForKey = (suiteKey: SuiteKey): string => suiteKey ?? ROOT_SUITE_LABEL;
+const suiteTokenForKey = (suiteKey: SuiteKey): string =>
+  suiteKey === null ? ROOT_SUITE_SELECT_VALUE : `suite:${suiteKey}`;
+const suiteKeyFromToken = (token: string): SuiteKey =>
+  token === ROOT_SUITE_SELECT_VALUE ? null : token.startsWith("suite:") ? token.slice(6) : null;
 
 const SUITE_ACCENT_CLASSES = [
   "bg-red-400",
@@ -57,9 +66,9 @@ const SUITE_ACCENT_CLASSES = [
   "bg-rose-500",
 ];
 
-function suiteAccentClass(suiteName: string): string {
-  if (suiteName === ROOT_SUITE_LABEL) return "bg-slate-400";
-  const hash = suiteName
+function suiteAccentClass(suiteKey: SuiteKey): string {
+  if (suiteKey === null) return "bg-slate-400";
+  const hash = suiteKey
     .split("")
     .reduce((sum, char) => (sum + char.charCodeAt(0)) % SUITE_ACCENT_CLASSES.length, 0);
   return SUITE_ACCENT_CLASSES[hash] ?? "bg-slate-400";
@@ -125,15 +134,17 @@ const Configurations = () => {
     cfg.scenarioEntries?.length ?? cfg.scenarios?.length ?? 0;
 
   const suiteOptions = useMemo(() => {
-    const next = new Set<string>();
-    for (const cfg of configs) next.add(suiteLabelForConfig(cfg));
-    return Array.from(next).sort((a, b) => a.localeCompare(b));
+    const next = new Set<SuiteKey>();
+    for (const cfg of configs) next.add(suiteKeyForConfig(cfg));
+    return Array.from(next).sort((a, b) => suiteLabelForKey(a).localeCompare(suiteLabelForKey(b)));
   }, [configs]);
 
   const filteredConfigs = useMemo(() => {
     return configs.filter((cfg) => {
-      const suiteLabel = suiteLabelForConfig(cfg);
-      if (suiteFilter !== "all" && suiteLabel !== suiteFilter) {
+      const suiteKey = suiteKeyForConfig(cfg);
+      const selectedSuiteKey = suiteFilter === "all" ? undefined : suiteKeyFromToken(suiteFilter);
+      const suiteLabel = suiteLabelForKey(suiteKey);
+      if (selectedSuiteKey !== undefined && suiteKey !== selectedSuiteKey) {
         return false;
       }
       if (normalizedConfigFilter.length === 0) return true;
@@ -168,11 +179,11 @@ const Configurations = () => {
     return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
-  const toggleSuiteCollapsed = (suiteName: string) => {
+  const toggleSuiteCollapsed = (suiteToken: string) => {
     setCollapsedSuites((prev) => {
       const next = new Set(prev);
-      if (next.has(suiteName)) next.delete(suiteName);
-      else next.add(suiteName);
+      if (next.has(suiteToken)) next.delete(suiteToken);
+      else next.add(suiteToken);
       return next;
     });
   };
@@ -188,31 +199,39 @@ const Configurations = () => {
     }
   }, [collapsedSuites]);
 
-  const runSuite = async (suiteName: string, items: typeof sortedConfigs) => {
-    if (runningSuites.has(suiteName)) return;
-    setRunningSuites((prev) => new Set(prev).add(suiteName));
+  const runSuite = async (suiteToken: string, suiteLabel: string, items: typeof sortedConfigs) => {
+    if (runningSuites.has(suiteToken)) return;
+    setRunningSuites((prev) => new Set(prev).add(suiteToken));
     try {
       const runnable = items.filter((cfg) => typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0);
       if (runnable.length === 0) {
         toast({
           title: "No runnable evaluations",
-          description: `Suite "${suiteName}" has no evaluation files with a source path.`,
+          description: `Suite "${suiteLabel}" has no evaluation files with a source path.`,
           variant: "destructive",
         });
         return;
       }
 
-      for (const cfg of runnable) {
-        await source.startRun({
+      const outcomes = await Promise.allSettled(
+        runnable.map((cfg) =>
+          source.startRun({
           configPath: String(cfg.sourcePath),
           runsPerScenario: 1,
           applySnapshotEval: true,
-        });
-      }
+          })
+        )
+      );
+      const successCount = outcomes.filter((item) => item.status === "fulfilled").length;
+      const failureCount = outcomes.length - successCount;
 
       toast({
-        title: "Suite queued",
-        description: `Queued ${runnable.length} evaluation${runnable.length === 1 ? "" : "s"} for suite "${suiteName}".`,
+        title: failureCount === 0 ? "Suite queued" : "Suite queued with errors",
+        description:
+          failureCount === 0
+            ? `Queued ${successCount} evaluation${successCount === 1 ? "" : "s"} for suite "${suiteLabel}".`
+            : `Queued ${successCount}/${runnable.length} evaluations for suite "${suiteLabel}" (${failureCount} failed).`,
+        variant: failureCount === 0 ? "default" : "destructive",
       });
     } catch (error: unknown) {
       toast({
@@ -223,21 +242,23 @@ const Configurations = () => {
     } finally {
       setRunningSuites((prev) => {
         const next = new Set(prev);
-        next.delete(suiteName);
+        next.delete(suiteToken);
         return next;
       });
     }
   };
 
   const groupedConfigs = useMemo(() => {
-    const grouped = new Map<string, typeof sortedConfigs>();
+    const grouped = new Map<SuiteKey, typeof sortedConfigs>();
     for (const cfg of sortedConfigs) {
-      const suite = suiteLabelForConfig(cfg);
-      const bucket = grouped.get(suite);
+      const suiteKey = suiteKeyForConfig(cfg);
+      const bucket = grouped.get(suiteKey);
       if (bucket) bucket.push(cfg);
-      else grouped.set(suite, [cfg]);
+      else grouped.set(suiteKey, [cfg]);
     }
-    return Array.from(grouped.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(grouped.entries()).sort((a, b) =>
+      suiteLabelForKey(a[0]).localeCompare(suiteLabelForKey(b[0]))
+    );
   }, [sortedConfigs]);
 
   return (
@@ -258,9 +279,9 @@ const Configurations = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All suites</SelectItem>
-              {suiteOptions.map((suiteName) => (
-                <SelectItem key={suiteName} value={suiteName}>
-                  {suiteName}
+              {suiteOptions.map((suiteKey) => (
+                <SelectItem key={suiteTokenForKey(suiteKey)} value={suiteTokenForKey(suiteKey)}>
+                  {suiteLabelForKey(suiteKey)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -310,34 +331,39 @@ const Configurations = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groupedConfigs.map(([suiteName, items]) => (
-                <Fragment key={`suite-group-${suiteName}`}>
-                  <TableRow key={`suite-${suiteName}`} className="bg-muted/40 hover:bg-muted/40">
+              {groupedConfigs.map(([suiteKey, items]) => {
+                const suiteLabel = suiteLabelForKey(suiteKey);
+                const suiteToken = suiteTokenForKey(suiteKey);
+                const isCollapsed = collapsedSuites.has(suiteToken);
+                const isRunning = runningSuites.has(suiteToken);
+                return (
+                <Fragment key={`suite-group-${suiteToken}`}>
+                  <TableRow key={`suite-${suiteToken}`} className="bg-muted/40 hover:bg-muted/40">
                     <TableCell colSpan={5} className="py-2">
                       <div className="flex items-center justify-between gap-2">
                         <button
                           type="button"
                           className="inline-flex h-6 items-center gap-2 text-xs leading-none hover:text-foreground"
-                          onClick={() => toggleSuiteCollapsed(suiteName)}
-                          aria-expanded={!collapsedSuites.has(suiteName)}
-                          aria-label={`${collapsedSuites.has(suiteName) ? "Expand" : "Collapse"} suite ${suiteName}`}
+                          onClick={() => toggleSuiteCollapsed(suiteToken)}
+                          aria-expanded={!isCollapsed}
+                          aria-label={`${isCollapsed ? "Expand" : "Collapse"} suite ${suiteLabel}`}
                         >
                           <ChevronRight
                             className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${
-                              collapsedSuites.has(suiteName) ? "" : "rotate-90"
+                              isCollapsed ? "" : "rotate-90"
                             }`}
                             aria-hidden="true"
                           />
                           <span
-                            className={`h-2 w-2 rounded-full ${suiteAccentClass(suiteName)}`}
+                            className={`h-2 w-2 rounded-full ${suiteAccentClass(suiteKey)}`}
                             aria-hidden="true"
                           />
-                          {suiteName === ROOT_SUITE_LABEL ? (
+                          {suiteKey === null ? (
                             <Home className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                           ) : (
                             <Folder className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                           )}
-                          <span className="font-medium">{suiteName}</span>
+                          <span className="font-medium">{suiteLabel}</span>
                           <span className="text-muted-foreground">({items.length})</span>
                         </button>
                         <Button
@@ -345,16 +371,16 @@ const Configurations = () => {
                           size="sm"
                           variant="outline"
                           className="h-7 px-2 text-xs"
-                          disabled={runningSuites.has(suiteName)}
-                          onClick={() => void runSuite(suiteName, items)}
+                          disabled={isRunning}
+                          onClick={() => void runSuite(suiteToken, suiteLabel, items)}
                         >
                           <Play className="mr-1 h-3.5 w-3.5" />
-                          {runningSuites.has(suiteName) ? "Queueing..." : "Run Suite"}
+                          {isRunning ? "Queueing..." : "Run Suite"}
                         </Button>
                       </div>
                     </TableCell>
                   </TableRow>
-                  {!collapsedSuites.has(suiteName) && items.map((cfg) => (
+                  {!isCollapsed && items.map((cfg) => (
                     <TableRow key={cfg.id}>
                       <TableCell>
                         <div>
@@ -413,7 +439,7 @@ const Configurations = () => {
                     </TableRow>
                   ))}
                 </Fragment>
-              ))}
+              )})}
               {!loading && configs.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
