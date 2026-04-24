@@ -44,6 +44,52 @@ type MarkdownReportListItem = {
   mtime: string;
 };
 
+type AggregateGroupBy = 'run' | 'scenario' | 'agent';
+
+type MetricSummary = {
+  total_runs: number;
+  passed_runs: number;
+  failed_runs: number;
+  pass_rate: number;
+  avg_tool_calls_per_run: number;
+  avg_tool_latency_ms: number | null;
+};
+
+type LoadedRunResult = {
+  run_id: string;
+  path: string;
+  results: ResultsJson;
+};
+
+type AggregateGroupRow = MetricSummary & {
+  key: string;
+  run_id?: string;
+  scenario_id?: string;
+  agent?: string;
+  run_count: number;
+  timestamp_range?: {
+    min: string;
+    max: string;
+  };
+};
+
+type CompareClass = 'regressed' | 'improved' | 'unchanged' | 'new' | 'missing';
+
+type CompareRow = {
+  key: string;
+  scenario_id: string;
+  agent: string;
+  classification: CompareClass;
+  left: MetricSummary | null;
+  right: MetricSummary | null;
+  deltas: {
+    pass_rate: number | null;
+    failed_runs: number | null;
+    avg_tool_calls_per_run: number | null;
+    avg_tool_latency_ms: number | null;
+  };
+};
+
 const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_HOST = '127.0.0.1';
@@ -629,6 +675,111 @@ export function registerTools(server: McpServer): void {
           runsDir: base,
           runs: entries
         });
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_aggregate_runs',
+    {
+      description:
+        'Aggregate metrics across historical MCPLab runs with compact summary-first output.',
+      inputSchema: {
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        run_ids: z
+          .array(z.string())
+          .optional()
+          .describe("Explicit run ids. If present, takes precedence over latest_n. Supports 'LATEST'."),
+        latest_n: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe('Number of latest runs to aggregate when run_ids are not provided (default 20).'),
+        scenario_ids: z.array(z.string()).optional().describe('Optional scenario id filter.'),
+        agents: z.array(z.string()).optional().describe('Optional agent filter.'),
+        group_by: z
+          .enum(['run', 'scenario', 'agent'])
+          .optional()
+          .describe('Grouping for row-level ranking (default run).'),
+        top_n: z
+          .number()
+          .int()
+          .positive()
+          .max(50)
+          .optional()
+          .describe('Max rows for worst/best ranking output (default 10).'),
+        include_details: z
+          .boolean()
+          .optional()
+          .describe('Include full grouped rows. Defaults to false (summary-first).')
+      }
+    },
+    async ({ runs_dir, run_ids, latest_n, scenario_ids, agents, group_by, top_n, include_details }) => {
+      return withToolHandling(async () => {
+        const loaded = loadRunsForAnalysis({
+          runsDirInput: runs_dir,
+          runIds: run_ids,
+          latestN: latest_n ?? 20
+        });
+        const report = buildAggregateRunsReport({
+          runs: loaded,
+          scenarioIds: scenario_ids,
+          agents,
+          groupBy: group_by ?? 'run',
+          topN: top_n ?? 10,
+          includeDetails: include_details ?? false
+        });
+        return ok(`Aggregated ${loaded.length} run(s)`, report);
+      });
+    }
+  );
+
+  server.registerTool(
+    'mcplab_compare_runs',
+    {
+      description:
+        'Compare two MCPLab runs and surface compact deltas with regressions/improvements first.',
+      inputSchema: {
+        runs_dir: z
+          .string()
+          .optional()
+          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
+        left_run_id: z.string().describe("Left run id or 'LATEST'."),
+        right_run_id: z.string().describe("Right run id or 'LATEST'."),
+        scenario_ids: z.array(z.string()).optional().describe('Optional scenario id filter.'),
+        agents: z.array(z.string()).optional().describe('Optional agent filter.'),
+        top_n: z
+          .number()
+          .int()
+          .positive()
+          .max(100)
+          .optional()
+          .describe('Max rows for regressions/improvements (default 20).'),
+        include_details: z
+          .boolean()
+          .optional()
+          .describe('Include full classification rows. Defaults to false (summary-first).')
+      }
+    },
+    async ({ runs_dir, left_run_id, right_run_id, scenario_ids, agents, top_n, include_details }) => {
+      return withToolHandling(async () => {
+        const base = resolveRunsDir(runs_dir);
+        const left = loadSingleRunForAnalysis(base, left_run_id);
+        const right = loadSingleRunForAnalysis(base, right_run_id);
+        const report = buildCompareRunsReport({
+          left,
+          right,
+          scenarioIds: scenario_ids,
+          agents,
+          topN: top_n ?? 20,
+          includeDetails: include_details ?? false
+        });
+        return ok(`Compared run ${left.run_id} against ${right.run_id}`, report);
       });
     }
   );
@@ -1577,6 +1728,477 @@ function summarizeConfig(config: EvalConfig): Record<string, unknown> {
   };
 }
 
+function loadRunsForAnalysis(params: {
+  runsDirInput?: string;
+  runIds?: string[];
+  latestN: number;
+}): LoadedRunResult[] {
+  const base = resolveRunsDir(params.runsDirInput);
+  const ids = selectRunIdsForAnalysis(base, params.runIds, params.latestN);
+  return ids.map((id) => loadSingleRunForAnalysis(base, id));
+}
+
+function loadSingleRunForAnalysis(primaryRunsDir: string, runIdInput: string): LoadedRunResult {
+  const resolvedRunId = resolveRunIdToken(primaryRunsDir, runIdInput);
+  const readBase = resolveExistingRunReadDir(primaryRunsDir, resolvedRunId);
+  const runPath = join(readBase, resolvedRunId);
+  const resultsPath = join(runPath, 'results.json');
+  if (!existsSync(resultsPath)) {
+    throw new Error(`results.json not found for run '${resolvedRunId}' at ${resultsPath}`);
+  }
+  const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+  return {
+    run_id: resolvedRunId,
+    path: runPath,
+    results: parsed
+  };
+}
+
+function selectRunIdsForAnalysis(
+  primaryRunsDir: string,
+  runIds: string[] | undefined,
+  latestN: number
+): string[] {
+  if (runIds && runIds.length > 0) {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const token of runIds) {
+      const resolved = resolveRunIdToken(primaryRunsDir, token);
+      if (!seen.has(resolved)) {
+        out.push(resolved);
+        seen.add(resolved);
+      }
+    }
+    return out;
+  }
+  const discovered = listRunsWithFallback(primaryRunsDir, latestN, false)
+    .map((entry) => String(entry.run_id ?? '').trim())
+    .filter(Boolean);
+  if (discovered.length === 0) {
+    throw new Error(`No runs found in ${primaryRunsDir}`);
+  }
+  return discovered;
+}
+
+function resolveRunIdToken(primaryRunsDir: string, runIdInput: string): string {
+  const token = String(runIdInput ?? '').trim();
+  if (!token) throw new Error('run id is required');
+  if (token !== 'LATEST') return token;
+  const latest = latestRunId(primaryRunsDir);
+  if (!latest) {
+    throw new Error(`No runs found in ${primaryRunsDir}`);
+  }
+  return latest;
+}
+
+function buildAggregateRunsReport(params: {
+  runs: LoadedRunResult[];
+  scenarioIds?: string[];
+  agents?: string[];
+  groupBy: AggregateGroupBy;
+  topN: number;
+  includeDetails: boolean;
+}): Record<string, unknown> {
+  const scenarioFilter = normalizeOptionalFilterSet(params.scenarioIds);
+  const agentFilter = normalizeOptionalFilterSet(params.agents);
+  const selectedRuns = params.runs.map((run) => ({
+    run_id: run.run_id,
+    timestamp: run.results.metadata.timestamp,
+    config_hash: run.results.metadata.config_hash
+  }));
+  const overallMetrics = computeMetricSummary(
+    params.runs.flatMap((run) => filterScenarios(run.results.scenarios, scenarioFilter, agentFilter))
+  );
+  const rows = buildAggregateRows(params.runs, params.groupBy, scenarioFilter, agentFilter);
+  const worstRows = [...rows]
+    .sort(compareRowsWorstFirst)
+    .slice(0, params.topN)
+    .map(toSerializableAggregateRow);
+  const bestRows = [...rows]
+    .sort(compareRowsBestFirst)
+    .slice(0, params.topN)
+    .map(toSerializableAggregateRow);
+
+  const structured = removeUndefined({
+    runs: selectedRuns,
+    group_by: params.groupBy,
+    filters: removeUndefined({
+      scenario_ids: params.scenarioIds?.length ? params.scenarioIds : undefined,
+      agents: params.agents?.length ? params.agents : undefined
+    }),
+    summary: removeUndefined({
+      ...overallMetrics,
+      selected_run_count: params.runs.length
+    }),
+    top_worst: worstRows,
+    top_best: bestRows,
+    details: params.includeDetails
+      ? rows.sort(compareRowsWorstFirst).map(toSerializableAggregateRow)
+      : undefined
+  });
+  return structured;
+}
+
+function buildCompareRunsReport(params: {
+  left: LoadedRunResult;
+  right: LoadedRunResult;
+  scenarioIds?: string[];
+  agents?: string[];
+  topN: number;
+  includeDetails: boolean;
+}): Record<string, unknown> {
+  const scenarioFilter = normalizeOptionalFilterSet(params.scenarioIds);
+  const agentFilter = normalizeOptionalFilterSet(params.agents);
+  const leftScenarios = filterScenarios(params.left.results.scenarios, scenarioFilter, agentFilter);
+  const rightScenarios = filterScenarios(params.right.results.scenarios, scenarioFilter, agentFilter);
+  const leftSummary = computeMetricSummary(leftScenarios);
+  const rightSummary = computeMetricSummary(rightScenarios);
+
+  const leftMap = buildScenarioAgentMetricMap(leftScenarios);
+  const rightMap = buildScenarioAgentMetricMap(rightScenarios);
+  const keys = new Set([...leftMap.keys(), ...rightMap.keys()]);
+  const rows: CompareRow[] = [];
+  for (const key of keys) {
+    const leftEntry = leftMap.get(key) ?? null;
+    const rightEntry = rightMap.get(key) ?? null;
+    const classification = classifyCompareRow(leftEntry?.summary ?? null, rightEntry?.summary ?? null);
+    rows.push({
+      key,
+      scenario_id: leftEntry?.scenario_id ?? rightEntry?.scenario_id ?? '',
+      agent: leftEntry?.agent ?? rightEntry?.agent ?? '',
+      classification,
+      left: leftEntry?.summary ?? null,
+      right: rightEntry?.summary ?? null,
+      deltas: {
+        pass_rate:
+          leftEntry && rightEntry
+            ? roundedDelta(rightEntry.summary.pass_rate - leftEntry.summary.pass_rate)
+            : null,
+        failed_runs:
+          leftEntry && rightEntry ? rightEntry.summary.failed_runs - leftEntry.summary.failed_runs : null,
+        avg_tool_calls_per_run:
+          leftEntry && rightEntry
+            ? roundedDelta(
+                rightEntry.summary.avg_tool_calls_per_run - leftEntry.summary.avg_tool_calls_per_run
+              )
+            : null,
+        avg_tool_latency_ms:
+          leftEntry && rightEntry
+            ? nullableRoundedDelta(
+                rightEntry.summary.avg_tool_latency_ms,
+                leftEntry.summary.avg_tool_latency_ms
+              )
+            : null
+      }
+    });
+  }
+
+  const regressions = rows
+    .filter((row) => row.classification === 'regressed')
+    .sort(compareRegressionRows)
+    .slice(0, params.topN);
+  const improvements = rows
+    .filter((row) => row.classification === 'improved')
+    .sort(compareImprovementRows)
+    .slice(0, params.topN);
+  const newItems = rows
+    .filter((row) => row.classification === 'new')
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .slice(0, params.topN);
+  const missingItems = rows
+    .filter((row) => row.classification === 'missing')
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .slice(0, params.topN);
+
+  const classificationCounts = rows.reduce<Record<CompareClass, number>>(
+    (acc, row) => {
+      acc[row.classification] += 1;
+      return acc;
+    },
+    { regressed: 0, improved: 0, unchanged: 0, new: 0, missing: 0 }
+  );
+
+  return removeUndefined({
+    left_run: {
+      run_id: params.left.run_id,
+      timestamp: params.left.results.metadata.timestamp,
+      config_hash: params.left.results.metadata.config_hash
+    },
+    right_run: {
+      run_id: params.right.run_id,
+      timestamp: params.right.results.metadata.timestamp,
+      config_hash: params.right.results.metadata.config_hash
+    },
+    filters: removeUndefined({
+      scenario_ids: params.scenarioIds?.length ? params.scenarioIds : undefined,
+      agents: params.agents?.length ? params.agents : undefined
+    }),
+    summary: {
+      left: leftSummary,
+      right: rightSummary,
+      deltas: {
+        pass_rate: roundedDelta(rightSummary.pass_rate - leftSummary.pass_rate),
+        failed_runs: rightSummary.failed_runs - leftSummary.failed_runs,
+        avg_tool_calls_per_run: roundedDelta(
+          rightSummary.avg_tool_calls_per_run - leftSummary.avg_tool_calls_per_run
+        ),
+        avg_tool_latency_ms: nullableRoundedDelta(
+          rightSummary.avg_tool_latency_ms,
+          leftSummary.avg_tool_latency_ms
+        )
+      },
+      classification_counts: classificationCounts
+    },
+    regressions: regressions.map(toSerializableCompareRow),
+    improvements: improvements.map(toSerializableCompareRow),
+    new_items: newItems.map(toSerializableCompareRow),
+    missing_items: missingItems.map(toSerializableCompareRow),
+    details: params.includeDetails
+      ? rows
+          .sort((a, b) => compareClassPriority(a.classification) - compareClassPriority(b.classification) || a.key.localeCompare(b.key))
+          .map(toSerializableCompareRow)
+      : undefined
+  });
+}
+
+function normalizeOptionalFilterSet(values?: string[]): Set<string> | null {
+  if (!values || values.length === 0) return null;
+  const set = new Set(values.map((v) => String(v).trim()).filter(Boolean));
+  return set.size > 0 ? set : null;
+}
+
+function filterScenarios(
+  scenarios: ResultsJson['scenarios'],
+  scenarioFilter: Set<string> | null,
+  agentFilter: Set<string> | null
+): ResultsJson['scenarios'] {
+  return scenarios.filter((scenario) => {
+    const scenarioOk = !scenarioFilter || scenarioFilter.has(scenario.scenario_id);
+    const agentOk = !agentFilter || agentFilter.has(scenario.agent);
+    return scenarioOk && agentOk;
+  });
+}
+
+function computeMetricSummary(scenarios: ResultsJson['scenarios']): MetricSummary {
+  let totalRuns = 0;
+  let passedRuns = 0;
+  let toolCallTotal = 0;
+  let toolDurationTotal = 0;
+  let toolDurationCount = 0;
+
+  for (const scenario of scenarios) {
+    totalRuns += scenario.runs.length;
+    for (const run of scenario.runs) {
+      if (run.pass) passedRuns += 1;
+      toolCallTotal += run.tool_call_count;
+      for (const duration of run.tool_durations_ms) {
+        toolDurationTotal += duration;
+        toolDurationCount += 1;
+      }
+    }
+  }
+
+  return {
+    total_runs: totalRuns,
+    passed_runs: passedRuns,
+    failed_runs: totalRuns - passedRuns,
+    pass_rate: totalRuns === 0 ? 0 : roundedDelta(passedRuns / totalRuns),
+    avg_tool_calls_per_run: totalRuns === 0 ? 0 : roundedDelta(toolCallTotal / totalRuns),
+    avg_tool_latency_ms:
+      toolDurationCount === 0 ? null : roundedDelta(toolDurationTotal / toolDurationCount)
+  };
+}
+
+function buildAggregateRows(
+  runs: LoadedRunResult[],
+  groupBy: AggregateGroupBy,
+  scenarioFilter: Set<string> | null,
+  agentFilter: Set<string> | null
+): AggregateGroupRow[] {
+  if (groupBy === 'run') {
+    return runs.map((run) => {
+      const scenarios = filterScenarios(run.results.scenarios, scenarioFilter, agentFilter);
+      const summary = computeMetricSummary(scenarios);
+      return {
+        key: run.run_id,
+        run_id: run.run_id,
+        run_count: 1,
+        timestamp_range: {
+          min: run.results.metadata.timestamp,
+          max: run.results.metadata.timestamp
+        },
+        ...summary
+      };
+    });
+  }
+
+  const bucket = new Map<
+    string,
+    {
+      key: string;
+      scenario_id?: string;
+      agent?: string;
+      runIds: Set<string>;
+      minTimestamp: string | null;
+      maxTimestamp: string | null;
+      scenarios: ResultsJson['scenarios'];
+    }
+  >();
+
+  for (const run of runs) {
+    const scenarios = filterScenarios(run.results.scenarios, scenarioFilter, agentFilter);
+    for (const scenario of scenarios) {
+      const key = groupBy === 'scenario' ? scenario.scenario_id : scenario.agent;
+      const existing = bucket.get(key);
+      if (existing) {
+        existing.runIds.add(run.run_id);
+        existing.scenarios.push(scenario);
+        existing.minTimestamp =
+          !existing.minTimestamp || run.results.metadata.timestamp < existing.minTimestamp
+            ? run.results.metadata.timestamp
+            : existing.minTimestamp;
+        existing.maxTimestamp =
+          !existing.maxTimestamp || run.results.metadata.timestamp > existing.maxTimestamp
+            ? run.results.metadata.timestamp
+            : existing.maxTimestamp;
+        continue;
+      }
+      bucket.set(key, {
+        key,
+        scenario_id: groupBy === 'scenario' ? scenario.scenario_id : undefined,
+        agent: groupBy === 'agent' ? scenario.agent : undefined,
+        runIds: new Set([run.run_id]),
+        minTimestamp: run.results.metadata.timestamp,
+        maxTimestamp: run.results.metadata.timestamp,
+        scenarios: [scenario]
+      });
+    }
+  }
+
+  const out: AggregateGroupRow[] = [];
+  for (const entry of bucket.values()) {
+    const summary = computeMetricSummary(entry.scenarios);
+    out.push({
+      key: entry.key,
+      scenario_id: entry.scenario_id,
+      agent: entry.agent,
+      run_count: entry.runIds.size,
+      timestamp_range:
+        entry.minTimestamp && entry.maxTimestamp
+          ? { min: entry.minTimestamp, max: entry.maxTimestamp }
+          : undefined,
+      ...summary
+    });
+  }
+  return out;
+}
+
+function buildScenarioAgentMetricMap(
+  scenarios: ResultsJson['scenarios']
+): Map<string, { scenario_id: string; agent: string; summary: MetricSummary }> {
+  const map = new Map<string, { scenario_id: string; agent: string; summary: MetricSummary }>();
+  for (const scenario of scenarios) {
+    const key = `${scenario.scenario_id}::${scenario.agent}`;
+    map.set(key, {
+      scenario_id: scenario.scenario_id,
+      agent: scenario.agent,
+      summary: computeMetricSummary([scenario])
+    });
+  }
+  return map;
+}
+
+function classifyCompareRow(left: MetricSummary | null, right: MetricSummary | null): CompareClass {
+  if (!left && right) return 'new';
+  if (left && !right) return 'missing';
+  if (!left || !right) return 'unchanged';
+  const passDelta = right.pass_rate - left.pass_rate;
+  if (passDelta < 0) return 'regressed';
+  if (passDelta > 0) return 'improved';
+  const failedDelta = right.failed_runs - left.failed_runs;
+  if (failedDelta > 0) return 'regressed';
+  if (failedDelta < 0) return 'improved';
+  return 'unchanged';
+}
+
+function compareRowsWorstFirst(a: AggregateGroupRow, b: AggregateGroupRow): number {
+  if (a.pass_rate !== b.pass_rate) return a.pass_rate - b.pass_rate;
+  if (a.failed_runs !== b.failed_runs) return b.failed_runs - a.failed_runs;
+  return a.key.localeCompare(b.key);
+}
+
+function compareRowsBestFirst(a: AggregateGroupRow, b: AggregateGroupRow): number {
+  if (a.pass_rate !== b.pass_rate) return b.pass_rate - a.pass_rate;
+  if (a.failed_runs !== b.failed_runs) return a.failed_runs - b.failed_runs;
+  return a.key.localeCompare(b.key);
+}
+
+function compareRegressionRows(a: CompareRow, b: CompareRow): number {
+  const aDelta = a.deltas.pass_rate ?? 0;
+  const bDelta = b.deltas.pass_rate ?? 0;
+  if (aDelta !== bDelta) return aDelta - bDelta;
+  const aFailed = a.deltas.failed_runs ?? 0;
+  const bFailed = b.deltas.failed_runs ?? 0;
+  if (aFailed !== bFailed) return bFailed - aFailed;
+  return a.key.localeCompare(b.key);
+}
+
+function compareImprovementRows(a: CompareRow, b: CompareRow): number {
+  const aDelta = a.deltas.pass_rate ?? 0;
+  const bDelta = b.deltas.pass_rate ?? 0;
+  if (aDelta !== bDelta) return bDelta - aDelta;
+  const aFailed = a.deltas.failed_runs ?? 0;
+  const bFailed = b.deltas.failed_runs ?? 0;
+  if (aFailed !== bFailed) return aFailed - bFailed;
+  return a.key.localeCompare(b.key);
+}
+
+function compareClassPriority(classification: CompareClass): number {
+  if (classification === 'regressed') return 0;
+  if (classification === 'improved') return 1;
+  if (classification === 'new') return 2;
+  if (classification === 'missing') return 3;
+  return 4;
+}
+
+function toSerializableAggregateRow(row: AggregateGroupRow): Record<string, unknown> {
+  return removeUndefined({
+    key: row.key,
+    run_id: row.run_id,
+    scenario_id: row.scenario_id,
+    agent: row.agent,
+    run_count: row.run_count,
+    timestamp_range: row.timestamp_range,
+    total_runs: row.total_runs,
+    passed_runs: row.passed_runs,
+    failed_runs: row.failed_runs,
+    pass_rate: row.pass_rate,
+    avg_tool_calls_per_run: row.avg_tool_calls_per_run,
+    avg_tool_latency_ms: row.avg_tool_latency_ms
+  });
+}
+
+function toSerializableCompareRow(row: CompareRow): Record<string, unknown> {
+  return {
+    key: row.key,
+    scenario_id: row.scenario_id,
+    agent: row.agent,
+    classification: row.classification,
+    left: row.left,
+    right: row.right,
+    deltas: row.deltas
+  };
+}
+
+function roundedDelta(value: number): number {
+  return Number(value.toFixed(6));
+}
+
+function nullableRoundedDelta(right: number | null, left: number | null): number | null {
+  if (right === null || left === null) return null;
+  return roundedDelta(right - left);
+}
+
 function listRuns(
   runsDir: string,
   limit: number,
@@ -2223,6 +2845,16 @@ function truncate(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n...[truncated ${text.length - maxChars} chars]`;
 }
+
+export const __testExports = {
+  selectRunIdsForAnalysis,
+  resolveRunIdToken,
+  computeMetricSummary,
+  buildAggregateRows,
+  classifyCompareRow,
+  buildAggregateRunsReport,
+  buildCompareRunsReport
+};
 
 export async function handleMcplabMcpHttpRequest(
   req: IncomingMessage,

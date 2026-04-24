@@ -166,12 +166,12 @@ export const workspaceApiClient = {
         })
       }
     ),
-  createResultAssistantSession: (runId: string) =>
+  createResultAssistantSession: (params: { runId?: string; scope?: 'run' | 'all_runs' }) =>
     request<{ sessionId: string; session: ResultAssistantSessionView }>(
       '/api/result-assistant/sessions',
       {
         method: 'POST',
-        body: JSON.stringify({ runId })
+        body: JSON.stringify(params)
       }
     ),
   getResultAssistantSession: (sessionId: string) =>

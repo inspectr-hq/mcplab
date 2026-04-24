@@ -29,7 +29,10 @@ const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
   'mcplab_list_markdown_reports',
   'mcplab_read_markdown_report',
   'mcplab_list_runs',
+  'mcplab_aggregate_runs',
+  'mcplab_compare_runs',
   'mcplab_read_run_artifact',
+  'mcplab_grep_run_artifact',
   'mcplab_trace_stats',
   'mcplab_trace_get_final_answers',
   'mcplab_trace_get_conversation',
@@ -61,7 +64,7 @@ export async function handleResultAssistantRoutes(params: {
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const listReferenceReportsForRun = (runId: string) =>
+  const listReferenceReportsForRun = (runId: string | null) =>
     listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
 
   const executePendingToolCall = async (
@@ -83,7 +86,7 @@ export async function handleResultAssistantRoutes(params: {
     try {
       const toolResult = await executeResultAssistantToolCall(session, pending);
       pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
-      if (pending.tool === 'mcplab_write_markdown_report') {
+      if (pending.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
         session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
         session.systemPromptCache = undefined;
       }
@@ -127,13 +130,15 @@ export async function handleResultAssistantRoutes(params: {
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
     cleanupResultAssistantSessions(resultAssistantSessions);
-    const body = (await parseBody(req)) as { runId?: unknown };
+    const body = (await parseBody(req)) as { runId?: unknown; scope?: unknown };
+    const requestedScope = String(body.scope ?? '').trim().toLowerCase();
+    const scope: 'run' | 'all_runs' = requestedScope === 'all_runs' ? 'all_runs' : 'run';
     const runId = String(body.runId ?? '').trim();
-    if (!runId) {
-      asJson(res, 400, { error: 'runId is required' });
+    if (scope === 'run' && !runId) {
+      asJson(res, 400, { error: 'runId is required for run-scoped sessions' });
       return true;
     }
-    const results = getRunResults(runId, settings.runsDir);
+    const results = scope === 'run' ? getRunResults(runId, settings.runsDir) : null;
     const libraries = readLibraries(settings.librariesDir);
     const assistantAgentName = pickDefaultAssistantAgentName({
       settingsDefault: settings.scenarioAssistantAgentName,
@@ -149,13 +154,14 @@ export async function handleResultAssistantRoutes(params: {
     const agentConfig = resolveAssistantAgentFromLibraries(libraries, assistantAgentName);
     const session: ResultAssistantSession = {
       id: `ras-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      runId,
+      scope,
+      runId: scope === 'run' ? runId : null,
       createdAt: Date.now(),
       lastTouchedAt: Date.now(),
       selectedAssistantAgentName: assistantAgentName,
       agentConfig,
       resultSummary: results,
-      referenceReportsForRun: listReferenceReportsForRun(runId),
+      referenceReportsForRun: listReferenceReportsForRun(scope === 'run' ? runId : null),
       mcp: new McpClientManager(),
       tools: [],
       toolPublicMap: new Map(),
@@ -166,7 +172,10 @@ export async function handleResultAssistantRoutes(params: {
     session.chatMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'system',
-      text: 'Result Assistant session created.',
+      text:
+        scope === 'all_runs'
+          ? 'Result Assistant session created for all historical runs.'
+          : 'Result Assistant session created.',
       createdAt: new Date().toISOString()
     });
     try {
@@ -332,7 +341,7 @@ function localMcplabMcpUrl(): string {
 
 function listMarkdownReportsLinkedToRun(
   workspaceRoot: string,
-  runId: string
+  runId: string | null
 ): Array<{
   path: string;
   relativePath: string;
@@ -369,7 +378,7 @@ function listMarkdownReportsLinkedToRun(
         const relPath = relative(root, fullPath).split(sep).join('/');
         const wsPath = relative(workspaceRoot, fullPath).split(sep).join('/');
         const name = basename(fullPath);
-        if (!relPath.includes(runId) && !name.includes(runId)) continue;
+        if (runId && !relPath.includes(runId) && !name.includes(runId)) continue;
         out.push({
           path: wsPath,
           relativePath: relPath,

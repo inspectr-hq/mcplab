@@ -132,8 +132,8 @@ export const workspaceSource: EvalDataSource = {
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },
-  async createResultAssistantSession(runId) {
-    return workspaceApiClient.createResultAssistantSession(runId);
+  async createResultAssistantSession(params) {
+    return workspaceApiClient.createResultAssistantSession(params);
   },
   async getResultAssistantSession(sessionId) {
     return workspaceApiClient.getResultAssistantSession(sessionId);

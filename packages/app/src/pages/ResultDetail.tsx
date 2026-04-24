@@ -535,7 +535,7 @@ const ResultDetail = () => {
     try {
       let sessionId = assistantSessionId;
       if (!sessionId) {
-        const created = await source.createResultAssistantSession(result.id);
+        const created = await source.createResultAssistantSession({ runId: result.id, scope: "run" });
         sessionId = created.sessionId;
         setAssistantSessionId(created.session.id);
         setAssistantPendingToolCalls(created.session.pendingToolCalls);

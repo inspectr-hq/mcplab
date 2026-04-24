@@ -44,12 +44,13 @@ interface ResultAssistantChatMessage {
 
 export interface ResultAssistantSession {
   id: string;
-  runId: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
   createdAt: number;
   lastTouchedAt: number;
   selectedAssistantAgentName: string;
   agentConfig: AgentConfig;
-  resultSummary: ResultsJson;
+  resultSummary: ResultsJson | null;
   referenceReportsForRun: Array<{
     path: string;
     relativePath: string;
@@ -75,6 +76,8 @@ const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_list_markdown_reports',
   'mcplab_read_markdown_report',
   'mcplab_list_runs',
+  'mcplab_aggregate_runs',
+  'mcplab_compare_runs',
   'mcplab_read_run_artifact',
   'mcplab_grep_run_artifact',
   'mcplab_trace_stats',
@@ -102,6 +105,7 @@ export function touchResultAssistantSession(session: ResultAssistantSession): vo
 export function resultAssistantSessionView(session: ResultAssistantSession) {
   return {
     id: session.id,
+    scope: session.scope,
     runId: session.runId,
     createdAt: new Date(session.createdAt).toISOString(),
     updatedAt: new Date(session.lastTouchedAt).toISOString(),
@@ -245,16 +249,17 @@ export function summarizeToolResultForResultAssistant(result: unknown): string {
 
 function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
-  const totalScenarioCount = session.resultSummary.scenarios.length;
   const scenarioLimit = 30;
+  const totalScenarioCount = session.resultSummary?.scenarios.length ?? 0;
   const omittedScenarioCount = Math.max(0, totalScenarioCount - scenarioLimit);
-  const scenarioSummaries = session.resultSummary.scenarios.slice(0, scenarioLimit).map((sc) => ({
-    scenario_id: sc.scenario_id,
-    agent: sc.agent,
-    pass_rate: sc.pass_rate,
-    run_count: sc.runs.length,
-    sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
-  }));
+  const scenarioSummaries =
+    session.resultSummary?.scenarios.slice(0, scenarioLimit).map((sc) => ({
+      scenario_id: sc.scenario_id,
+      agent: sc.agent,
+      pass_rate: sc.pass_rate,
+      run_count: sc.runs.length,
+      sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
+    })) ?? [];
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
@@ -269,23 +274,29 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
-    omittedScenarioCount > 0
-      ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
-      : 'All scenarios are included in the prompt context.',
-    `Run result context: ${JSON.stringify({
-      run_id: session.resultSummary.metadata.run_id,
-      timestamp: session.resultSummary.metadata.timestamp,
-      run_note: session.resultSummary.metadata.run_note ?? null,
-      config_hash: session.resultSummary.metadata.config_hash,
-      summary: session.resultSummary.summary,
-      snapshot_eval: session.resultSummary.metadata.snapshot_eval ?? null,
-      scenario_count_total: totalScenarioCount,
-      scenario_count_included: scenarioSummaries.length,
-      scenario_count_omitted: omittedScenarioCount,
-      scenarios: scenarioSummaries,
-      linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
-    })}`,
-    'For custom markdown reports linked to this run, prefer mcplab_list_markdown_reports with run_id set to the current run id, then mcplab_read_markdown_report for selected files.',
+    session.scope === 'all_runs'
+      ? 'Scope: all historical runs. Use mcplab_list_runs first, then inspect specific runs via mcplab_read_run_artifact / trace tools.'
+      : omittedScenarioCount > 0
+        ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
+        : 'All scenarios are included in the prompt context.',
+    session.scope === 'all_runs'
+      ? 'Run result context: none preloaded. You can inspect any run from history using available tools.'
+      : `Run result context: ${JSON.stringify({
+          run_id: session.resultSummary?.metadata.run_id,
+          timestamp: session.resultSummary?.metadata.timestamp,
+          run_note: session.resultSummary?.metadata.run_note ?? null,
+          config_hash: session.resultSummary?.metadata.config_hash,
+          summary: session.resultSummary?.summary,
+          snapshot_eval: session.resultSummary?.metadata.snapshot_eval ?? null,
+          scenario_count_total: totalScenarioCount,
+          scenario_count_included: scenarioSummaries.length,
+          scenario_count_omitted: omittedScenarioCount,
+          scenarios: scenarioSummaries,
+          linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
+        })}`,
+    session.scope === 'all_runs'
+      ? 'For custom markdown reports across runs, call mcplab_list_markdown_reports without run_id or with a specific run_id when needed.'
+      : 'For custom markdown reports linked to this run, prefer mcplab_list_markdown_reports with run_id set to the current run id, then mcplab_read_markdown_report for selected files.',
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'

@@ -277,7 +277,8 @@ export interface ResultAssistantPendingToolCall {
 
 export interface ResultAssistantSessionView {
   id: string;
-  runId: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
   createdAt: string;
   updatedAt: string;
   selectedAssistantAgentName: string;
@@ -694,9 +695,10 @@ export interface EvalDataSource {
     outputPath?: string;
     overwrite?: boolean;
   }) => Promise<ResultAssistantApplyReportResponse>;
-  createResultAssistantSession: (
-    runId: string
-  ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
+  createResultAssistantSession: (params: {
+    runId?: string;
+    scope?: 'run' | 'all_runs';
+  }) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
   getResultAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ResultAssistantSessionView }>;
