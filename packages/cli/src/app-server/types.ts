@@ -20,6 +20,28 @@ export interface AppSettings {
   scenarioAssistantAgentName?: string;
 }
 
+export interface HealthMcpConnectionInfo {
+  enabled: boolean;
+  transport?: 'streamable-http';
+  host?: string;
+  port?: number;
+  path?: string;
+  proxyUrl?: string;
+  directUrl?: string;
+  serverPackageVersion?: string;
+  environment?: {
+    MCP_HOST: string;
+    MCP_PORT: string;
+    MCP_PATH: string;
+  };
+}
+
+export interface HealthResponse {
+  ok: boolean;
+  version: string;
+  mcp: HealthMcpConnectionInfo;
+}
+
 export interface DevMcpServerRuntime {
   host: string;
   port: number;

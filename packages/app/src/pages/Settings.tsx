@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,7 +20,7 @@ const SettingsPage = () => {
     [scenarioAssistantAgentName, agents]
   );
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setLoadingSettings(true);
     try {
       const settings = await source.getWorkspaceSettings();
@@ -35,11 +35,11 @@ const SettingsPage = () => {
     } finally {
       setLoadingSettings(false);
     }
-  };
+  }, [source]);
 
   useEffect(() => {
     void loadSettings();
-  }, [source]);
+  }, [loadSettings]);
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
     setScenarioAssistantAgentName(nextAgentName);
@@ -131,6 +131,7 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 };

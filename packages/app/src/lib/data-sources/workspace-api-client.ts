@@ -26,7 +26,8 @@ import type {
   ResultAssistantApplyReportResponse,
   ResultAssistantSessionView,
   ResultAssistantTurnResponse,
-  ScenarioPreviewCoreRunResponse
+  ScenarioPreviewCoreRunResponse,
+  WorkspaceHealthResponse
 } from './types';
 
 function getBaseUrl(): string {
@@ -70,7 +71,7 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
 }
 
 export const workspaceApiClient = {
-  health: () => request<{ ok: boolean; version: string }>('/api/health'),
+  health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () =>
     request<{
       workspaceRoot: string;

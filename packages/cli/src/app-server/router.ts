@@ -102,6 +102,9 @@ import {
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   ?.version as string;
+const mcpServerPkgVersion = JSON.parse(
+  readFileSync(new URL('../../../mcp-server/package.json', import.meta.url), 'utf8')
+)?.version as string;
 
 interface JobEvent {
   type: 'queued' | 'started' | 'log' | 'completed' | 'error';
@@ -279,8 +282,17 @@ export async function startAppServer(options: AppServerOptions) {
             ? {
                 enabled: true,
                 transport: 'streamable-http',
-                endpoint: `http://${options.host}:${options.port}${devMcp.path}`,
-                upstream: `${devMcp.targetBaseUrl}${devMcp.path}`
+                host: devMcp.host,
+                port: devMcp.port,
+                path: devMcp.path,
+                proxyUrl: `http://${options.host}:${options.port}${devMcp.path}`,
+                directUrl: `${devMcp.targetBaseUrl}${devMcp.path}`,
+                serverPackageVersion: mcpServerPkgVersion,
+                environment: {
+                  MCP_HOST: devMcp.host,
+                  MCP_PORT: String(devMcp.port),
+                  MCP_PATH: devMcp.path
+                }
               }
             : { enabled: false }
         });

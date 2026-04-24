@@ -32,6 +32,10 @@ const buildCrumbs = (pathname: string, search: string): Crumb[] => {
     crumbs.push({ label: "MCP Evaluations" });
     return crumbs;
   }
+  if (matchPath("/settings/mcp", pathname)) {
+    crumbs.push({ label: "Settings", to: "/settings" }, { label: "MCP Connection" });
+    return crumbs;
+  }
   if (matchPath("/settings", pathname)) {
     crumbs.push({ label: "Settings" });
     return crumbs;
@@ -83,13 +87,13 @@ const buildCrumbs = (pathname: string, search: string): Crumb[] => {
       : "Server";
     crumbs.push(
       { label: "Libraries", to: "/libraries/servers" },
-      { label: "Servers", to: "/libraries/servers" },
+      { label: "MCP servers", to: "/libraries/servers" },
       { label: serverId === "new" ? "New Server" : serverId }
     );
     return crumbs;
   }
   if (matchPath("/libraries/servers", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "Servers" });
+    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "MCP servers" });
     return crumbs;
   }
   if (matchPath("/libraries/agents/:agentName", pathname)) {
