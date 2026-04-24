@@ -78,6 +78,7 @@ const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
   'mcplab_list_runs',
   'mcplab_aggregate_runs',
   'mcplab_compare_runs',
+  'mcplab_compare_answer_quality',
   'mcplab_read_run_artifact',
   'mcplab_grep_run_artifact',
   'mcplab_trace_stats',
@@ -182,11 +183,12 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       status: 'pending',
       createdAt: new Date().toISOString()
     };
+    const toolRequestText = `I need to call '${pending.publicToolName}' to help with this request.`;
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
       role: 'assistant',
-      text: modelOutput.text,
+      text: toolRequestText,
       createdAt: new Date().toISOString(),
       pendingToolCallId: pending.id,
       toolRequestServer: pending.server,
@@ -195,13 +197,13 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     });
     session.llmMessages.push({
       role: 'assistant',
-      content: modelOutput.text,
+      content: toolRequestText,
       tool_calls: [{ id: pending.id, name: pending.publicToolName, arguments: pending.arguments }]
     });
     touchResultAssistantSession(session);
     return {
       session: resultAssistantSessionView(session),
-      response: { type: 'tool_call_request', text: modelOutput.text, pendingToolCall: pending }
+      response: { type: 'tool_call_request', text: toolRequestText, pendingToolCall: pending }
     };
   }
 
@@ -272,13 +274,14 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
+    'When asked about answer quality evolution (clarity/completeness/factuality/actionability), prefer mcplab_compare_answer_quality over ad-hoc manual text reading.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
     session.scope === 'all_runs'
       ? 'Scope: all historical runs. Use mcplab_list_runs first, then inspect specific runs via mcplab_read_run_artifact / trace tools.'
       : omittedScenarioCount > 0
-        ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
-        : 'All scenarios are included in the prompt context.',
+      ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
+      : 'All scenarios are included in the prompt context.',
     session.scope === 'all_runs'
       ? 'Run result context: none preloaded. You can inspect any run from history using available tools.'
       : `Run result context: ${JSON.stringify({

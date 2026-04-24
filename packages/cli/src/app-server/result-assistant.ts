@@ -25,12 +25,23 @@ export type ResultAssistantRouteDeps = Pick<
   | 'resolveAssistantAgentFromLibraries'
 >;
 
+type ResultAssistantTurnRouteResponse = {
+  session: ReturnType<typeof resultAssistantSessionView>;
+  response: {
+    type: 'assistant_message' | 'tool_call_request';
+    text: string;
+    pendingToolCall?: ResultAssistantSession['pendingToolCalls'][number];
+    autoContinue?: boolean;
+  };
+};
+
 const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
   'mcplab_list_markdown_reports',
   'mcplab_read_markdown_report',
   'mcplab_list_runs',
   'mcplab_aggregate_runs',
   'mcplab_compare_runs',
+  'mcplab_compare_answer_quality',
   'mcplab_read_run_artifact',
   'mcplab_grep_run_artifact',
   'mcplab_trace_stats',
@@ -114,24 +125,43 @@ export async function handleResultAssistantRoutes(params: {
     }
   };
 
-  const continueWithAutoApprovedReads = async (session: ResultAssistantSession) => {
-    let output = await continueResultAssistantTurn(session);
-    for (let i = 0; i < 25; i += 1) {
-      const pending = output.response.pendingToolCall;
-      if (output.response.type !== 'tool_call_request' || !pending) break;
-      if (!RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)) break;
-      await executePendingToolCall(session, pending, 'Auto-approved read-only', {
-        emitApprovalChatMessage: false
-      });
-      output = await continueResultAssistantTurn(session);
+  const continueWithAutoApprovedReads = async (
+    session: ResultAssistantSession
+  ): Promise<ResultAssistantTurnRouteResponse> => {
+    const output = await continueResultAssistantTurn(session);
+    const pending = output.response.pendingToolCall;
+    if (
+      output.response.type !== 'tool_call_request' ||
+      !pending ||
+      !RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)
+    ) {
+      return {
+        session: output.session,
+        response: {
+          ...output.response,
+          autoContinue: false
+        }
+      };
     }
-    return output;
+    await executePendingToolCall(session, pending, 'Auto-approved read-only', {
+      emitApprovalChatMessage: false
+    });
+    touchResultAssistantSession(session);
+    return {
+      session: resultAssistantSessionView(session),
+      response: {
+        ...output.response,
+        autoContinue: true
+      }
+    };
   };
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
     cleanupResultAssistantSessions(resultAssistantSessions);
     const body = (await parseBody(req)) as { runId?: unknown; scope?: unknown };
-    const requestedScope = String(body.scope ?? '').trim().toLowerCase();
+    const requestedScope = String(body.scope ?? '')
+      .trim()
+      .toLowerCase();
     const scope: 'run' | 'all_runs' = requestedScope === 'all_runs' ? 'all_runs' : 'run';
     const runId = String(body.runId ?? '').trim();
     if (scope === 'run' && !runId) {
@@ -241,6 +271,24 @@ export async function handleResultAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
+    const output = await continueWithAutoApprovedReads(session);
+    asJson(res, 200, output);
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/result-assistant/sessions/') &&
+    pathname.endsWith('/continue') &&
+    method === 'POST'
+  ) {
+    cleanupResultAssistantSessions(resultAssistantSessions);
+    const parts = pathname.split('/');
+    const sessionId = parts[4];
+    const session = resultAssistantSessions.get(sessionId);
+    if (!session) {
+      asJson(res, 404, { error: 'Result Assistant session not found' });
+      return true;
+    }
     const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;

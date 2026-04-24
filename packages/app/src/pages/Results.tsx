@@ -15,7 +15,9 @@ import {
   User,
   Wrench,
   Loader2,
-  Send
+  Send,
+  PanelRightOpen,
+  PanelRightClose
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +42,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { PassRateBadge } from "@/components/PassRateBadge";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -49,13 +50,19 @@ import { toast } from "@/hooks/use-toast";
 import type { EvalResult } from "@/types/eval";
 import type {
   ResultAssistantPendingToolCall,
-  ResultAssistantSessionView
+  ResultAssistantSessionView,
+  ResultAssistantTurnResponse
 } from "@/lib/data-sources/types";
 
 type RunScopeSummary = {
   scenarioCount: number;
   agentCount: number;
   scenarioPreview: string;
+};
+
+type ResultAssistantTurnPayload = {
+  session: ResultAssistantSessionView;
+  response: ResultAssistantTurnResponse;
 };
 
 function runScopeSummary(run: EvalResult): RunScopeSummary {
@@ -97,6 +104,7 @@ const Results = () => {
   const [assistantPendingToolCalls, setAssistantPendingToolCalls] = useState<ResultAssistantPendingToolCall[]>([]);
   const [assistantInput, setAssistantInput] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -245,6 +253,16 @@ const Results = () => {
     setAssistantPendingToolCalls(session.pendingToolCalls);
   };
 
+  const syncAndContinueAssistantTurn = async (sessionId: string, payload: ResultAssistantTurnPayload) => {
+    let current = payload;
+    syncResultAssistantSession(current.session);
+    for (let i = 0; i < 25 && current.response.autoContinue; i += 1) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      current = await source.continueResultAssistantSession(sessionId);
+      syncResultAssistantSession(current.session);
+    }
+  };
+
   const openGlobalAssistant = () => {
     setAssistantOpen(true);
     setAssistantMessages((prev) => {
@@ -287,11 +305,11 @@ const Results = () => {
         });
       }
       const response = await source.sendResultAssistantMessage(sessionId, question);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(sessionId, response);
     } catch (error: unknown) {
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
-        title: "MCP Labs Assistant error",
+        title: "MCP Lab Assistant error",
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
@@ -305,7 +323,7 @@ const Results = () => {
     setAssistantLoading(true);
     try {
       const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(assistantSessionId, response);
     } catch (error: unknown) {
       toast({
         title: "Could not approve assistant action",
@@ -322,7 +340,7 @@ const Results = () => {
     setAssistantLoading(true);
     try {
       const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(assistantSessionId, response);
     } catch (error: unknown) {
       toast({
         title: "Could not deny assistant action",
@@ -445,13 +463,21 @@ const Results = () => {
             {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
           <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
-            <Sparkles className="h-3.5 w-3.5" />
-            MCP Labs Assistant
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            MCP Lab Assistant
           </Button>
         </div>
       </div>
 
-      <div className={`grid gap-6 ${assistantOpen ? "xl:grid-cols-[minmax(0,1fr)_30rem]" : "grid-cols-1"}`}>
+      <div
+        className={`grid gap-6 ${
+          assistantOpen
+            ? assistantExpanded
+              ? "xl:grid-cols-[minmax(0,1fr)_52rem]"
+              : "xl:grid-cols-[minmax(0,1fr)_30rem]"
+            : "grid-cols-1"
+        }`}
+      >
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -606,11 +632,23 @@ const Results = () => {
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Sparkles className="h-4 w-4 text-amber-500" />
-                    MCP Labs Assistant
+                    MCP Lab Assistant
                   </CardTitle>
-                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setAssistantOpen(false)}>
-                    Hide
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      onClick={() => setAssistantExpanded((prev) => !prev)}
+                    >
+                      {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                      {assistantExpanded ? "Compact" : "Expand"}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => setAssistantOpen(false)}>
+                      Hide
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Analyze historical differences and trends across all result runs.
@@ -618,7 +656,7 @@ const Results = () => {
               </div>
             </CardHeader>
             <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
-              <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+              <div className="min-h-0 flex-1 overflow-y-auto bg-muted/15 px-4 py-4">
                 <div className="space-y-3 pr-2">
                   {assistantMessages.map((message, index) => {
                     const isUser = message.role === "user";
@@ -669,7 +707,7 @@ const Results = () => {
                           </div>
                         )}
                         <div
-                          className={`max-w-[92%] rounded-md border p-3 text-sm ${
+                          className={`min-w-0 max-w-[92%] break-words rounded-md border p-3 text-sm ${
                             isUser ? "border-primary/20 bg-primary/10" : "border-border/80 bg-background shadow-sm"
                           }`}
                         >
@@ -696,7 +734,7 @@ const Results = () => {
                   )}
                   <div ref={assistantChatEndRef} />
                 </div>
-              </ScrollArea>
+              </div>
               <div className="border-t bg-background px-4 py-3">
                 <div className="rounded-xl border bg-background p-2 shadow-sm">
                   <Textarea

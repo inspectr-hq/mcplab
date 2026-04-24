@@ -31,6 +31,7 @@ import type {
   MarkdownReportSummary,
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView,
+  ResultAssistantTurnResponse,
   SnapshotComparison,
   SnapshotRecord
 } from "@/lib/data-sources/types";
@@ -76,6 +77,11 @@ function formatCompactOneDecimal(value: number): string {
 function formatTokenCount(value: number | null | undefined): string {
   return typeof value === "number" ? value.toLocaleString() : "n/a";
 }
+
+type ResultAssistantTurnPayload = {
+  session: ResultAssistantSessionView;
+  response: ResultAssistantTurnResponse;
+};
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -552,11 +558,11 @@ const ResultDetail = () => {
         });
       }
       const response = await source.sendResultAssistantMessage(sessionId, question);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(sessionId, response);
     } catch (error: unknown) {
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
-        title: "MCP Labs Assistant error",
+        title: "MCP Lab Assistant error",
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive"
       });
@@ -581,12 +587,25 @@ const ResultDetail = () => {
     });
   };
 
+  const syncAndContinueAssistantTurn = async (
+    sessionId: string,
+    payload: ResultAssistantTurnPayload
+  ) => {
+    let current = payload;
+    syncResultAssistantSession(current.session);
+    for (let i = 0; i < 25 && current.response.autoContinue; i += 1) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      current = await source.continueResultAssistantSession(sessionId);
+      syncResultAssistantSession(current.session);
+    }
+  };
+
   const approveResultAssistantToolCall = async (callId: string) => {
     if (!assistantSessionId) return;
     setAssistantLoading(true);
     try {
       const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(assistantSessionId, response);
     } catch (error: unknown) {
       toast({
         title: "Could not approve assistant action",
@@ -603,7 +622,7 @@ const ResultDetail = () => {
     setAssistantLoading(true);
     try {
       const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
-      syncResultAssistantSession(response.session);
+      await syncAndContinueAssistantTurn(assistantSessionId, response);
     } catch (error: unknown) {
       toast({
         title: "Could not deny assistant action",
@@ -885,8 +904,8 @@ const ResultDetail = () => {
               className="shrink-0 gap-1.5"
               onClick={() => openAssistantWithPrompt()}
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              MCP Labs Assistant
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              MCP Lab Assistant
             </Button>
           </div>
         </div>
@@ -1042,7 +1061,7 @@ const ResultDetail = () => {
                 )
               }
             >
-              <Sparkles className="h-3.5 w-3.5" />
+              <Sparkles className="h-4 w-4 text-amber-500" />
               Ask Assistant
             </Button>
           </div>
@@ -1151,7 +1170,7 @@ const ResultDetail = () => {
                                   , { scenarioId: sc.scenarioId })
                                 }
                               >
-                                <Sparkles className="h-3.5 w-3.5" />
+                                <Sparkles className="h-4 w-4 text-amber-500" />
                                 Ask Assistant
                               </Button>
                             </div>
@@ -1454,7 +1473,7 @@ const ResultDetail = () => {
                                               , { scenarioId: sc.scenarioId })
                                             }
                                           >
-                                            <Sparkles className="h-3.5 w-3.5" />
+                                            <Sparkles className="h-4 w-4 text-amber-500" />
                                             Ask Assistant
                                           </Button>
                                         </div>
@@ -1533,7 +1552,7 @@ const ResultDetail = () => {
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-amber-500" />
-                  MCP Labs Assistant
+                  MCP Lab Assistant
                 </CardTitle>
                 <div className="flex items-center gap-2 shrink-0">
                   <Button
@@ -1690,7 +1709,7 @@ const ResultDetail = () => {
                                 className="h-7 gap-1.5 px-2 text-xs"
                                 onClick={() => sendToScenarioAssistant(message.text)}
                               >
-                                <Sparkles className="h-3.5 w-3.5" />
+                                <Sparkles className="h-4 w-4 text-amber-500" />
                                 Send to Scenario Assistant
                               </Button>
                               <Button

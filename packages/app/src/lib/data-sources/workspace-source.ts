@@ -141,6 +141,9 @@ export const workspaceSource: EvalDataSource = {
   async sendResultAssistantMessage(sessionId, message) {
     return workspaceApiClient.sendResultAssistantMessage(sessionId, message);
   },
+  async continueResultAssistantSession(sessionId) {
+    return workspaceApiClient.continueResultAssistantSession(sessionId);
+  },
   async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
     return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
   },

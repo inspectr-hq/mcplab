@@ -43,7 +43,11 @@ function makeScenario(
   };
 }
 
-function makeResults(runId: string, timestamp: string, scenarios: ScenarioAggregate[]): ResultsJson {
+function makeResults(
+  runId: string,
+  timestamp: string,
+  scenarios: ScenarioAggregate[]
+): ResultsJson {
   const allRuns = scenarios.flatMap((scenario) => scenario.runs);
   const totalRuns = allRuns.length;
   const passed = allRuns.filter((run) => run.pass).length;
@@ -105,7 +109,10 @@ describe('mcp run calculation helpers', () => {
 
   it('aggregates weighted metrics with scenario/agent filters and compact defaults', () => {
     const run1 = makeLoadedRun('run-1', '2026-04-20T10:00:00.000Z', [
-      makeScenario('s1', 'a1', [makeRunResult(0, true, 2, [100, 200]), makeRunResult(1, false, 1, [300])]),
+      makeScenario('s1', 'a1', [
+        makeRunResult(0, true, 2, [100, 200]),
+        makeRunResult(1, false, 1, [300])
+      ]),
       makeScenario('s2', 'a2', [makeRunResult(0, true, 1, [150])])
     ]);
     const run2 = makeLoadedRun('run-2', '2026-04-21T10:00:00.000Z', [
@@ -134,14 +141,26 @@ describe('mcp run calculation helpers', () => {
 
   it('classifies run comparison rows and computes headline deltas', () => {
     const left = makeLoadedRun('left', '2026-04-20T10:00:00.000Z', [
-      makeScenario('reg', 'agent', [makeRunResult(0, true, 1, [100]), makeRunResult(1, true, 1, [100])]),
-      makeScenario('imp', 'agent', [makeRunResult(0, false, 2, [300]), makeRunResult(1, false, 2, [300])]),
+      makeScenario('reg', 'agent', [
+        makeRunResult(0, true, 1, [100]),
+        makeRunResult(1, true, 1, [100])
+      ]),
+      makeScenario('imp', 'agent', [
+        makeRunResult(0, false, 2, [300]),
+        makeRunResult(1, false, 2, [300])
+      ]),
       makeScenario('same', 'agent', [makeRunResult(0, true, 1, [100])]),
       makeScenario('gone', 'agent', [makeRunResult(0, true, 1, [100])])
     ]);
     const right = makeLoadedRun('right', '2026-04-21T10:00:00.000Z', [
-      makeScenario('reg', 'agent', [makeRunResult(0, false, 1, [100]), makeRunResult(1, true, 1, [100])]),
-      makeScenario('imp', 'agent', [makeRunResult(0, true, 1, [120]), makeRunResult(1, false, 1, [120])]),
+      makeScenario('reg', 'agent', [
+        makeRunResult(0, false, 1, [100]),
+        makeRunResult(1, true, 1, [100])
+      ]),
+      makeScenario('imp', 'agent', [
+        makeRunResult(0, true, 1, [120]),
+        makeRunResult(1, false, 1, [120])
+      ]),
       makeScenario('same', 'agent', [makeRunResult(0, true, 1, [100])]),
       makeScenario('new', 'agent', [makeRunResult(0, true, 1, [90])])
     ]);
@@ -166,5 +185,214 @@ describe('mcp run calculation helpers', () => {
     expect((report.new_items as unknown[]).length).toBe(1);
     expect((report.missing_items as unknown[]).length).toBe(1);
     expect((report.details as unknown[]).length).toBe(5);
+  });
+
+  it('validates quality judge schema and rejects invalid payloads', () => {
+    const valid = __testExports.parseAndValidateQualityJudgeResponse(
+      JSON.stringify({
+        answer_a: {
+          dimension_scores: {
+            factuality: 4,
+            completeness: 3,
+            actionability: 4,
+            clarity: 5
+          },
+          overall_score: 4
+        },
+        answer_b: {
+          dimension_scores: {
+            factuality: 3,
+            completeness: 3,
+            actionability: 3,
+            clarity: 4
+          },
+          overall_score: 3
+        },
+        confidence: 0.82,
+        rationale: 'A is more complete and actionable.'
+      })
+    );
+    expect(valid.answer_a.overall_score).toBe(4);
+    expect(valid.answer_b.dimension_scores.factuality).toBe(3);
+
+    expect(() =>
+      __testExports.parseAndValidateQualityJudgeResponse(
+        JSON.stringify({
+          answer_a: {
+            dimension_scores: {
+              factuality: 4,
+              completeness: 3,
+              actionability: 4,
+              clarity: 5
+            },
+            overall_score: 4
+          },
+          answer_b: {
+            dimension_scores: {
+              factuality: 3,
+              completeness: 3,
+              actionability: 3,
+              clarity: 4
+            },
+            overall_score: 3
+          },
+          confidence: 2,
+          rationale: 'invalid confidence'
+        })
+      )
+    ).toThrow();
+  });
+
+  it('merges dual-order quality judgments symmetrically', () => {
+    const merged = __testExports.mergeQualityJudgeResponses(
+      {
+        answer_a: {
+          dimension_scores: {
+            factuality: 4,
+            completeness: 4,
+            actionability: 3,
+            clarity: 4
+          },
+          overall_score: 4
+        },
+        answer_b: {
+          dimension_scores: {
+            factuality: 3,
+            completeness: 3,
+            actionability: 3,
+            clarity: 3
+          },
+          overall_score: 3
+        },
+        confidence: 0.7,
+        rationale: 'forward'
+      },
+      {
+        answer_a: {
+          dimension_scores: {
+            factuality: 5,
+            completeness: 4,
+            actionability: 4,
+            clarity: 4
+          },
+          overall_score: 4
+        },
+        answer_b: {
+          dimension_scores: {
+            factuality: 3,
+            completeness: 3,
+            actionability: 2,
+            clarity: 3
+          },
+          overall_score: 3
+        },
+        confidence: 0.8,
+        rationale: 'reverse-normalized'
+      }
+    );
+
+    expect(merged.left.overall_score).toBe(4);
+    expect(merged.right.overall_score).toBe(3);
+    expect(merged.deltas.overall_score).toBe(-1);
+    expect(merged.confidence).toBe(0.75);
+  });
+
+  it('classifies quality deltas with epsilon threshold', () => {
+    expect(__testExports.classifyQualityCompareByDelta(0.16)).toBe('improved');
+    expect(__testExports.classifyQualityCompareByDelta(-0.16)).toBe('regressed');
+    expect(__testExports.classifyQualityCompareByDelta(0.1)).toBe('unchanged');
+  });
+
+  it('builds quality report with compact default and optional details/rationales', () => {
+    const left = makeLoadedRun('left', '2026-04-20T10:00:00.000Z', []);
+    const right = makeLoadedRun('right', '2026-04-21T10:00:00.000Z', []);
+    const rows = [
+      {
+        key: 's1::a1',
+        scenario_id: 's1',
+        agent: 'a1',
+        classification: 'regressed',
+        left: {
+          dimension_scores: {
+            factuality: 4,
+            completeness: 4,
+            actionability: 4,
+            clarity: 4
+          },
+          overall_score: 4
+        },
+        right: {
+          dimension_scores: {
+            factuality: 3,
+            completeness: 3,
+            actionability: 3,
+            clarity: 3
+          },
+          overall_score: 3
+        },
+        deltas: {
+          overall_score: -1,
+          dimension_scores: {
+            factuality: -1,
+            completeness: -1,
+            actionability: -1,
+            clarity: -1
+          }
+        },
+        confidence: 0.8,
+        rationale: 'degraded',
+        judge_error: undefined
+      },
+      {
+        key: 's2::a1',
+        scenario_id: 's2',
+        agent: 'a1',
+        classification: 'new',
+        left: null,
+        right: null,
+        deltas: {
+          overall_score: null,
+          dimension_scores: {
+            factuality: null,
+            completeness: null,
+            actionability: null,
+            clarity: null
+          }
+        },
+        confidence: null,
+        rationale: undefined,
+        judge_error: undefined
+      }
+    ];
+
+    const compact = __testExports.buildQualityReportFromRows({
+      left,
+      right,
+      rows,
+      topN: 20,
+      includeRationales: false,
+      includeDetails: false,
+      judgeAgentName: 'assistant-default',
+      truncatedByPairCap: false
+    }) as Record<string, unknown>;
+    expect(compact.details).toBeUndefined();
+    expect(
+      ((compact.top_regressions as unknown[])[0] as Record<string, unknown>).rationale
+    ).toBeUndefined();
+
+    const detailed = __testExports.buildQualityReportFromRows({
+      left,
+      right,
+      rows,
+      topN: 20,
+      includeRationales: true,
+      includeDetails: true,
+      judgeAgentName: 'assistant-default',
+      truncatedByPairCap: false
+    }) as Record<string, unknown>;
+    expect((detailed.details as unknown[]).length).toBe(2);
+    expect(
+      ((detailed.top_regressions as unknown[])[0] as Record<string, unknown>).rationale as string
+    ).toBe('degraded');
   });
 });
