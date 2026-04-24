@@ -23,6 +23,9 @@ function configFileNameFromName(name: string): string {
 }
 
 export const workspaceSource: EvalDataSource = {
+  async health() {
+    return workspaceApiClient.health();
+  },
   async listConfigs() {
     const records = await workspaceApiClient.listConfigs();
     return records.map(fromCoreConfigYaml);

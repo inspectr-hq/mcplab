@@ -47,6 +47,11 @@ type RunScopeSummary = {
   scenarioPreview: string;
 };
 
+function isSameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
 function runScopeSummary(run: EvalResult): RunScopeSummary {
   const scenarioIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.scenarioId).filter(Boolean)));
   const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
@@ -259,9 +264,9 @@ const Compare = () => {
         .map((value) => value.trim())
         .filter(Boolean);
       const nextScenario = searchParams.get("scenario") ?? "all";
-      setWithinRunId(nextRunId);
-      setWithinRunAgentIds(nextAgents);
-      setWithinRunScenarioFilter(nextScenario);
+      setWithinRunId((prev) => (prev === nextRunId ? prev : nextRunId));
+      setWithinRunAgentIds((prev) => (isSameStringArray(prev, nextAgents) ? prev : nextAgents));
+      setWithinRunScenarioFilter((prev) => (prev === nextScenario ? prev : nextScenario));
     }
   }, [mode, searchParams]);
 

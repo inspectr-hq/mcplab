@@ -75,6 +75,363 @@ const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_HOST = '127.0.0.1';
 const MAX_MARKDOWN_REPORT_READ_BYTES = 2 * 1024 * 1024;
 
+const GenericObjectSchema = z.object({}).passthrough();
+
+const ResultsSummarySchema = z.object({
+  total_scenarios: z.number().int().nonnegative(),
+  total_runs: z.number().int().nonnegative(),
+  pass_rate: z.number(),
+  avg_tool_calls_per_run: z.number(),
+  avg_tool_latency_ms: z.number().nullable()
+});
+
+const ResultsMetadataSchema = z
+  .object({
+    run_id: z.string(),
+    timestamp: z.string(),
+    config_hash: z.string(),
+    cli_version: z.string(),
+    mcp_server_versions: z.record(z.string())
+  })
+  .passthrough();
+
+const MetricSummarySchema = z.object({
+  total_runs: z.number().int().nonnegative(),
+  passed_runs: z.number().int().nonnegative(),
+  failed_runs: z.number().int().nonnegative(),
+  pass_rate: z.number(),
+  avg_tool_calls_per_run: z.number(),
+  avg_tool_latency_ms: z.number().nullable()
+});
+
+const AggregateRowSchema = z.object({
+  key: z.string(),
+  run_id: z.string().optional(),
+  scenario_id: z.string().optional(),
+  agent: z.string().optional(),
+  run_count: z.number().int().nonnegative(),
+  timestamp_range: z
+    .object({
+      min: z.string(),
+      max: z.string()
+    })
+    .optional(),
+  total_runs: z.number().int().nonnegative(),
+  passed_runs: z.number().int().nonnegative(),
+  failed_runs: z.number().int().nonnegative(),
+  pass_rate: z.number(),
+  avg_tool_calls_per_run: z.number(),
+  avg_tool_latency_ms: z.number().nullable()
+});
+
+const CompareRowSchema = z.object({
+  key: z.string(),
+  scenario_id: z.string(),
+  agent: z.string(),
+  classification: z.enum(['regressed', 'improved', 'unchanged', 'new', 'missing']),
+  left: MetricSummarySchema.nullable(),
+  right: MetricSummarySchema.nullable(),
+  deltas: z.object({
+    pass_rate: z.number().nullable(),
+    failed_runs: z.number().nullable(),
+    avg_tool_calls_per_run: z.number().nullable(),
+    avg_tool_latency_ms: z.number().nullable()
+  })
+});
+
+const RunListEntrySchema = z.object({
+  run_id: z.string(),
+  path: z.string(),
+  summary: ResultsSummarySchema.optional(),
+  metadata: ResultsMetadataSchema.optional(),
+  summary_error: z.string().optional()
+});
+
+const LibraryScenarioEntrySchema = z.object({
+  file: z.string(),
+  id: z.string().optional(),
+  content: GenericObjectSchema.optional(),
+  yaml: z.string().optional()
+});
+
+const AgentEntrySchema = z.object({
+  provider: z.enum(['openai', 'anthropic', 'azure_openai']),
+  model: z.string(),
+  temperature: z.number().optional(),
+  max_tokens: z.number().int().positive().optional(),
+  system: z.string().optional()
+});
+
+const LibraryEntrySchema = z.object({
+  bundleRoot: z.string(),
+  servers: z.union([z.array(z.object({ id: z.string() })), z.record(GenericObjectSchema)]),
+  agents: z.union([z.array(z.object({ id: z.string() })), z.record(AgentEntrySchema)]),
+  scenarios: z.array(LibraryScenarioEntrySchema)
+});
+
+const ServerAuthSchema = z.union([
+  z.object({
+    type: z.literal('bearer'),
+    token: z.string()
+  }),
+  z.object({
+    type: z.literal('api_key'),
+    header_name: z.string().optional(),
+    value: z.string()
+  }),
+  z.object({
+    type: z.literal('oauth_client_credentials'),
+    token_url: z.string(),
+    client_id_env: z.string(),
+    client_secret_env: z.string(),
+    scope: z.string().optional(),
+    audience: z.string().optional()
+  })
+]);
+
+const ServerEntrySchema = z.object({
+  transport: z.literal('http'),
+  url: z.string(),
+  auth: ServerAuthSchema.optional()
+});
+
+const ScenarioEntrySchema = z.object({
+  id: z.string(),
+  agent: z.string().optional(),
+  servers: z.array(z.string()),
+  prompt: z.string(),
+  snapshot_eval_enabled: z.boolean().optional(),
+  eval: GenericObjectSchema.optional(),
+  extract: z
+    .array(
+      z.object({
+        name: z.string(),
+        from: z.string(),
+        regex: z.string()
+      })
+    )
+    .optional()
+});
+
+const ConfigSummarySchema = z.object({
+  server_count: z.number().int().nonnegative(),
+  agent_count: z.number().int().nonnegative(),
+  scenario_count: z.number().int().nonnegative(),
+  servers: z.array(z.string()),
+  agents: z.array(z.string()),
+  scenarios: z.array(
+    z.object({
+      id: z.string(),
+      servers: z.array(z.string()),
+      has_eval: z.boolean(),
+      extract_count: z.number().int().nonnegative()
+    })
+  )
+});
+
+const ToolAnalysisListItemSchema = z.object({
+  report_id: z.string(),
+  path: z.string().optional(),
+  error: z.string().optional(),
+  reportId: z.string().optional(),
+  createdAt: z.string().optional(),
+  sourceJobId: z.string().optional(),
+  serverNames: z.array(z.string()).optional(),
+  assistantAgentName: z.string().optional(),
+  assistantAgentModel: z.string().optional(),
+  modes: GenericObjectSchema.optional(),
+  summary: GenericObjectSchema.optional()
+});
+
+const ToolAnalysisSummarySchema = z.object({
+  reportId: z.string().optional(),
+  createdAt: z.string().optional(),
+  sourceJobId: z.string().optional(),
+  serverNames: z.array(z.string()).optional(),
+  assistantAgentName: z.string().optional(),
+  assistantAgentModel: z.string().optional(),
+  modes: GenericObjectSchema.optional(),
+  summary: GenericObjectSchema.optional()
+});
+
+const FlattenedTraceItemSchema = z.union([
+  z.object({
+    type: z.literal('message'),
+    record_index: z.number().int().nonnegative(),
+    message_index: z.number().int().nonnegative(),
+    scenario_id: z.string(),
+    agent: z.string(),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    usage: z.unknown().optional()
+  }),
+  z.object({
+    type: z.literal('text'),
+    record_index: z.number().int().nonnegative(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    scenario_id: z.string(),
+    agent: z.string(),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    text: z.string()
+  }),
+  z.object({
+    type: z.literal('tool_use'),
+    record_index: z.number().int().nonnegative(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    scenario_id: z.string(),
+    agent: z.string(),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    id: z.string(),
+    name: z.string(),
+    server: z.string(),
+    input: z.unknown()
+  }),
+  z.object({
+    type: z.literal('tool_result'),
+    record_index: z.number().int().nonnegative(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    scenario_id: z.string(),
+    agent: z.string(),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    tool_use_id: z.string(),
+    name: z.string(),
+    server: z.string(),
+    is_error: z.boolean().optional(),
+    duration_ms: z.number().optional(),
+    content: z.unknown()
+  })
+]);
+
+const ConversationTimelineItemSchema = z.union([
+  z.object({
+    index: z.number().int().nonnegative(),
+    type: z.enum(['agent_message', 'user_message', 'tool_text']),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    text: z.string()
+  }),
+  z.object({
+    index: z.number().int().nonnegative(),
+    type: z.literal('tool_call'),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    id: z.string(),
+    server: z.string(),
+    tool: z.string(),
+    args: z.unknown()
+  }),
+  z.object({
+    index: z.number().int().nonnegative(),
+    type: z.literal('tool_result'),
+    role: z.enum(['user', 'assistant', 'tool']),
+    ts: z.string(),
+    message_index: z.number().int().nonnegative(),
+    block_index: z.number().int().nonnegative(),
+    tool_use_id: z.string(),
+    server: z.string(),
+    tool: z.string(),
+    ok: z.boolean(),
+    duration_ms: z.number().optional(),
+    content: z.array(
+      z
+        .object({
+          text: z.string()
+        })
+        .passthrough()
+    )
+  })
+]);
+
+const WriteMarkdownReportSuccessSchema = z.object({
+  ok: z.literal(true),
+  path: z.string().describe('Resolved absolute path to the written markdown file.'),
+  bytes: z.number().int().nonnegative().describe('UTF-8 byte length written to disk.'),
+  chars: z.number().int().nonnegative().describe('Character count written to disk.'),
+  overwritten: z.boolean().describe('True when an existing file was replaced.'),
+  workspace_root: z.string().describe('Workspace root used for path safety validation.')
+});
+
+const WriteMarkdownReportErrorSchema = z.object({
+  ok: z.literal(false),
+  error_code: z.enum([
+    'PATH_ESCAPE',
+    'PERMISSION_DENIED',
+    'FILE_EXISTS',
+    'INVALID_EXTENSION',
+    'PARENT_DIR_MISSING',
+    'IO_ERROR'
+  ]),
+  error_message: z.string(),
+  attempted_path: z.string().optional(),
+  violated_constraint: z.string().optional()
+});
+
+const GenerateServerEntryInputSchema = z
+  .object({
+    id: z.string(),
+    url: z.string(),
+    transport: z.enum(['http']).optional(),
+    auth_type: z.enum(['none', 'bearer', 'api_key', 'oauth_client_credentials']).optional(),
+    bearer_token: z.string().optional(),
+    bearer_env: z.string().optional(),
+    api_key_header_name: z.string().optional(),
+    api_key_value: z.string().optional(),
+    oauth_token_url: z.string().optional(),
+    oauth_client_id_env: z.string().optional(),
+    oauth_client_secret_env: z.string().optional(),
+    oauth_scope: z.string().optional(),
+    oauth_audience: z.string().optional()
+  })
+  .superRefine((value, ctx) => {
+    const authType = value.auth_type ?? 'none';
+    if (authType === 'bearer') {
+      if (!value.bearer_token && !value.bearer_env) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'auth_type=bearer requires at least one of bearer_token or bearer_env.'
+        });
+      }
+    }
+    if (authType === 'api_key') {
+      if (!value.api_key_value) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'auth_type=api_key requires api_key_value.'
+        });
+      }
+    }
+    if (authType === 'oauth_client_credentials') {
+      if (!value.oauth_token_url) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'auth_type=oauth_client_credentials requires oauth_token_url.'
+        });
+      }
+      if (!value.oauth_client_id_env) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'auth_type=oauth_client_credentials requires oauth_client_id_env.'
+        });
+      }
+      if (!value.oauth_client_secret_env) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'auth_type=oauth_client_credentials requires oauth_client_secret_env.'
+        });
+      }
+    }
+  });
+
 export type SessionRuntime = {
   transport: StreamableHTTPServerTransport;
   server: McpServer;
@@ -195,11 +552,14 @@ export function registerTools(server: McpServer): void {
     ) => unknown
   ): void => {
     const resolvedTitle = resolveToolTitle(name, config.title, config.annotations?.title);
+    const outputSchema =
+      config.outputSchema ?? z.object({}).passthrough().describe('Structured tool response.');
     server.registerTool(
       name,
       {
         ...config,
         title: resolvedTitle,
+        outputSchema,
         annotations: inferToolAnnotations(name, resolvedTitle, config.annotations)
       },
       cb as never
@@ -211,6 +571,7 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Write a Markdown report file to disk (for example under mcplab/reports/) and return the resolved path. Paths must stay inside the current workspace.',
+      outputSchema: z.union([WriteMarkdownReportSuccessSchema, WriteMarkdownReportErrorSchema]),
       inputSchema: {
         output_path: z
           .string()
@@ -229,32 +590,119 @@ export function registerTools(server: McpServer): void {
       }
     },
     async ({ output_path, markdown, overwrite, create_dirs }) => {
-      return withToolHandling(async () => {
+      try {
         const targetPath = resolvePathInsideWorkspace(output_path);
         const extension = extname(targetPath).toLowerCase();
         if (extension !== '.md' && extension !== '.markdown') {
-          throw new Error('output_path must end with .md or .markdown');
+          const structured = {
+            ok: false as const,
+            error_code: 'INVALID_EXTENSION' as const,
+            error_message: 'output_path must end with .md or .markdown',
+            attempted_path: output_path,
+            violated_constraint: 'MARKDOWN_EXTENSION_REQUIRED'
+          };
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+            structuredContent: structured
+          };
         }
         const parentDir = dirname(targetPath);
         if (Boolean(create_dirs ?? true)) {
-          mkdirSync(parentDir, { recursive: true });
+          try {
+            mkdirSync(parentDir, { recursive: true });
+          } catch (error: unknown) {
+            const code =
+              typeof error === 'object' && error !== null && 'code' in error
+                ? String((error as { code?: unknown }).code ?? '')
+                : '';
+            const structured = {
+              ok: false as const,
+              error_code: (code === 'EACCES' || code === 'EPERM'
+                ? 'PERMISSION_DENIED'
+                : 'IO_ERROR') as 'PERMISSION_DENIED' | 'IO_ERROR',
+              error_message: error instanceof Error ? error.message : String(error),
+              attempted_path: targetPath
+            };
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+              structuredContent: structured
+            };
+          }
         } else if (!existsSync(parentDir)) {
-          throw new Error(`Parent directory does not exist: ${parentDir}`);
+          const structured = {
+            ok: false as const,
+            error_code: 'PARENT_DIR_MISSING' as const,
+            error_message: `Parent directory does not exist: ${parentDir}`,
+            attempted_path: targetPath
+          };
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+            structuredContent: structured
+          };
         }
         const fileExists = existsSync(targetPath);
         if (fileExists && !Boolean(overwrite)) {
-          throw new Error(`File already exists: ${targetPath} (set overwrite=true to replace it)`);
+          const structured = {
+            ok: false as const,
+            error_code: 'FILE_EXISTS' as const,
+            error_message: `File already exists: ${targetPath} (set overwrite=true to replace it)`,
+            attempted_path: targetPath
+          };
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+            structuredContent: structured
+          };
         }
         const normalized = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
-        writeFileSync(targetPath, normalized, 'utf8');
+        try {
+          writeFileSync(targetPath, normalized, 'utf8');
+        } catch (error: unknown) {
+          const code =
+            typeof error === 'object' && error !== null && 'code' in error
+              ? String((error as { code?: unknown }).code ?? '')
+              : '';
+          const structured = {
+            ok: false as const,
+            error_code: (code === 'EACCES' || code === 'EPERM'
+              ? 'PERMISSION_DENIED'
+              : 'IO_ERROR') as 'PERMISSION_DENIED' | 'IO_ERROR',
+            error_message: error instanceof Error ? error.message : String(error),
+            attempted_path: targetPath
+          };
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+            structuredContent: structured
+          };
+        }
         return ok(`Wrote Markdown report to ${targetPath}`, {
+          ok: true,
           path: targetPath,
           bytes: Buffer.byteLength(normalized, 'utf8'),
           chars: normalized.length,
           overwritten: fileExists,
           workspace_root: process.cwd()
         });
-      });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isPathEscape = message.toLowerCase().includes('escapes workspace root');
+        const structured = {
+          ok: false as const,
+          error_code: (isPathEscape ? 'PATH_ESCAPE' : 'IO_ERROR') as 'PATH_ESCAPE' | 'IO_ERROR',
+          error_message: message,
+          attempted_path: output_path,
+          violated_constraint: isPathEscape ? 'WORKSPACE_CONTAINMENT' : undefined
+        };
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Error: ${structured.error_message}` }],
+          structuredContent: removeUndefined(structured)
+        };
+      }
     }
   );
 
@@ -263,6 +711,21 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'List saved markdown reports under mcplab/reports. Supports filtering by run id substring to find reports linked to a result.',
+      outputSchema: {
+        reports_dir: z.string(),
+        run_id_filter: z.string().optional(),
+        query: z.string().optional(),
+        total_matching: z.number().int().nonnegative(),
+        items: z.array(
+          z.object({
+            path: z.string(),
+            relativePath: z.string(),
+            name: z.string(),
+            sizeBytes: z.number().int().nonnegative(),
+            mtime: z.string()
+          })
+        )
+      },
       inputSchema: {
         reports_dir: z
           .string()
@@ -322,6 +785,16 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Read a saved markdown report by relative path (under mcplab/reports by default) or by workspace-relative path, with optional truncation.',
+      outputSchema: {
+        reports_dir: z.string(),
+        path: z.string(),
+        relativePath: z.string(),
+        name: z.string(),
+        sizeBytes: z.number().int().nonnegative(),
+        mtime: z.string(),
+        truncated: z.boolean(),
+        content: z.string()
+      },
       inputSchema: {
         path: z
           .string()
@@ -376,6 +849,7 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'List reusable MCPLab library entries (servers, agents, scenarios) from a bundle root such as mcplab/ or examples/libraries/.',
+      outputSchema: LibraryEntrySchema,
       inputSchema: {
         bundleRoot: z
           .string()
@@ -416,6 +890,14 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
+      outputSchema: {
+        bundleRoot: z.string(),
+        kind: z.enum(['servers', 'agents', 'scenarios']),
+        id: z.string(),
+        file: z.string().optional(),
+        yaml: z.string(),
+        content: GenericObjectSchema
+      },
       inputSchema: {
         bundleRoot: z.string().optional().describe('Optional library bundle root path.'),
         kind: z.enum(['servers', 'agents', 'scenarios']).describe('Library category.'),
@@ -436,90 +918,56 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Generate a MCPLab servers.yaml entry (or inline config block) for an MCP server connection.',
-      inputSchema: z
-        .object({
-          id: z.string().describe('Server id key (kebab-case recommended).'),
-          url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
-          transport: z
-            .enum(['http'])
-            .optional()
-            .describe('MCPLab transport type (currently http).'),
-          auth_type: z
-            .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
-            .optional()
-            .describe('Authentication mode.'),
-          bearer_token: z
-            .string()
-            .optional()
-            .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
-          bearer_env: z
-            .string()
-            .optional()
-            .describe('Env var for bearer token when auth_type=bearer.'),
-          api_key_header_name: z
-            .string()
-            .optional()
-            .describe('Header name for API key auth (default: X-API-Key).'),
-          api_key_value: z
-            .string()
-            .optional()
-            .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
-          oauth_token_url: z
-            .string()
-            .optional()
-            .describe('OAuth token URL when auth_type=oauth_client_credentials.'),
-          oauth_client_id_env: z.string().optional().describe('OAuth client id env var.'),
-          oauth_client_secret_env: z.string().optional().describe('OAuth client secret env var.'),
-          oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
-          oauth_audience: z.string().optional().describe('Optional OAuth audience.')
-        })
-        .superRefine((value, ctx) => {
-          const authType = value.auth_type ?? 'none';
-          if (authType === 'bearer') {
-            if (!value.bearer_token && !value.bearer_env) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'auth_type=bearer requires at least one of bearer_token or bearer_env.'
-              });
-            }
-          }
-          if (authType === 'api_key') {
-            if (!value.api_key_value) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'auth_type=api_key requires api_key_value.'
-              });
-            }
-          }
-          if (authType === 'oauth_client_credentials') {
-            if (!value.oauth_token_url) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'auth_type=oauth_client_credentials requires oauth_token_url.'
-              });
-            }
-            if (!value.oauth_client_id_env) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'auth_type=oauth_client_credentials requires oauth_client_id_env.'
-              });
-            }
-            if (!value.oauth_client_secret_env) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: 'auth_type=oauth_client_credentials requires oauth_client_secret_env.'
-              });
-            }
-          }
-        })
+      outputSchema: {
+        id: z.string(),
+        entry: ServerEntrySchema,
+        yaml: z.string()
+      },
+      inputSchema: {
+        id: z.string().describe('Server id key (kebab-case recommended).'),
+        url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
+        transport: z
+          .enum(['http'])
+          .optional()
+          .describe('MCPLab transport type (currently http).'),
+        auth_type: z
+          .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
+          .optional()
+          .describe('Authentication mode.'),
+        bearer_token: z
+          .string()
+          .optional()
+          .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
+        bearer_env: z
+          .string()
+          .optional()
+          .describe('Env var for bearer token when auth_type=bearer.'),
+        api_key_header_name: z
+          .string()
+          .optional()
+          .describe('Header name for API key auth (default: X-API-Key).'),
+        api_key_value: z
+          .string()
+          .optional()
+          .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
+        oauth_token_url: z
+          .string()
+          .optional()
+          .describe('OAuth token URL when auth_type=oauth_client_credentials.'),
+        oauth_client_id_env: z.string().optional().describe('OAuth client id env var.'),
+        oauth_client_secret_env: z.string().optional().describe('OAuth client secret env var.'),
+        oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
+        oauth_audience: z.string().optional().describe('Optional OAuth audience.')
+      }
     },
     async (input) => {
       return withToolHandling(async () => {
-        const entry = buildServerEntry(input);
-        return ok(`Generated server entry '${input.id}'`, {
-          id: input.id,
+        const parsed = GenerateServerEntryInputSchema.parse(input);
+        const entry = buildServerEntry(parsed);
+        return ok(`Generated server entry '${parsed.id}'`, {
+          id: parsed.id,
           entry,
-          yaml: stringifyYaml({ [input.id]: entry }).trimEnd()
+          yaml: stringifyYaml({ [parsed.id]: entry }).trimEnd()
         });
       });
     }
@@ -530,6 +978,11 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Generate a MCPLab agents.yaml entry (provider/model/system settings) for evaluation runs.',
+      outputSchema: {
+        id: z.string(),
+        entry: AgentEntrySchema,
+        yaml: z.string()
+      },
       inputSchema: {
         id: z.string().describe('Agent id key (kebab-case recommended).'),
         provider: z
@@ -558,6 +1011,14 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Optimized for scenario authoring workflows.',
+      outputSchema: {
+        scenario: ScenarioEntrySchema,
+        yaml: z.string(),
+        yaml_library_file: z.string(),
+        yaml_inline_list_item: z.string(),
+        format: z.enum(['library-scenario-file', 'inline-scenarios-list-item']),
+        warnings: z.array(z.string())
+      },
       inputSchema: {
         id: z
           .string()
@@ -575,7 +1036,11 @@ export function registerTools(server: McpServer): void {
           .array(z.string())
           .min(1)
           .describe('One or more server ids available to the scenario.'),
-        prompt: z.string().describe('The task prompt the evaluation agent should execute.'),
+        prompt: z
+          .string()
+          .min(1)
+          .max(4000)
+          .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
         snapshot_eval_enabled: z
           .boolean()
           .optional()
@@ -631,6 +1096,18 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Validate and expand a MCPLab config file via mcplab-core loadConfig(), including server/agent/scenario library references.',
+      outputSchema: {
+        configPath: z.string(),
+        bundleRoot: z.string(),
+        hash: z.string(),
+        summary: ConfigSummarySchema,
+        resolved_config: z.object({
+          servers: z.record(GenericObjectSchema),
+          agents: z.record(AgentEntrySchema),
+          scenarios: z.array(GenericObjectSchema),
+          run_defaults: GenericObjectSchema.optional()
+        })
+      },
       inputSchema: {
         config_path: z.string().describe('Path to MCPLab eval YAML config.'),
         bundle_root: z
@@ -676,8 +1153,8 @@ export function registerTools(server: McpServer): void {
         failed_runs: z.number().int().nonnegative(),
         skipped_runs: z.number().int().nonnegative(),
         duration_ms: z.number().nonnegative(),
-        summary: z.record(z.unknown()),
-        metadata: z.record(z.unknown()),
+        summary: ResultsSummarySchema,
+        metadata: ResultsMetadataSchema,
         scenarios: z.array(
           z.object({
             scenario_id: z.string(),
@@ -767,6 +1244,12 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'List MCPLab run artifact directories and optionally summarize each run from results.json when present.',
+      outputSchema: {
+        runsDir: z.string(),
+        query: z.string().optional(),
+        total_matching: z.number().int().nonnegative(),
+        runs: z.array(RunListEntrySchema)
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -794,18 +1277,19 @@ export function registerTools(server: McpServer): void {
     async ({ runs_dir, query, limit, include_summary }) => {
       return withToolHandling(async () => {
         const base = resolveRunsDir(runs_dir);
-        const entries = listRunsWithFallback(base, limit ?? 10, Boolean(include_summary));
+        const entries = listRunsWithFallback(base, undefined, Boolean(include_summary));
         const searchQuery = String(query ?? '')
           .trim()
           .toLowerCase();
         const filtered = searchQuery
           ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
           : entries;
+        const capped = filtered.slice(0, limit ?? 10);
         return ok(`Found ${filtered.length} run(s) in ${base}`, {
           runsDir: base,
           query: searchQuery || undefined,
           total_matching: filtered.length,
-          runs: filtered
+          runs: capped
         });
       });
     }
@@ -815,6 +1299,12 @@ export function registerTools(server: McpServer): void {
     'mcplab_search_runs',
     {
       description: 'Search MCPLab run artifacts with a text query across run metadata and paths.',
+      outputSchema: {
+        runsDir: z.string(),
+        query: z.string(),
+        total_matching: z.number().int().nonnegative(),
+        runs: z.array(RunListEntrySchema)
+      },
       inputSchema: {
         query: z
           .string()
@@ -843,13 +1333,14 @@ export function registerTools(server: McpServer): void {
           .trim()
           .toLowerCase();
         if (!searchQuery) throw new Error('query is required');
-        const entries = listRunsWithFallback(base, limit ?? 10, include_summary ?? true);
+        const entries = listRunsWithFallback(base, undefined, include_summary ?? true);
         const filtered = entries.filter((entry) => searchableText(entry).includes(searchQuery));
+        const capped = filtered.slice(0, limit ?? 10);
         return ok(`Found ${filtered.length} run(s) in ${base}`, {
           runsDir: base,
           query: searchQuery,
           total_matching: filtered.length,
-          runs: filtered
+          runs: capped
         });
       });
     }
@@ -860,6 +1351,28 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Aggregate metrics across historical MCPLab runs with compact summary-first output.',
+      outputSchema: z.object({
+        runs: z.array(
+          z.object({
+            run_id: z.string(),
+            timestamp: z.string(),
+            config_hash: z.string()
+          })
+        ),
+        group_by: z.enum(['run', 'scenario', 'agent']),
+        filters: z
+          .object({
+            scenario_ids: z.array(z.string()).optional(),
+            agents: z.array(z.string()).optional()
+          })
+          .optional(),
+        summary: MetricSummarySchema.extend({
+          selected_run_count: z.number().int().nonnegative()
+        }),
+        top_worst: z.array(AggregateRowSchema),
+        top_best: z.array(AggregateRowSchema),
+        details: z.array(AggregateRowSchema).optional()
+      }),
       inputSchema: {
         runs_dir: z
           .string()
@@ -933,6 +1446,46 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Compare two MCPLab runs and surface compact deltas with regressions/improvements first.',
+      outputSchema: z.object({
+        left_run: z.object({
+          run_id: z.string(),
+          timestamp: z.string(),
+          config_hash: z.string()
+        }),
+        right_run: z.object({
+          run_id: z.string(),
+          timestamp: z.string(),
+          config_hash: z.string()
+        }),
+        filters: z
+          .object({
+            scenario_ids: z.array(z.string()).optional(),
+            agents: z.array(z.string()).optional()
+          })
+          .optional(),
+        summary: z.object({
+          left: MetricSummarySchema,
+          right: MetricSummarySchema,
+          deltas: z.object({
+            pass_rate: z.number(),
+            failed_runs: z.number(),
+            avg_tool_calls_per_run: z.number(),
+            avg_tool_latency_ms: z.number().nullable()
+          }),
+          classification_counts: z.object({
+            regressed: z.number().int().nonnegative(),
+            improved: z.number().int().nonnegative(),
+            unchanged: z.number().int().nonnegative(),
+            new: z.number().int().nonnegative(),
+            missing: z.number().int().nonnegative()
+          })
+        }),
+        regressions: z.array(CompareRowSchema),
+        improvements: z.array(CompareRowSchema),
+        new_items: z.array(CompareRowSchema),
+        missing_items: z.array(CompareRowSchema),
+        details: z.array(CompareRowSchema).optional()
+      }),
       inputSchema: {
         runs_dir: z
           .string()
@@ -989,7 +1542,7 @@ export function registerTools(server: McpServer): void {
       outputSchema: {
         tool_analysis_results_dir: z.string(),
         total: z.number().int().nonnegative(),
-        items: z.array(z.record(z.unknown()))
+        items: z.array(ToolAnalysisListItemSchema)
       },
       inputSchema: {
         tool_analysis_results_dir: z
@@ -1014,18 +1567,19 @@ export function registerTools(server: McpServer): void {
     async ({ tool_analysis_results_dir, query, limit }) => {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
-        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
+        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, undefined);
         const searchQuery = String(query ?? '')
           .trim()
           .toLowerCase();
         const filtered = searchQuery
           ? reports.filter((report) => searchableText(report).includes(searchQuery))
           : reports;
+        const capped = filtered.slice(0, limit ?? 20);
         return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
           query: searchQuery || undefined,
           total: filtered.length,
-          items: filtered
+          items: capped
         });
       });
     }
@@ -1036,6 +1590,12 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Search saved MCP tool analysis reports by query text across ids, paths, and summary fields.',
+      outputSchema: {
+        tool_analysis_results_dir: z.string(),
+        query: z.string(),
+        total: z.number().int().nonnegative(),
+        items: z.array(ToolAnalysisListItemSchema)
+      },
       inputSchema: {
         query: z
           .string()
@@ -1060,13 +1620,14 @@ export function registerTools(server: McpServer): void {
           .trim()
           .toLowerCase();
         if (!searchQuery) throw new Error('query is required');
-        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, limit ?? 20);
+        const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, undefined);
         const filtered = reports.filter((report) => searchableText(report).includes(searchQuery));
+        const capped = filtered.slice(0, limit ?? 20);
         return ok(`Found ${filtered.length} tool analysis report(s) in ${baseDir}`, {
           tool_analysis_results_dir: baseDir,
           query: searchQuery,
           total: filtered.length,
-          items: filtered
+          items: capped
         });
       });
     }
@@ -1077,12 +1638,22 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Read a saved MCP tool analysis report record (report.json) by report id and return parsed metadata plus optional raw JSON preview.',
+      outputSchema: z.object({
+        path: z.string(),
+        report_id: z.string(),
+        truncated: z.boolean(),
+        raw_json_preview: z.string(),
+        summary: ToolAnalysisSummarySchema,
+        record: GenericObjectSchema.optional()
+      }),
       inputSchema: {
         report_id: z.string().describe("Report id directory name (or 'LATEST')."),
         tool_analysis_results_dir: z
           .string()
           .optional()
-          .describe('Directory containing saved tool analysis reports.'),
+          .describe(
+            'Directory containing saved tool analysis reports (default mcplab/results/tool-analysis).'
+          ),
         max_chars: z
           .number()
           .int()
@@ -1131,26 +1702,73 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Delete a saved MCP tool analysis report directory by report id (from mcplab/results/tool-analysis by default).',
+      outputSchema: {
+        status: z.enum(['deleted', 'not_found', 'dry_run']),
+        report_id: z.string(),
+        path: z.string(),
+        tool_analysis_results_dir: z.string(),
+        existed: z.boolean(),
+        deleted: z.boolean(),
+        would_delete: z.boolean()
+      },
       inputSchema: {
         report_id: z.string().describe('Report id directory name to delete.'),
         tool_analysis_results_dir: z
           .string()
           .optional()
-          .describe('Directory containing saved tool analysis reports.')
+          .describe(
+            'Directory containing saved tool analysis reports (default mcplab/results/tool-analysis).'
+          ),
+        dry_run: z
+          .boolean()
+          .optional()
+          .describe('If true, return what would be deleted without deleting anything.'),
+        confirm: z
+          .boolean()
+          .optional()
+          .describe('Must be true to execute deletion when dry_run is false.')
       }
     },
-    async ({ report_id, tool_analysis_results_dir }) => {
+    async ({ report_id, tool_analysis_results_dir, dry_run, confirm }) => {
       return withToolHandling(async () => {
         const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
         const dirPath = toolAnalysisReportDirPathWithFallback(baseDir, report_id.trim());
-        if (!existsSync(dirPath)) {
-          throw new Error(`Tool analysis report not found: ${dirPath}`);
+        const existed = existsSync(dirPath);
+        const isDryRun = Boolean(dry_run);
+        if (isDryRun) {
+          return ok(`Dry run for delete tool analysis report ${report_id}`, {
+            status: 'dry_run',
+            report_id: report_id.trim(),
+            path: dirPath,
+            tool_analysis_results_dir: baseDir,
+            existed,
+            deleted: false,
+            would_delete: existed
+          });
+        }
+        if (confirm !== true) {
+          throw new Error('confirm=true is required to delete a tool analysis report');
+        }
+        if (!existed) {
+          return ok(`Tool analysis report not found: ${report_id}`, {
+            status: 'not_found',
+            report_id: report_id.trim(),
+            path: dirPath,
+            tool_analysis_results_dir: baseDir,
+            existed: false,
+            deleted: false,
+            would_delete: false
+          });
         }
         rmSync(dirPath, { recursive: true, force: false });
         return ok(`Deleted tool analysis report ${report_id}`, {
+          status: 'deleted',
           report_id: report_id.trim(),
           path: dirPath,
-          tool_analysis_results_dir: baseDir
+          tool_analysis_results_dir: baseDir,
+          existed: true,
+          deleted: true,
+          would_delete: true
         });
       });
     }
@@ -1161,6 +1779,12 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'List structured trace timeline items for a MCPLab run (flattened from scenario_run trace records) with optional type/scenario/agent filtering.',
+      outputSchema: {
+        run_id: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        total_matching: z.number().int().nonnegative(),
+        items: z.array(FlattenedTraceItemSchema)
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1218,6 +1842,20 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Extract final assistant answers from a run trace (scenario_run documents) for easy agent output comparison.',
+      outputSchema: {
+        run_id: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        items: z.array(
+          z.object({
+            index: z.number().int().nonnegative(),
+            scenario_id: z.string(),
+            agent: z.string(),
+            ts: z.string().optional(),
+            truncated: z.boolean(),
+            text: z.string()
+          })
+        )
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1276,6 +1914,13 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Return a structured conversation timeline (messages + tool blocks) for a specific scenario+agent in a scenario_run trace.',
+      outputSchema: {
+        run_id: z.string(),
+        scenario_id: z.string(),
+        agent: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        timeline: z.array(ConversationTimelineItemSchema)
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1331,6 +1976,12 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Search scenario_run trace content for a text query and return matching message/block items.',
+      outputSchema: {
+        run_id: z.string(),
+        query: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        matches: z.array(FlattenedTraceItemSchema)
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1386,6 +2037,24 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Compute trace statistics for a run (message/block counts, tool usage, durations, and final-answer counts).',
+      outputSchema: {
+        run_id: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        total_scenario_records: z.number().int().nonnegative(),
+        message_role_counts: z.record(z.number()),
+        block_type_counts: z.record(z.number()),
+        scenario_agent_pairs: z.number().int().nonnegative(),
+        tool_call_count: z.number().int().nonnegative(),
+        tool_result_count: z.number().int().nonnegative(),
+        final_answer_count: z.number().int().nonnegative(),
+        avg_tool_result_duration_ms: z.number().nullable(),
+        tool_usage: z.array(
+          z.object({
+            tool: z.string(),
+            count: z.number().int().nonnegative()
+          })
+        )
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1451,6 +2120,31 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Read MCPLab run artifacts such as results.json, summary.md, trace.jsonl, resolved-config.yaml, or report.html.',
+      outputSchema: {
+        path: z.string(),
+        run_id: z.string(),
+        artifact: z.enum([
+          'results.json',
+          'summary.md',
+          'trace.jsonl',
+          'resolved-config.yaml',
+          'report.html'
+        ]),
+        line_range: z.string().optional(),
+        truncated: z.boolean(),
+        content: z.string(),
+        summary: ResultsSummarySchema.optional(),
+        metadata: ResultsMetadataSchema.optional(),
+        scenarios: z
+          .array(
+            z.object({
+              scenario_id: z.string(),
+              agent: z.string(),
+              pass_rate: z.number()
+            })
+          )
+          .optional()
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -1543,6 +2237,34 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Search for text within a MCPLab run artifact and return matching lines with surrounding context. Use this to find specific sections in large files (e.g. a tool name in report.html) without reading the full file. Returns line numbers so you can follow up with mcplab_read_run_artifact line_start/line_end to read the full section.',
+      outputSchema: {
+        run_id: z.string(),
+        artifact: z.enum([
+          'results.json',
+          'summary.md',
+          'trace.jsonl',
+          'resolved-config.yaml',
+          'report.html'
+        ]),
+        query: z.string(),
+        total_lines: z.number().int().nonnegative(),
+        match_count: z.number().int().nonnegative(),
+        truncated_at_limit: z.boolean(),
+        matches: z.array(
+          z.object({
+            match_line: z.number().int().positive(),
+            context_start_line: z.number().int().positive(),
+            context_end_line: z.number().int().positive(),
+            lines: z.array(
+              z.object({
+                line: z.number().int().positive(),
+                text: z.string(),
+                is_match: z.boolean()
+              })
+            )
+          })
+        )
+      },
       inputSchema: {
         runs_dir: z
           .string()
@@ -2154,7 +2876,7 @@ function resolveRunIdToken(primaryRunsDir: string, runIdInput: string): string {
 
 function listRuns(
   runsDir: string,
-  limit: number,
+  limit: number | undefined,
   includeSummary: boolean
 ): Array<Record<string, unknown>> {
   if (!existsSync(runsDir)) return [];
@@ -2168,10 +2890,10 @@ function listRuns(
       }
     })
     .sort()
-    .reverse()
-    .slice(0, limit);
+    .reverse();
+  const cappedDirNames = typeof limit === 'number' ? dirNames.slice(0, limit) : dirNames;
 
-  return dirNames.map((runId) => {
+  return cappedDirNames.map((runId) => {
     const out: Record<string, unknown> = {
       run_id: runId,
       path: join(runsDir, runId)
@@ -2216,7 +2938,7 @@ function runReadDirs(primaryRunsDir: string): string[] {
 
 function listRunsWithFallback(
   primaryRunsDir: string,
-  limit: number,
+  limit: number | undefined,
   includeSummary: boolean
 ): Array<Record<string, unknown>> {
   const merged = new Map<string, Record<string, unknown>>();
@@ -2229,7 +2951,7 @@ function listRunsWithFallback(
   }
   return Array.from(merged.values())
     .sort((a, b) => String(b.run_id ?? '').localeCompare(String(a.run_id ?? '')))
-    .slice(0, limit);
+    .slice(0, typeof limit === 'number' ? limit : Number.MAX_SAFE_INTEGER);
 }
 
 function resolveExistingRunReadDir(primaryRunsDir: string, runId?: string): string {
@@ -2439,7 +3161,7 @@ function summarizeToolAnalysisRecord(record: Record<string, unknown>): Record<st
 
 function listToolAnalysisReportsFromDisk(
   baseDir: string,
-  limit: number
+  limit: number | undefined
 ): Array<Record<string, unknown>> {
   if (!existsSync(baseDir)) return [];
   const ids = readdirSync(baseDir)
@@ -2451,10 +3173,10 @@ function listToolAnalysisReportsFromDisk(
       }
     })
     .sort()
-    .reverse()
-    .slice(0, limit);
+    .reverse();
+  const cappedIds = typeof limit === 'number' ? ids.slice(0, limit) : ids;
   const out: Array<Record<string, unknown>> = [];
-  for (const reportId of ids) {
+  for (const reportId of cappedIds) {
     try {
       const filePath = toolAnalysisReportFilePath(baseDir, reportId);
       if (!existsSync(filePath)) continue;
@@ -2478,7 +3200,7 @@ function listToolAnalysisReportsFromDisk(
 
 function listToolAnalysisReportsFromDiskWithFallback(
   baseDir: string,
-  limit: number
+  limit: number | undefined
 ): Array<Record<string, unknown>> {
   const merged = new Map<string, Record<string, unknown>>();
   for (const dir of toolAnalysisReadDirs(baseDir)) {
@@ -2490,7 +3212,7 @@ function listToolAnalysisReportsFromDiskWithFallback(
   }
   return Array.from(merged.values())
     .sort((a, b) => String(b.report_id ?? '').localeCompare(String(a.report_id ?? '')))
-    .slice(0, limit);
+    .slice(0, typeof limit === 'number' ? limit : Number.MAX_SAFE_INTEGER);
 }
 
 function toolAnalysisReportDirPathWithFallback(baseDir: string, reportId: string): string {

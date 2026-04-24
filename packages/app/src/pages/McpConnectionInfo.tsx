@@ -3,8 +3,8 @@ import { Copy, RefreshCw, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
-import { workspaceApiClient } from "@/lib/data-sources/workspace-api-client";
 import type { WorkspaceHealthResponse } from "@/lib/data-sources/types";
 
 const DEFAULT_MCP_HOST = "127.0.0.1";
@@ -104,13 +104,14 @@ function SnippetCard({
 }
 
 const McpConnectionInfoPage = () => {
+  const { source } = useDataSource();
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<WorkspaceHealthResponse | null>(null);
 
   const loadHealth = useCallback(async () => {
     setLoading(true);
     try {
-      const nextHealth = await workspaceApiClient.health();
+      const nextHealth = await source.health();
       setHealth(nextHealth);
     } catch (error: unknown) {
       setHealth(null);
@@ -122,7 +123,7 @@ const McpConnectionInfoPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [source]);
 
   useEffect(() => {
     void loadHealth();

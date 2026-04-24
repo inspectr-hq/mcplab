@@ -691,6 +691,7 @@ export interface OAuthEnsureServerStatus {
 }
 
 export interface EvalDataSource {
+  health: () => Promise<WorkspaceHealthResponse>;
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
   updateConfig: (config: EvalConfig) => Promise<EvalConfig>;
