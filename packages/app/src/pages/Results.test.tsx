@@ -61,7 +61,7 @@ describe("Results", () => {
     sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200)]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -77,7 +77,7 @@ describe("Results", () => {
     sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200)]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -95,7 +95,7 @@ describe("Results", () => {
     sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200), makeRun("run-b", null)]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -116,7 +116,7 @@ describe("Results", () => {
     ]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>

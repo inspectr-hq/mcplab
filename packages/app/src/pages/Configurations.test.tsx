@@ -78,7 +78,7 @@ describe("Configurations suites", () => {
 
   it("renders grouped suite headers including root bucket", async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]}>
+      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -93,7 +93,7 @@ describe("Configurations suites", () => {
 
   it("filters configs by suite selection", async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]}>
+      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -115,7 +115,7 @@ describe("Configurations suites", () => {
 
   it("queues all configs in a suite when Run Suite is clicked", async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]}>
+      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>

@@ -6,7 +6,7 @@ import {
   classifyCompareRow,
   computeMetricSummary,
   type LoadedRunResult
-} from '../../mcp-server/src/mcp-run-calculations.js';
+} from '@inspectr/mcplab-mcp-server/mcp-run-calculations';
 
 function makeRunResult(
   index: number,

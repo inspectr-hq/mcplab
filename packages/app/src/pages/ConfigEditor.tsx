@@ -613,23 +613,27 @@ const ConfigEditor = () => {
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const inlineAgentEntries = agentEntries
     .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline");
-  const agentViewRows = agentEntries.flatMap((entry) => {
-    if (entry.kind === "referenced") {
-      const agent = findLibraryAgentByRef(entry.ref);
-      return agent ? [{ agent, origin: "referenced" as const, ref: entry.ref }] : [];
+  const agentViewRows = agentEntries.flatMap(
+    (entry): { agent: AgentConfig; origin: "inline" | "referenced"; ref: string | undefined }[] => {
+      if (entry.kind === "referenced") {
+        const agent = findLibraryAgentByRef(entry.ref);
+        return agent ? [{ agent, origin: "referenced", ref: entry.ref }] : [];
+      }
+      return [{ agent: entry.agent, origin: "inline", ref: undefined }];
     }
-    return [{ agent: entry.agent, origin: "inline" as const, ref: undefined }];
-  });
+  );
   const referencedScenarioIds = scenarioEntries
     .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
     .map((entry) => entry.ref);
-  const scenarioViewRows = scenarioEntries.flatMap((entry) => {
-    if (entry.kind === "referenced") {
-      const scenario = findLibraryScenarioByRef(entry.ref);
-      return scenario ? [{ scenario, origin: "referenced" as const }] : [];
+  const scenarioViewRows = scenarioEntries.flatMap(
+    (entry): { scenario: Scenario; origin: "inline" | "referenced" }[] => {
+      if (entry.kind === "referenced") {
+        const scenario = findLibraryScenarioByRef(entry.ref);
+        return scenario ? [{ scenario, origin: "referenced" }] : [];
+      }
+      return [{ scenario: entry.scenario, origin: "inline" }];
     }
-    return [{ scenario: entry.scenario, origin: "inline" as const }];
-  });
+  );
   const scenarioViewAgents = Array.from(
     new Map(
       [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.id, agent] as const)
@@ -1072,6 +1076,7 @@ const ConfigEditor = () => {
                                 onClick={() =>
                                   setExpandedInlineAgentIds((prev) => ({
                                     ...prev,
+                                    // eslint-disable-next-line no-extra-boolean-cast
                                     [entry.agent.id]: !Boolean(prev[entry.agent.id])
                                   }))
                                 }
@@ -1268,6 +1273,7 @@ const ConfigEditor = () => {
                               onClick={() =>
                                 setExpandedViewAgentIds((prev) => ({
                                   ...prev,
+                                  // eslint-disable-next-line no-extra-boolean-cast
                                   [viewAgentKey]: !Boolean(prev[viewAgentKey])
                                 }))
                               }
@@ -1390,6 +1396,7 @@ const ConfigEditor = () => {
                                 onClick={() =>
                                   setExpandedInlineScenarioIds((prev) => ({
                                     ...prev,
+                                    // eslint-disable-next-line no-extra-boolean-cast
                                     [entry.scenario.id]: !Boolean(prev[entry.scenario.id])
                                   }))
                                 }

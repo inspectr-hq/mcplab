@@ -104,7 +104,7 @@ const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.
   ?.version as string;
 const mcpServerPkgVersion = (() => {
   try {
-    // Resolve via module system — works in monorepo and in published npm layout alike
+    // Resolve the package entry (e.g. .../dist/index.js), then step up one level to reach package.json
     const entryUrl = import.meta.resolve('@inspectr/mcplab-mcp-server');
     return JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string ?? '1.0.0';
   } catch {

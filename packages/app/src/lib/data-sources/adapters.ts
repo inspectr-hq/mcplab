@@ -32,7 +32,7 @@ function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
 }
 
-function toUiEvalRule(assertion: any): EvalRule {
+function toUiEvalRule(assertion: { type: string; pattern?: string; value?: string; path?: string; equals?: string }): EvalRule {
   switch (assertion.type) {
     case 'regex':
       return { type: 'response_regex', value: assertion.pattern };
