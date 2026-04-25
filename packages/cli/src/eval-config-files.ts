@@ -37,7 +37,11 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
         const targetStat = statSync(absPath, { throwIfNoEntry: false });
         if (!targetStat) continue;
         if (targetStat.isDirectory()) {
-          walk(absPath);
+          // Guard against symlinks that point outside the intended root
+          const targetRealPath = realpathSync(absPath);
+          if (targetRealPath.startsWith(resolvedRoot + sep)) {
+            walk(absPath);
+          }
         } else if (targetStat.isFile() && isYamlFile(entry.name)) {
           files.push(absPath);
         }

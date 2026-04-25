@@ -102,9 +102,15 @@ import {
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   ?.version as string;
-const mcpServerPkgVersion = JSON.parse(
-  readFileSync(new URL('../../../mcp-server/package.json', import.meta.url), 'utf8')
-)?.version as string;
+const mcpServerPkgVersion = (() => {
+  try {
+    // Resolve via module system — works in monorepo and in published npm layout alike
+    const entryUrl = import.meta.resolve('@inspectr/mcplab-mcp-server');
+    return JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string ?? '1.0.0';
+  } catch {
+    return '1.0.0';
+  }
+})();
 
 interface JobEvent {
   type: 'queued' | 'started' | 'log' | 'completed' | 'error';
