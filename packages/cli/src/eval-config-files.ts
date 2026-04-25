@@ -33,6 +33,14 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
       }
       if (entry.isFile() && isYamlFile(entry.name)) {
         files.push(absPath);
+      } else if (entry.isSymbolicLink()) {
+        const targetStat = statSync(absPath, { throwIfNoEntry: false });
+        if (!targetStat) continue;
+        if (targetStat.isDirectory()) {
+          walk(absPath);
+        } else if (targetStat.isFile() && isYamlFile(entry.name)) {
+          files.push(absPath);
+        }
       }
     }
   };

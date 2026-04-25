@@ -104,7 +104,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -123,7 +123,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -150,7 +150,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -171,7 +171,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -188,7 +188,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -210,7 +210,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']}>
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>

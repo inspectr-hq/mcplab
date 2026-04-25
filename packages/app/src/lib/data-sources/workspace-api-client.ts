@@ -41,6 +41,13 @@ function getBaseUrl(): string {
 
 const BASE = getBaseUrl();
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     ...init,
@@ -51,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Request failed (${response.status}): ${body}`);
+    throw new ApiError(response.status, `Request failed (${response.status}): ${body}`);
   }
   return (await response.json()) as T;
 }
@@ -66,7 +73,7 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Request failed (${response.status}): ${body}`);
+    throw new ApiError(response.status, `Request failed (${response.status}): ${body}`);
   }
   return response.text();
 }

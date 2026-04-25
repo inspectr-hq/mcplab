@@ -163,7 +163,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare"]}>
+      <MemoryRouter initialEntries={["/compare"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -186,7 +186,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare?mode=within-run&runId=run-2&agents=agent-b,agent-a"]}>
+      <MemoryRouter initialEntries={["/compare?mode=within-run&runId=run-2&agents=agent-b,agent-a"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -203,7 +203,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare?mode=within-run&runId=missing&agents=unknown"]}>
+      <MemoryRouter initialEntries={["/compare?mode=within-run&runId=missing&agents=unknown"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -218,7 +218,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(mixedAgentCountResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare"]}>
+      <MemoryRouter initialEntries={["/compare"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -233,7 +233,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare"]}>
+      <MemoryRouter initialEntries={["/compare"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -255,7 +255,7 @@ describe("Compare", () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter initialEntries={["/compare"]}>
+      <MemoryRouter initialEntries={["/compare"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
+import { ApiError } from '@/lib/data-sources/workspace-api-client';
 import type {
   EvalDataSource,
   ResultAssistantPendingToolCall,
@@ -13,8 +14,7 @@ type ResultAssistantTurnPayload = {
 };
 
 function isSessionNotFoundError(error: unknown): boolean {
-  const text = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return text.includes('404') && text.includes('session not found');
+  return error instanceof ApiError && error.status === 404;
 }
 
 export function useResultAssistant(params: {
@@ -238,10 +238,11 @@ export function useResultAssistant(params: {
 
   useEffect(() => {
     return () => {
-      if (!assistantSessionId) return;
-      void sourceRef.current.closeResultAssistantSession(assistantSessionId).catch(() => undefined);
+      const sessionId = assistantSessionIdRef.current;
+      if (!sessionId) return;
+      void sourceRef.current.closeResultAssistantSession(sessionId).catch(() => undefined);
     };
-  }, [assistantSessionId]);
+  }, []);
 
   return {
     assistantSessionId,

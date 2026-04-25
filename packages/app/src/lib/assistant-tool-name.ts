@@ -1,3 +1,4 @@
+// Keep in sync with packages/core/src/assistant-tools.ts formatAssistantToolName
 export function formatAssistantToolName(name: string | null | undefined): string {
   const raw = String(name ?? '').trim();
   if (!raw) return 'unknown_tool';

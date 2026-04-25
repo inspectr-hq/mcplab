@@ -26,12 +26,8 @@ const suiteKeyForConfig = (cfg: { suitePath?: string }): SuiteKey =>
 const suiteLabelForKey = (suiteKey: SuiteKey): string => suiteKey ?? ROOT_SUITE_LABEL;
 const suiteTokenForKey = (suiteKey: SuiteKey): string =>
   suiteKey === null ? ROOT_SUITE_SELECT_VALUE : `suite:${suiteKey}`;
-const suiteKeyFromToken = (token: string): SuiteKey => {
-  if (token === ROOT_SUITE_SELECT_VALUE) return null;
-  if (token.startsWith("suite:")) return token.slice(6);
-  console.warn(`suiteKeyFromToken: unrecognised token "${token}" — may be stale or migrated localStorage`);
-  return null;
-};
+const suiteKeyFromToken = (token: string): SuiteKey =>
+  token === ROOT_SUITE_SELECT_VALUE ? null : token.startsWith("suite:") ? token.slice(6) : null;
 
 const SUITE_ACCENT_CLASSES = [
   "bg-red-400",

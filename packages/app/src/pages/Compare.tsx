@@ -449,11 +449,20 @@ const Compare = () => {
         </div>
         <div className="flex items-center gap-2">
           {mode === "within-run" && (
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/compare">
-                <ArrowLeftRight className="mr-1.5 h-4 w-4" />
-                Back to Compare
-              </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("mode");
+                next.delete("runId");
+                next.delete("agents");
+                next.delete("scenario");
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              <ArrowLeftRight className="mr-1.5 h-4 w-4" />
+              Back to Compare
             </Button>
           )}
           {mode === "runs" && (

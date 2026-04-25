@@ -272,7 +272,11 @@ export function buildAggregateRows(
     }
     for (const scenario of selected) {
       const key = groupBy === 'scenario' ? scenario.scenario_id : scenario.agent;
-      const existing = grouped.get(key) ?? { scenarios: [], run_ids: new Set<string>(), timestamps: [] };
+      const existing = grouped.get(key) ?? {
+        scenarios: [],
+        run_ids: new Set<string>(),
+        timestamps: []
+      };
       existing.scenarios.push({ ...scenario, runs: [...scenario.runs] });
       existing.run_ids.add(run.run_id);
       existing.timestamps.push(run.results.metadata.timestamp);
