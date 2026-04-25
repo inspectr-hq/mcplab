@@ -702,7 +702,9 @@ describe('config adapters round-trip', () => {
     });
 
     // Scenario-owned inline server preserves oauth_client_credentials in mcp_servers
-    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find((s) => s['id'] === 'scn-cc');
+    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (s) => s['id'] === 'scn-cc'
+    );
     const writtenScopedApi = writtenScenario?.mcp_servers?.find((s) => s['id'] === 'scoped-api');
     expect(writtenScopedApi?.auth).toEqual({
       type: 'oauth_client_credentials',
@@ -955,7 +957,9 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthTokenEndpoint).toBe('https://auth.example.com/token');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'my-oauth-server');
+    const written = (roundTripped.servers as AnyRecord[]).find(
+      (s) => s['id'] === 'my-oauth-server'
+    );
     // mode: 'pre_registered' is the default and intentionally omitted on serialization
     expect(written?.auth).toEqual({
       type: 'oauth_authorization_code',
@@ -1060,7 +1064,9 @@ describe('config adapters round-trip', () => {
     const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
       (s) => s['id'] === 'scn-oauth'
     );
-    const writtenServer = (writtenScenario?.['mcp_servers'] as AnyRecord[] | undefined)?.find((s) => s['id'] === 'inline-oauth');
+    const writtenServer = (writtenScenario?.['mcp_servers'] as AnyRecord[] | undefined)?.find(
+      (s) => s['id'] === 'inline-oauth'
+    );
     expect(writtenServer?.auth).toEqual({
       type: 'oauth_authorization_code',
       client_id: 'inline-client',
@@ -1211,7 +1217,9 @@ describe('config adapters round-trip', () => {
             servers: [],
             prompt: 'test',
             eval: {
-              response_assertions: [{ type: 'future_type', value: 'x' } as unknown as { type: string }]
+              response_assertions: [
+                { type: 'future_type', value: 'x' } as unknown as { type: string }
+              ]
             }
           }
         ]

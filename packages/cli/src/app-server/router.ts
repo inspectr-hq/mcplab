@@ -106,7 +106,10 @@ const mcpServerPkgVersion = (() => {
   try {
     // Resolve the package entry (e.g. .../dist/index.js), then step up one level to reach package.json
     const entryUrl = import.meta.resolve('@inspectr/mcplab-mcp-server');
-    return JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string ?? '1.0.0';
+    return (
+      (JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string) ??
+      '1.0.0'
+    );
   } catch {
     return '1.0.0';
   }
