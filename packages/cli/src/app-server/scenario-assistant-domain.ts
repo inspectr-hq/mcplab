@@ -154,7 +154,7 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
     toolsLoaded: session.tools.length,
     toolServers: Array.from(new Set(session.tools.map((tool) => tool.name.split('__')[0]))),
     messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls.filter((call) => call.status === 'pending')
+    pendingToolCalls: session.pendingToolCalls
   };
 }
 

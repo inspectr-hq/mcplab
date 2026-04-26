@@ -66,6 +66,46 @@ export async function handleScenarioAssistantRoutes(params: {
   type SessionPendingCall = ScenarioAssistantSession['pendingToolCalls'][number];
   type SessionContext = ScenarioAssistantSession['context'];
 
+  const continueWithAutoApprovedReads = async (session: ScenarioAssistantSession) => {
+    let output = await continueAssistantTurn(session);
+    for (let i = 0; i < 25; i++) {
+      const pendingCalls = output.response?.pendingToolCalls;
+      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
+      const allReadOnly = pendingCalls.every(
+        (p) => session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
+      );
+      if (!allReadOnly) break;
+      let hadError = false;
+      for (const pending of pendingCalls) {
+        pending.status = 'approved';
+        try {
+          const toolResult = await executeAssistantToolCall(session, pending);
+          pending.resultPreview = summarizeToolResultForAssistant(toolResult);
+          session.llmMessages.push({
+            role: 'tool',
+            content: pending.resultPreview,
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+        } catch (error: unknown) {
+          pending.status = 'error';
+          pending.error = error instanceof Error ? error.message : String(error);
+          session.llmMessages.push({
+            role: 'tool',
+            content: JSON.stringify({ error: pending.error }),
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+          hadError = true;
+        }
+      }
+      touchAssistantSession(session);
+      if (hadError) break;
+      output = await continueAssistantTurn(session);
+    }
+    return output;
+  };
+
   if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
     cleanupAssistantSessions(assistantSessions);
     const body = (await parseBody(req)) as {
@@ -238,44 +278,7 @@ export async function handleScenarioAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
-    let output = await continueAssistantTurn(session);
-    // Auto-approve read-only tool calls (tools advertising readOnlyHint: true via MCP annotations).
-    // All calls in a parallel batch must be read-only for the batch to be auto-approved.
-    for (let i = 0; i < 25; i++) {
-      const pendingCalls = output.response?.pendingToolCalls;
-      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
-      const allReadOnly = pendingCalls.every(
-        (p) => session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
-      );
-      if (!allReadOnly) break;
-      let hadError = false;
-      for (const pending of pendingCalls) {
-        pending.status = 'approved';
-        try {
-          const toolResult = await executeAssistantToolCall(session, pending);
-          pending.resultPreview = summarizeToolResultForAssistant(toolResult);
-          session.llmMessages.push({
-            role: 'tool',
-            content: pending.resultPreview,
-            tool_call_id: pending.id,
-            name: pending.publicToolName
-          });
-        } catch (error: unknown) {
-          pending.status = 'error';
-          pending.error = error instanceof Error ? error.message : String(error);
-          session.llmMessages.push({
-            role: 'tool',
-            content: JSON.stringify({ error: pending.error }),
-            tool_call_id: pending.id,
-            name: pending.publicToolName
-          });
-          hadError = true;
-        }
-      }
-      touchAssistantSession(session);
-      if (hadError) break;
-      output = await continueAssistantTurn(session);
-    }
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }

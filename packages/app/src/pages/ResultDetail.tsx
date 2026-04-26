@@ -524,7 +524,9 @@ const ResultDetail = () => {
   };
 
   const unmatchedPendingToolCalls = assistantPendingToolCalls.filter(
-    (call) => !assistantMessages.some((message) => message.pendingToolCallId === call.id)
+    (call) =>
+      call.status === "pending" &&
+      !assistantMessages.some((message) => message.pendingToolCallId === call.id)
   );
 
   const openReportsPanel = (relativePath?: string) => {
@@ -1469,6 +1471,7 @@ const ResultDetail = () => {
                   isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
 
                 if (isAssistantToolRequest) {
+                  const isPendingApproval = linkedPendingToolCall?.status === "pending";
                   const displayToolName = formatAssistantToolName(
                     toolStepName ?? toolStepPublicName ?? "unknown_tool"
                   );
@@ -1491,12 +1494,12 @@ const ResultDetail = () => {
                               <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
                               <span
                                 className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                  linkedPendingToolCall
+                                  isPendingApproval
                                     ? "bg-amber-100 text-amber-900"
                                     : "bg-muted text-muted-foreground"
                                 }`}
                               >
-                                {linkedPendingToolCall ? "Needs approval" : "Completed"}
+                                {isPendingApproval ? "Needs approval" : "Completed"}
                               </span>
                             </div>
                           </div>
@@ -1504,7 +1507,7 @@ const ResultDetail = () => {
                         </summary>
                         <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
                           <MarkdownContent text={message.text} className="text-sm" />
-                          {linkedPendingToolCall && (
+                          {isPendingApproval && linkedPendingToolCall && (
                             <>
                               <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
                                 <code className="break-words">{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>

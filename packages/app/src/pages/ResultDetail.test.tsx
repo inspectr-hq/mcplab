@@ -1,20 +1,44 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultDetail from './ResultDetail';
 import type { EvalResult } from '@/types/eval';
+import type {
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionView
+} from '@/lib/data-sources/types';
 
-const { getResultMock, sourceMock } = vi.hoisted(() => {
+const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() => {
   const getResult = vi.fn();
   const listSnapshots = vi.fn().mockResolvedValue([]);
   const compareSnapshot = vi.fn();
   const listMarkdownReports = vi.fn().mockResolvedValue([]);
   const updateRunNote = vi.fn().mockResolvedValue(undefined);
+  const assistantState = {
+    assistantMessages: [] as ResultAssistantSessionView['messages'],
+    assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
+    assistantInput: '',
+    assistantLoading: false,
+    assistantChatEndRef: { current: null as HTMLDivElement | null },
+    assistantInputRef: { current: null as HTMLTextAreaElement | null },
+    setAssistantInput: vi.fn(),
+    askResultAssistant: vi.fn(),
+    approveResultAssistantToolCall: vi.fn(),
+    denyResultAssistantToolCall: vi.fn(),
+    applyResultAssistantSnippet: vi.fn(),
+    ensureIntroMessage: vi.fn(),
+    resetAssistantSession: vi.fn()
+  };
   return {
     getResultMock: getResult,
-    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports, updateRunNote }
+    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports, updateRunNote },
+    mockResultAssistantState: assistantState
   };
 });
+
+vi.mock('@/hooks/use-result-assistant', () => ({
+  useResultAssistant: () => mockResultAssistantState
+}));
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
@@ -100,6 +124,20 @@ function makeResult(): EvalResult {
 }
 
 describe('ResultDetail conversation toggle', () => {
+  beforeEach(() => {
+    mockResultAssistantState.assistantMessages = [];
+    mockResultAssistantState.assistantPendingToolCalls = [];
+    mockResultAssistantState.assistantInput = '';
+    mockResultAssistantState.assistantLoading = false;
+    mockResultAssistantState.setAssistantInput.mockClear();
+    mockResultAssistantState.askResultAssistant.mockClear();
+    mockResultAssistantState.approveResultAssistantToolCall.mockClear();
+    mockResultAssistantState.denyResultAssistantToolCall.mockClear();
+    mockResultAssistantState.applyResultAssistantSnippet.mockClear();
+    mockResultAssistantState.ensureIntroMessage.mockClear();
+    mockResultAssistantState.resetAssistantSession.mockClear();
+  });
+
   it('shows run note placeholder for historical runs without note', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
@@ -275,5 +313,49 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getAllByText(/100%/).length).toBeGreaterThan(0);
     expect(screen.queryByText('Agent 2')).not.toBeInTheDocument();
     expect(screen.queryByText('Scenario 2')).not.toBeInTheDocument();
+  });
+
+  it('shows resolved assistant tool calls as completed without approval actions', async () => {
+    const result = makeResult();
+    getResultMock.mockResolvedValue(result);
+    mockResultAssistantState.assistantMessages = [
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        text: 'I need to inspect the tags.',
+        createdAt: '2026-02-08T10:00:00.000Z',
+        pendingToolCallId: 'call-1',
+        toolRequestName: 'search_tags',
+        toolRequestPublicName: 'mcplab__search_tags'
+      }
+    ];
+    mockResultAssistantState.assistantPendingToolCalls = [
+      {
+        id: 'call-1',
+        server: 'mcplab',
+        tool: 'search_tags',
+        publicToolName: 'mcplab__search_tags',
+        arguments: { q: 'TM5-BP2' },
+        status: 'approved',
+        createdAt: '2026-02-08T10:00:01.000Z',
+        resultPreview: 'Approved'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByRole('button', { name: 'MCP Lab Assistant' }));
+
+    expect(await screen.findByText('Tool call search tags')).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
   });
 });

@@ -96,7 +96,7 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
     model: session.agentConfig.model,
     provider: session.agentConfig.provider,
     messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls.filter((call) => call.status === 'pending')
+    pendingToolCalls: session.pendingToolCalls
   };
 }
 

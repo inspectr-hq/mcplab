@@ -570,16 +570,17 @@ export function registerTools(server: McpServer): void {
     'mcplab_write_markdown_report',
     {
       description:
-        'Write a Markdown report file to disk (for example under mcplab/reports/) and return the resolved path. Paths must stay inside the current workspace.',
+        'Write a Markdown (.md or .markdown) file to a path within the current workspace. Returns structured output with ok:true and the resolved path on success. On failure, returns ok:false with an error_code from: PATH_ESCAPE (path traversal attempt), FILE_EXISTS (file already exists and overwrite is false), PERMISSION_DENIED, PARENT_DIR_MISSING (create_dirs is false and parent does not exist), INVALID_EXTENSION (not .md or .markdown), IO_ERROR.',
       outputSchema: z.union([WriteMarkdownReportSuccessSchema, WriteMarkdownReportErrorSchema]),
       inputSchema: {
         output_path: z
           .string()
           .describe(
-            'Target .md/.markdown path, relative to the current workspace or absolute within it.'
+            'Target .md/.markdown path. Use a relative path (e.g. mcplab/reports/my-report.md) — relative paths are always safe and resolve against the server\'s working directory (process.cwd()). Absolute paths are accepted only if they stay inside that directory; any path that escapes it is rejected with error_code PATH_ESCAPE.'
           ),
         markdown: z
           .string()
+          .min(1, 'Markdown content must not be empty.')
           .max(10485760, 'Markdown must not exceed 10 MiB')
           .describe('Markdown content to write. Maximum 10 MiB.'),
         overwrite: z
