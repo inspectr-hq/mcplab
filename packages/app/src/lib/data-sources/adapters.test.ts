@@ -3,6 +3,10 @@ import { fromCoreConfigYaml, fromCoreResultsJson, toCoreConfigYaml } from './ada
 import type { CoreResultsJson, ScenarioRunTraceRecord, WorkspaceConfigRecord } from './types';
 import type { EvalConfig } from '@/types/eval';
 
+// Local helper for asserting on raw YAML serialization output whose union types
+// (ServerListEntry, ScenarioListEntry) would require verbose type guards in tests.
+type AnyRecord = Record<string, unknown>;
+
 function baseResults(): CoreResultsJson {
   return {
     metadata: {
@@ -687,7 +691,7 @@ describe('config adapters round-trip', () => {
     const roundTripped = toCoreConfigYaml(uiConfig);
 
     // Top-level server preserves oauth_client_credentials
-    const writtenTopLevel = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-api');
+    const writtenTopLevel = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'my-api');
     expect(writtenTopLevel?.auth).toEqual({
       type: 'oauth_client_credentials',
       token_url: 'https://auth.example.com/token',
@@ -698,8 +702,10 @@ describe('config adapters round-trip', () => {
     });
 
     // Scenario-owned inline server preserves oauth_client_credentials in mcp_servers
-    const writtenScenario = (roundTripped.scenarios as any[]).find((s: any) => s.id === 'scn-cc');
-    const writtenScopedApi = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'scoped-api');
+    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (s) => s['id'] === 'scn-cc'
+    );
+    const writtenScopedApi = writtenScenario?.mcp_servers?.find((s) => s['id'] === 'scoped-api');
     expect(writtenScopedApi?.auth).toEqual({
       type: 'oauth_client_credentials',
       token_url: 'https://auth2.example.com/token',
@@ -735,7 +741,7 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('my-secret-token-123');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-server');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'my-server');
     expect(written?.auth).toEqual({ type: 'bearer', token: 'my-secret-token-123' });
   });
 
@@ -766,7 +772,7 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('${MY_TOKEN}');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'env-server');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'env-server');
     expect(written?.auth).toEqual({ type: 'bearer', token: '${MY_TOKEN}' });
   });
 
@@ -797,7 +803,7 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('${LEGACY_TOKEN}');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'legacy-server');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'legacy-server');
     expect(written?.auth).toEqual({ type: 'bearer', token: '${LEGACY_TOKEN}' });
   });
 
@@ -829,7 +835,7 @@ describe('config adapters round-trip', () => {
     expect(srv?.apiKeyHeaderName).toBe('X-Custom-Key');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'apikey-server');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'apikey-server');
     expect(written?.auth).toEqual({
       type: 'api_key',
       header_name: 'X-Custom-Key',
@@ -868,8 +874,8 @@ describe('config adapters round-trip', () => {
     };
 
     const roundTripped = toCoreConfigYaml(config);
-    const bearer = (roundTripped.servers as any[]).find((s: any) => s.id === 'bearer-server');
-    const api = (roundTripped.servers as any[]).find((s: any) => s.id === 'api-server');
+    const bearer = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'bearer-server');
+    const api = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'api-server');
 
     expect(bearer?.auth).toEqual({ type: 'bearer', token: '${TOKEN}' });
     expect(api?.auth).toEqual({ type: 'api_key', header_name: 'X-Api-Key', value: 'key-value' });
@@ -951,7 +957,9 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthTokenEndpoint).toBe('https://auth.example.com/token');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'my-oauth-server');
+    const written = (roundTripped.servers as AnyRecord[]).find(
+      (s) => s['id'] === 'my-oauth-server'
+    );
     // mode: 'pre_registered' is the default and intentionally omitted on serialization
     expect(written?.auth).toEqual({
       type: 'oauth_authorization_code',
@@ -998,7 +1006,7 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('read');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'dcr-server');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'dcr-server');
     expect(written?.auth).toEqual({
       type: 'oauth_authorization_code',
       mode: 'dcr',
@@ -1053,10 +1061,12 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('email');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const writtenScenario = (roundTripped.scenarios as any[]).find(
-      (s: any) => s.id === 'scn-oauth'
+    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (s) => s['id'] === 'scn-oauth'
     );
-    const writtenServer = writtenScenario?.mcp_servers?.find((s: any) => s.id === 'inline-oauth');
+    const writtenServer = (writtenScenario?.['mcp_servers'] as AnyRecord[] | undefined)?.find(
+      (s) => s['id'] === 'inline-oauth'
+    );
     expect(writtenServer?.auth).toEqual({
       type: 'oauth_authorization_code',
       client_id: 'inline-client',
@@ -1091,7 +1101,7 @@ describe('config adapters round-trip', () => {
 
     const uiConfig = fromCoreConfigYaml(sourceRecord);
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as any[]).find((s: any) => s.id === 'minimal-oauth');
+    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'minimal-oauth');
     expect(written?.auth?.client_id).toBe('only-client-id');
     expect(written?.auth?.client_secret).toBeUndefined();
     expect(written?.auth?.scope).toBeUndefined();
@@ -1148,7 +1158,9 @@ describe('config adapters round-trip', () => {
     ]);
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-assertions');
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-assertions'
+    );
     expect(scenario?.eval?.response_assertions).toEqual(
       sourceRecord.config.scenarios[0] &&
         !('ref' in sourceRecord.config.scenarios[0]) &&
@@ -1179,7 +1191,9 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as any[]).find((item: any) => item.id === 'scn-legacy');
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-legacy'
+    );
     expect(scenario?.eval?.response_assertions).toEqual([
       { type: 'contains', value: 'must-have' },
       { type: 'not_contains', value: 'must-not-have' }
@@ -1203,7 +1217,9 @@ describe('config adapters round-trip', () => {
             servers: [],
             prompt: 'test',
             eval: {
-              response_assertions: [{ type: 'future_type', value: 'x' } as any]
+              response_assertions: [
+                { type: 'future_type', value: 'x' } as unknown as { type: string }
+              ]
             }
           }
         ]

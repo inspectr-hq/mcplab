@@ -1,6 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, MoreHorizontal, Eye, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, BarChart3 } from "lucide-react";
+import {
+  Clock,
+  MoreHorizontal,
+  Eye,
+  Download,
+  Bot,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  RectangleEllipsis,
+  User,
+  Wrench,
+  BarChart3,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,11 +37,15 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { PassRateBadge } from "@/components/PassRateBadge";
+import { MarkdownContent } from "@/components/MarkdownContent";
+import { ResultAssistantPanel } from "@/components/results/ResultAssistantPanel";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
+import { formatAssistantToolName } from "@/lib/assistant-tool-name";
 import type { EvalResult } from "@/types/eval";
 
 type RunScopeSummary = {
@@ -58,6 +77,33 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
   };
 }
 
+const RESULT_ASSISTANT_SNIPPETS = [
+  {
+    label: "Summarize Run Trends",
+    description: "Highlight the main changes across the selected runs.",
+    prompt:
+      "Summarize the main trends across these runs. Call out pass-rate changes, latency, and tool usage shifts."
+  },
+  {
+    label: "Explain Failures",
+    description: "Identify the most important failures and likely root causes.",
+    prompt:
+      "Identify the most important failures across these runs and explain likely root causes from the traces."
+  },
+  {
+    label: "Compare Agents",
+    description: "Compare agent behavior, tool use, and answer quality across runs.",
+    prompt:
+      "Compare agent behavior across these runs. Highlight differences in tool use, answer quality, and consistency."
+  },
+  {
+    label: "Spot Anomalies",
+    description: "Find outliers in latency, tool calls, or pass rate.",
+    prompt:
+      "Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out."
+  }
+] as const;
+
 const Results = () => {
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
@@ -68,7 +114,8 @@ const Results = () => {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [scenarioFilter, setScenarioFilter] = useState("all");
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
-
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -116,6 +163,25 @@ const Results = () => {
       active = false;
     };
   }, [source]);
+
+  const {
+    assistantMessages,
+    assistantPendingToolCalls,
+    assistantInput,
+    assistantLoading,
+    assistantChatEndRef,
+    assistantInputRef,
+    setAssistantInput,
+    askAssistant,
+    approveResultAssistantToolCall,
+    denyResultAssistantToolCall,
+    applyResultAssistantSnippet,
+    ensureIntroMessage
+  } = useResultAssistant({
+    source,
+    open: assistantOpen,
+    scope: "all_runs"
+  });
 
   const scenarioFilterOptions = useMemo(() => {
     const labels = new Set<string>();
@@ -182,6 +248,13 @@ const Results = () => {
     return map;
   }, [sorted]);
 
+  const openGlobalAssistant = () => {
+    setAssistantOpen(true);
+    ensureIntroMessage(
+      "Ask me to compare runs, explain regressions over time, or summarize historical drift patterns."
+    );
+  };
+
   const handleDeleteRun = async (runId: string) => {
     setDeletingRun(true);
     try {
@@ -202,9 +275,12 @@ const Results = () => {
 
   return (
     <div className="space-y-6">
-      <AlertDialog open={pendingDeleteRunId !== null} onOpenChange={(open) => {
-        if (!open && !deletingRun) setPendingDeleteRunId(null);
-      }}>
+      <AlertDialog
+        open={pendingDeleteRunId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingRun) setPendingDeleteRunId(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete run?</AlertDialogTitle>
@@ -248,7 +324,9 @@ const Results = () => {
                 aria-expanded={openScenarioFilterPicker}
                 className="w-[260px] justify-between font-normal"
               >
-                <span className="truncate text-left">{scenarioFilter === "all" ? "All scenarios" : scenarioFilter}</span>
+                <span className="truncate text-left">
+                  {scenarioFilter === "all" ? "All scenarios" : scenarioFilter}
+                </span>
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
@@ -287,112 +365,282 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? "Refreshing..." : "Refresh"}
           </Button>
+          <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            MCP Lab Assistant
+          </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("id")}>
-                    Run ID
-                    {sortIcon("id")}
-                  </button>
-                </TableHead>
-                <TableHead>Evaluated</TableHead>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
-                    Timestamp
-                    {sortIcon("timestamp")}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
-                    Pass Rate
-                    {sortIcon("passRate")}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
-                    Scenarios
-                    {sortIcon("scenarios")}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("avgToolCalls")}>
-                    Avg Tool Calls
-                    {sortIcon("avgToolCalls")}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("toolTokens")}>
-                    Tool Tokens
-                    {sortIcon("toolTokens")}
-                  </button>
-                </TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">{r.id}</Link>
-                      {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
-                      {r.runNote ? <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-[11px] text-muted-foreground">
-                    {(() => {
-                      const scope = runScopesById.get(r.id)!;
-                      return (
-                        <div className="space-y-0.5">
-                          <div>
-                            Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+      <div
+        className={`grid gap-6 ${
+          assistantOpen
+            ? assistantExpanded
+              ? "xl:grid-cols-[minmax(0,1fr)_52rem]"
+              : "xl:grid-cols-[minmax(0,1fr)_30rem]"
+            : "grid-cols-1"
+        }`}
+      >
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("id")}
+                    >
+                      Run ID
+                      {sortIcon("id")}
+                    </button>
+                  </TableHead>
+                  <TableHead>Evaluated</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("timestamp")}
+                    >
+                      Timestamp
+                      {sortIcon("timestamp")}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("passRate")}
+                    >
+                      Pass Rate
+                      {sortIcon("passRate")}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("scenarios")}
+                    >
+                      Scenarios
+                      {sortIcon("scenarios")}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("avgToolCalls")}
+                    >
+                      Avg Tool Calls
+                      {sortIcon("avgToolCalls")}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort("toolTokens")}
+                    >
+                      Tool Tokens
+                      {sortIcon("toolTokens")}
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">
+                          {r.id}
+                        </Link>
+                        {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
+                        {r.runNote ? (
+                          <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-[11px] text-muted-foreground">
+                      {(() => {
+                        const scope = runScopesById.get(r.id) ?? {
+                          scenarioCount: 0,
+                          agentCount: 0,
+                          scenarioPreview: "n/a"
+                        };
+                        return (
+                          <div className="space-y-0.5">
+                            <div>
+                              Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} ·{" "}
+                              {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                            </div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
                           </div>
-                          <div className="font-mono text-xs text-foreground/80">
-                            {scope.scenarioPreview}
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(r.timestamp).toLocaleString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <PassRateBadge rate={r.overallPassRate} />
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
+                    <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
+                    <TableCell className="font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link to={`/results/${r.id}`}>
+                              <Eye className="mr-2 h-3.5 w-3.5" />
+                              View
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Download className="mr-2 h-3.5 w-3.5" />
+                            Export JSON
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              const active = document.activeElement;
+                              if (active instanceof HTMLElement) active.blur();
+                              setPendingDeleteRunId(r.id);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {assistantOpen && (
+          <ResultAssistantPanel
+            title="MCP Lab Assistant"
+            description="Analyze historical differences and trends across all result runs."
+            expanded={assistantExpanded}
+            onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
+            onHide={() => setAssistantOpen(false)}
+            messages={assistantMessages}
+            pendingToolCalls={assistantPendingToolCalls}
+            loading={assistantLoading}
+            input={assistantInput}
+            onInputChange={setAssistantInput}
+            onSend={() => void askAssistant()}
+            inputPlaceholder="Ask about historical run differences..."
+            snippets={RESULT_ASSISTANT_SNIPPETS}
+            onSnippetSelect={(prompt) => {
+              setAssistantOpen(true);
+              applyResultAssistantSnippet(prompt);
+            }}
+            onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
+            onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
+            chatEndRef={assistantChatEndRef}
+            inputRef={assistantInputRef}
+            className="min-w-0 overflow-hidden xl:flex xl:h-[calc(100vh-14rem)] xl:min-h-0 xl:flex-col"
+            renderMessage={({ message, index, linkedPendingToolCall, isUser, isAssistant, isSystem, isTool }) => {
+              const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
+              if (isTool && /^(Approved|Denied) tool call\b/i.test(String(message.text ?? "").trim())) {
+                return null;
+              }
+
+              if (isAssistantToolRequest) {
+                const displayToolName = formatAssistantToolName(
+                  linkedPendingToolCall?.tool ??
+                    message.toolRequestName ??
+                    linkedPendingToolCall?.publicToolName ??
+                    message.toolRequestPublicName ??
+                    "unknown_tool"
+                );
+                return (
+                  <div key={`${message.id ?? `${message.role}-${index}`}:tool`} className="flex items-start gap-2">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                      <Bot className="h-3 w-3" />
+                    </div>
+                    <details
+                      open={Boolean(linkedPendingToolCall)}
+                      className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
+                            <span
+                              className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                linkedPendingToolCall
+                                  ? "bg-amber-100 text-amber-900"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {linkedPendingToolCall ? "Needs approval" : "Completed"}
+                            </span>
                           </div>
                         </div>
-                      );
-                    })()}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(r.timestamp).toLocaleString()}</div>
-                  </TableCell>
-                  <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
-                  <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
-                  <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
-                  <TableCell className="font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild><Link to={`/results/${r.id}`}><Eye className="mr-2 h-3.5 w-3.5" />View</Link></DropdownMenuItem>
-                        <DropdownMenuItem><Download className="mr-2 h-3.5 w-3.5" />Export JSON</DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onSelect={(e) => {
-                            e.preventDefault();
-                            setPendingDeleteRunId(r.id);
-                          }}
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                      </summary>
+                      <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
+                        <MarkdownContent text={message.text} className="text-sm" />
+                      </div>
+                    </details>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={message.id ?? `${message.role}-${index}`}
+                  className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}
+                >
+                  {!isUser && (
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                      {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                    </div>
+                  )}
+                  <div
+                    className={`min-w-0 max-w-[92%] break-words rounded-md border p-3 text-sm ${
+                      isUser
+                        ? "border-primary/20 bg-primary/10"
+                        : isSystem
+                          ? "border-amber-400/30 bg-amber-50/70"
+                          : isTool
+                            ? "border-blue-300/30 bg-blue-50/50"
+                            : "border-border/80 bg-background shadow-sm"
+                    }`}
+                  >
+                    <MarkdownContent text={message.text} className="text-sm" />
+                  </div>
+                  {isUser && (
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+                      <User className="h-3 w-3" />
+                    </div>
+                  )}
+                </div>
+              );
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 };

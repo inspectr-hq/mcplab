@@ -37,6 +37,10 @@
     "./runtime": {
       "types": "./dist/runtime.d.ts",
       "default": "./dist/runtime.js"
+    },
+    "./mcp-run-calculations": {
+      "types": "./dist/mcp-run-calculations.d.ts",
+      "default": "./dist/mcp-run-calculations.js"
     }
   },
   "bin": {
@@ -48,7 +52,7 @@
   "dependencies": {
     "@inspectr/mcplab-core": "1.6.0",
     "@inspectr/mcplab-reporting": "1.1.5",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "yaml": "^2.5.1",
     "zod": "^3.25.0"
   }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,11 @@ type RunScopeSummary = {
   scenarioPreview: string;
 };
 
+function isSameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
 function runScopeSummary(run: EvalResult): RunScopeSummary {
   const scenarioIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.scenarioId).filter(Boolean)));
   const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
@@ -62,6 +67,7 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
 const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
+  const mode: CompareMode = searchParams.get("mode") === "within-run" ? "within-run" : "runs";
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -70,8 +76,6 @@ const Compare = () => {
   const [scenarioFilter, setScenarioFilter] = useState("all");
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
 
-  const initialModeParam = searchParams.get("mode");
-  const initialMode: CompareMode = initialModeParam === "within-run" ? "within-run" : "runs";
   const initialWithinRunId = searchParams.get("runId") ?? "";
   const initialWithinRunAgents = (searchParams.get("agents") ?? "")
     .split(",")
@@ -79,7 +83,6 @@ const Compare = () => {
     .filter(Boolean);
   const initialWithinRunScenario = searchParams.get("scenario") ?? "all";
 
-  const [mode, setMode] = useState<CompareMode>(initialMode);
   const [withinRunId, setWithinRunId] = useState(initialWithinRunId);
   const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
   const [withinRunScenarioFilter, setWithinRunScenarioFilter] = useState(initialWithinRunScenario);
@@ -202,10 +205,17 @@ const Compare = () => {
   };
 
   const startWithinRunFromRun = (run: EvalResult) => {
-    setMode("within-run");
+    const nextAgents = defaultAgentsForRun(run);
     setWithinRunId(run.id);
-    setWithinRunAgentIds(defaultAgentsForRun(run));
+    setWithinRunAgentIds(nextAgents);
     setWithinRunScenarioFilter("all");
+    const next = new URLSearchParams(searchParams);
+    next.set("mode", "within-run");
+    next.set("runId", run.id);
+    if (nextAgents.length > 0) next.set("agents", nextAgents.join(","));
+    else next.delete("agents");
+    next.delete("scenario");
+    setSearchParams(next, { replace: true });
   };
 
   const allScenarioIds = useMemo(
@@ -245,6 +255,20 @@ const Compare = () => {
     () => withinRunAgentIds.join(","),
     [withinRunAgentIds]
   );
+
+  useEffect(() => {
+    if (mode === "within-run") {
+      const nextRunId = searchParams.get("runId") ?? "";
+      const nextAgents = (searchParams.get("agents") ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const nextScenario = searchParams.get("scenario") ?? "all";
+      setWithinRunId((prev) => (prev === nextRunId ? prev : nextRunId));
+      setWithinRunAgentIds((prev) => (isSameStringArray(prev, nextAgents) ? prev : nextAgents));
+      setWithinRunScenarioFilter((prev) => (prev === nextScenario ? prev : nextScenario));
+    }
+  }, [mode, searchParams]);
 
   useEffect(() => {
     if (mode !== "within-run") return;
@@ -314,7 +338,7 @@ const Compare = () => {
     if (currentString !== nextString) {
       setSearchParams(next, { replace: true });
     }
-  }, [mode, withinRunId, withinRunAgentIds, withinRunScenarioFilter, setSearchParams]);
+  }, [mode, withinRunId, withinRunAgentIds, withinRunScenarioFilter, searchParams, setSearchParams]);
 
   const withinRunScenarioRows = useMemo<WithinRunScenarioRow[]>(() => {
     if (!withinRun) return [];
@@ -395,7 +419,7 @@ const Compare = () => {
   };
 
   const renderRunDetail = (run: ScenarioRun) => (
-    <div key={run.runIndex} className="rounded border bg-muted/20 px-2 py-1.5">
+    <div key={run.runIndex} className="min-w-0 rounded border bg-muted/20 px-2 py-1.5">
       <div className="text-xs">
         <span className="font-mono">#{run.runIndex + 1}</span>{" "}
         <span className={run.passed ? "text-emerald-700" : "text-destructive"}>
@@ -404,7 +428,7 @@ const Compare = () => {
         · tools: {run.toolCalls.length} · {run.duration}ms
       </div>
       {!run.passed && run.failureReasons.length > 0 && (
-        <div className="mt-1 text-[11px] text-muted-foreground">
+        <div className="mt-1 max-h-16 overflow-y-auto whitespace-pre-wrap break-all pr-1 text-[11px] text-muted-foreground">
           {run.failureReasons.join("; ")}
         </div>
       )}
@@ -424,6 +448,23 @@ const Compare = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {mode === "within-run" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("mode");
+                next.delete("runId");
+                next.delete("agents");
+                next.delete("scenario");
+                setSearchParams(next, { replace: true });
+              }}
+            >
+              <ArrowLeftRight className="mr-1.5 h-4 w-4" />
+              Back to Compare
+            </Button>
+          )}
           {mode === "runs" && (
             <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
               <PopoverTrigger asChild>
@@ -477,30 +518,10 @@ const Compare = () => {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={mode === "runs" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("runs")}
-            >
-              Run vs Run
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {mode === "within-run" && (
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base">Within One Run Controls</CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={() => setMode("runs")}>
-                Back to run list
-              </Button>
-            </div>
+            <CardTitle className="text-base">Within One Run Controls</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -595,8 +616,8 @@ const Compare = () => {
       {mode === "runs" && (
         <Card>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
+            <Table containerClassName="max-h-[36rem] overflow-auto">
+              <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
               <TableRow>
                 <TableHead className="w-10" />
                 <TableHead>
@@ -641,7 +662,11 @@ const Compare = () => {
                     <TableCell className="font-mono text-xs">{r.id}</TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
                       {(() => {
-                        const scope = runScopesById.get(r.id)!;
+                        const scope = runScopesById.get(r.id) ?? {
+                          scenarioCount: 0,
+                          agentCount: 0,
+                          scenarioPreview: "n/a"
+                        };
                         return (
                           <div className="space-y-0.5">
                             <div>
@@ -680,6 +705,17 @@ const Compare = () => {
         </Card>
       )}
 
+      {mode === "runs" && selectedRuns.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-sm font-medium">No runs selected</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Select 2–5 runs from the table above to start a comparison.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {mode === "runs" && selectedRuns.length >= 2 && (
         <>
           {selectedRuns.length === 2 && (
@@ -706,11 +742,11 @@ const Compare = () => {
 
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Summary Comparison</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
+            <CardContent className="max-h-[24rem] overflow-auto p-0">
+              <Table className="table-fixed">
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
-                    <TableHead>Metric</TableHead>
+                    <TableHead className="w-[220px]">Metric</TableHead>
                     {selectedRuns.map((r, i) => (
                       <TableHead key={r.id} style={{ color: colors[i] }} className="font-mono text-xs">{r.id}</TableHead>
                     ))}
@@ -740,11 +776,11 @@ const Compare = () => {
 
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Scenario Breakdown</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
+            <CardContent className="max-h-[26rem] overflow-auto p-0">
+              <Table className="table-fixed">
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
-                    <TableHead>Scenario</TableHead>
+                    <TableHead className="w-[220px]">Scenario</TableHead>
                     {selectedRuns.map((r, i) => (
                       <TableHead key={r.id} style={{ color: colors[i] }} className="font-mono text-xs">{r.id}</TableHead>
                     ))}
@@ -824,9 +860,9 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Agent Summary</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="max-h-[24rem] overflow-auto p-0">
               <Table>
-                <TableHeader>
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead>Metric</TableHead>
                     {withinRunAgentSummary.map((summary) => (
@@ -878,9 +914,9 @@ const Compare = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Scenario × Agent Matrix</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
+            <CardContent className="max-h-[34rem] overflow-auto p-0">
+              <Table className="table-fixed">
+                <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead className="w-[260px]">Scenario</TableHead>
                     {selectedWithinRunAgentOptions.map((agent) => (
@@ -904,7 +940,7 @@ const Compare = () => {
                           );
                         }
                         return (
-                          <TableCell key={agent.id} className="align-top">
+                          <TableCell key={agent.id} className="min-w-0 align-top">
                             <div className="space-y-2">
                               <div className="text-xs text-muted-foreground">
                                 <PassRateBadge rate={scenario.passRate} />{" "}

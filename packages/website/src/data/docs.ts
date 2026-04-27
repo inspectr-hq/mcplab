@@ -444,6 +444,21 @@ const librariesAndRefs: DocPage = {
       ]
     },
     {
+      id: 'suite-labels',
+      title: 'Suite Labels from Folder Paths',
+      paragraphs: [
+        'Eval configs placed in subfolders automatically derive a suite label from their folder path. The App groups and displays configs by suite in the Configurations page, making it easy to run or browse related configs together.',
+        'The suite label is the relative folder path from the evals root. A file at `evals/search/basic.yaml` gets the suite label "search".'
+      ],
+      codeBlocks: [
+        {
+          title: 'folder structure → suite labels',
+          language: 'text',
+          code: `evals/\n├── search/\n│   ├── basic.yaml       → suite: "search"\n│   └── advanced.yaml    → suite: "search"\n└── auth/\n    └── login.yaml       → suite: "auth"`
+        }
+      ]
+    },
+    {
       id: 'use-refs',
       title: 'Reference Library Items in eval.yaml',
       paragraphs: ['Use `ref` entries to pull shared items into an eval config by id.'],
@@ -589,6 +604,26 @@ const cliRunning: DocPage = {
           title: 'custom output dir',
           language: 'bash',
           code: 'npx @inspectr/mcplab run -c eval.yaml --runs-dir ./my-runs'
+        }
+      ]
+    },
+    {
+      id: 'batch-runs',
+      title: 'Batch Runs — Directory Mode',
+      paragraphs: [
+        'Pass a directory path to -c/--config and MCPLab will discover and run all .yaml and .yml files in that directory recursively. This is useful for running an entire suite of eval configs in one command.',
+        'Use --bail to stop the batch after the first config that has any failing scenario (fail-fast mode). Without --bail, all configs run regardless of individual failures.'
+      ],
+      codeBlocks: [
+        {
+          title: 'run all configs in a directory',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c ./evals/'
+        },
+        {
+          title: 'stop on first failure',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c ./evals/ --bail'
         }
       ]
     },
@@ -995,13 +1030,21 @@ const appGettingStarted: DocPage = {
       paragraphs: ['The sidebar gives you access to all App features.'],
       bullets: [
         'Dashboard — recent runs and pass rate trends at a glance.',
+        'Configurations — browse all eval configs grouped by suite, filter, and run per suite.',
         'Run Evaluation — select a config and launch an eval.',
         'Results — browse completed runs and drill into detail.',
         'MCP Tool Analysis — review MCP tool definitions for quality.',
         'Library — manage reusable agents and servers.',
-        'Settings — configure API keys and preferences.'
+        'Settings — configure API keys, preferences, and view MCP Connection Info.'
       ],
       screenshot: '/screenshots/dashboard.png'
+    },
+    {
+      id: 'connection-info',
+      title: 'MCP Connection Info',
+      paragraphs: [
+        'The Settings page includes a Connection Info section that shows the MCP server endpoint URL for your running MCPLab instance. It also provides ready-to-paste configuration snippets for connecting external agents — including Claude, OpenAI-compatible clients, and other MCP-aware tools — to the MCPLab MCP server.'
+      ]
     }
   ]
 };
@@ -1044,6 +1087,38 @@ const appRunning: DocPage = {
         'Hit Run to start the evaluation. The page shows live progress as scenarios complete. When all scenarios finish, the results are saved and you can navigate to the Result Detail.'
       ],
       screenshot: '/screenshots/run-evaluation-progress.png'
+    }
+  ]
+};
+
+const appConfigurations: DocPage = {
+  slug: 'app-configurations',
+  label: 'Configurations',
+  href: '/docs/app/configurations/',
+  description: 'Browse, filter, and run eval configs from the Configurations page.',
+  keywords: ['configurations', 'suite', 'folder', 'filter', 'run suite', 'configs'],
+  seoTitle: 'App — Configurations',
+  track: 'app',
+  sections: [
+    {
+      id: 'configurations-overview',
+      title: 'The Configurations Page',
+      paragraphs: [
+        'The Configurations page lists all eval config files found in the evals directory. Configs are grouped by suite — the folder they live in — so related configs stay together.',
+        'Each suite section is collapsible. Use the filter bar to search by config name or suite label.'
+      ],
+      bullets: [
+        'Configs in subfolders are grouped under a suite label derived from their folder path.',
+        'Each suite section can be collapsed or expanded independently.',
+        'The filter bar narrows the list by name or suite in real time.'
+      ]
+    },
+    {
+      id: 'run-suite',
+      title: 'Running a Suite',
+      paragraphs: [
+        'Each suite header includes a Run Suite button that launches all configs in that suite at once. Individual configs can also be run directly from the list.'
+      ]
     }
   ]
 };
@@ -1120,13 +1195,16 @@ const appAssistants: DocPage = {
       id: 'result-assistant',
       title: 'Result Assistant',
       paragraphs: [
-        'The Result Assistant is an AI chat scoped to a specific completed run. Ask it questions about the results and it answers based on the run data.',
-        'Use it to understand failures quickly without manually reading through trace files.'
+        'The Result Assistant is an AI chat that answers questions based on run data. It is available in two scopes.',
+        'From a specific run (scope: run), it is scoped to that run\'s results, tool traces, and assertions. Use it to understand failures quickly without manually reading through trace files.',
+        'From the Results overview (scope: all_runs), it has access to data across all runs and can answer questions about trends, regressions, and cross-run comparisons.'
       ],
       bullets: [
         'Ask: "Which scenarios failed and why?"',
         'Ask: "Did the agent call the correct tools in the right order?"',
-        'Ask: "Suggest improvements to make the failing scenarios pass."'
+        'Ask: "Suggest improvements to make the failing scenarios pass."',
+        'Ask (all_runs scope): "Which scenarios have been consistently failing across recent runs?"',
+        'Ask (all_runs scope): "How has the pass rate changed over the last five runs?"'
       ],
       screenshot: '/screenshots/evaluation-results-assistance.png'
     }
@@ -1788,6 +1866,7 @@ const pageIndex: DocPage[] = [
   cliReports,
   cliCicd,
   appGettingStarted,
+  appConfigurations,
   appRunning,
   appResults,
   appAssistants,
@@ -1823,6 +1902,7 @@ export const docsNavSections = [
     title: 'App',
     items: [
       appGettingStarted,
+      appConfigurations,
       appRunning,
       appResults,
       appAssistants,

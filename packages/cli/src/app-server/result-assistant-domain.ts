@@ -3,10 +3,12 @@ import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
+  formatAssistantToolName,
   newAssistantEntityId,
   touchSession,
   truncateJson
 } from './assistant-common.js';
+import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
 
 interface ParsedAssistantToolCall {
   name: string;
@@ -44,12 +46,13 @@ interface ResultAssistantChatMessage {
 
 export interface ResultAssistantSession {
   id: string;
-  runId: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
   createdAt: number;
   lastTouchedAt: number;
   selectedAssistantAgentName: string;
   agentConfig: AgentConfig;
-  resultSummary: ResultsJson;
+  resultSummary: ResultsJson | null;
   referenceReportsForRun: Array<{
     path: string;
     relativePath: string;
@@ -70,23 +73,6 @@ const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
 const RESULT_ASSISTANT_TOOL_RESULT_PREVIEW_CHARS = 4000;
 const RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS = 3;
 const RESULT_ASSISTANT_MCP_SERVER_NAME = 'mcplab';
-const RESULT_ASSISTANT_ALLOWED_TOOLS = new Set([
-  'mcplab_write_markdown_report',
-  'mcplab_list_markdown_reports',
-  'mcplab_read_markdown_report',
-  'mcplab_list_runs',
-  'mcplab_read_run_artifact',
-  'mcplab_grep_run_artifact',
-  'mcplab_trace_stats',
-  'mcplab_trace_get_final_answers',
-  'mcplab_trace_get_conversation',
-  'mcplab_trace_list_events',
-  'mcplab_trace_search',
-  'mcplab_list_tool_analysis_results',
-  'mcplab_read_tool_analysis_result',
-  'mcplab_list_library',
-  'mcplab_get_library_item'
-]);
 
 export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
@@ -102,6 +88,7 @@ export function touchResultAssistantSession(session: ResultAssistantSession): vo
 export function resultAssistantSessionView(session: ResultAssistantSession) {
   return {
     id: session.id,
+    scope: session.scope,
     runId: session.runId,
     createdAt: new Date(session.createdAt).toISOString(),
     updatedAt: new Date(session.lastTouchedAt).toISOString(),
@@ -109,7 +96,7 @@ export function resultAssistantSessionView(session: ResultAssistantSession) {
     model: session.agentConfig.model,
     provider: session.agentConfig.provider,
     messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls.filter((call) => call.status === 'pending')
+    pendingToolCalls: session.pendingToolCalls
   };
 }
 
@@ -126,7 +113,7 @@ export async function preloadResultAssistantTools(
   const discovered = await session.mcp.listTools(RESULT_ASSISTANT_MCP_SERVER_NAME);
   const usedNames = new Set<string>();
   for (const tool of discovered) {
-    if (!RESULT_ASSISTANT_ALLOWED_TOOLS.has(tool.name)) continue;
+    if (!isResultAssistantAllowedTool(tool.name)) continue;
     const publicName = makeAssistantToolPublicName(
       RESULT_ASSISTANT_MCP_SERVER_NAME,
       tool.name,
@@ -178,11 +165,14 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
       status: 'pending',
       createdAt: new Date().toISOString()
     };
+    const toolRequestText = `I need to call '${formatAssistantToolName(
+      pending.publicToolName
+    )}' to help with this request.`;
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
       role: 'assistant',
-      text: modelOutput.text,
+      text: toolRequestText,
       createdAt: new Date().toISOString(),
       pendingToolCallId: pending.id,
       toolRequestServer: pending.server,
@@ -191,13 +181,13 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     });
     session.llmMessages.push({
       role: 'assistant',
-      content: modelOutput.text,
+      content: toolRequestText,
       tool_calls: [{ id: pending.id, name: pending.publicToolName, arguments: pending.arguments }]
     });
     touchResultAssistantSession(session);
     return {
       session: resultAssistantSessionView(session),
-      response: { type: 'tool_call_request', text: modelOutput.text, pendingToolCall: pending }
+      response: { type: 'tool_call_request', text: toolRequestText, pendingToolCall: pending }
     };
   }
 
@@ -245,16 +235,17 @@ export function summarizeToolResultForResultAssistant(result: unknown): string {
 
 function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
-  const totalScenarioCount = session.resultSummary.scenarios.length;
   const scenarioLimit = 30;
+  const totalScenarioCount = session.resultSummary?.scenarios.length ?? 0;
   const omittedScenarioCount = Math.max(0, totalScenarioCount - scenarioLimit);
-  const scenarioSummaries = session.resultSummary.scenarios.slice(0, scenarioLimit).map((sc) => ({
-    scenario_id: sc.scenario_id,
-    agent: sc.agent,
-    pass_rate: sc.pass_rate,
-    run_count: sc.runs.length,
-    sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
-  }));
+  const scenarioSummaries =
+    session.resultSummary?.scenarios.slice(0, scenarioLimit).map((sc) => ({
+      scenario_id: sc.scenario_id,
+      agent: sc.agent,
+      pass_rate: sc.pass_rate,
+      run_count: sc.runs.length,
+      sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
+    })) ?? [];
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
@@ -267,25 +258,32 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
     'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
+    'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'If you need a tool, request exactly one tool call and wait for approval.',
     'Respond in plain text. If you need to call a tool, use the available tools directly.',
-    omittedScenarioCount > 0
+    session.scope === 'all_runs'
+      ? 'Scope: all historical runs. Use mcplab_search_runs to list or filter runs (no query needed for full listing). Then inspect specific runs via mcplab_read_run_artifact / trace tools.'
+      : omittedScenarioCount > 0
       ? `Important: Only the first ${scenarioLimit} of ${totalScenarioCount} scenarios are included in the prompt context. If the user asks about coverage/completeness, mention that ${omittedScenarioCount} scenario(s) are omitted and suggest using tools to inspect full results.`
       : 'All scenarios are included in the prompt context.',
-    `Run result context: ${JSON.stringify({
-      run_id: session.resultSummary.metadata.run_id,
-      timestamp: session.resultSummary.metadata.timestamp,
-      run_note: session.resultSummary.metadata.run_note ?? null,
-      config_hash: session.resultSummary.metadata.config_hash,
-      summary: session.resultSummary.summary,
-      snapshot_eval: session.resultSummary.metadata.snapshot_eval ?? null,
-      scenario_count_total: totalScenarioCount,
-      scenario_count_included: scenarioSummaries.length,
-      scenario_count_omitted: omittedScenarioCount,
-      scenarios: scenarioSummaries,
-      linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
-    })}`,
-    'For custom markdown reports linked to this run, prefer mcplab_list_markdown_reports with run_id set to the current run id, then mcplab_read_markdown_report for selected files.',
+    session.scope === 'all_runs'
+      ? 'Run result context: none preloaded. You can inspect any run from history using available tools.'
+      : `Run result context: ${JSON.stringify({
+          run_id: session.resultSummary?.metadata.run_id,
+          timestamp: session.resultSummary?.metadata.timestamp,
+          run_note: session.resultSummary?.metadata.run_note ?? null,
+          config_hash: session.resultSummary?.metadata.config_hash,
+          summary: session.resultSummary?.summary,
+          snapshot_eval: session.resultSummary?.metadata.snapshot_eval ?? null,
+          scenario_count_total: totalScenarioCount,
+          scenario_count_included: scenarioSummaries.length,
+          scenario_count_omitted: omittedScenarioCount,
+          scenarios: scenarioSummaries,
+          linked_custom_reports: session.referenceReportsForRun.slice(0, 20)
+        })}`,
+    session.scope === 'all_runs'
+      ? 'For custom markdown reports across runs, use mcplab_search_markdown_reports (no query needed for full listing, or filter by run_id/name). Then read selected files with mcplab_read_markdown_report.'
+      : 'For custom markdown reports linked to this run, use mcplab_search_markdown_reports with run_id set to the current run id. Then read selected files with mcplab_read_markdown_report.',
     toolLines.length > 0
       ? `Available MCPLab MCP tools:\n${toolLines.join('\n')}`
       : 'No MCPLab MCP tools available.'
@@ -306,7 +304,8 @@ async function resultAssistantChatModel(
   if (response.tool_calls && response.tool_calls.length > 0) {
     const [first] = response.tool_calls;
     const baseText =
-      response.content?.trim() || `I need to call '${first.name}' to help with this request.`;
+      response.content?.trim() ||
+      `I need to call '${formatAssistantToolName(first.name)}' to help with this request.`;
     return {
       type: 'tool_call_request',
       text: baseText,

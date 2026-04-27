@@ -102,6 +102,18 @@ import {
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   ?.version as string;
+const mcpServerPkgVersion = (() => {
+  try {
+    // Resolve the package entry (e.g. .../dist/index.js), then step up one level to reach package.json
+    const entryUrl = import.meta.resolve('@inspectr/mcplab-mcp-server');
+    return (
+      (JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string) ??
+      '1.0.0'
+    );
+  } catch {
+    return '1.0.0';
+  }
+})();
 
 interface JobEvent {
   type: 'queued' | 'started' | 'log' | 'completed' | 'error';
@@ -279,8 +291,17 @@ export async function startAppServer(options: AppServerOptions) {
             ? {
                 enabled: true,
                 transport: 'streamable-http',
-                endpoint: `http://${options.host}:${options.port}${devMcp.path}`,
-                upstream: `${devMcp.targetBaseUrl}${devMcp.path}`
+                host: devMcp.host,
+                port: devMcp.port,
+                path: devMcp.path,
+                proxyUrl: `http://${options.host}:${options.port}${devMcp.path}`,
+                directUrl: `${devMcp.targetBaseUrl}${devMcp.path}`,
+                serverPackageVersion: mcpServerPkgVersion,
+                environment: {
+                  MCP_HOST: devMcp.host,
+                  MCP_PORT: String(devMcp.port),
+                  MCP_PATH: devMcp.path
+                }
               }
             : { enabled: false }
         });
@@ -516,12 +537,13 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   const url = `http://${options.host}:${options.port}`;
+  const logPrefix = '[mcplab-app]';
   const logPath = (label: string, value: string) => {
     // Keep startup paths visually aligned in terminal output.
-    console.log(`  ${label.padEnd(8)}\t${value}`);
+    console.log(`${logPrefix}  ${label.padEnd(8)}\t${value}`);
   };
   // eslint-disable-next-line no-console
-  console.log(`mcplab app running at ${url}`);
+  console.log(`${logPrefix} App running at ${url}`);
   logPath('evals:', settings.evalsDir);
   logPath('runs:', settings.runsDir);
   logPath('analysis:', settings.toolAnalysisResultsDir);

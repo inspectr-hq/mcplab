@@ -263,6 +263,7 @@ export function classifyToolSafety(
 } {
   const hasDestructiveHint = annotations?.destructiveHint === true;
   const hasReadOnlyHint = annotations?.readOnlyHint === true;
+  const hasExplicitReadOnlyFalse = annotations?.readOnlyHint === false;
   if (hasDestructiveHint) {
     return {
       safetyClassification: 'unsafe_or_unknown',
@@ -274,6 +275,13 @@ export function classifyToolSafety(
     return {
       safetyClassification: 'read_like',
       classificationReason: "MCP annotations indicate read-only behavior ('readOnlyHint: true')."
+    };
+  }
+  if (hasExplicitReadOnlyFalse) {
+    return {
+      safetyClassification: 'unsafe_or_unknown',
+      classificationReason:
+        "MCP annotations indicate non-read-only behavior ('readOnlyHint: false')."
     };
   }
 

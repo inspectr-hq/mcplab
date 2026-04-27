@@ -4,7 +4,7 @@ dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
   hashConfig,
@@ -24,8 +24,13 @@ import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
-import { resolveRunOptions, runInteractiveSelection } from './run-interactive.js';
+import {
+  resolveRunOptions,
+  runInteractiveSelection,
+  type ResolveRunOptionsResult
+} from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
+import { deriveConfigRelativePath, resolveRunConfigSelection } from './eval-config-files.js';
 import {
   applySnapshotPolicyToRunResult,
   buildSnapshotFromRun,
@@ -45,6 +50,22 @@ program
   .description('Laboratory for testing Model Context Protocol servers')
   .version(pkgVersion);
 
+interface RunCommandOptions {
+  config?: string;
+  scenario?: string;
+  runs: string;
+  agents?: string;
+  agentsAll: boolean;
+  interactive: boolean;
+  snapshotEval: boolean;
+  compareSnapshot?: string;
+  bail: boolean;
+  runNote?: string;
+  runsDir: string;
+  snapshotsDir: string;
+  oauthToken: string[];
+}
+
 program
   .command('run')
   .description('Run evaluation scenarios')
@@ -59,6 +80,7 @@ program
   .option('--interactive', 'Prompt for required inputs')
   .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
   .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
+  .option('--bail', 'Stop after first failed config when --config points to a folder')
   .option('--run-note <text>', 'Optional note attached to the run metadata (max 500 chars)')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
   .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
@@ -68,7 +90,7 @@ program
     (val: string, acc: string[]) => [...acc, val],
     [] as string[]
   )
-  .action(async (options) => {
+  .action(async (options: RunCommandOptions) => {
     try {
       const hasAgentOverride = Boolean(options.agents) || Boolean(options.agentsAll);
       const needsConfigPrompt = Boolean(options.interactive) && !options.config;
@@ -100,142 +122,102 @@ program
         interactiveSelection
       });
 
-      const loaded = loadConfig(resolve(resolvedOptions.config));
-      const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
-      loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
-      loaded.hash = hashConfig(loaded.config);
-      let { config, hash, warnings } = loaded;
-      for (const warning of warnings) {
-        console.log(kleur.yellow(`⚠ ${warning}`));
+      const selection = resolveRunConfigSelection(resolvedOptions.config, process.cwd());
+      const configPaths = selection.configPaths;
+      const requestedPath = selection.requestedPath;
+      const requestedPathIsDirectory = selection.requestedPathIsDirectory;
+      const isBatch = requestedPathIsDirectory;
+
+      if (isBatch && options.compareSnapshot) {
+        throw new Error('--compare-snapshot is not supported when running a config folder');
       }
 
-      const requestedAgentsFromCsv = resolvedOptions.agents
-        ? resolvedOptions.agents
-            .split(',')
-            .map((a: string) => a.trim())
-            .filter(Boolean)
-        : [];
-      const requestedAgents = resolvedOptions.agentsAll
-        ? Object.keys(config.agents)
-        : requestedAgentsFromCsv.length > 0
-        ? requestedAgentsFromCsv
-        : undefined;
-      const beforeExpandCount = config.scenarios.length;
-      const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
-      const expanded = expandConfigForAgents(config, effectiveAgents);
-      if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
-        const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
-        console.log(
-          kleur.cyan(
-            `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${expanded.scenarios.length} total tests`
-          )
-        );
+      if (!isBatch) {
+        const outcome = await executeSingleConfigRun({
+          configPath: configPaths[0]!,
+          options,
+          resolvedOptions
+        });
+        if (outcome.shouldFailOnDrift) {
+          console.error(kleur.red('Snapshot eval drift detected in fail_on_drift mode.'));
+          process.exit(2);
+        }
+        console.log(kleur.gray('Process exiting.'));
+        return;
       }
 
-      const selected = selectScenarios(expanded, options.scenario);
-      const runsPerScenario = Number(options.runs);
-      if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
-        throw new Error('Runs must be a positive number');
-      }
-      const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
-      const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
-      const oauthTokens: Record<string, string> = {};
-      for (const entry of options.oauthToken as string[]) {
-        const eqIdx = entry.indexOf('=');
-        if (eqIdx < 1) {
-          throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);
-        }
-        const serverName = entry.slice(0, eqIdx).trim();
-        const token = entry.slice(eqIdx + 1).trim();
-        if (!serverName) {
-          throw new Error(`Invalid --oauth-token '${entry}': server name cannot be empty`);
-        }
-        if (!token) {
-          throw new Error(`Invalid --oauth-token '${entry}': token value cannot be empty`);
-        }
-        oauthTokens[serverName] = token;
-      }
-      const { runDir, results } = await runAll(selected, {
-        runsPerScenario,
-        scenarioId: options.scenario,
-        runNote,
-        configHash: hash,
-        gitCommit: getGitCommit(),
-        cliVersion: pkgVersion,
-        runsDir: String(options.runsDir),
-        oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
-        onProgress: async (event) => {
-          const line = formatRunProgressEvent(event);
-          if (line) {
-            console.log(`[${formatNowTime()}] ${line}`);
+      const rows: Array<{
+        configPath: string;
+        runId?: string;
+        runDir?: string;
+        success: boolean;
+        error?: string;
+      }> = [];
+      let hadFailures = false;
+      for (let i = 0; i < configPaths.length; i += 1) {
+        const configPath = configPaths[i]!;
+        const displayPath = deriveConfigRelativePath(configPath, requestedPath);
+        console.log(kleur.cyan(`\n▶ Batch config ${i + 1}/${configPaths.length}: ${displayPath}`));
+        try {
+          const outcome = await executeSingleConfigRun({
+            configPath,
+            options,
+            resolvedOptions
+          });
+          const success = outcome.passed && !outcome.shouldFailOnDrift;
+          rows.push({
+            configPath: displayPath,
+            runId: outcome.runId,
+            runDir: outcome.runDir,
+            success
+          });
+          if (!success) {
+            hadFailures = true;
+            if (options.bail) {
+              console.error(kleur.red('Stopping batch due to --bail after failed config.'));
+              break;
+            }
+          }
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          rows.push({
+            configPath: displayPath,
+            success: false,
+            error: message
+          });
+          hadFailures = true;
+          if (options.bail) {
+            console.error(kleur.red('Stopping batch due to --bail after config error.'));
+            break;
           }
         }
-      });
-      let shouldFailOnDrift = false;
-      const useSnapshotEval =
-        Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
+      }
 
-      if (useSnapshotEval) {
-        const policy = config.snapshot_eval;
-        if (!policy?.baseline_snapshot_id) {
+      console.log('');
+      console.log(kleur.cyan('Batch summary:'));
+      for (const row of rows) {
+        if (row.success) {
           console.log(
-            kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.')
+            kleur.green(
+              `  ✓ ${row.configPath} (run=${row.runId ?? '-'}${
+                row.runDir ? `, dir=${relative(process.cwd(), row.runDir)}` : ''
+              })`
+            )
           );
         } else {
-          const snapshot = loadSnapshot(
-            String(policy.baseline_snapshot_id),
-            resolve(options.snapshotsDir)
-          );
-          const comparison = compareRunToSnapshot(results, snapshot);
-          const enabledScenarioIds = new Set(
-            selected.scenarios
-              .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
-              .map((scenario) => scenario.id)
-          );
-          const applied = applySnapshotPolicyToRunResult({
-            results,
-            comparisons: [comparison],
-            policy,
-            enabledScenarioIds
-          });
-          console.log('');
-          console.log(kleur.cyan('📸 Snapshot Eval Policy'));
-          console.log(
-            `${applied.mode} · baseline=${applied.baseline_snapshot_id} · overall=${applied.overall_score} · status=${applied.status}`
-          );
-          if (applied.impacted_scenarios.length > 0) {
-            console.log(
-              kleur.yellow(`Impacted scenarios: ${applied.impacted_scenarios.join(', ')}`)
-            );
-          }
-          console.log(formatSnapshotComparisonTable(comparison));
-          shouldFailOnDrift =
-            policy.mode === 'fail_on_drift' && applied.impacted_scenarios.length > 0;
+          console.log(kleur.red(`  ✗ ${row.configPath}${row.error ? ` (${row.error})` : ''}`));
         }
       }
+      console.log(
+        kleur.cyan(
+          `Batch result: ${rows.filter((row) => row.success).length} succeeded, ${
+            rows.filter((row) => !row.success).length
+          } failed`
+        )
+      );
 
-      const reportPath = join(runDir, 'report.html');
-      const resultsPath = join(runDir, 'results.json');
-      const summaryPath = join(runDir, 'summary.md');
-      writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-      writeFileSync(reportPath, renderReport(results), 'utf8');
-      writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
-      console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
-
-      if (options.compareSnapshot) {
-        const snapshot = loadSnapshot(
-          String(options.compareSnapshot),
-          resolve(options.snapshotsDir)
-        );
-        const comparison = compareRunToSnapshot(results, snapshot);
-        console.log('');
-        console.log(kleur.cyan('📸 Snapshot Comparison'));
-        console.log(formatSnapshotComparisonTable(comparison));
-      }
-
-      if (shouldFailOnDrift) {
-        console.error(kleur.red('Snapshot eval drift detected in fail_on_drift mode.'));
-        process.exit(2);
+      if (hadFailures) {
+        process.exit(1);
       }
       console.log(kleur.gray('Process exiting.'));
     } catch (err: any) {
@@ -732,6 +714,149 @@ program
   });
 
 program.parse();
+
+async function executeSingleConfigRun(params: {
+  configPath: string;
+  options: RunCommandOptions;
+  resolvedOptions: ResolveRunOptionsResult;
+}): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
+  const { configPath, options, resolvedOptions } = params;
+  const loaded = loadConfig(resolve(configPath));
+  const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
+  loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
+  loaded.hash = hashConfig(loaded.config);
+  const { config, hash, warnings } = loaded;
+  for (const warning of warnings) {
+    console.log(kleur.yellow(`⚠ ${warning}`));
+  }
+
+  const requestedAgentsFromCsv = resolvedOptions.agents
+    ? resolvedOptions.agents
+        .split(',')
+        .map((a: string) => a.trim())
+        .filter(Boolean)
+    : [];
+  const requestedAgents = resolvedOptions.agentsAll
+    ? Object.keys(config.agents)
+    : requestedAgentsFromCsv.length > 0
+    ? requestedAgentsFromCsv
+    : undefined;
+  const beforeExpandCount = config.scenarios.length;
+  const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
+  const expanded = expandConfigForAgents(config, effectiveAgents);
+  if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
+    const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
+    console.log(
+      kleur.cyan(
+        `📊 Testing ${beforeExpandCount} scenarios × ${agentCount} selected agents = ${expanded.scenarios.length} total tests`
+      )
+    );
+  }
+
+  const selected = selectScenarios(expanded, options.scenario);
+  const runsPerScenario = Number(options.runs);
+  if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
+    throw new Error('Runs must be a positive number');
+  }
+  const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
+  const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+  const oauthTokens: Record<string, string> = {};
+  for (const entry of options.oauthToken) {
+    const eqIdx = entry.indexOf('=');
+    if (eqIdx < 1) {
+      throw new Error(`Invalid --oauth-token format '${entry}'. Expected: server-name=token`);
+    }
+    const serverName = entry.slice(0, eqIdx).trim();
+    const token = entry.slice(eqIdx + 1).trim();
+    if (!serverName) {
+      throw new Error(`Invalid --oauth-token '${entry}': server name cannot be empty`);
+    }
+    if (!token) {
+      throw new Error(`Invalid --oauth-token '${entry}': token value cannot be empty`);
+    }
+    oauthTokens[serverName] = token;
+  }
+  const { runDir, results } = await runAll(selected, {
+    runsPerScenario,
+    scenarioId: options.scenario,
+    runNote,
+    configHash: hash,
+    gitCommit: getGitCommit(),
+    cliVersion: pkgVersion,
+    runsDir: String(options.runsDir),
+    oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
+    onProgress: async (event) => {
+      const line = formatRunProgressEvent(event);
+      if (line) {
+        console.log(`[${formatNowTime()}] ${line}`);
+      }
+    }
+  });
+  let shouldFailOnDrift = false;
+  const useSnapshotEval = Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
+
+  if (useSnapshotEval) {
+    const policy = config.snapshot_eval;
+    if (!policy?.baseline_snapshot_id) {
+      console.log(kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.'));
+    } else {
+      const snapshot = loadSnapshot(
+        String(policy.baseline_snapshot_id),
+        resolve(options.snapshotsDir)
+      );
+      const comparison = compareRunToSnapshot(results, snapshot);
+      const enabledScenarioIds = new Set(
+        selected.scenarios
+          .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
+          .map((scenario) => scenario.id)
+      );
+      const applied = applySnapshotPolicyToRunResult({
+        results,
+        comparisons: [comparison],
+        policy,
+        enabledScenarioIds
+      });
+      console.log('');
+      console.log(kleur.cyan('📸 Snapshot Eval Policy'));
+      console.log(
+        `${applied.mode} · baseline=${applied.baseline_snapshot_id} · overall=${applied.overall_score} · status=${applied.status}`
+      );
+      if (applied.impacted_scenarios.length > 0) {
+        console.log(kleur.yellow(`Impacted scenarios: ${applied.impacted_scenarios.join(', ')}`));
+      }
+      console.log(formatSnapshotComparisonTable(comparison));
+      shouldFailOnDrift = policy.mode === 'fail_on_drift' && applied.impacted_scenarios.length > 0;
+    }
+  }
+
+  const reportPath = join(runDir, 'report.html');
+  const resultsPath = join(runDir, 'results.json');
+  const summaryPath = join(runDir, 'summary.md');
+  writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+  writeFileSync(reportPath, renderReport(results), 'utf8');
+  writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
+  console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
+
+  if (options.compareSnapshot) {
+    const snapshot = loadSnapshot(String(options.compareSnapshot), resolve(options.snapshotsDir));
+    const comparison = compareRunToSnapshot(results, snapshot);
+    console.log('');
+    console.log(kleur.cyan('📸 Snapshot Comparison'));
+    console.log(formatSnapshotComparisonTable(comparison));
+  }
+
+  const failedRuns = results.scenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
+    0
+  );
+
+  return {
+    runDir,
+    runId: results.metadata.run_id,
+    passed: failedRuns === 0,
+    shouldFailOnDrift
+  };
+}
 
 function getGitCommit(): string | undefined {
   try {

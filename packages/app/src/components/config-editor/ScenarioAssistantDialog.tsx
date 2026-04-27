@@ -1,16 +1,18 @@
 import { Fragment, useEffect, useState, useRef } from "react";
-import { Bot, ChevronDown, CheckCircle2, Copy, Loader2, Minimize2, Plus, RectangleEllipsis, Send, Sparkles, User, Wrench, X } from "lucide-react";
+import { Bot, CheckCircle2, Copy, Loader2, Minimize2, Sparkles, Wrench, X } from "lucide-react";
+import {
+  AssistantComposer,
+  AssistantMessageRow,
+  AssistantToolCallCard,
+  AssistantTypingIndicator
+} from "@/components/assistant/AssistantChat";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
-import { cn } from "@/lib/utils";
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
 import type {
   ScenarioAssistantSessionView,
@@ -22,27 +24,33 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
   {
     label: "Suggest Checks",
     description: "Propose stronger evaluation checks for this scenario.",
-    prompt: "Suggest checks"
+    prompt:
+      "Review the current checks in this scenario and suggest stronger alternatives. For each suggestion, explain what failure mode it catches that the existing checks miss. Prioritize checks that are deterministic, not sensitive to minor phrasing changes, and that would reliably catch regressions."
   },
   {
     label: "Suggest Value Capture Rules",
     description: "Recommend extract/value capture rules for key outputs.",
-    prompt: "Suggest value capture rules"
+    prompt:
+      "Analyze the expected tool calls and outputs in this scenario and suggest value capture rules that extract the most meaningful structured data. For each rule, explain which field to capture, why it matters for evaluation, and what a good vs. bad captured value looks like."
   },
   {
     label: "Improve Prompt Determinism",
     description: "Reduce ambiguity and improve reproducibility.",
-    prompt: "Improve prompt determinism"
+    prompt:
+      "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
   },
-  {
-    label: "Explain Snapshot Drift Risk",
-    description: "Assess likely causes of drift and stabilization options.",
-    prompt: "Explain snapshot drift risk"
-  },
+  // Commented out for now, as the snapshot is still WIP
+  // {
+  //   label: "Explain Snapshot Drift Risk",
+  //   description: "Assess likely causes of drift and stabilization options.",
+  //   prompt:
+  //     "Assess this scenario for snapshot drift risk. Which parts of the expected output are most likely to change as the underlying model or tool evolves? Explain the root cause for each risk and suggest whether to stabilize via tighter prompting, value capture rules, or more flexible checks."
+  // },
   {
     label: "Generate Scenario Draft",
     description: "Create a draft scenario from the current context.",
-    prompt: "Generate scenario draft"
+    prompt:
+      "Based on the current tool configuration and context, generate a complete scenario draft. Include a clear prompt, realistic expected tool calls with arguments, meaningful checks that validate the core behavior, and at least one value capture rule. Explain your choices so I can adjust them."
   }
 ] as const;
 
@@ -391,8 +399,16 @@ export function ScenarioAssistantDialog({
     toast({ title: "Applied suggestion", description: `Updated ${labelByKey[key]}` });
   };
 
+  const blurActiveElement = () => {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+  };
+
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
+      blurActiveElement();
       setPreserveSessionOnClose(false);
       preserveSessionOnCloseRef.current = false;
     }
@@ -400,12 +416,14 @@ export function ScenarioAssistantDialog({
   };
 
   const handleMinimize = () => {
+    blurActiveElement();
     preserveSessionOnCloseRef.current = true;
     setPreserveSessionOnClose(true);
     onOpenChange(false);
   };
 
   const handleDiscardMinimizedSession = () => {
+    blurActiveElement();
     preserveSessionOnCloseRef.current = false;
     setPreserveSessionOnClose(false);
     if (sessionId) closeScenarioAssistantSession(sessionId);
@@ -507,7 +525,7 @@ export function ScenarioAssistantDialog({
                         if (!isAssistantToolRequest) {
                           return (
                             <div className="space-y-2">
-                              <AssistantChatMessageRow message={message} />
+                              <ScenarioAssistantMessageRow message={message} />
                             </div>
                           );
                         }
@@ -519,9 +537,6 @@ export function ScenarioAssistantDialog({
                               <Bot className="h-3 w-3" />
                             </div>
                             <div className="w-full max-w-[92%] space-y-2">
-                              <div className="rounded-md border border-border/60 bg-background px-3 py-2">
-                                <MarkdownContent text={message.text} variant="assistant" />
-                              </div>
                               {allToolCalls.length > 1 && pendingCount > 0 && (
                                 <div className="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-1.5">
                                   <span className="text-xs text-amber-900">
@@ -531,75 +546,23 @@ export function ScenarioAssistantDialog({
                                     type="button"
                                     size="sm"
                                     className="h-7 px-2 text-xs"
-                                    disabled={loading}
+                                    disabled={pendingCount === 0}
                                     onClick={() => void handleApproveAll()}
                                   >
                                     Approve All ({pendingCount})
                                   </Button>
                                 </div>
                               )}
-                              {allToolCalls.map((call) => {
-                                const isPending = call.status === "pending";
-                                const displayToolName = call.tool ?? call.publicToolName ?? "unknown_tool";
-                                return (
-                                  <details
-                                    key={call.id}
-                                    open={isPending}
-                                    className="group overflow-hidden rounded-md border border-border/60 bg-background"
-                                  >
-                                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                          <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                                          <span
-                                            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                              isPending
-                                                ? "bg-amber-100 text-amber-900"
-                                                : call.status === "error"
-                                                  ? "bg-red-100 text-red-900"
-                                                  : call.status === "denied"
-                                                    ? "bg-gray-100 text-gray-700"
-                                                    : "bg-muted text-muted-foreground"
-                                            }`}
-                                          >
-                                            {isPending ? "Needs approval" : call.status === "error" ? "Error" : call.status === "denied" ? "Denied" : "Approved"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                                    </summary>
-                                    <div className="space-y-2 border-t border-border/50 px-3 py-2">
-                                      <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                                        <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-                                      </pre>
-                                      {isPending && (
-                                        <div className="mt-2 flex justify-end gap-2">
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 px-2 text-xs"
-                                            disabled={loading}
-                                            onClick={() => void handleDeny(call.id)}
-                                          >
-                                            Deny
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            className="h-7 px-2 text-xs"
-                                            disabled={loading}
-                                            onClick={() => void handleApprove(call.id)}
-                                          >
-                                            Approve
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </details>
-                                );
-                              })}
+                              {allToolCalls.map((call, idx) => (
+                                <AssistantToolCallCard
+                                  key={call.id}
+                                  call={call}
+                                  loading={loading}
+                                  description={idx === 0 ? message.text : undefined}
+                                  onApprove={(callId) => void handleApprove(callId)}
+                                  onDeny={(callId) => void handleDeny(callId)}
+                                />
+                              ))}
                             </div>
                           </div>
                         );
@@ -672,48 +635,13 @@ export function ScenarioAssistantDialog({
                   {(session?.pendingToolCalls ?? [])
                     .filter((call) => !(session?.messages ?? []).some((m) => m.pendingToolCallId === call.id || m.pendingToolCallIds?.includes(call.id)))
                     .map((call) => (
-                    <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <p className="min-w-0 truncate font-mono text-xs font-semibold">
-                              {call.publicToolName || call.tool}
-                            </p>
-                            <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
-                              Needs approval
-                            </span>
-                          </div>
-                        </div>
-                        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                      </summary>
-                      <div className="border-t px-3 pb-3 pt-2">
-                        <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
-                          <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-                        </pre>
-                        <div className="mt-2 flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-xs"
-                            disabled={loading}
-                            onClick={() => void handleDeny(call.id)}
-                          >
-                            Deny
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            disabled={loading}
-                            onClick={() => void handleApprove(call.id)}
-                          >
-                            Approve
-                          </Button>
-                        </div>
-                      </div>
-                    </details>
+                    <AssistantToolCallCard
+                      key={call.id}
+                      call={call}
+                      loading={loading}
+                      onApprove={(callId) => void handleApprove(callId)}
+                      onDeny={(callId) => void handleDeny(callId)}
+                    />
                   ))}
                   {!session && loading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -721,91 +649,24 @@ export function ScenarioAssistantDialog({
                       Starting assistant session...
                     </div>
                   )}
-                  {session && loading && (
-                    <div className="flex items-start gap-2">
-                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                        <Bot className="h-3 w-3" />
-                      </div>
-                      <div className="inline-flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Thinking...
-                      </div>
-                    </div>
-                  )}
+                  {session && loading && <AssistantTypingIndicator />}
                   <div ref={chatEndRef} />
                 </div>
               </ScrollArea>
 
-              <div className="rounded-xl border bg-background p-2 shadow-sm">
-                <Textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Get assistance with creating or refining this scenario ..."
-                  disabled={!sessionId || loading}
-                  rows={1}
-                  className="min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-1 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendMessage(input);
-                    }
-                  }}
-                />
-                <div className="mt-1 flex items-center justify-between gap-2 px-1 pt-1">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 shrink-0 gap-1 px-1.5 text-[11px] font-normal text-muted-foreground/80 hover:text-muted-foreground"
-                        disabled={!sessionId || loading}
-                      >
-                        <Plus className="h-3 w-3" />
-                        Snippets
-                        <ChevronDown className="h-3 w-3" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-[320px]">
-                      <DropdownMenuLabel>Scenario Assistant Snippets</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {SCENARIO_ASSISTANT_SNIPPETS.map((snippet) => (
-                        <DropdownMenuItem
-                          key={snippet.label}
-                          className="items-start whitespace-normal px-2 py-2"
-                          onSelect={() => applyScenarioSnippet(snippet.prompt)}
-                        >
-                          <div className="space-y-0.5">
-                            <div className="text-xs font-medium leading-tight">{snippet.label}</div>
-                            <div className="text-[11px] leading-snug text-muted-foreground">
-                              {snippet.description}
-                            </div>
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    type="button"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={() => void sendMessage(input)}
-                    disabled={!sessionId || loading || !input.trim()}
-                    aria-label="Send message"
-                    title="Send message"
-                  >
-                    {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        <span className="sr-only">Send</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
+              <AssistantComposer
+                input={input}
+                onInputChange={setInput}
+                onSend={() => void sendMessage(input)}
+                inputPlaceholder="Get assistance with creating or refining this scenario ..."
+                snippets={SCENARIO_ASSISTANT_SNIPPETS}
+                snippetsLabel="Scenario Assistant Snippets"
+                onSnippetSelect={applyScenarioSnippet}
+                loading={loading}
+                disabled={!sessionId}
+                inputRef={inputRef}
+                snippetContentClassName="w-[320px]"
+              />
           </div>
         )}
       </DialogContent>
@@ -848,7 +709,7 @@ function SuggestionCard({
   );
 }
 
-function AssistantChatMessageRow({
+function ScenarioAssistantMessageRow({
   message
 }: {
   message: ScenarioAssistantSessionView["messages"][number];
@@ -866,65 +727,14 @@ function AssistantChatMessageRow({
     }
   };
 
-  const role = message.role;
-  if (role === "tool") {
-    const trimmed = String(message.text ?? "").trim();
-    if (/^(Approved|Denied) tool call\b/i.test(trimmed)) {
-      return null;
-    }
-    return (
-      <div className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm">
-        <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-          <Wrench className="h-3.5 w-3.5" />
-          Tool
-          <span className="font-normal normal-case text-sky-700/80">
-            {new Date(message.createdAt).toLocaleTimeString()}
-          </span>
-        </div>
-        <p className="whitespace-pre-wrap text-sky-900">{message.text}</p>
-      </div>
-    );
-  }
-
-  if (role === "system") {
-    return (
-      <div className="flex items-start gap-2 text-xs">
-        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-          <RectangleEllipsis className="h-3 w-3" />
-        </div>
-        <div className="max-w-[92%] rounded-md border border-amber-400/30 bg-amber-50/70 p-3 text-sm">
-          <MarkdownContent text={message.text} variant="assistant" />
-        </div>
-      </div>
-    );
-  }
-
-  const isUser = role === "user";
-  const Icon = isUser ? User : Bot;
-  const showCopyButton = role === "user" || role === "assistant";
+  const showCopyButton = message.role === "user" || message.role === "assistant";
+  const isUser = message.role === "user";
   return (
-    <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
-      {!isUser && (
-        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-          <Icon className="h-3 w-3" />
-        </div>
-      )}
-      <div className="relative max-w-[92%]">
-        <div
-          className={`max-w-full rounded-md border px-3 py-2 text-sm ${
-            isUser
-              ? "border-primary/20 bg-primary/10"
-              : "border-border/80 bg-background shadow-sm"
-          }`}
-        >
-          {!isUser && <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Assistant</p>}
-          {isUser ? (
-            <p className="whitespace-pre-wrap">{message.text}</p>
-          ) : (
-            <MarkdownContent text={message.text} variant="assistant" />
-          )}
-        </div>
-        {showCopyButton && (
+    <AssistantMessageRow
+      message={message}
+      assistantLabel={message.role === "assistant" ? "Assistant" : undefined}
+      renderActions={
+        showCopyButton ? (
           <Button
             type="button"
             variant="ghost"
@@ -936,262 +746,8 @@ function AssistantChatMessageRow({
           >
             <Copy className="h-3.5 w-3.5" />
           </Button>
-        )}
-      </div>
-      {isUser && (
-        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-          <Icon className="h-3 w-3" />
-        </div>
-      )}
-    </div>
+        ) : undefined
+      }
+    />
   );
-}
-
-function MarkdownContent({
-  text,
-  variant = "assistant"
-}: {
-  text: string;
-  variant?: "assistant" | "system";
-}) {
-  const blocks = parseMarkdownBlocks(text);
-  return (
-    <div className={cn("space-y-2", variant === "system" && "text-xs")}>
-      {blocks.map((block, index) => (
-        <Fragment key={`md-${index}`}>
-          {renderMarkdownBlock(block, index, variant)}
-        </Fragment>
-      ))}
-    </div>
-  );
-}
-
-type MarkdownBlock =
-  | { type: "paragraph"; text: string }
-  | { type: "heading"; level: 1 | 2 | 3 | 4; text: string }
-  | { type: "hr" }
-  | { type: "code"; lang?: string; code: string }
-  | { type: "list"; ordered: boolean; items: string[] }
-  | { type: "table"; headers: string[]; rows: string[][] };
-
-function parseMarkdownBlocks(input: string): MarkdownBlock[] {
-  const lines = input.replace(/\r\n/g, "\n").split("\n");
-  const blocks: MarkdownBlock[] = [];
-  let i = 0;
-
-  const isBlank = (line: string) => line.trim() === "";
-  const isFence = (line: string) => line.trimStart().startsWith("```");
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (isBlank(line)) {
-      i += 1;
-      continue;
-    }
-
-    if (isFence(line)) {
-      const lang = trimmed.replace(/^```/, "").trim() || undefined;
-      i += 1;
-      const codeLines: string[] = [];
-      while (i < lines.length && !isFence(lines[i])) {
-        codeLines.push(lines[i]);
-        i += 1;
-      }
-      if (i < lines.length && isFence(lines[i])) i += 1;
-      blocks.push({ type: "code", lang, code: codeLines.join("\n") });
-      continue;
-    }
-
-    if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
-      blocks.push({ type: "hr" });
-      i += 1;
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
-    if (headingMatch) {
-      blocks.push({
-        type: "heading",
-        level: headingMatch[1].length as 1 | 2 | 3 | 4,
-        text: headingMatch[2].trim()
-      });
-      i += 1;
-      continue;
-    }
-
-    if (looksLikeMarkdownTable(lines, i)) {
-      const header = splitTableRow(lines[i]);
-      i += 2; // skip separator
-      const rows: string[][] = [];
-      while (i < lines.length && lines[i].includes("|") && !isBlank(lines[i])) {
-        rows.push(splitTableRow(lines[i]));
-        i += 1;
-      }
-      blocks.push({ type: "table", headers: header, rows });
-      continue;
-    }
-
-    const orderedMatch = trimmed.match(/^\d+\.\s+/);
-    const bulletMatch = trimmed.match(/^[-*+]\s+/);
-    if (orderedMatch || bulletMatch) {
-      const ordered = Boolean(orderedMatch);
-      const items: string[] = [];
-      while (i < lines.length) {
-        const current = lines[i].trim();
-        if (ordered ? /^\d+\.\s+/.test(current) : /^[-*+]\s+/.test(current)) {
-          items.push(current.replace(ordered ? /^\d+\.\s+/ : /^[-*+]\s+/, ""));
-          i += 1;
-          continue;
-        }
-        if (isBlank(lines[i])) {
-          i += 1;
-        }
-        break;
-      }
-      blocks.push({ type: "list", ordered, items });
-      continue;
-    }
-
-    const paragraphLines = [line];
-    i += 1;
-    while (i < lines.length) {
-      const next = lines[i];
-      const nextTrimmed = next.trim();
-      if (
-        isBlank(next) ||
-        isFence(next) ||
-        /^---+$/.test(nextTrimmed) ||
-        /^#{1,4}\s+/.test(nextTrimmed) ||
-        looksLikeMarkdownTable(lines, i) ||
-        /^\d+\.\s+/.test(nextTrimmed) ||
-        /^[-*+]\s+/.test(nextTrimmed)
-      ) {
-        break;
-      }
-      paragraphLines.push(next);
-      i += 1;
-    }
-    blocks.push({ type: "paragraph", text: paragraphLines.join("\n") });
-  }
-
-  return blocks;
-}
-
-function looksLikeMarkdownTable(lines: string[], index: number): boolean {
-  if (index + 1 >= lines.length) return false;
-  const header = lines[index].trim();
-  const separator = lines[index + 1].trim();
-  if (!header.includes("|")) return false;
-  return /^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$/.test(separator);
-}
-
-function splitTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => cell.trim());
-}
-
-function renderMarkdownBlock(
-  block: MarkdownBlock,
-  index: number,
-  variant: "assistant" | "system"
-) {
-  if (block.type === "hr") {
-    return <hr className="border-border/60" />;
-  }
-  if (block.type === "heading") {
-    const className =
-      block.level === 1
-        ? "text-base font-semibold"
-        : block.level === 2
-          ? "text-sm font-semibold"
-          : "text-sm font-medium";
-    return <h4 className={className}>{renderInlineMarkdown(block.text, `${index}-h`)}</h4>;
-  }
-  if (block.type === "paragraph") {
-    return (
-      <p className={cn("whitespace-pre-wrap leading-relaxed", variant === "system" && "leading-normal")}>
-        {renderInlineMarkdown(block.text, `${index}-p`)}
-      </p>
-    );
-  }
-  if (block.type === "code") {
-    return (
-      <div className="rounded-md border bg-muted/70">
-        {block.lang && (
-          <div className="border-b px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-            {block.lang}
-          </div>
-        )}
-        <pre className="max-h-72 overflow-auto p-2 text-xs">
-          <code>{block.code}</code>
-        </pre>
-      </div>
-    );
-  }
-  if (block.type === "list") {
-    const Tag = block.ordered ? "ol" : "ul";
-    return (
-      <Tag className={cn("space-y-1 pl-5", block.ordered ? "list-decimal" : "list-disc")}>
-        {block.items.map((item, itemIndex) => (
-          <li key={`${index}-li-${itemIndex}`} className="leading-relaxed">
-            {renderInlineMarkdown(item, `${index}-li-${itemIndex}`)}
-          </li>
-        ))}
-      </Tag>
-    );
-  }
-  if (block.type === "table") {
-    return (
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[480px] border-collapse text-xs">
-          <thead className="bg-muted/40">
-            <tr>
-              {block.headers.map((header, headerIndex) => (
-                <th
-                  key={`${index}-th-${headerIndex}`}
-                  className="border-b px-2 py-1.5 text-left font-semibold align-top"
-                >
-                  {renderInlineMarkdown(header, `${index}-thc-${headerIndex}`)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {block.rows.map((row, rowIndex) => (
-              <tr key={`${index}-row-${rowIndex}`} className="border-t">
-                {row.map((cell, cellIndex) => (
-                  <td key={`${index}-td-${rowIndex}-${cellIndex}`} className="px-2 py-1.5 align-top">
-                    {renderInlineMarkdown(cell, `${index}-tdc-${rowIndex}-${cellIndex}`)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  return null;
-}
-
-function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code key={`${keyBase}-${index}`} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={`${keyBase}-${index}`}>{part.slice(2, -2)}</strong>;
-    }
-    return <Fragment key={`${keyBase}-${index}`}>{part}</Fragment>;
-  });
 }

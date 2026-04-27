@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChevronDown, Lightbulb } from "lucide-react";
 import type { ToolAnalysisReport } from "@/lib/data-sources/types";
 import { isWriteDeleteClassification, safeJsonStringify } from "@/lib/tool-analysis-utils";
@@ -64,6 +65,31 @@ function SuggestionCallout({ text }: { text: string }) {
       </div>
       <p>{text}</p>
     </div>
+  );
+}
+
+function SafetyBadge({
+  label,
+  reason,
+  variantClassName
+}: {
+  label: string;
+  reason: string;
+  variantClassName: string;
+}) {
+  return (
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className={variantClassName}>
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm text-xs">
+          <p>{reason}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -529,6 +555,12 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                         : isWriteDelete
                           ? "write/delete"
                           : "unsafe/unknown";
+                    const safetyVariantClass =
+                      tool.safetyClassification === "read_like"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : isWriteDelete
+                          ? "border-amber-300 bg-amber-50 text-amber-800"
+                          : "border-slate-300 bg-slate-100 text-slate-700";
                     return (
                     <details
                       key={tool.publicToolName}
@@ -540,18 +572,11 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex min-w-0 items-center gap-2">
                               <div className="min-w-0 truncate font-mono text-sm" title={tool.publicToolName}>{toolDisplayName}</div>
-                              <Badge
-                                variant="outline"
-                                className={`shrink-0 whitespace-nowrap ${
-                                  tool.safetyClassification === "read_like"
-                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    : isWriteDelete
-                                      ? "border-amber-300 bg-amber-50 text-amber-800"
-                                      : "border-slate-300 bg-slate-100 text-slate-700"
-                                }`}
-                              >
-                                {safetyLabel}
-                              </Badge>
+                              <SafetyBadge
+                                label={safetyLabel}
+                                reason={tool.classificationReason}
+                                variantClassName={safetyVariantClass}
+                              />
                             </div>
                             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
                           </div>

@@ -16,6 +16,9 @@ Map user goals to reliable starting points.
 - "I need to debug failing runs."
   Follow `references/troubleshooting.md` and inspect `results.json` then `trace.jsonl`.
 
+- "I need to run all my configs at once."
+  Use `mcplab run -c <directory>/` to run all `.yaml`/`.yml` files recursively. Add `--bail` to stop on first failure. See `references/cli-recipes.md` Batch Runs section.
+
 - "I need examples for assertions."
   Use `references/config-recipes.md` section `eval` and provide copy-ready snippets for tool constraints, tool sequences, and all response assertion types.
 

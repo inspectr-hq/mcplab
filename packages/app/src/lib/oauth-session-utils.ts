@@ -17,13 +17,7 @@ export async function ensureOAuthForServers(params: {
   }) => void;
   timeoutMs?: number;
 }): Promise<void> {
-  const {
-    serverNames,
-    source,
-    onServerAuthStart,
-    onServerStatus,
-    timeoutMs = 5 * 60_000
-  } = params;
+  const { serverNames, source, onServerAuthStart, onServerStatus, timeoutMs = 5 * 60_000 } = params;
   const uniqueServerNames = Array.from(new Set(serverNames.filter(Boolean)));
   if (uniqueServerNames.length === 0) return;
 

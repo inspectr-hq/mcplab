@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -89,6 +89,31 @@ function formatToolDiscoveryWarning(serverName: string, warning: string): string
     return `Could not load tools from '${serverName}'. Check that the MCP server is running and reachable, then try Refresh Servers / Discover Tools again.`;
   }
   return warning;
+}
+
+function SafetyBadge({
+  label,
+  reason,
+  variantClassName
+}: {
+  label: string;
+  reason: string;
+  variantClassName: string;
+}) {
+  return (
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className={variantClassName}>
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm text-xs">
+          <p>{reason}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 
@@ -668,6 +693,12 @@ const ToolAnalysisPage = () => {
                               : isWriteDelete
                                 ? "write/delete"
                                 : "unsafe/unknown";
+                          const safetyVariantClass =
+                            tool.safetyClassification === "read_like"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : isWriteDelete
+                                ? "border-amber-300 bg-amber-50 text-amber-800"
+                                : "border-slate-300 bg-slate-100 text-slate-700";
                           return (
                           <label key={`${server.serverName}-${tool.name}`} className="flex items-start gap-2 rounded border p-2">
                             <Checkbox
@@ -682,18 +713,11 @@ const ToolAnalysisPage = () => {
                                 {tool.title && (
                                   <span className="text-xs text-muted-foreground">{tool.title}</span>
                                 )}
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] ${
-                                    tool.safetyClassification === "read_like"
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                      : isWriteDelete
-                                        ? "border-amber-300 bg-amber-50 text-amber-800"
-                                        : "border-slate-300 bg-slate-100 text-slate-700"
-                                  }`}
-                                >
-                                  {safetyLabel}
-                                </Badge>
+                                <SafetyBadge
+                                  label={safetyLabel}
+                                  reason={tool.classificationReason}
+                                  variantClassName={safetyVariantClass}
+                                />
                                 {tool.inputSchema && (
                                   <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">
                                     schema: input
@@ -708,7 +732,6 @@ const ToolAnalysisPage = () => {
                               {tool.description && (
                                 <p className="text-xs text-muted-foreground line-clamp-2">{tool.description}</p>
                               )}
-                              <p className="text-[11px] text-muted-foreground">{tool.classificationReason}</p>
                             </div>
                           </label>
                         );

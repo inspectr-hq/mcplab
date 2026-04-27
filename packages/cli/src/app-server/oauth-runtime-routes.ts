@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteRequestContext, OAuthDebuggerSessionsMap } from './app-context.js';
 import type { OAuthRuntimeSessionsMap } from './oauth-runtime-domain.js';
-import { OAuthAuthorizationRequiredError, type OAuthSessionManager } from './oauth-session-manager.js';
+import {
+  OAuthAuthorizationRequiredError,
+  type OAuthSessionManager
+} from './oauth-session-manager.js';
 import {
   cleanupOAuthRuntimeSessions,
   createOAuthRuntimeSession,
@@ -51,7 +54,10 @@ export async function handleOAuthRuntimeRoutes(params: {
       return true;
     }
     try {
-      const result = await oauthSessionManager.ensureServersAuthorized(serverNames, req.headers.host);
+      const result = await oauthSessionManager.ensureServersAuthorized(
+        serverNames,
+        req.headers.host
+      );
       asJson(res, 200, result);
     } catch (error: unknown) {
       if (error instanceof OAuthAuthorizationRequiredError) {

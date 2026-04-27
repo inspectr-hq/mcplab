@@ -440,7 +440,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                         : "Open Scenario Assistant"
                 }
               >
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                 Ask Assistant
               </Button>
               <Button
@@ -756,7 +756,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                     onClick={() => setAssistantOpen(true)}
                     title="Ask for help improving checks"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                     Ask Assistant
                   </Button>
                 )}
@@ -942,7 +942,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                     onClick={() => setAssistantOpen(true)}
                     title="Ask for help improving value capture rules"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                     Ask Assistant
                   </Button>
                 )}

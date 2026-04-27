@@ -11,10 +11,10 @@ import type {
   SnapshotRecord,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
-    OAuthDebuggerSessionEvent,
-    OAuthDebuggerSessionView,
-    OAuthEnsureServerStatus,
-    OAuthRuntimeSessionView,
+  OAuthDebuggerSessionEvent,
+  OAuthDebuggerSessionView,
+  OAuthEnsureServerStatus,
+  OAuthRuntimeSessionView,
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
@@ -26,7 +26,9 @@ import type {
   ResultAssistantApplyReportResponse,
   ResultAssistantSessionView,
   ResultAssistantTurnResponse,
-  ScenarioPreviewCoreRunResponse
+  ScenarioPreviewCoreRunResponse,
+  WorkspaceHealthResponse,
+  CoreLibraryBundle
 } from './types';
 
 function getBaseUrl(): string {
@@ -39,6 +41,13 @@ function getBaseUrl(): string {
 
 const BASE = getBaseUrl();
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     ...init,
@@ -49,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Request failed (${response.status}): ${body}`);
+    throw new ApiError(response.status, `Request failed (${response.status}): ${body}`);
   }
   return (await response.json()) as T;
 }
@@ -64,13 +73,13 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Request failed (${response.status}): ${body}`);
+    throw new ApiError(response.status, `Request failed (${response.status}): ${body}`);
   }
   return response.text();
 }
 
 export const workspaceApiClient = {
-  health: () => request<{ ok: boolean; version: string }>('/api/health'),
+  health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () =>
     request<{
       workspaceRoot: string;
@@ -138,17 +147,6 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify({ runId })
     }),
-  askResultAssistant: (
-    runId: string,
-    messages: Array<{ role: 'user' | 'assistant'; text: string }>
-  ) =>
-    request<{ reply: string; assistantAgentName: string; provider: string; model: string }>(
-      `/api/runs/${encodeURIComponent(runId)}/assistant`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ messages })
-      }
-    ),
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;
@@ -166,12 +164,12 @@ export const workspaceApiClient = {
         })
       }
     ),
-  createResultAssistantSession: (runId: string) =>
+  createResultAssistantSession: (params: { runId?: string; scope?: 'run' | 'all_runs' }) =>
     request<{ sessionId: string; session: ResultAssistantSessionView }>(
       '/api/result-assistant/sessions',
       {
         method: 'POST',
-        body: JSON.stringify({ runId })
+        body: JSON.stringify(params)
       }
     ),
   getResultAssistantSession: (sessionId: string) =>
@@ -229,17 +227,8 @@ export const workspaceApiClient = {
       method: 'POST',
       body: JSON.stringify(policy)
     }),
-  getLibraries: () =>
-    request<{
-      servers: CoreEvalConfig['servers'];
-      agents: CoreEvalConfig['agents'];
-      scenarios: CoreEvalConfig['scenarios'];
-    }>('/api/libraries'),
-  saveLibraries: (libraries: {
-    servers: CoreEvalConfig['servers'];
-    agents: CoreEvalConfig['agents'];
-    scenarios: CoreEvalConfig['scenarios'];
-  }) =>
+  getLibraries: () => request<CoreLibraryBundle>('/api/libraries'),
+  saveLibraries: (libraries: CoreLibraryBundle) =>
     request<{ ok: boolean }>('/api/libraries', {
       method: 'PUT',
       body: JSON.stringify(libraries)
@@ -335,9 +324,7 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }),
-  discoverToolsForAnalysis: (params: {
-    serverNames: string[];
-  }) =>
+  discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',
       body: JSON.stringify(params)

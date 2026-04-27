@@ -17,7 +17,7 @@ type Crumb = {
   to?: string;
 };
 
-const buildCrumbs = (pathname: string): Crumb[] => {
+const buildCrumbs = (pathname: string, search: string): Crumb[] => {
   if (pathname === "/") {
     return [{ label: "Dashboard" }];
   }
@@ -30,6 +30,10 @@ const buildCrumbs = (pathname: string): Crumb[] => {
   }
   if (matchPath("/mcp-evaluations", pathname)) {
     crumbs.push({ label: "MCP Evaluations" });
+    return crumbs;
+  }
+  if (matchPath("/settings/mcp", pathname)) {
+    crumbs.push({ label: "Settings", to: "/settings" }, { label: "MCP Connection" });
     return crumbs;
   }
   if (matchPath("/settings", pathname)) {
@@ -83,13 +87,13 @@ const buildCrumbs = (pathname: string): Crumb[] => {
       : "Server";
     crumbs.push(
       { label: "Libraries", to: "/libraries/servers" },
-      { label: "Servers", to: "/libraries/servers" },
+      { label: "MCP servers", to: "/libraries/servers" },
       { label: serverId === "new" ? "New Server" : serverId }
     );
     return crumbs;
   }
   if (matchPath("/libraries/servers", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "Servers" });
+    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "MCP servers" });
     return crumbs;
   }
   if (matchPath("/libraries/agents/:agentName", pathname)) {
@@ -122,12 +126,14 @@ const buildCrumbs = (pathname: string): Crumb[] => {
     crumbs.push({ label: "Libraries", to: "/libraries/test-cases" }, { label: "Test Cases" });
     return crumbs;
   }
-  if (matchPath("/compare", pathname)) {
-    crumbs.push({ label: "Compare Evaluations" });
-    return crumbs;
-  }
   if (matchPath("/compare/results", pathname)) {
     crumbs.push({ label: "Compare Evaluations", to: "/compare" }, { label: "Full Result Compare" });
+    return crumbs;
+  }
+  if (matchPath("/compare", pathname)) {
+    const mode = new URLSearchParams(search).get("mode");
+    const modeLabel = mode === "within-run" ? "Agents" : "Runs";
+    crumbs.push({ label: "Compare Evaluations", to: "/compare" }, { label: modeLabel });
     return crumbs;
   }
 
@@ -137,7 +143,7 @@ const buildCrumbs = (pathname: string): Crumb[] => {
 export function AppLayout() {
   const location = useLocation();
   const embed = new URLSearchParams(location.search).get("embed") === "1";
-  const crumbs = buildCrumbs(location.pathname);
+  const crumbs = buildCrumbs(location.pathname, location.search);
   const { connection, version } = useDataSource();
 
   if (embed) {

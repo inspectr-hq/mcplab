@@ -13,6 +13,7 @@ import {
   summarizeToolResultForResultAssistant,
   touchResultAssistantSession
 } from './result-assistant-domain.js';
+import { isResultAssistantAutoApprovedTool } from './result-assistant-tools.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
 
 export type ResultAssistantRouteDeps = Pick<
@@ -25,21 +26,14 @@ export type ResultAssistantRouteDeps = Pick<
   | 'resolveAssistantAgentFromLibraries'
 >;
 
-const RESULT_ASSISTANT_AUTO_APPROVE_TOOLS = new Set([
-  'mcplab_list_markdown_reports',
-  'mcplab_read_markdown_report',
-  'mcplab_list_runs',
-  'mcplab_read_run_artifact',
-  'mcplab_trace_stats',
-  'mcplab_trace_get_final_answers',
-  'mcplab_trace_get_conversation',
-  'mcplab_trace_list_events',
-  'mcplab_trace_search',
-  'mcplab_list_tool_analysis_results',
-  'mcplab_read_tool_analysis_result',
-  'mcplab_list_library',
-  'mcplab_get_library_item'
-]);
+type ResultAssistantTurnRouteResponse = {
+  session: ReturnType<typeof resultAssistantSessionView>;
+  response: {
+    type: 'assistant_message' | 'tool_call_request';
+    text: string;
+    pendingToolCall?: ResultAssistantSession['pendingToolCalls'][number];
+  };
+};
 
 export async function handleResultAssistantRoutes(params: {
   req: IncomingMessage;
@@ -61,7 +55,7 @@ export async function handleResultAssistantRoutes(params: {
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const listReferenceReportsForRun = (runId: string) =>
+  const listReferenceReportsForRun = (runId: string | null) =>
     listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
 
   const executePendingToolCall = async (
@@ -83,7 +77,7 @@ export async function handleResultAssistantRoutes(params: {
     try {
       const toolResult = await executeResultAssistantToolCall(session, pending);
       pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
-      if (pending.tool === 'mcplab_write_markdown_report') {
+      if (pending.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
         session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
         session.systemPromptCache = undefined;
       }
@@ -111,15 +105,24 @@ export async function handleResultAssistantRoutes(params: {
     }
   };
 
-  const continueWithAutoApprovedReads = async (session: ResultAssistantSession) => {
+  const continueWithAutoApprovedReads = async (
+    session: ResultAssistantSession
+  ): Promise<ResultAssistantTurnRouteResponse> => {
     let output = await continueResultAssistantTurn(session);
     for (let i = 0; i < 25; i += 1) {
       const pending = output.response.pendingToolCall;
-      if (output.response.type !== 'tool_call_request' || !pending) break;
-      if (!RESULT_ASSISTANT_AUTO_APPROVE_TOOLS.has(pending.tool)) break;
+      if (
+        output.response.type !== 'tool_call_request' ||
+        !pending ||
+        !isResultAssistantAutoApprovedTool(pending.tool)
+      ) {
+        return output;
+      }
       await executePendingToolCall(session, pending, 'Auto-approved read-only', {
         emitApprovalChatMessage: false
       });
+      touchResultAssistantSession(session);
+      if (pending.error) break;
       output = await continueResultAssistantTurn(session);
     }
     return output;
@@ -127,13 +130,17 @@ export async function handleResultAssistantRoutes(params: {
 
   if (pathname === '/api/result-assistant/sessions' && method === 'POST') {
     cleanupResultAssistantSessions(resultAssistantSessions);
-    const body = (await parseBody(req)) as { runId?: unknown };
+    const body = (await parseBody(req)) as { runId?: unknown; scope?: unknown };
+    const requestedScope = String(body.scope ?? '')
+      .trim()
+      .toLowerCase();
+    const scope: 'run' | 'all_runs' = requestedScope === 'all_runs' ? 'all_runs' : 'run';
     const runId = String(body.runId ?? '').trim();
-    if (!runId) {
-      asJson(res, 400, { error: 'runId is required' });
+    if (scope === 'run' && !runId) {
+      asJson(res, 400, { error: 'runId is required for run-scoped sessions' });
       return true;
     }
-    const results = getRunResults(runId, settings.runsDir);
+    const results = scope === 'run' ? getRunResults(runId, settings.runsDir) : null;
     const libraries = readLibraries(settings.librariesDir);
     const assistantAgentName = pickDefaultAssistantAgentName({
       settingsDefault: settings.scenarioAssistantAgentName,
@@ -149,13 +156,14 @@ export async function handleResultAssistantRoutes(params: {
     const agentConfig = resolveAssistantAgentFromLibraries(libraries, assistantAgentName);
     const session: ResultAssistantSession = {
       id: `ras-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      runId,
+      scope,
+      runId: scope === 'run' ? runId : null,
       createdAt: Date.now(),
       lastTouchedAt: Date.now(),
       selectedAssistantAgentName: assistantAgentName,
       agentConfig,
       resultSummary: results,
-      referenceReportsForRun: listReferenceReportsForRun(runId),
+      referenceReportsForRun: listReferenceReportsForRun(scope === 'run' ? runId : null),
       mcp: new McpClientManager(),
       tools: [],
       toolPublicMap: new Map(),
@@ -166,7 +174,10 @@ export async function handleResultAssistantRoutes(params: {
     session.chatMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'system',
-      text: 'Result Assistant session created.',
+      text:
+        scope === 'all_runs'
+          ? 'Result Assistant session created for all historical runs.'
+          : 'Result Assistant session created.',
       createdAt: new Date().toISOString()
     });
     try {
@@ -332,7 +343,7 @@ function localMcplabMcpUrl(): string {
 
 function listMarkdownReportsLinkedToRun(
   workspaceRoot: string,
-  runId: string
+  runId: string | null
 ): Array<{
   path: string;
   relativePath: string;
@@ -369,7 +380,7 @@ function listMarkdownReportsLinkedToRun(
         const relPath = relative(root, fullPath).split(sep).join('/');
         const wsPath = relative(workspaceRoot, fullPath).split(sep).join('/');
         const name = basename(fullPath);
-        if (!relPath.includes(runId) && !name.includes(runId)) continue;
+        if (runId && !relPath.includes(runId) && !name.includes(runId)) continue;
         out.push({
           path: wsPath,
           relativePath: relPath,

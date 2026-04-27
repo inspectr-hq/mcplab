@@ -7,11 +7,7 @@ import {
   type AgentConfig,
   type EvalConfig
 } from '@inspectr/mcplab-core';
-import type {
-  AppRouteDeps,
-  AppRouteRequestContext,
-  AssistantSessionsMap
-} from './app-context.js';
+import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
 import {
@@ -47,16 +43,8 @@ export async function handleScenarioAssistantRoutes(params: {
   oauthSessionManager: OAuthSessionManager;
   deps: ScenarioAssistantRouteDeps;
 }): Promise<boolean> {
-  const {
-    req,
-    res,
-    pathname,
-    method,
-    settings,
-    assistantSessions,
-    oauthSessionManager,
-    deps
-  } = params;
+  const { req, res, pathname, method, settings, assistantSessions, oauthSessionManager, deps } =
+    params;
   const {
     parseBody,
     asJson,
@@ -77,6 +65,47 @@ export async function handleScenarioAssistantRoutes(params: {
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   type SessionPendingCall = ScenarioAssistantSession['pendingToolCalls'][number];
   type SessionContext = ScenarioAssistantSession['context'];
+
+  const continueWithAutoApprovedReads = async (session: ScenarioAssistantSession) => {
+    let output = await continueAssistantTurn(session);
+    for (let i = 0; i < 25; i += 1) {
+      const pendingCalls = output.response?.pendingToolCalls;
+      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
+      const allReadOnly = pendingCalls.every(
+        (p) =>
+          session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
+      );
+      if (!allReadOnly) break;
+      let hadError = false;
+      for (const pending of pendingCalls) {
+        pending.status = 'approved';
+        try {
+          const toolResult = await executeAssistantToolCall(session, pending);
+          pending.resultPreview = summarizeToolResultForAssistant(toolResult);
+          session.llmMessages.push({
+            role: 'tool',
+            content: pending.resultPreview,
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+        } catch (error: unknown) {
+          pending.status = 'error';
+          pending.error = error instanceof Error ? error.message : String(error);
+          session.llmMessages.push({
+            role: 'tool',
+            content: JSON.stringify({ error: pending.error }),
+            tool_call_id: pending.id,
+            name: pending.publicToolName
+          });
+          hadError = true;
+        }
+      }
+      touchAssistantSession(session);
+      if (hadError) break;
+      output = await continueAssistantTurn(session);
+    }
+    return output;
+  };
 
   if (pathname === '/api/scenario-assistant/sessions' && method === 'POST') {
     cleanupAssistantSessions(assistantSessions);
@@ -250,7 +279,7 @@ export async function handleScenarioAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueAssistantTurn(session);
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }

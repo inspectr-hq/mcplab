@@ -36,6 +36,22 @@ Notes:
 - `--agents` values must match agent IDs loaded from config/library.
 - `--runs`/`-n` must be a positive number.
 
+## Batch Runs (Directory Config)
+
+Passing a directory to `-c/--config` runs all `.yaml`/`.yml` files found recursively in that folder.
+
+```bash
+# Run every config file under mcplab/evals/
+mcplab run -c mcplab/evals/
+
+# Stop after the first config that produces a failure
+mcplab run -c mcplab/evals/ --bail
+```
+
+Notes:
+- Each config file is executed as a separate run.
+- `--bail` stops the batch as soon as any config run fails. Useful in CI to surface the first breakage quickly.
+
 ## Serve App
 
 ```bash

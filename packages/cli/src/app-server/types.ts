@@ -1,3 +1,7 @@
+import type { HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
+
+export type { HealthMcpConnectionInfo };
+
 export interface AppServerOptions {
   host: string;
   port: number;
@@ -18,6 +22,13 @@ export interface AppSettings {
   toolAnalysisResultsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
+}
+
+// Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo
+export interface HealthResponse {
+  ok: boolean;
+  version: string;
+  mcp: HealthMcpConnectionInfo;
 }
 
 export interface DevMcpServerRuntime {

@@ -1,10 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
-import type {
-  AppRouteDeps,
-  AppRouteRequestContext,
-  ToolAnalysisJobsMap
-} from './app-context.js';
+import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -58,16 +54,8 @@ export async function handleToolAnalysisRoutes(params: {
   oauthSessionManager: OAuthSessionManager;
   deps: ToolAnalysisRouteDeps;
 }): Promise<boolean> {
-  const {
-    req,
-    res,
-    pathname,
-    method,
-    settings,
-    toolAnalysisJobs,
-    oauthSessionManager,
-    deps
-  } = params;
+  const { req, res, pathname, method, settings, toolAnalysisJobs, oauthSessionManager, deps } =
+    params;
   const {
     parseBody,
     asJson,

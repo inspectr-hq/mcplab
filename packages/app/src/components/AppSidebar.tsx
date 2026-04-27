@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { LayoutDashboard, Settings, Play, BarChart3, NotepadText, NotebookTabs, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck, Github } from "lucide-react";
+import { LayoutDashboard, Settings, Play, BarChart3, NotepadText, NotebookTabs, GitCompare, Database, Bot, FileCode, FlaskConical, Microscope, ShieldCheck, Github, Link2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import IconInspectr from "@/components/ui/IconInspectr.jsx";
 import { useLocation } from "react-router-dom";
@@ -38,7 +38,7 @@ const navSections = [
     title: "Libraries",
     items: [
       { title: "Test Cases", url: "/libraries/test-cases", icon: FileCode },
-      { title: "Servers", url: "/libraries/servers", icon: Database },
+      { title: "MCP servers", url: "/libraries/servers", icon: Database },
       { title: "Agents", url: "/libraries/agents", icon: Bot },
     ]
   },
@@ -54,7 +54,10 @@ const navSections = [
   },
   {
     title: "Workspace",
-    items: [{ title: "Settings", url: "/settings", icon: Settings }]
+    items: [
+      { title: "Settings", url: "/settings", icon: Settings },
+      { title: "MCPLab MCP server", url: "/settings/mcp", icon: Link2 }
+    ]
   }
 ] as const;
 
@@ -109,13 +112,15 @@ export function AppSidebar(props: AppSidebarProps = { version: null }) {
                         isActive={
                           item.url === "/"
                             ? location.pathname === "/"
-                            : location.pathname.startsWith(item.url)
+                            : item.url === "/settings"
+                              ? location.pathname === "/settings"
+                              : location.pathname.startsWith(item.url)
                         }
                         tooltip={item.title}
                       >
                         <NavLink
                           to={item.url}
-                          end={item.url === "/"}
+                          end={item.url === "/" || item.url === "/settings"}
                           activeClassName="bg-sidebar-accent text-sidebar-accent-foreground"
                         >
                           <item.icon className="h-4 w-4" />

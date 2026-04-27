@@ -16,6 +16,7 @@ import Agents from "./pages/Agents";
 import AgentDetail from "./pages/AgentDetail";
 import ManageTestCases from "./pages/ManageTestCases";
 import SettingsPage from "./pages/Settings";
+import McpConnectionInfoPage from "./pages/McpConnectionInfo";
 import ToolAnalysis from "./pages/ToolAnalysis";
 import ToolAnalysisResults from "./pages/ToolAnalysisResults";
 import ToolAnalysisResultDetail from "./pages/ToolAnalysisResultDetail";
@@ -49,7 +50,12 @@ const App = () => (
           <ConfigProvider>
             <Toaster />
             <Sonner />
-            <BrowserRouter>
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true
+              }}
+            >
               <Routes>
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
@@ -69,6 +75,7 @@ const App = () => (
                   <Route path="/libraries/scenarios" element={<Navigate to="/libraries/test-cases" replace />} />
                   <Route path="/libraries/scenarios/:scenarioId" element={<LegacyScenarioRouteRedirect />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/settings/mcp" element={<McpConnectionInfoPage />} />
                   <Route path="/run" element={<RunEvaluation />} />
                   <Route path="/results" element={<Results />} />
                   <Route path="/results/:id" element={<ResultDetail />} />

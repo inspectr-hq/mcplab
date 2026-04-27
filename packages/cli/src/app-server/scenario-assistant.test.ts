@@ -27,7 +27,8 @@ function makeDeps(options?: {
   preloadAssistantTools?: ReturnType<typeof vi.fn>;
 }) {
   const captured: Array<{ status: number; body: unknown }> = [];
-  const preloadAssistantTools = options?.preloadAssistantTools ?? vi.fn().mockResolvedValue(undefined);
+  const preloadAssistantTools =
+    options?.preloadAssistantTools ?? vi.fn().mockResolvedValue(undefined);
   const servers = options?.servers ?? {
     'server-1': { transport: 'http', url: 'https://example.com/mcp' }
   };
@@ -40,7 +41,10 @@ function makeDeps(options?: {
       }),
       cleanupAssistantSessions: vi.fn(),
       touchAssistantSession: vi.fn(),
-      assistantSessionView: vi.fn((session: any) => ({ id: session.id, warnings: session.warnings ?? [] })),
+      assistantSessionView: vi.fn((session: any) => ({
+        id: session.id,
+        warnings: session.warnings ?? []
+      })),
       ensureInsideRoot: vi.fn((_root: string, p: string) => p),
       readLibraries: vi.fn().mockReturnValue({
         servers,
@@ -182,7 +186,8 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
           {
             serverName: 'oauth-server',
             runtimeSessionId: 'oauthrt-1',
-            authorizeLaunchUrl: 'http://localhost:8787/api/oauth-runtime/sessions/oauthrt-1/authorize',
+            authorizeLaunchUrl:
+              'http://localhost:8787/api/oauth-runtime/sessions/oauthrt-1/authorize',
             message: "OAuth login required for server 'oauth-server'."
           }
         ])

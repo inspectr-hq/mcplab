@@ -100,7 +100,10 @@ export class McpClientManager {
         this.clients.set(name, client);
         const implementation = client.getServerVersion();
         this.serverVersions.set(name, implementation?.version ?? null);
-        this.serverImplementations.set(name, implementation ? normalizeImplementation(implementation) : null);
+        this.serverImplementations.set(
+          name,
+          implementation ? normalizeImplementation(implementation) : null
+        );
       } catch (err: any) {
         throw new Error(
           formatMcpError(
@@ -462,11 +465,10 @@ function normalizeImplementation(input: unknown): McpServerImplementation | null
         const src = typeof entry.src === 'string' ? entry.src : '';
         if (!src) return null;
         const icon: McpImplementationIcon = { src };
-        if (typeof entry.mimeType === 'string' && entry.mimeType.trim()) icon.mimeType = entry.mimeType;
+        if (typeof entry.mimeType === 'string' && entry.mimeType.trim())
+          icon.mimeType = entry.mimeType;
         if (Array.isArray(entry.sizes)) {
-          const sizes = entry.sizes
-            .map((size) => String(size).trim())
-            .filter(Boolean);
+          const sizes = entry.sizes.map((size) => String(size).trim()).filter(Boolean);
           if (sizes.length > 0) icon.sizes = sizes;
         }
         if (entry.theme === 'light' || entry.theme === 'dark') icon.theme = entry.theme;

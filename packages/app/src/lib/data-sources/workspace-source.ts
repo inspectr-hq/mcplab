@@ -8,7 +8,7 @@ import {
   toCoreLibraries
 } from './adapters';
 import { workspaceApiClient } from './workspace-api-client';
-import type { EvalDataSource } from './types';
+import type { EvalDataSource, LibraryBundle } from './types';
 
 function configFileName(config: EvalConfig): string {
   if (config.sourcePath) {
@@ -23,6 +23,9 @@ function configFileNameFromName(name: string): string {
 }
 
 export const workspaceSource: EvalDataSource = {
+  async health() {
+    return workspaceApiClient.health();
+  },
   async listConfigs() {
     const records = await workspaceApiClient.listConfigs();
     return records.map(fromCoreConfigYaml);
@@ -126,14 +129,11 @@ export const workspaceSource: EvalDataSource = {
   async compareSnapshot(snapshotId, runId) {
     return workspaceApiClient.compareSnapshot(snapshotId, runId);
   },
-  async askResultAssistant(runId, messages) {
-    return workspaceApiClient.askResultAssistant(runId, messages);
-  },
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },
-  async createResultAssistantSession(runId) {
-    return workspaceApiClient.createResultAssistantSession(runId);
+  async createResultAssistantSession(params) {
+    return workspaceApiClient.createResultAssistantSession(params);
   },
   async getResultAssistantSession(sessionId) {
     return workspaceApiClient.getResultAssistantSession(sessionId);
@@ -161,7 +161,7 @@ export const workspaceSource: EvalDataSource = {
     const record = await workspaceApiClient.updateSnapshotPolicy(configId, policy);
     return fromCoreConfigYaml(record);
   },
-  async getLibraries() {
+  async getLibraries(): Promise<LibraryBundle> {
     const libraries = await workspaceApiClient.getLibraries();
     return fromCoreLibraries(libraries);
   },

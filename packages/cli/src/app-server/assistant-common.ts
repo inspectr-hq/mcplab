@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent } from '@inspectr/mcplab-core';
+import { chatWithAgent, formatAssistantToolName } from '@inspectr/mcplab-core';
+
+export { formatAssistantToolName };
 
 export function truncateJson(value: unknown, maxChars: number): string {
   try {

@@ -154,7 +154,7 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
     toolsLoaded: session.tools.length,
     toolServers: Array.from(new Set(session.tools.map((tool) => tool.name.split('__')[0]))),
     messages: session.chatMessages,
-    pendingToolCalls: session.pendingToolCalls.filter((call) => call.status === 'pending')
+    pendingToolCalls: session.pendingToolCalls
   };
 }
 
@@ -173,6 +173,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), Value Capture Rules, and snapshot settings.',
     'Use the available MCP tools and schemas to ground suggestions.',
     'If you need live MCP information, call a tool and wait for approval.',
+    'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
     'Use user-facing terminology in your text responses: "Checks" and "Value Capture Rules" (not "eval rules" / "extract rules").',
     'Respond ONLY as JSON with one of these envelopes:',
     `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
@@ -558,10 +559,14 @@ export function normalizeScenarioAssistantEvalRules(
     seen.add(key);
     deduped.push(rule);
   }
-  return lintContradictoryEvalRules(intentDeduplicateEvalRules(collapseOffByOneCountGuards(deduped)));
+  return lintContradictoryEvalRules(
+    intentDeduplicateEvalRules(collapseOffByOneCountGuards(deduped))
+  );
 }
 
-function normalizeEvalRuleSuggestions(suggestions: ScenarioAssistantSuggestionBundle | undefined): void {
+function normalizeEvalRuleSuggestions(
+  suggestions: ScenarioAssistantSuggestionBundle | undefined
+): void {
   if (!suggestions?.evalRules?.replacement) return;
   suggestions.evalRules.replacement = normalizeScenarioAssistantEvalRules(
     suggestions.evalRules.replacement

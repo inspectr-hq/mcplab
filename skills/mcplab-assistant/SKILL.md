@@ -56,21 +56,27 @@ When the request is about creating or editing MCPLab config, the assistant must:
 
 When the request is about analyzing results, the assistant must:
 
-1. Read artifacts in this order:
+1. Prefer MCP analysis tools first to reduce context/token usage:
+- `mcplab_aggregate_runs` for multi-run trends and compact metric summaries
+- `mcplab_compare_runs` for structured run-to-run regressions/improvements
+- `mcplab_search_runs` to locate runs by filter criteria
+- `mcplab_search_markdown_reports` to locate report files
+- `mcplab_search_tool_analysis_results` to query stored tool analysis data
+2. Read artifacts directly only when needed:
 - `results.json`
 - `summary.md`
 - `trace.jsonl` (for failing scenarios or unclear tool behavior)
 - `report.html` (optional, interactive confirmation)
-2. Return analysis with:
+3. Return analysis with:
 - overall pass/fail summary
 - failing scenario IDs and failure reason category
 - tool-usage observations (missing required tools, forbidden tool usage, sequence drift)
 - concrete remediation steps per failing scenario
-3. For multi-agent runs, include side-by-side comparison:
+4. For multi-agent runs, include side-by-side comparison:
 - pass rate per agent
 - median/typical latency
 - scenario-level win/loss notes
-4. Always reference exact artifact paths and scenario IDs in findings.
+5. Always reference exact artifact paths and scenario IDs in findings.
 
 ## Config Workflow
 
@@ -113,13 +119,26 @@ When the request is about analyzing results, the assistant must:
 
 ## Output Analysis Workflow
 
-1. Read run directory artifacts:
+1. Start with MCP comparison tools:
+- `mcplab_aggregate_runs` for historical trends
+- `mcplab_compare_runs` for deterministic run deltas
+2. Read run directory artifacts only when tool output is insufficient:
 - `results.json` for structured metrics and pass/fail
 - `summary.md` for quick human scan
 - `trace.jsonl` for call-by-call debugging
 - `report.html` for interactive investigation
-2. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
-3. Highlight regressions with concrete scenario IDs and observed behavior deltas.
+3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
+4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
+5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
+
+## Result Assistant Scopes
+
+The Result Assistant supports two scopes:
+
+- `run` — analyses a single evaluation run. Accessible from the individual run detail page.
+- `all_runs` — analyses historical trends across all runs. Accessible from the Results overview page.
+
+When a user asks about analyzing results in the UI, clarify which scope applies: single-run triage uses `run`; cross-run trend analysis uses `all_runs`.
 
 ## Source Of Truth
 
@@ -147,6 +166,17 @@ User request:
 Assistant behavior:
 1. Provide one `mcplab run --agents ...` command for comparison.
 2. Provide one follow-up analysis step using `results.json` and `report.html`.
+
+### Pattern 5: Historical Trend Request
+
+User request:
+"Compare historical run quality and spot regressions."
+
+Assistant behavior:
+1. Use `mcplab_aggregate_runs` for compact trend metrics over selected runs.
+2. Use `mcplab_compare_runs` to identify deterministic regressions/improvements.
+3. If semantic output quality is requested, inspect `results.json` and targeted `trace.jsonl` entries for representative scenario deltas.
+4. Return top regressions first with scenario IDs and suggested next checks.
 
 ### Pattern 3: Failure Triage Request
 

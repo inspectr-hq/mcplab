@@ -1,4 +1,4 @@
-import type { EvalConfig, EvalResult, EvalRule } from '@/types/eval';
+import type { EvalConfig, EvalResult, EvalRule, ScenarioRun } from '@/types/eval';
 import type {
   AgentConfig as CoreAgentConfig,
   EvalConfig as CoreEvalConfig,
@@ -13,7 +13,8 @@ import type {
   ServerAuthOauthClientCredentials as CoreServerAuthOauth,
   ServerConfig as CoreServerConfig,
   TraceMessage as CoreTraceMessage,
-  TraceMessageContentBlock as CoreTraceMessageContentBlock
+  TraceMessageContentBlock as CoreTraceMessageContentBlock,
+  HealthMcpConnectionInfo
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -27,7 +28,8 @@ export type {
   CoreSourceEvalConfig,
   CoreScenarioRun,
   CoreScenarioAggregate,
-  CoreResultsJson
+  CoreResultsJson,
+  HealthMcpConnectionInfo
 };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -38,6 +40,8 @@ export interface WorkspaceConfigRecord {
   id: string;
   name: string;
   path: string;
+  relativePath?: string;
+  suitePath?: string;
   mtime: string;
   hash: string;
   config: CoreSourceEvalConfig;
@@ -155,6 +159,13 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
+// Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo
+export interface WorkspaceHealthResponse {
+  ok: boolean;
+  version: string;
+  mcp: HealthMcpConnectionInfo;
+}
+
 export interface WorkspaceSettings {
   workspaceRoot: string;
   evalsDir: string;
@@ -162,6 +173,18 @@ export interface WorkspaceSettings {
   snapshotsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
+}
+
+export interface LibraryBundle {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+  scenarios: EvalConfig['scenarios'];
+}
+
+export interface CoreLibraryBundle {
+  servers: CoreEvalConfig['servers'];
+  agents: CoreEvalConfig['agents'];
+  scenarios: CoreEvalConfig['scenarios'];
 }
 
 export interface ScenarioAssistantSuggestionBundle {
@@ -236,11 +259,6 @@ export interface ScenarioAssistantTurnResponse {
   pendingToolCalls?: ScenarioAssistantPendingToolCall[];
 }
 
-export interface ResultAssistantChatMessage {
-  role: 'user' | 'assistant';
-  text: string;
-}
-
 export interface ResultAssistantApplyReportResponse {
   ok: boolean;
   runId: string;
@@ -275,7 +293,8 @@ export interface ResultAssistantPendingToolCall {
 
 export interface ResultAssistantSessionView {
   id: string;
-  runId: string;
+  scope: 'run' | 'all_runs';
+  runId: string | null;
   createdAt: string;
   updatedAt: string;
   selectedAssistantAgentName: string;
@@ -657,6 +676,7 @@ export interface OAuthEnsureServerStatus {
 }
 
 export interface EvalDataSource {
+  health: () => Promise<WorkspaceHealthResponse>;
   listConfigs: () => Promise<EvalConfig[]>;
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
   updateConfig: (config: EvalConfig) => Promise<EvalConfig>;
@@ -682,19 +702,16 @@ export interface EvalDataSource {
   createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;
   getSnapshot: (id: string) => Promise<SnapshotRecord | undefined>;
   compareSnapshot: (snapshotId: string, runId: string) => Promise<SnapshotComparison>;
-  askResultAssistant: (
-    runId: string,
-    messages: ResultAssistantChatMessage[]
-  ) => Promise<{ reply: string; assistantAgentName: string; provider: string; model: string }>;
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;
     outputPath?: string;
     overwrite?: boolean;
   }) => Promise<ResultAssistantApplyReportResponse>;
-  createResultAssistantSession: (
-    runId: string
-  ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
+  createResultAssistantSession: (params: {
+    runId?: string;
+    scope?: 'run' | 'all_runs';
+  }) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
   getResultAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ResultAssistantSessionView }>;
@@ -726,16 +743,8 @@ export interface EvalDataSource {
       baselineSourceRunId?: string;
     }
   ) => Promise<EvalConfig>;
-  getLibraries: () => Promise<{
-    servers: EvalConfig['servers'];
-    agents: EvalConfig['agents'];
-    scenarios: EvalConfig['scenarios'];
-  }>;
-  saveLibraries: (libraries: {
-    servers: EvalConfig['servers'];
-    agents: EvalConfig['agents'];
-    scenarios: EvalConfig['scenarios'];
-  }) => Promise<void>;
+  getLibraries: () => Promise<LibraryBundle>;
+  saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
     provider: 'anthropic' | 'openai' | 'azure'
   ) => Promise<ProviderModelsResponse>;

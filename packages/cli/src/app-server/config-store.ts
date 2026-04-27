@@ -1,14 +1,21 @@
-import { basename, extname, join } from 'node:path';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, extname } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
 import type { SourceEvalConfig } from '@inspectr/mcplab-core';
 import { loadConfig, normalizeSourceConfig } from '@inspectr/mcplab-core';
 import { encodeEvalId, ensureInsideRoot } from './store-utils.js';
+import {
+  deriveConfigRelativePath,
+  deriveSuitePathFromRelativePath,
+  listYamlConfigFilesRecursive
+} from '../eval-config-files.js';
 
 export interface ConfigRecord {
   id: string;
   name: string;
   path: string;
+  relativePath: string;
+  suitePath: string;
   mtime: string;
   hash: string;
   config: SourceEvalConfig;
@@ -29,10 +36,13 @@ export function readConfigRecord(
   } = loadConfig(absPath, { bundleRoot });
   const stat = statSync(absPath);
   const name = basename(absPath, extname(absPath));
+  const relativePath = deriveConfigRelativePath(absPath, evalsDir);
   return {
     id: encodeEvalId(absPath, evalsDir),
     name,
     path: absPath,
+    relativePath,
+    suitePath: deriveSuitePathFromRelativePath(relativePath),
     mtime: stat.mtime.toISOString(),
     hash,
     config: sourceConfig,
@@ -70,10 +80,13 @@ export function readConfigRecordOrInvalid(
   } catch (error) {
     const stat = statSync(absPath);
     const name = basename(absPath, extname(absPath));
+    const relativePath = deriveConfigRelativePath(absPath, evalsDir);
     return {
       id: encodeEvalId(absPath, evalsDir),
       name,
       path: absPath,
+      relativePath,
+      suitePath: deriveSuitePathFromRelativePath(relativePath),
       mtime: stat.mtime.toISOString(),
       hash: '',
       config: parseSourceConfigForInvalidRecord(absPath),
@@ -84,9 +97,9 @@ export function readConfigRecordOrInvalid(
 
 export function listConfigs(evalsDir: string, bundleRoot?: string): ConfigRecord[] {
   if (!existsSync(evalsDir)) return [];
-  const files = readdirSync(evalsDir)
-    .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
-    .map((name) => ensureInsideRoot(evalsDir, join(evalsDir, name)));
+  const files = listYamlConfigFilesRecursive(evalsDir).map((path) =>
+    ensureInsideRoot(evalsDir, path)
+  );
   const records = files.map((path) => readConfigRecordOrInvalid(path, evalsDir, bundleRoot));
   return records.sort((a, b) => {
     const nameA = (typeof a.config.name === 'string' && a.config.name.trim()) || a.name;

@@ -23,14 +23,22 @@ import type {
   ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
-  WorkspaceConfigRecord
+  WorkspaceConfigRecord,
+  CoreLibraryBundle,
+  LibraryBundle
 } from './types';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
 }
 
-function toUiEvalRule(assertion: any): EvalRule {
+function toUiEvalRule(assertion: {
+  type: string;
+  pattern?: string;
+  value?: string;
+  path?: string;
+  equals?: string;
+}): EvalRule {
   switch (assertion.type) {
     case 'regex':
       return { type: 'response_regex', value: assertion.pattern };
@@ -52,12 +60,16 @@ function toUiEvalRule(assertion: any): EvalRule {
       return { type: 'response_jsonpath_not_exists', path: assertion.path };
     default:
       throw new Error(
-        `Unsupported response assertion type in config: ${String(assertion?.type ?? '(missing type)')}`
+        `Unsupported response assertion type in config: ${String(
+          assertion?.type ?? '(missing type)'
+        )}`
       );
   }
 }
 
-function toCoreResponseAssertion(rule: EvalRule):
+function toCoreResponseAssertion(
+  rule: EvalRule
+):
   | { type: 'regex'; pattern: string }
   | { type: 'contains'; value: string }
   | { type: 'not_contains'; value: string }
@@ -346,6 +358,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     name: configName || record.name,
     configName,
     description: record.path,
+    ...(record.relativePath ? { relativePath: record.relativePath } : {}),
+    ...(record.suitePath !== undefined ? { suitePath: record.suitePath } : {}),
     loadError: record.error,
     loadWarnings: record.warnings,
     servers,
@@ -376,11 +390,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   };
 }
 
-export function fromCoreLibraries(libraries: {
-  servers: CoreEvalConfig['servers'];
-  agents: CoreEvalConfig['agents'];
-  scenarios: CoreEvalConfig['scenarios'];
-}): Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'> {
+export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
   const record: WorkspaceConfigRecord = {
     id: 'library',
     name: 'library',
@@ -611,11 +621,9 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   };
 }
 
-export function toCoreLibraries(input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>): {
-  servers: CoreEvalConfig['servers'];
-  agents: CoreEvalConfig['agents'];
-  scenarios: CoreEvalConfig['scenarios'];
-} {
+export function toCoreLibraries(
+  input: Pick<EvalConfig, 'servers' | 'agents' | 'scenarios'>
+): CoreLibraryBundle {
   const servers = Object.fromEntries(
     (input.servers ?? []).map((server) => [
       server.id,

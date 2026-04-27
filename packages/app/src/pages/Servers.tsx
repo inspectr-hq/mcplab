@@ -87,14 +87,14 @@ const Servers = () => {
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
             <Database className="h-6 w-6" />
-            Servers
+            MCP Servers
           </h1>
           <p className="text-sm text-muted-foreground">
             Reusable MCP server definitions shared across configurations.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SearchInput value={serverFilter} onValueChange={setServerFilter} placeholder="Search servers..." />
+          <SearchInput value={serverFilter} onValueChange={setServerFilter} placeholder="Search MCP servers..." />
           <Button type="button" size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh

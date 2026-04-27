@@ -123,7 +123,7 @@ export default function ToolAnalysisResultsPage() {
               </PopoverTrigger>
               <PopoverContent className="w-[240px] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Search servers..." />
+                  <CommandInput placeholder="Search MCP servers..." />
                   <CommandList>
                     <CommandEmpty>No servers found.</CommandEmpty>
                     <CommandGroup>

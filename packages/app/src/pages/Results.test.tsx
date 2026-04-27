@@ -57,11 +57,45 @@ function makeRun(id: string, tokenTotal: number | null): EvalResult {
 }
 
 describe("Results", () => {
+  it("opens the global MCP Lab Assistant sidebar from the Results header", async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200)]);
+
+    render(
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Results");
+    fireEvent.click(screen.getByRole("button", { name: "MCP Lab Assistant" }));
+    expect(screen.getByPlaceholderText("Ask about historical run differences...")).toBeInTheDocument();
+  });
+
+  it("toggles MCP Lab Assistant expand mode in results", async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200)]);
+
+    render(
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Results");
+    fireEvent.click(screen.getByRole("button", { name: "MCP Lab Assistant" }));
+    const expandButton = screen.getByRole("button", { name: /Expand/i });
+    fireEvent.click(expandButton);
+    expect(screen.getByRole("button", { name: /Compact/i })).toBeInTheDocument();
+  });
+
   it("renders tool token totals and n/a when unavailable", async () => {
     sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200), makeRun("run-b", null)]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -82,7 +116,7 @@ describe("Results", () => {
     ]);
 
     render(
-      <MemoryRouter initialEntries={["/results"]}>
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
