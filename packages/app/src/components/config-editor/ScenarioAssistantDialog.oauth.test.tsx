@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScenarioAssistantDialog } from './ScenarioAssistantDialog';
 import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
@@ -11,7 +11,8 @@ const mockSource = {
   sendScenarioAssistantMessage: vi.fn(),
   approveScenarioAssistantToolCall: vi.fn(),
   denyScenarioAssistantToolCall: vi.fn(),
-  approveAllScenarioAssistantToolCalls: vi.fn()
+  approveAllScenarioAssistantToolCalls: vi.fn(),
+  subscribeScenarioAssistantSessionEvents: vi.fn()
 };
 
 const mockEnsureOAuthForServers = vi.fn();
@@ -255,6 +256,55 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
     expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exactly the asset tags.' });
+  });
+
+  it('merges live assistant session updates from SSE events', async () => {
+    let onScenarioEvent: ((event: { payload: { session: ScenarioAssistantSessionView } }) => void) | undefined;
+    mockSource.subscribeScenarioAssistantSessionEvents.mockImplementation(
+      (_sessionId: string, onEvent: typeof onScenarioEvent) => {
+        onScenarioEvent = onEvent;
+        return () => undefined;
+      }
+    );
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: makeAssistantSession()
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(mockSource.subscribeScenarioAssistantSessionEvents).toHaveBeenCalled());
+    await act(async () => {
+      onScenarioEvent?.({
+        type: 'assistant_message_completed',
+        ts: new Date().toISOString(),
+        payload: {
+          sessionId: 'sas-1',
+          session: {
+            ...makeAssistantSession(),
+            messages: [
+              {
+                id: 'msg-1',
+                role: 'assistant',
+                text: 'Live update from SSE',
+                createdAt: new Date().toISOString()
+              }
+            ]
+          }
+        }
+      });
+    });
+
+    expect(await screen.findByText('Live update from SSE')).toBeInTheDocument();
   });
 
   it('approves all pending scenario assistant tool calls', async () => {

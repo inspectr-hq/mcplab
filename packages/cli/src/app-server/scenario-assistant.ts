@@ -14,6 +14,12 @@ import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
 } from './oauth-session-manager.js';
+import {
+  broadcastAssistantSseEvent,
+  createAssistantSseEvent,
+  endAssistantSseClients,
+  serveAssistantSseStream
+} from './assistant-events.js';
 
 export type ScenarioAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -65,12 +71,54 @@ export async function handleScenarioAssistantRoutes(params: {
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   type SessionPendingCall = ScenarioAssistantSession['pendingToolCalls'][number];
   type SessionContext = ScenarioAssistantSession['context'];
+  const publishSessionEvent = (
+    session: ScenarioAssistantSession,
+    type:
+      | 'session_started'
+      | 'turn_started'
+      | 'tool_call_requested'
+      | 'tool_call_approved'
+      | 'tool_call_denied'
+      | 'tool_call_resolved'
+      | 'assistant_message_completed'
+      | 'session_warning'
+      | 'session_error'
+      | 'session_finished',
+    payload: Record<string, unknown> = {}
+  ) => {
+    broadcastAssistantSseEvent(
+      session,
+      createAssistantSseEvent(type, {
+        sessionId: session.id,
+        session: assistantSessionView(session),
+        ...payload
+      })
+    );
+  };
 
   const continueWithAutoApprovedReads = async (session: ScenarioAssistantSession) => {
+    publishSessionEvent(session, 'turn_started');
     let output = await continueAssistantTurn(session);
     for (let i = 0; i < 25; i += 1) {
       const pendingCalls = output.response?.pendingToolCalls;
-      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
+      if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') {
+        if (output.response?.type === 'assistant_message') {
+          publishSessionEvent(session, 'assistant_message_completed', {
+            text: output.response.text,
+            suggestions: output.response.suggestions
+          });
+        } else if (output.response?.type === 'tool_call_request' && output.response.pendingToolCalls) {
+          publishSessionEvent(session, 'tool_call_requested', {
+            pendingToolCalls: output.response.pendingToolCalls,
+            pendingToolCallId: output.response.pendingToolCalls[0]?.id
+          });
+        }
+        break;
+      }
+      publishSessionEvent(session, 'tool_call_requested', {
+        pendingToolCalls: pendingCalls,
+        pendingToolCallId: pendingCalls[0]?.id
+      });
       const allReadOnly = pendingCalls.every(
         (p) =>
           session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
@@ -79,6 +127,7 @@ export async function handleScenarioAssistantRoutes(params: {
       let hadError = false;
       for (const pending of pendingCalls) {
         pending.status = 'approved';
+        publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
         try {
           const toolResult = await executeAssistantToolCall(session, pending);
           pending.resultPreview = summarizeToolResultForAssistant(toolResult);
@@ -87,6 +136,10 @@ export async function handleScenarioAssistantRoutes(params: {
             content: pending.resultPreview,
             tool_call_id: pending.id,
             name: pending.publicToolName
+          });
+          publishSessionEvent(session, 'tool_call_resolved', {
+            pendingToolCallId: pending.id,
+            pendingToolCall: pending
           });
         } catch (error: unknown) {
           pending.status = 'error';
@@ -97,12 +150,22 @@ export async function handleScenarioAssistantRoutes(params: {
             tool_call_id: pending.id,
             name: pending.publicToolName
           });
+          publishSessionEvent(session, 'session_error', {
+            pendingToolCallId: pending.id,
+            error: pending.error
+          });
           hadError = true;
         }
       }
       touchAssistantSession(session);
       if (hadError) break;
       output = await continueAssistantTurn(session);
+    }
+    if (output.response?.type === 'assistant_message') {
+      publishSessionEvent(session, 'assistant_message_completed', {
+        text: output.response.text,
+        suggestions: output.response.suggestions
+      });
     }
     return output;
   };
@@ -191,7 +254,9 @@ export async function handleScenarioAssistantRoutes(params: {
       pendingToolCalls: [],
       chatMessages: [],
       llmMessages: [],
-      warnings
+      warnings,
+      events: [],
+      clients: new Set()
     };
     session.chatMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -225,9 +290,25 @@ export async function handleScenarioAssistantRoutes(params: {
         return true;
       }
     }
+    for (const warning of warnings) {
+      publishSessionEvent(session, 'session_warning', { warning });
+    }
     await preloadAssistantTools(session, serversByName, selectedServerNames, { serverAuthHeaders });
     assistantSessions.set(session.id, session);
+    publishSessionEvent(session, 'session_started');
     asJson(res, 201, { sessionId: session.id, session: assistantSessionView(session) });
+    return true;
+  }
+
+  if (pathname.startsWith('/api/scenario-assistant/sessions/') && pathname.endsWith('/events') && method === 'GET') {
+    cleanupAssistantSessions(assistantSessions);
+    const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '').replace('/events', '');
+    const session = assistantSessions.get(sessionId);
+    if (!session) {
+      asJson(res, 404, { error: 'Scenario Assistant session not found' });
+      return true;
+    }
+    serveAssistantSseStream(req, res, session);
     return true;
   }
 
@@ -247,6 +328,11 @@ export async function handleScenarioAssistantRoutes(params: {
   if (pathname.startsWith('/api/scenario-assistant/sessions/') && method === 'DELETE') {
     cleanupAssistantSessions(assistantSessions);
     const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '');
+    const session = assistantSessions.get(sessionId);
+    if (session) {
+      publishSessionEvent(session, 'session_finished');
+      endAssistantSseClients(session);
+    }
     assistantSessions.delete(sessionId);
     asJson(res, 200, { ok: true });
     return true;
@@ -329,6 +415,7 @@ export async function handleScenarioAssistantRoutes(params: {
       pending.arguments = body.argumentsOverride;
     }
     pending.status = 'approved';
+    publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
     try {
       const toolResult = await executeAssistantToolCall(session, pending);
       pending.resultPreview = summarizeToolResultForAssistant(toolResult);
@@ -353,9 +440,17 @@ export async function handleScenarioAssistantRoutes(params: {
         text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
         createdAt: new Date().toISOString()
       });
+      publishSessionEvent(session, 'session_error', {
+        pendingToolCallId: pending.id,
+        error: pending.error
+      });
     }
+    publishSessionEvent(session, 'tool_call_resolved', {
+      pendingToolCallId: pending.id,
+      pendingToolCall: pending
+    });
     if (allSiblingsResolved(session, callId)) {
-      const output = await continueAssistantTurn(session);
+      const output = await continueWithAutoApprovedReads(session);
       asJson(res, 200, output);
     } else {
       touchAssistantSession(session);
@@ -406,8 +501,13 @@ export async function handleScenarioAssistantRoutes(params: {
       tool_call_id: pending.id,
       name: pending.publicToolName
     });
+    publishSessionEvent(session, 'tool_call_denied', { pendingToolCallId: pending.id });
+    publishSessionEvent(session, 'tool_call_resolved', {
+      pendingToolCallId: pending.id,
+      pendingToolCall: pending
+    });
     if (allSiblingsResolved(session, callId)) {
-      const output = await continueAssistantTurn(session);
+      const output = await continueWithAutoApprovedReads(session);
       asJson(res, 200, output);
     } else {
       touchAssistantSession(session);
@@ -444,6 +544,7 @@ export async function handleScenarioAssistantRoutes(params: {
     }
     for (const pending of pendingCalls) {
       pending.status = 'approved';
+      publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
       try {
         const toolResult = await executeAssistantToolCall(session, pending);
         pending.resultPreview = summarizeToolResultForAssistant(toolResult);
@@ -468,9 +569,17 @@ export async function handleScenarioAssistantRoutes(params: {
           text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
           createdAt: new Date().toISOString()
         });
+        publishSessionEvent(session, 'session_error', {
+          pendingToolCallId: pending.id,
+          error: pending.error
+        });
       }
+      publishSessionEvent(session, 'tool_call_resolved', {
+        pendingToolCallId: pending.id,
+        pendingToolCall: pending
+      });
     }
-    const output = await continueAssistantTurn(session);
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }

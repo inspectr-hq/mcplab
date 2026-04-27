@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
 import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
@@ -8,6 +9,7 @@ import {
   touchSession,
   truncateJson
 } from './assistant-common.js';
+import type { AssistantSseEvent } from './assistant-events.js';
 import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
 
 interface ParsedAssistantToolCall {
@@ -67,6 +69,8 @@ export interface ResultAssistantSession {
   chatMessages: ResultAssistantChatMessage[];
   llmMessages: LlmMessage[];
   systemPromptCache?: string;
+  events: AssistantSseEvent[];
+  clients: Set<ServerResponse>;
 }
 
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useRef } from "react";
+import { Fragment, useCallback, useEffect, useState, useRef } from "react";
 import { Bot, CheckCircle2, Copy, Loader2, Minimize2, Sparkles, Wrench, X } from "lucide-react";
 import {
   AssistantComposer,
@@ -157,7 +157,7 @@ export function ScenarioAssistantDialog({
       });
       if (cancelled) return;
       setSessionId(resp.sessionId);
-      setSession(resp.session);
+      syncScenarioAssistantSession(resp.session);
     };
     void bootstrap()
       .catch((error: unknown) => {
@@ -194,6 +194,15 @@ export function ScenarioAssistantDialog({
     setAppliedSuggestionKeys(new Set());
     initialMessageSentRef.current = null;
   };
+
+  const syncScenarioAssistantSession = useCallback((nextSession: ScenarioAssistantSessionView) => {
+    setSession((prev) => {
+      if (prev && prev.messages.length > nextSession.messages.length) {
+        return prev;
+      }
+      return nextSession;
+    });
+  }, []);
 
   const closeScenarioAssistantSession = (id: string) => {
     resetLocalSessionState();
@@ -269,7 +278,7 @@ export function ScenarioAssistantDialog({
     setLoading(true);
     try {
       const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed);
-      setSession(resp.session);
+      syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       setSession((prev) =>
         prev
@@ -305,12 +314,19 @@ export function ScenarioAssistantDialog({
     void sendMessage(handoffMessage);
   }, [open, sessionId, session, canUseAssistant, loading, initialUserMessage]);
 
+  useEffect(() => {
+    if (!open || !sessionId || !session) return;
+    return source.subscribeScenarioAssistantSessionEvents(sessionId, (event) => {
+      syncScenarioAssistantSession(event.payload.session);
+    });
+  }, [open, sessionId, session?.id, source, syncScenarioAssistantSession]);
+
   const handleApprove = async (callId: string) => {
     if (!sessionId) return;
     setLoading(true);
     try {
       const resp = await source.approveScenarioAssistantToolCall(sessionId, callId);
-      setSession(resp.session);
+      syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
         title: "Tool call failed",
@@ -327,7 +343,7 @@ export function ScenarioAssistantDialog({
     setLoading(true);
     try {
       const resp = await source.denyScenarioAssistantToolCall(sessionId, callId);
-      setSession(resp.session);
+      syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
         title: "Could not deny tool call",
@@ -344,7 +360,7 @@ export function ScenarioAssistantDialog({
     setLoading(true);
     try {
       const resp = await source.approveAllScenarioAssistantToolCalls(sessionId);
-      setSession(resp.session);
+      syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
         title: "Could not approve all tool calls",

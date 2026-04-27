@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { AgentConfig, EvalConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
@@ -9,6 +10,7 @@ import {
   truncateJson,
   withTimeout
 } from './assistant-common.js';
+import type { AssistantSseEvent } from './assistant-events.js';
 import { readLibraries } from './libraries-store.js';
 
 export { truncateJson } from './assistant-common.js';
@@ -125,6 +127,8 @@ export interface ScenarioAssistantSession {
   llmMessages: LlmMessage[];
   warnings: string[];
   systemPromptCache?: string;
+  events: AssistantSseEvent[];
+  clients: Set<ServerResponse>;
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;

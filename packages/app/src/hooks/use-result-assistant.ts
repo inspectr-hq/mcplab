@@ -50,7 +50,10 @@ export function useResultAssistant(params: {
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
       setAssistantSessionId(sessionIdOverride ?? session.id);
-      setAssistantMessages(session.messages);
+      setAssistantMessages((prev) => {
+        if (prev.length > session.messages.length) return prev;
+        return session.messages;
+      });
       setAssistantPendingToolCalls(session.pendingToolCalls);
       onSessionSync?.(session);
     },
@@ -235,6 +238,13 @@ export function useResultAssistant(params: {
     const next = Math.min(el.scrollHeight, 160);
     el.style.height = `${Math.max(40, next)}px`;
   }, [assistantInput, open]);
+
+  useEffect(() => {
+    if (!open || !assistantSessionId) return;
+    return sourceRef.current.subscribeResultAssistantSessionEvents(assistantSessionId, (event) => {
+      syncResultAssistantSession(event.payload.session, event.payload.sessionId);
+    });
+  }, [open, assistantSessionId, syncResultAssistantSession]);
 
   useEffect(() => {
     return () => {

@@ -6,15 +6,17 @@ import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import type { ResultAssistantSession } from './result-assistant-domain.js';
 import {
   cleanupResultAssistantSessions,
-  continueResultAssistantTurn,
-  executeResultAssistantToolCall,
-  preloadResultAssistantTools,
   resultAssistantSessionView,
-  summarizeToolResultForResultAssistant,
   touchResultAssistantSession
 } from './result-assistant-domain.js';
 import { isResultAssistantAutoApprovedTool } from './result-assistant-tools.js';
 import { flushDanglingToolCalls } from './assistant-common.js';
+import {
+  broadcastAssistantSseEvent,
+  createAssistantSseEvent,
+  endAssistantSseClients,
+  serveAssistantSseStream
+} from './assistant-events.js';
 
 export type ResultAssistantRouteDeps = Pick<
   AppRouteDeps,
@@ -24,6 +26,10 @@ export type ResultAssistantRouteDeps = Pick<
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'resolveAssistantAgentFromLibraries'
+  | 'continueAssistantTurn'
+  | 'executeAssistantToolCall'
+  | 'summarizeToolResultForAssistant'
+  | 'preloadAssistantTools'
 >;
 
 type ResultAssistantTurnRouteResponse = {
@@ -51,12 +57,40 @@ export async function handleResultAssistantRoutes(params: {
     getRunResults,
     readLibraries,
     pickDefaultAssistantAgentName,
-    resolveAssistantAgentFromLibraries
+    resolveAssistantAgentFromLibraries,
+    continueAssistantTurn,
+    executeAssistantToolCall,
+    summarizeToolResultForAssistant,
+    preloadAssistantTools
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const listReferenceReportsForRun = (runId: string | null) =>
     listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
+  const publishSessionEvent = (
+    session: ResultAssistantSession,
+    type:
+      | 'session_started'
+      | 'turn_started'
+      | 'tool_call_requested'
+      | 'tool_call_approved'
+      | 'tool_call_denied'
+      | 'tool_call_resolved'
+      | 'assistant_message_completed'
+      | 'session_warning'
+      | 'session_error'
+      | 'session_finished',
+    payload: Record<string, unknown> = {}
+  ) => {
+    broadcastAssistantSseEvent(
+      session,
+      createAssistantSseEvent(type, {
+        sessionId: session.id,
+        session: resultAssistantSessionView(session),
+        ...payload
+      })
+    );
+  };
 
   const executePendingToolCall = async (
     session: ResultAssistantSession,
@@ -66,6 +100,7 @@ export async function handleResultAssistantRoutes(params: {
   ): Promise<void> => {
     const emitApprovalChatMessage = options?.emitApprovalChatMessage ?? true;
     pending.status = 'approved';
+    publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
     if (emitApprovalChatMessage) {
       session.chatMessages.push({
         id: makeMsgId(),
@@ -75,8 +110,8 @@ export async function handleResultAssistantRoutes(params: {
       });
     }
     try {
-      const toolResult = await executeResultAssistantToolCall(session, pending);
-      pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
+      const toolResult = await executeAssistantToolCall(session, pending);
+      pending.resultPreview = summarizeToolResultForAssistant(toolResult);
       if (pending.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
         session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
         session.systemPromptCache = undefined;
@@ -86,6 +121,10 @@ export async function handleResultAssistantRoutes(params: {
         content: pending.resultPreview,
         tool_call_id: pending.id,
         name: pending.publicToolName
+      });
+      publishSessionEvent(session, 'tool_call_resolved', {
+        pendingToolCallId: pending.id,
+        pendingToolCall: pending
       });
     } catch (error: unknown) {
       pending.status = 'error';
@@ -102,13 +141,18 @@ export async function handleResultAssistantRoutes(params: {
         text: `Tool error (${pending.server}::${pending.tool}): ${pending.error}`,
         createdAt: new Date().toISOString()
       });
+      publishSessionEvent(session, 'session_error', {
+        pendingToolCallId: pending.id,
+        error: pending.error
+      });
     }
   };
 
   const continueWithAutoApprovedReads = async (
     session: ResultAssistantSession
   ): Promise<ResultAssistantTurnRouteResponse> => {
-    let output = await continueResultAssistantTurn(session);
+    publishSessionEvent(session, 'turn_started');
+    let output = await continueAssistantTurn(session);
     for (let i = 0; i < 25; i += 1) {
       const pending = output.response.pendingToolCall;
       if (
@@ -116,14 +160,28 @@ export async function handleResultAssistantRoutes(params: {
         !pending ||
         !isResultAssistantAutoApprovedTool(pending.tool)
       ) {
+        if (output.response.type === 'assistant_message') {
+          publishSessionEvent(session, 'assistant_message_completed', {
+            text: output.response.text
+          });
+        } else if (output.response.type === 'tool_call_request' && output.response.pendingToolCall) {
+          publishSessionEvent(session, 'tool_call_requested', {
+            pendingToolCallId: output.response.pendingToolCall.id,
+            pendingToolCall: output.response.pendingToolCall
+          });
+        }
         return output;
       }
+      publishSessionEvent(session, 'tool_call_requested', {
+        pendingToolCallId: pending.id,
+        pendingToolCall: pending
+      });
       await executePendingToolCall(session, pending, 'Auto-approved read-only', {
         emitApprovalChatMessage: false
       });
       touchResultAssistantSession(session);
       if (pending.error) break;
-      output = await continueResultAssistantTurn(session);
+      output = await continueAssistantTurn(session);
     }
     return output;
   };
@@ -169,7 +227,9 @@ export async function handleResultAssistantRoutes(params: {
       toolPublicMap: new Map(),
       pendingToolCalls: [],
       chatMessages: [],
-      llmMessages: []
+      llmMessages: [],
+      events: [],
+      clients: new Set()
     };
     session.chatMessages.push({
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -181,7 +241,7 @@ export async function handleResultAssistantRoutes(params: {
       createdAt: new Date().toISOString()
     });
     try {
-      await preloadResultAssistantTools(session, localMcplabMcpUrl());
+      await preloadAssistantTools(session, localMcplabMcpUrl());
     } catch (error) {
       session.chatMessages.push({
         id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -189,9 +249,23 @@ export async function handleResultAssistantRoutes(params: {
         text: `Warning: could not preload MCPLab MCP tools: ${errorMessage(error)}`,
         createdAt: new Date().toISOString()
       });
+      publishSessionEvent(session, 'session_warning', { warning: errorMessage(error) });
     }
     resultAssistantSessions.set(session.id, session);
+    publishSessionEvent(session, 'session_started');
     asJson(res, 201, { sessionId: session.id, session: resultAssistantSessionView(session) });
+    return true;
+  }
+
+  if (pathname.startsWith('/api/result-assistant/sessions/') && pathname.endsWith('/events') && method === 'GET') {
+    cleanupResultAssistantSessions(resultAssistantSessions);
+    const sessionId = pathname.replace('/api/result-assistant/sessions/', '').replace('/events', '');
+    const session = resultAssistantSessions.get(sessionId);
+    if (!session) {
+      asJson(res, 404, { error: 'Result Assistant session not found' });
+      return true;
+    }
+    serveAssistantSseStream(req, res, session);
     return true;
   }
 
@@ -211,6 +285,11 @@ export async function handleResultAssistantRoutes(params: {
   if (pathname.startsWith('/api/result-assistant/sessions/') && method === 'DELETE') {
     cleanupResultAssistantSessions(resultAssistantSessions);
     const sessionId = pathname.replace('/api/result-assistant/sessions/', '');
+    const session = resultAssistantSessions.get(sessionId);
+    if (session) {
+      publishSessionEvent(session, 'session_finished');
+      endAssistantSseClients(session);
+    }
     resultAssistantSessions.delete(sessionId);
     asJson(res, 200, { ok: true });
     return true;
@@ -325,6 +404,11 @@ export async function handleResultAssistantRoutes(params: {
       }),
       tool_call_id: pending.id,
       name: pending.publicToolName
+    });
+    publishSessionEvent(session, 'tool_call_denied', { pendingToolCallId: pending.id });
+    publishSessionEvent(session, 'tool_call_resolved', {
+      pendingToolCallId: pending.id,
+      pendingToolCall: pending
     });
     const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
