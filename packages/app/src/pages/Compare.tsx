@@ -45,6 +45,7 @@ type RunScopeSummary = {
   scenarioCount: number;
   agentCount: number;
   scenarioPreview: string;
+  modelSummary: string;
 };
 
 function isSameStringArray(a: string[], b: string[]): boolean {
@@ -55,12 +56,18 @@ function isSameStringArray(a: string[], b: string[]): boolean {
 function runScopeSummary(run: EvalResult): RunScopeSummary {
   const scenarioIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.scenarioId).filter(Boolean)));
   const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
+  const models = Array.from(
+    new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
+  );
   const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
   const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+  const modelPreview = models.slice(0, 2).join(", ");
+  const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
   return {
     scenarioCount: scenarioIds.length,
     agentCount: agentIds.length,
-    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
+    modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
   };
 }
 
@@ -665,12 +672,14 @@ const Compare = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scenarioPreview: "n/a"
+                          scenarioPreview: "n/a",
+                          modelSummary: ""
                         };
                         return (
                           <div className="space-y-0.5">
                             <div>
                               Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
                             <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
                           </div>

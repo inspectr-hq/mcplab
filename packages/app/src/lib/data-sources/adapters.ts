@@ -1125,6 +1125,8 @@ export function fromCoreResultsJson(
       scenarioName: scenario.scenario_name || scenario.scenario_id,
       agentId: scenario.agent,
       agentName: scenario.agent,
+      provider: scenario.provider,
+      model: scenario.model,
       runs,
       passRate: scenario.pass_rate,
       avgToolCalls,
