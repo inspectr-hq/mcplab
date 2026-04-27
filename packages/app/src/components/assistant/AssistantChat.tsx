@@ -180,7 +180,6 @@ export function AssistantToolCallCard({
           <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
         </pre>
         {call.error && <p className="text-xs text-destructive">{call.error}</p>}
-        {call.resultPreview && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{call.resultPreview}</p>}
         {isPending && (
           <div className="mt-2 flex justify-end gap-2">
             <Button
