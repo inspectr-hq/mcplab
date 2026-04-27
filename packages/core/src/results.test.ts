@@ -38,6 +38,32 @@ describe('aggregateResults', () => {
     expect(result.scenarios).toHaveLength(0);
   });
 
+  it('passes provider and model through to scenario aggregate', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'claude',
+          provider: 'anthropic',
+          model: 'claude-haiku-4-5-20251001',
+          runs: [makeRun(true)]
+        }
+      ]
+    });
+    expect(result.scenarios[0].provider).toBe('anthropic');
+    expect(result.scenarios[0].model).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('leaves provider and model undefined when not supplied', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [{ scenario_id: 's1', agent: 'gpt-4', runs: [makeRun(true)] }]
+    });
+    expect(result.scenarios[0].provider).toBeUndefined();
+    expect(result.scenarios[0].model).toBeUndefined();
+  });
+
   it('computes pass_rate 1.0 when all runs pass', () => {
     const result = aggregateResults({
       ...BASE,

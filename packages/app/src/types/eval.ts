@@ -165,6 +165,8 @@ export interface ScenarioResult {
   scenarioName: string;
   agentId: string;
   agentName: string;
+  provider?: string;
+  model?: string;
   runs: ScenarioRun[];
   passRate: number;
   avgToolCalls: number;
