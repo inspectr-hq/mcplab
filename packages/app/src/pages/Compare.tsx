@@ -16,6 +16,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PassRateBadge } from "@/components/PassRateBadge";
+import { formatProvider } from "@/components/ProviderBadge";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import type { EvalResult, ScenarioResult, ScenarioRun } from "@/types/eval";
@@ -28,6 +29,8 @@ type CompareMode = "runs" | "within-run";
 type AgentSummary = {
   agentId: string;
   agentName: string;
+  provider?: string;
+  model?: string;
   passRate: number;
   totalRuns: number;
   avgToolCalls: number;
@@ -304,7 +307,7 @@ const Compare = () => {
       nextAgents = nextAgentOptions.slice(0, Math.min(2, nextAgentOptions.length));
     }
     const nextScenarioOptions = (() => {
-      if (!nextRun) return [];
+      if (!nextRun) return new Set<string>();
       const labels = new Set<string>();
       for (const scenario of nextRun.scenarios) {
         const name = String(scenario.scenarioName ?? "").trim();
@@ -405,9 +408,13 @@ const Compare = () => {
       const passCount = runs.filter((run) => run.passed).length;
       const totalToolCalls = runs.reduce((sum, run) => sum + run.toolCalls.length, 0);
       const totalDuration = runs.reduce((sum, run) => sum + run.duration, 0);
+      const provider = relatedScenarios.find((s) => s.provider)?.provider;
+      const model = relatedScenarios.find((s) => s.model)?.model;
       return {
         agentId: agent.id,
         agentName: agent.name,
+        provider,
+        model,
         passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
@@ -875,8 +882,13 @@ const Compare = () => {
                   <TableRow>
                     <TableHead>Metric</TableHead>
                     {withinRunAgentSummary.map((summary) => (
-                      <TableHead key={summary.agentId} className="font-mono text-xs">
-                        {summary.agentName}
+                      <TableHead key={summary.agentId}>
+                        <div className="font-medium text-sm">{summary.agentName}</div>
+                        {(summary.provider || summary.model) && (
+                          <div className="font-mono text-xs font-normal text-muted-foreground">
+                            {[summary.provider ? formatProvider(summary.provider) : null, summary.model].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -928,11 +940,19 @@ const Compare = () => {
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead className="w-[260px]">Scenario</TableHead>
-                    {selectedWithinRunAgentOptions.map((agent) => (
-                      <TableHead key={agent.id} className="font-mono text-xs">
-                        {agent.name}
-                      </TableHead>
-                    ))}
+                    {selectedWithinRunAgentOptions.map((agent) => {
+                      const summary = withinRunAgentSummary.find((s) => s.agentId === agent.id);
+                      return (
+                        <TableHead key={agent.id}>
+                          <div className="font-medium text-sm">{agent.name}</div>
+                          {(summary?.provider || summary?.model) && (
+                            <div className="font-mono text-xs font-normal text-muted-foreground">
+                              {[summary.provider ? formatProvider(summary.provider) : null, summary.model].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 </TableHeader>
                 <TableBody>

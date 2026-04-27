@@ -27,6 +27,7 @@ import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import { formatAssistantToolName } from "@/lib/assistant-tool-name";
+import { formatProvider } from "@/components/ProviderBadge";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
   MarkdownReportContent,
@@ -1016,7 +1017,14 @@ const ResultDetail = () => {
                       <TableRow className="cursor-pointer hover:bg-muted/50">
                         <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(rowKey) ? "rotate-180" : ""}`} /></TableCell>
                         <TableCell className="font-medium text-sm">{sc.scenarioName}</TableCell>
-                        <TableCell className="text-sm">{sc.agentName}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{sc.agentName}</div>
+                          {(sc.provider || sc.model) && (
+                            <div className="text-xs text-muted-foreground">
+                              {[sc.provider ? formatProvider(sc.provider) : null, sc.model].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                         <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
                         <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
