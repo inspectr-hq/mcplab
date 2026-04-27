@@ -213,7 +213,7 @@ export async function executeResultAssistantToolCall(
   session: ResultAssistantSession,
   pending: ResultAssistantPendingToolCall
 ): Promise<unknown> {
-  const timeoutMs = 10_000;
+  const timeoutMs = 30_000;
   let handle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     handle = setTimeout(

@@ -26,10 +26,10 @@ export type ResultAssistantRouteDeps = Pick<
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'resolveAssistantAgentFromLibraries'
-  | 'continueAssistantTurn'
-  | 'executeAssistantToolCall'
-  | 'summarizeToolResultForAssistant'
-  | 'preloadAssistantTools'
+  | 'continueResultAssistantTurn'
+  | 'executeResultAssistantToolCall'
+  | 'summarizeToolResultForResultAssistant'
+  | 'preloadResultAssistantTools'
 >;
 
 type ResultAssistantTurnRouteResponse = {
@@ -58,10 +58,10 @@ export async function handleResultAssistantRoutes(params: {
     readLibraries,
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromLibraries,
-    continueAssistantTurn,
-    executeAssistantToolCall,
-    summarizeToolResultForAssistant,
-    preloadAssistantTools
+    continueResultAssistantTurn,
+    executeResultAssistantToolCall,
+    summarizeToolResultForResultAssistant,
+    preloadResultAssistantTools
   } = deps;
   const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const makeMsgId = () => `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -110,8 +110,8 @@ export async function handleResultAssistantRoutes(params: {
       });
     }
     try {
-      const toolResult = await executeAssistantToolCall(session, pending);
-      pending.resultPreview = summarizeToolResultForAssistant(toolResult);
+      const toolResult = await executeResultAssistantToolCall(session, pending);
+      pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
       if (pending.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
         session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
         session.systemPromptCache = undefined;
@@ -152,7 +152,7 @@ export async function handleResultAssistantRoutes(params: {
     session: ResultAssistantSession
   ): Promise<ResultAssistantTurnRouteResponse> => {
     publishSessionEvent(session, 'turn_started');
-    let output = await continueAssistantTurn(session);
+    let output = await continueResultAssistantTurn(session);
     for (let i = 0; i < 25; i += 1) {
       const pending = output.response.pendingToolCall;
       if (
@@ -181,7 +181,7 @@ export async function handleResultAssistantRoutes(params: {
       });
       touchResultAssistantSession(session);
       if (pending.error) break;
-      output = await continueAssistantTurn(session);
+      output = await continueResultAssistantTurn(session);
     }
     return output;
   };
@@ -241,7 +241,7 @@ export async function handleResultAssistantRoutes(params: {
       createdAt: new Date().toISOString()
     });
     try {
-      await preloadAssistantTools(session, localMcplabMcpUrl());
+      await preloadResultAssistantTools(session, localMcplabMcpUrl());
     } catch (error) {
       session.chatMessages.push({
         id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -322,7 +322,7 @@ export async function handleResultAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueWithAutoApprovedReads(session);
+      const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }

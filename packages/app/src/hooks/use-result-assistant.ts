@@ -36,6 +36,7 @@ export function useResultAssistant(params: {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
   const sourceRef = useRef(source);
+  const onSessionSyncRef = useRef(onSessionSync);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -47,6 +48,10 @@ export function useResultAssistant(params: {
     sourceRef.current = source;
   }, [source]);
 
+  useEffect(() => {
+    onSessionSyncRef.current = onSessionSync;
+  }, [onSessionSync]);
+
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
       setAssistantSessionId(sessionIdOverride ?? session.id);
@@ -55,9 +60,9 @@ export function useResultAssistant(params: {
         return session.messages;
       });
       setAssistantPendingToolCalls(session.pendingToolCalls);
-      onSessionSync?.(session);
+      onSessionSyncRef.current?.(session);
     },
-    [onSessionSync]
+    []
   );
 
   const syncAndContinueAssistantTurn = useCallback(

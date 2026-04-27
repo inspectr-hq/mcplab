@@ -743,7 +743,7 @@ export async function executeAssistantToolCall(
   session: ScenarioAssistantSession,
   pending: AssistantPendingToolCall
 ): Promise<unknown> {
-  const timeoutMs = 10_000;
+  const timeoutMs = 30_000;
   return withTimeout(
     () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
     timeoutMs,

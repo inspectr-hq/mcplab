@@ -28,10 +28,6 @@ import type {
   pickDefaultAssistantAgentName,
   resolveAssistantAgentFromConfig,
   resolveAssistantAgentFromLibraries,
-  preloadAssistantTools,
-  continueAssistantTurn,
-  executeAssistantToolCall,
-  summarizeToolResultForAssistant,
   ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 import type {
@@ -105,10 +101,29 @@ export interface AssistantDeps extends LibraryDeps {
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
-  preloadAssistantTools: typeof preloadAssistantTools;
-  continueAssistantTurn: typeof continueAssistantTurn;
-  executeAssistantToolCall: typeof executeAssistantToolCall;
-  summarizeToolResultForAssistant: typeof summarizeToolResultForAssistant;
+}
+
+export interface ResultAssistantDeps extends LibraryDeps {
+  pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
+  resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
+  preloadResultAssistantTools: typeof import('./result-assistant-domain.js').preloadResultAssistantTools;
+  continueResultAssistantTurn: typeof import('./result-assistant-domain.js').continueResultAssistantTurn;
+  executeResultAssistantToolCall: typeof import('./result-assistant-domain.js').executeResultAssistantToolCall;
+  summarizeToolResultForResultAssistant: typeof import('./result-assistant-domain.js').summarizeToolResultForResultAssistant;
+}
+
+export interface ScenarioAssistantDeps extends LibraryDeps {
+  cleanupAssistantSessions: typeof cleanupAssistantSessions;
+  touchAssistantSession: typeof touchAssistantSession;
+  assistantSessionView: typeof assistantSessionView;
+  ensureInsideRoot: typeof ensureInsideRoot;
+  pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
+  resolveAssistantAgentFromConfig: typeof resolveAssistantAgentFromConfig;
+  resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
+  preloadAssistantTools: typeof import('./scenario-assistant-domain.js').preloadAssistantTools;
+  continueAssistantTurn: typeof import('./scenario-assistant-domain.js').continueAssistantTurn;
+  executeAssistantToolCall: typeof import('./scenario-assistant-domain.js').executeAssistantToolCall;
+  summarizeToolResultForAssistant: typeof import('./scenario-assistant-domain.js').summarizeToolResultForAssistant;
 }
 
 export interface OAuthDebuggerDeps extends LibraryDeps {
@@ -169,7 +184,8 @@ export interface AppRouteDeps
     JobStreamDeps,
     ToolAnalysisDeps,
     OAuthDebuggerDeps,
-    AssistantDeps,
+    ResultAssistantDeps,
+    ScenarioAssistantDeps,
     SnapshotDeps,
     ConfigDeps,
     RunDeps {}
