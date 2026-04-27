@@ -129,6 +129,8 @@ export async function runAll(
       scenario_id: string;
       scenario_name?: string;
       agent: string;
+      provider?: string;
+      model?: string;
       eval?: ExecutableScenario['eval'];
       runs: ScenarioRunResult[];
     }> = [];
@@ -313,6 +315,8 @@ export async function runAll(
         scenario_id: scenario.id,
         scenario_name: scenario.name,
         agent: scenario.agent,
+        provider: agent.provider,
+        model: agent.model,
         eval: scenario.eval,
         runs
       });

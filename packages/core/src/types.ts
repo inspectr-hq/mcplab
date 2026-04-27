@@ -340,6 +340,8 @@ export interface ScenarioAggregate {
   scenario_id: string;
   scenario_name?: string;
   agent: string;
+  provider?: string;
+  model?: string;
   eval?: EvalRules;
   tool_constraints_stats?: {
     required: Record<string, number>;

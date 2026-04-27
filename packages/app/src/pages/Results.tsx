@@ -52,6 +52,7 @@ type RunScopeSummary = {
   scenarioCount: number;
   agentCount: number;
   scenarioPreview: string;
+  modelSummary: string;
 };
 
 function runScopeSummary(run: EvalResult): RunScopeSummary {
@@ -68,12 +69,18 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
     ).values()
   );
   const agentNames = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentName).filter(Boolean)));
+  const models = Array.from(
+    new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
+  );
   const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
   const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
+  const modelPreview = models.slice(0, 2).join(", ");
+  const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
   return {
     scenarioCount: scenarioLabels.length,
     agentCount: agentNames.length,
-    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"
+    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
+    modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
   };
 }
 
@@ -469,13 +476,15 @@ const Results = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scenarioPreview: "n/a"
+                          scenarioPreview: "n/a",
+                          modelSummary: ""
                         };
                         return (
                           <div className="space-y-0.5">
                             <div>
                               Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} ·{" "}
                               {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
                             <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
                           </div>
