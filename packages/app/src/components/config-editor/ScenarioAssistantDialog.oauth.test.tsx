@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScenarioAssistantDialog } from './ScenarioAssistantDialog';
@@ -320,17 +321,21 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
   });
 
   it('minimizes an active session without discarding it', async () => {
-    const onOpenChange = vi.fn();
-    const { rerender } = render(
-      <ScenarioAssistantDialog
-        open
-        onOpenChange={onOpenChange}
-        scenario={makeScenario()}
-        agents={agents}
-        servers={servers}
-        onApplyPatch={vi.fn()}
-      />
-    );
+    function Wrapper() {
+      const [open, setOpen] = useState(true);
+      return (
+        <ScenarioAssistantDialog
+          open={open}
+          onOpenChange={setOpen}
+          scenario={makeScenario()}
+          agents={agents}
+          servers={servers}
+          onApplyPatch={vi.fn()}
+        />
+      );
+    }
+
+    render(<Wrapper />);
 
     await screen.findByLabelText('Minimize assistant');
     const assistantInput = screen.getByPlaceholderText(
@@ -340,20 +345,9 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     expect(document.activeElement).toBe(assistantInput);
     fireEvent.click(screen.getByLabelText('Minimize assistant'));
 
-    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(mockSource.closeScenarioAssistantSession).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByPlaceholderText('Get assistance with creating or refining this scenario ...')).not.toBeInTheDocument());
     expect(document.activeElement).not.toBe(assistantInput);
-
-    rerender(
-      <ScenarioAssistantDialog
-        open={false}
-        onOpenChange={onOpenChange}
-        scenario={makeScenario()}
-        agents={agents}
-        servers={servers}
-        onApplyPatch={vi.fn()}
-      />
-    );
 
     expect(screen.getByText('Scenario Assistant (session active)')).toBeInTheDocument();
   });

@@ -576,7 +576,7 @@ export function registerTools(server: McpServer): void {
         output_path: z
           .string()
           .describe(
-            'Target .md/.markdown path. Use a relative path (e.g. mcplab/reports/my-report.md) — relative paths are always safe and resolve against the server\'s working directory (process.cwd()). Absolute paths are accepted only if they stay inside that directory; any path that escapes it is rejected with error_code PATH_ESCAPE.'
+            "Target .md/.markdown path. Use a relative path (e.g. mcplab/reports/my-report.md) — relative paths are always safe and resolve against the server's working directory (process.cwd()). Absolute paths are accepted only if they stay inside that directory; any path that escapes it is rejected with error_code PATH_ESCAPE."
           ),
         markdown: z
           .string()

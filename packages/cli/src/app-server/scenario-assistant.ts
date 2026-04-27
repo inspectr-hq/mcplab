@@ -72,7 +72,8 @@ export async function handleScenarioAssistantRoutes(params: {
       const pendingCalls = output.response?.pendingToolCalls;
       if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
       const allReadOnly = pendingCalls.every(
-        (p) => session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
+        (p) =>
+          session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
       );
       if (!allReadOnly) break;
       let hadError = false;
