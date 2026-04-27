@@ -1,5 +1,25 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.2.0
+
+### Minor Changes
+
+- feat: enhance handling of config paths and suite organization
+- feat: add MCP server connection details
+- feat: improve MCP tooling for the MCPLab
+- feat: Add snippets for the result overview assistant
+- feat: introduce cross-run Result Assistant for historical trend analysis
+- feat: add MCP tools for run aggregation and regression comparison
+- feat: enhance run comparison view with within-run mode and sticky headers
+- feat: support batch config runs via directory path with --bail flag
+- refactor: add log prefix for consistent CLI output in MCPLab app server
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.7.0
+  - @inspectr/mcplab-reporting@1.1.6
+
 ## 1.1.4
 
 ### Patch Changes
