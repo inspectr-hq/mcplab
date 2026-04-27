@@ -319,7 +319,7 @@ export function ScenarioAssistantDialog({
     return source.subscribeScenarioAssistantSessionEvents(sessionId, (event) => {
       syncScenarioAssistantSession(event.payload.session);
     });
-  }, [open, sessionId, session?.id, source, syncScenarioAssistantSession]);
+  }, [open, sessionId, source, syncScenarioAssistantSession]);
 
   const handleApprove = async (callId: string) => {
     if (!sessionId) return;

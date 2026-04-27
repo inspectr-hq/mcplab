@@ -11,6 +11,7 @@ import {
   withTimeout
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
+import { endAssistantSseClients } from './assistant-events.js';
 import { readLibraries } from './libraries-store.js';
 
 export { truncateJson } from './assistant-common.js';
@@ -139,7 +140,7 @@ export function cleanupAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now);
+  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
 }
 
 export function touchAssistantSession(session: ScenarioAssistantSession): void {

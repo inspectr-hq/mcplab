@@ -107,7 +107,9 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
     if (closed) return;
     if (typeof event.data !== 'string' || !event.data) return;
     try {
-      onEvent(JSON.parse(event.data) as TEvent);
+      const parsed = JSON.parse(event.data) as TEvent;
+      if (parsed.type === 'session_finished') close();
+      onEvent(parsed);
     } catch {
       // Ignore malformed or non-JSON assistant SSE payloads.
     }
@@ -115,7 +117,12 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   for (const eventType of eventTypes) {
     source.addEventListener(eventType, messageHandler);
   }
-  source.onerror = () => close();
+  // Only close permanently when EventSource has given up (readyState CLOSED = 2).
+  // Transient errors (readyState CONNECTING = 0) let the browser auto-reconnect;
+  // the server replays session.events on reconnect so no events are lost.
+  source.onerror = () => {
+    if (source.readyState === 2) close();
+  };
   return () => close();
 }
 

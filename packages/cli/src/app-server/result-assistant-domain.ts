@@ -10,6 +10,7 @@ import {
   truncateJson
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
+import { endAssistantSseClients } from './assistant-events.js';
 import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
 
 interface ParsedAssistantToolCall {
@@ -82,7 +83,7 @@ export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now);
+  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
 }
 
 export function touchResultAssistantSession(session: ResultAssistantSession): void {

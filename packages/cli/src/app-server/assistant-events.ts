@@ -33,11 +33,14 @@ export function createAssistantSseEvent(
   };
 }
 
+const MAX_REPLAYED_EVENTS = 100;
+
 export function broadcastAssistantSseEvent(
   session: AssistantSseSessionState,
   event: AssistantSseEvent
 ): void {
   session.events.push(event);
+  if (session.events.length > MAX_REPLAYED_EVENTS) session.events.shift();
   for (const client of session.clients) {
     sendSseEvent(client, event);
   }

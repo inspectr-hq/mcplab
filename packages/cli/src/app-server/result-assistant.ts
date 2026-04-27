@@ -15,7 +15,8 @@ import {
   broadcastAssistantSseEvent,
   createAssistantSseEvent,
   endAssistantSseClients,
-  serveAssistantSseStream
+  serveAssistantSseStream,
+  type AssistantSseEventType
 } from './assistant-events.js';
 
 export type ResultAssistantRouteDeps = Pick<
@@ -69,17 +70,7 @@ export async function handleResultAssistantRoutes(params: {
     listMarkdownReportsLinkedToRun(settings.workspaceRoot, runId);
   const publishSessionEvent = (
     session: ResultAssistantSession,
-    type:
-      | 'session_started'
-      | 'turn_started'
-      | 'tool_call_requested'
-      | 'tool_call_approved'
-      | 'tool_call_denied'
-      | 'tool_call_resolved'
-      | 'assistant_message_completed'
-      | 'session_warning'
-      | 'session_error'
-      | 'session_finished',
+    type: AssistantSseEventType,
     payload: Record<string, unknown> = {}
   ) => {
     broadcastAssistantSseEvent(
