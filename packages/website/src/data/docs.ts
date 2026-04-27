@@ -1195,13 +1195,16 @@ const appAssistants: DocPage = {
       id: 'result-assistant',
       title: 'Result Assistant',
       paragraphs: [
-        'The Result Assistant is an AI chat scoped to a specific completed run. Ask it questions about the results and it answers based on the run data.',
-        'Use it to understand failures quickly without manually reading through trace files.'
+        'The Result Assistant is an AI chat that answers questions based on run data. It is available in two scopes.',
+        'From a specific run (scope: run), it is scoped to that run\'s results, tool traces, and assertions. Use it to understand failures quickly without manually reading through trace files.',
+        'From the Results overview (scope: all_runs), it has access to data across all runs and can answer questions about trends, regressions, and cross-run comparisons.'
       ],
       bullets: [
         'Ask: "Which scenarios failed and why?"',
         'Ask: "Did the agent call the correct tools in the right order?"',
-        'Ask: "Suggest improvements to make the failing scenarios pass."'
+        'Ask: "Suggest improvements to make the failing scenarios pass."',
+        'Ask (all_runs scope): "Which scenarios have been consistently failing across recent runs?"',
+        'Ask (all_runs scope): "How has the pass rate changed over the last five runs?"'
       ],
       screenshot: '/screenshots/evaluation-results-assistance.png'
     }
@@ -1863,6 +1866,7 @@ const pageIndex: DocPage[] = [
   cliReports,
   cliCicd,
   appGettingStarted,
+  appConfigurations,
   appRunning,
   appResults,
   appAssistants,
@@ -1898,6 +1902,7 @@ export const docsNavSections = [
     title: 'App',
     items: [
       appGettingStarted,
+      appConfigurations,
       appRunning,
       appResults,
       appAssistants,
