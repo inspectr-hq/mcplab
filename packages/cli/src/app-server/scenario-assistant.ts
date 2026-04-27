@@ -68,7 +68,7 @@ export async function handleScenarioAssistantRoutes(params: {
 
   const continueWithAutoApprovedReads = async (session: ScenarioAssistantSession) => {
     let output = await continueAssistantTurn(session);
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 25; i += 1) {
       const pendingCalls = output.response?.pendingToolCalls;
       if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') break;
       const allReadOnly = pendingCalls.every(

@@ -46,7 +46,10 @@ export function listYamlConfigFilesRecursive(rootDir: string): string[] {
             walk(absPath);
           }
         } else if (targetStat.isFile() && isYamlFile(entry.name)) {
-          files.push(absPath);
+          const fileRealPath = realpathSync(absPath);
+          if (fileRealPath.startsWith(resolvedRoot) && fileRealPath[resolvedRoot.length] === sep) {
+            files.push(absPath);
+          }
         }
       }
     }

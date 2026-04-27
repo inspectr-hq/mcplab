@@ -13,7 +13,8 @@ import type {
   ServerAuthOauthClientCredentials as CoreServerAuthOauth,
   ServerConfig as CoreServerConfig,
   TraceMessage as CoreTraceMessage,
-  TraceMessageContentBlock as CoreTraceMessageContentBlock
+  TraceMessageContentBlock as CoreTraceMessageContentBlock,
+  HealthMcpConnectionInfo
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -27,7 +28,8 @@ export type {
   CoreSourceEvalConfig,
   CoreScenarioRun,
   CoreScenarioAggregate,
-  CoreResultsJson
+  CoreResultsJson,
+  HealthMcpConnectionInfo
 };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -157,29 +159,11 @@ export interface ProviderModelsResponse {
   source: string;
 }
 
-// Mirror: packages/cli/src/app-server/types.ts HealthResponse (CLI-side condensed form, mcp uses HealthMcpConnectionInfo)
+// Source of truth for mcp field shape: packages/core/src/types.ts HealthMcpConnectionInfo
 export interface WorkspaceHealthResponse {
   ok: boolean;
   version: string;
-  mcp:
-    | {
-        enabled: false;
-      }
-    | {
-        enabled: true;
-        transport: 'streamable-http';
-        host: string;
-        port: number;
-        path: string;
-        proxyUrl: string;
-        directUrl: string;
-        serverPackageVersion: string;
-        environment: {
-          MCP_HOST: string;
-          MCP_PORT: string;
-          MCP_PATH: string;
-        };
-      };
+  mcp: HealthMcpConnectionInfo;
 }
 
 export interface WorkspaceSettings {

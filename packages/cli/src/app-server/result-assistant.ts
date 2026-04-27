@@ -122,6 +122,7 @@ export async function handleResultAssistantRoutes(params: {
         emitApprovalChatMessage: false
       });
       touchResultAssistantSession(session);
+      if (pending.error) break;
       output = await continueResultAssistantTurn(session);
     }
     return output;

@@ -353,6 +353,26 @@ export interface ScenarioAggregate {
   last_final_answer: string;
 }
 
+export type HealthMcpConnectionInfo =
+  | {
+      enabled: false;
+    }
+  | {
+      enabled: true;
+      transport: 'streamable-http';
+      host: string;
+      port: number;
+      path: string;
+      proxyUrl: string;
+      directUrl: string;
+      serverPackageVersion: string;
+      environment: {
+        MCP_HOST: string;
+        MCP_PORT: string;
+        MCP_PATH: string;
+      };
+    };
+
 export interface ResultsJson {
   metadata: {
     run_id: string;

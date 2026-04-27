@@ -89,7 +89,8 @@ const Configurations = () => {
       const parsed = JSON.parse(raw) as unknown;
       if (!Array.isArray(parsed)) return new Set<string>();
       return new Set(parsed.filter((item): item is string => typeof item === "string"));
-    } catch {
+    } catch (e) {
+      console.warn('Failed to restore collapsed suites from localStorage', e);
       return new Set<string>();
     }
   });
@@ -194,8 +195,8 @@ const Configurations = () => {
         COLLAPSED_SUITES_STORAGE_KEY,
         JSON.stringify(Array.from(collapsedSuites))
       );
-    } catch {
-      // ignore storage errors (private mode/quota)
+    } catch (e) {
+      console.warn("Failed to persist collapsed suites to localStorage (quota/private mode?)", e);
     }
   }, [collapsedSuites]);
 

@@ -1,3 +1,7 @@
+import type { HealthMcpConnectionInfo } from '@inspectr/mcplab-core';
+
+export type { HealthMcpConnectionInfo };
+
 export interface AppServerOptions {
   host: string;
   port: number;
@@ -20,27 +24,7 @@ export interface AppSettings {
   scenarioAssistantAgentName?: string;
 }
 
-export type HealthMcpConnectionInfo =
-  | {
-      enabled: false;
-    }
-  | {
-      enabled: true;
-      transport: 'streamable-http';
-      host: string;
-      port: number;
-      path: string;
-      proxyUrl: string;
-      directUrl: string;
-      serverPackageVersion: string;
-      environment: {
-        MCP_HOST: string;
-        MCP_PORT: string;
-        MCP_PATH: string;
-      };
-    };
-
-// Mirror: packages/app/src/lib/data-sources/types.ts WorkspaceHealthResponse (app-side superset with extra mcp fields)
+// Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo
 export interface HealthResponse {
   ok: boolean;
   version: string;
