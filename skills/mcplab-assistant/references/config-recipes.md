@@ -188,6 +188,12 @@ mcp_servers:
       scope: openid profile
 ```
 
+## Suite / Folder Organization
+
+Config files placed in subfolders automatically derive a **suite path** from their folder hierarchy. For example, a file at `mcplab/evals/search/relevance.yaml` belongs to the `search` suite. This suite path is stored with the run results and is used to group and filter runs in the UI and MCP tools.
+
+Organize configs in subfolders by product area, feature, or risk tier to make suite-level filtering and batch execution meaningful.
+
 ## Schema-Driven Authoring Order
 
 1. Add one working `agents` entry.

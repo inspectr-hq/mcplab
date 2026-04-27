@@ -59,6 +59,9 @@ When the request is about analyzing results, the assistant must:
 1. Prefer MCP analysis tools first to reduce context/token usage:
 - `mcplab_aggregate_runs` for multi-run trends and compact metric summaries
 - `mcplab_compare_runs` for structured run-to-run regressions/improvements
+- `mcplab_search_runs` to locate runs by filter criteria
+- `mcplab_search_markdown_reports` to locate report files
+- `mcplab_search_tool_analysis_results` to query stored tool analysis data
 2. Read artifacts directly only when needed:
 - `results.json`
 - `summary.md`
@@ -127,6 +130,15 @@ When the request is about analyzing results, the assistant must:
 3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
 4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
 5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
+
+## Result Assistant Scopes
+
+The Result Assistant supports two scopes:
+
+- `run` — analyses a single evaluation run. Accessible from the individual run detail page.
+- `all_runs` — analyses historical trends across all runs. Accessible from the Results overview page.
+
+When a user asks about analyzing results in the UI, clarify which scope applies: single-run triage uses `run`; cross-run trend analysis uses `all_runs`.
 
 ## Source Of Truth
 
