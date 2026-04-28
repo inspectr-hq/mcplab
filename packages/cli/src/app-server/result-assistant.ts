@@ -155,7 +155,10 @@ export async function handleResultAssistantRoutes(params: {
           publishSessionEvent(session, 'assistant_message_completed', {
             text: output.response.text
           });
-        } else if (output.response.type === 'tool_call_request' && output.response.pendingToolCall) {
+        } else if (
+          output.response.type === 'tool_call_request' &&
+          output.response.pendingToolCall
+        ) {
           publishSessionEvent(session, 'tool_call_requested', {
             pendingToolCallId: output.response.pendingToolCall.id,
             pendingToolCall: output.response.pendingToolCall
@@ -248,9 +251,15 @@ export async function handleResultAssistantRoutes(params: {
     return true;
   }
 
-  if (pathname.startsWith('/api/result-assistant/sessions/') && pathname.endsWith('/events') && method === 'GET') {
+  if (
+    pathname.startsWith('/api/result-assistant/sessions/') &&
+    pathname.endsWith('/events') &&
+    method === 'GET'
+  ) {
     cleanupResultAssistantSessions(resultAssistantSessions);
-    const sessionId = pathname.replace('/api/result-assistant/sessions/', '').replace('/events', '');
+    const sessionId = pathname
+      .replace('/api/result-assistant/sessions/', '')
+      .replace('/events', '');
     const session = resultAssistantSessions.get(sessionId);
     if (!session) {
       asJson(res, 404, { error: 'Result Assistant session not found' });
@@ -313,7 +322,7 @@ export async function handleResultAssistantRoutes(params: {
     });
     flushDanglingToolCalls(session.llmMessages);
     session.llmMessages.push({ role: 'user', content: message });
-      const output = await continueWithAutoApprovedReads(session);
+    const output = await continueWithAutoApprovedReads(session);
     asJson(res, 200, output);
     return true;
   }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,11 +107,7 @@ const ResultDetail = () => {
     "assistant"
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
-  const [assistantMeta, setAssistantMeta] = useState<{
-    assistantAgentName: string;
-    provider: string;
-    model: string;
-  } | null>(null);
+
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState("");
   const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
@@ -143,13 +139,7 @@ const ResultDetail = () => {
     open: assistantOpen,
     scope: "run",
     runId: id,
-    onSessionSync: (session) => {
-      setAssistantMeta({
-        assistantAgentName: session.selectedAssistantAgentName,
-        provider: session.provider,
-        model: session.model
-      });
-    }
+    onSessionSync: undefined
   });
 
   const refreshReferenceReports = useCallback(
@@ -190,7 +180,6 @@ const ResultDetail = () => {
     if (!id) return;
     let active = true;
     resetAssistantSession();
-    setAssistantMeta(null);
     setLoading(true);
     source.getResult(id).then((next) => {
       if (active) {

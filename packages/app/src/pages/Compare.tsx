@@ -74,6 +74,16 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
   };
 }
 
+function getRepresentativeScenarioMetadata(scenarios: ScenarioResult[]): Pick<AgentSummary, "provider" | "model"> {
+  const representativeScenario =
+    scenarios.find((scenario) => scenario.provider && scenario.model) ??
+    scenarios.find((scenario) => scenario.provider || scenario.model);
+  return {
+    provider: representativeScenario?.provider,
+    model: representativeScenario?.model
+  };
+}
+
 const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -181,7 +191,7 @@ const Compare = () => {
   }, [results, scenarioFilter]);
 
   const sortedResults = useMemo(() => {
-    const next = [...filteredResults].sort((a, b) => {
+    return [...filteredResults].sort((a, b) => {
       let cmp = 0;
       if (sortBy === "id") cmp = a.id.localeCompare(b.id);
       if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -189,7 +199,6 @@ const Compare = () => {
       if (sortBy === "scenarios") cmp = a.totalScenarios - b.totalScenarios;
       return sortDir === "asc" ? cmp : -cmp;
     });
-    return next;
   }, [filteredResults, sortBy, sortDir]);
 
   const selectedRuns = useMemo(
@@ -408,8 +417,7 @@ const Compare = () => {
       const passCount = runs.filter((run) => run.passed).length;
       const totalToolCalls = runs.reduce((sum, run) => sum + run.toolCalls.length, 0);
       const totalDuration = runs.reduce((sum, run) => sum + run.duration, 0);
-      const provider = relatedScenarios.find((s) => s.provider)?.provider;
-      const model = relatedScenarios.find((s) => s.model)?.model;
+      const { provider, model } = getRepresentativeScenarioMetadata(relatedScenarios);
       return {
         agentId: agent.id,
         agentName: agent.name,

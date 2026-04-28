@@ -85,6 +85,7 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   onEvent: (event: TEvent) => void
 ): () => void {
   const source = new EventSource(`${BASE}${path}`);
+  const terminalSessionPath = path.replace(/\/events$/, '');
   const eventTypes = [
     'session_started',
     'turn_started',
@@ -121,7 +122,26 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   // Transient errors (readyState CONNECTING = 0) let the browser auto-reconnect;
   // the server replays session.events on reconnect so no events are lost.
   source.onerror = () => {
-    if (source.readyState === 2) close();
+    if (closed) return;
+    if (source.readyState === 2) {
+      close();
+      return;
+    }
+    void fetch(`${BASE}${terminalSessionPath}`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json'
+      }
+    })
+      .then((response) => {
+        if (response.status === 404 || response.status === 410) {
+          close();
+        }
+      })
+      .catch(() => {
+        // Keep retrying on transient network failures.
+      });
   };
   return () => close();
 }
@@ -257,7 +277,8 @@ export const workspaceApiClient = {
   subscribeResultAssistantSessionEvents: (
     sessionId: string,
     onEvent: (event: ResultAssistantSseEvent) => void
-  ) => subscribeAssistantSessionEvents(`/api/result-assistant/sessions/${sessionId}/events`, onEvent),
+  ) =>
+    subscribeAssistantSessionEvents(`/api/result-assistant/sessions/${sessionId}/events`, onEvent),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
     request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
       '/api/snapshots/generate-eval',

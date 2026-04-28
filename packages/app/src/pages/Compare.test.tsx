@@ -273,4 +273,91 @@ describe("Compare", () => {
       );
     });
   });
+
+  it("keeps provider and model metadata from the same scenario row", async () => {
+    sourceMock.listResults.mockResolvedValue([
+      makeRun("run-mixed", [
+        {
+          scenarioId: "scn-1",
+          scenarioName: "Scenario 1",
+          agentId: "agent-a",
+          agentName: "Agent A",
+          provider: "anthropic",
+          passRate: 1,
+          avgToolCalls: 1,
+          avgDuration: 100,
+          runs: [
+            {
+              runIndex: 0,
+              passed: true,
+              toolCalls: [{ name: "search", arguments: {}, duration: 100, timestamp: "2026-03-10T10:00:01.000Z" }],
+              finalAnswer: "ok",
+              conversation: [],
+              duration: 100,
+              extractedValues: {},
+              failureReasons: []
+            }
+          ]
+        },
+        {
+          scenarioId: "scn-2",
+          scenarioName: "Scenario 2",
+          agentId: "agent-a",
+          agentName: "Agent A",
+          provider: "openai",
+          model: "gpt-4",
+          passRate: 1,
+          avgToolCalls: 1,
+          avgDuration: 110,
+          runs: [
+            {
+              runIndex: 0,
+              passed: true,
+              toolCalls: [{ name: "search", arguments: {}, duration: 110, timestamp: "2026-03-10T10:00:02.000Z" }],
+              finalAnswer: "ok",
+              conversation: [],
+              duration: 110,
+              extractedValues: {},
+              failureReasons: []
+            }
+          ]
+        },
+        {
+          scenarioId: "scn-1",
+          scenarioName: "Scenario 1",
+          agentId: "agent-b",
+          agentName: "Agent B",
+          provider: "anthropic",
+          model: "claude-3-5-sonnet",
+          passRate: 1,
+          avgToolCalls: 1,
+          avgDuration: 90,
+          runs: [
+            {
+              runIndex: 0,
+              passed: true,
+              toolCalls: [{ name: "search", arguments: {}, duration: 90, timestamp: "2026-03-10T10:00:03.000Z" }],
+              finalAnswer: "ok",
+              conversation: [],
+              duration: 90,
+              extractedValues: {},
+              failureReasons: []
+            }
+          ]
+        }
+      ])
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/compare?mode=within-run&runId=run-mixed&agents=agent-a,agent-b"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Agent Summary");
+    expect(screen.getAllByText(/OpenAI · gpt-4/)).toHaveLength(2);
+    expect(screen.queryByText(/Anthropic · gpt-4/)).not.toBeInTheDocument();
+  });
 });

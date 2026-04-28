@@ -98,7 +98,10 @@ export async function handleScenarioAssistantRoutes(params: {
             text: output.response.text,
             suggestions: output.response.suggestions
           });
-        } else if (output.response?.type === 'tool_call_request' && output.response.pendingToolCalls) {
+        } else if (
+          output.response?.type === 'tool_call_request' &&
+          output.response.pendingToolCalls
+        ) {
           publishSessionEvent(session, 'tool_call_requested', {
             pendingToolCalls: output.response.pendingToolCalls,
             pendingToolCallId: output.response.pendingToolCalls[0]?.id
@@ -291,9 +294,15 @@ export async function handleScenarioAssistantRoutes(params: {
     return true;
   }
 
-  if (pathname.startsWith('/api/scenario-assistant/sessions/') && pathname.endsWith('/events') && method === 'GET') {
+  if (
+    pathname.startsWith('/api/scenario-assistant/sessions/') &&
+    pathname.endsWith('/events') &&
+    method === 'GET'
+  ) {
     cleanupAssistantSessions(assistantSessions);
-    const sessionId = pathname.replace('/api/scenario-assistant/sessions/', '').replace('/events', '');
+    const sessionId = pathname
+      .replace('/api/scenario-assistant/sessions/', '')
+      .replace('/events', '');
     const session = assistantSessions.get(sessionId);
     if (!session) {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
