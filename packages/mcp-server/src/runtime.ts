@@ -80,6 +80,8 @@ const GenericObjectSchema = z.object({}).passthrough();
 const ResultsSummarySchema = z.object({
   total_scenarios: z.number().int().nonnegative(),
   total_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative(),
+  skipped_runs: z.number().int().nonnegative(),
   pass_rate: z.number(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
@@ -97,6 +99,8 @@ const ResultsMetadataSchema = z
 
 const MetricSummarySchema = z.object({
   total_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative(),
+  skipped_runs: z.number().int().nonnegative(),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
   pass_rate: z.number(),
@@ -117,6 +121,8 @@ const AggregateRowSchema = z.object({
     })
     .optional(),
   total_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative(),
+  skipped_runs: z.number().int().nonnegative(),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
   pass_rate: z.number(),
@@ -1202,9 +1208,9 @@ export function registerTools(server: McpServer): void {
 
         const reportHtml = renderReport(results);
         const allRuns = results.scenarios.flatMap((scenario) => scenario.runs);
-        const passedRuns = allRuns.filter((run) => run.pass === true).length;
-        const failedRuns = allRuns.filter((run) => run.pass === false).length;
-        const skippedRuns = Math.max(0, allRuns.length - passedRuns - failedRuns);
+        const passedRuns = allRuns.filter((run) => run.evaluation_status === 'passed').length;
+        const failedRuns = allRuns.filter((run) => run.evaluation_status === 'failed').length;
+        const skippedRuns = allRuns.filter((run) => run.evaluation_status === 'skipped').length;
         const durationMs = allRuns.reduce((sum, run) => {
           const directRaw = (run as { duration_ms?: unknown }).duration_ms;
           const direct = typeof directRaw === 'number' ? directRaw : null;

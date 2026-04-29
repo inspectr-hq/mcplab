@@ -414,7 +414,8 @@ const Compare = () => {
         .filter((value): value is ScenarioResult => Boolean(value));
       const runs = relatedScenarios.flatMap((scenario) => scenario.runs);
       const totalRuns = runs.length;
-      const passCount = runs.filter((run) => run.passed).length;
+      const evaluatedRuns = runs.filter((run) => run.evaluationStatus !== "skipped");
+      const passCount = evaluatedRuns.filter((run) => run.passed).length;
       const totalToolCalls = runs.reduce((sum, run) => sum + run.toolCalls.length, 0);
       const totalDuration = runs.reduce((sum, run) => sum + run.duration, 0);
       const { provider, model } = getRepresentativeScenarioMetadata(relatedScenarios);
@@ -423,7 +424,7 @@ const Compare = () => {
         agentName: agent.name,
         provider,
         model,
-        passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+        passRate: evaluatedRuns.length === 0 ? 0 : passCount / evaluatedRuns.length,
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
         avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns
@@ -444,12 +445,20 @@ const Compare = () => {
     <div key={run.runIndex} className="min-w-0 rounded border bg-muted/20 px-2 py-1.5">
       <div className="text-xs">
         <span className="font-mono">#{run.runIndex + 1}</span>{" "}
-        <span className={run.passed ? "text-emerald-700" : "text-destructive"}>
-          {run.passed ? "PASS" : "FAIL"}
+        <span
+          className={
+            run.evaluationStatus === "skipped"
+              ? "text-amber-700"
+              : run.passed
+              ? "text-emerald-700"
+              : "text-destructive"
+          }
+        >
+          {run.evaluationStatus === "skipped" ? "SKIPPED" : run.passed ? "PASS" : "FAIL"}
         </span>{" "}
         · tools: {run.toolCalls.length} · {run.duration}ms
       </div>
-      {!run.passed && run.failureReasons.length > 0 && (
+      {run.evaluationStatus !== "skipped" && !run.passed && run.failureReasons.length > 0 && (
         <div className="mt-1 max-h-16 overflow-y-auto whitespace-pre-wrap break-all pr-1 text-[11px] text-muted-foreground">
           {run.failureReasons.join("; ")}
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus, Clock3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -324,6 +324,8 @@ const ResultDetail = () => {
   const {
     filteredScenarios,
     filteredTotalRuns,
+    filteredEvaluatedRuns,
+    filteredSkippedRuns,
     filteredPassCount,
     displayPassRate,
     displayAvgToolCalls,
@@ -334,6 +336,8 @@ const ResultDetail = () => {
       return {
         filteredScenarios: [] as EvalResult["scenarios"],
         filteredTotalRuns: 0,
+        filteredEvaluatedRuns: 0,
+        filteredSkippedRuns: 0,
         filteredPassCount: 0,
         displayPassRate: 0,
         displayAvgToolCalls: 0,
@@ -348,10 +352,20 @@ const ResultDetail = () => {
         )
       : result.scenarios;
     const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
-    const passCount = scenarios.reduce(
-      (sum, scenario) => sum + scenario.runs.filter((run) => run.passed).length,
+    const evaluatedRuns = scenarios.reduce(
+      (sum, scenario) =>
+        sum + scenario.runs.filter((run) => run.evaluationStatus !== "skipped").length,
       0
     );
+    const skippedRuns = totalRuns - evaluatedRuns;
+    const passCount = scenarios.reduce((sum, scenario) => {
+      return (
+        sum +
+        scenario.runs.filter(
+          (run) => run.evaluationStatus !== "skipped" && run.passed
+        ).length
+      );
+    }, 0);
     const totalToolCalls = scenarios.reduce(
       (sum, scenario) =>
         sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
@@ -364,8 +378,10 @@ const ResultDetail = () => {
     return {
       filteredScenarios: scenarios,
       filteredTotalRuns: totalRuns,
+      filteredEvaluatedRuns: evaluatedRuns,
+      filteredSkippedRuns: skippedRuns,
       filteredPassCount: passCount,
-      displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
+      displayPassRate: evaluatedRuns === 0 ? 0 : passCount / evaluatedRuns,
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       displayAvgLatency: totalRuns === 0 ? 0 : Math.round(totalDuration / totalRuns),
       displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
@@ -394,10 +410,12 @@ const ResultDetail = () => {
     .map(([serverId, version]) => `${serverId}: ${version ?? "unknown"}`)
     .join(", ");
   const passCount = filteredPassCount;
-  const failCount = Math.max(0, filteredTotalRuns - passCount);
+  const failCount = Math.max(0, filteredEvaluatedRuns - passCount);
+  const skippedCount = filteredSkippedRuns;
   const pieData = [
     { name: "Pass", value: passCount, color: "hsl(152, 69%, 40%)" },
     { name: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
+    { name: "Skipped", value: skippedCount, color: "hsl(38, 92%, 50%)" },
   ];
 
   const toggle = (rowId: string) => {
@@ -909,6 +927,7 @@ const ResultDetail = () => {
             <div className="ml-4 space-y-2">
               <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
               <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
+              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-amber-500" />{skippedCount} skipped</div>
             </div>
           </CardContent>
         </Card>
@@ -1083,12 +1102,23 @@ const ResultDetail = () => {
                             {sc.runs.map((run) => (
                               <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
                                 <div className="mt-0.5">
-                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
+                                  {run.evaluationStatus === "skipped" ? (
+                                    <Clock3 className="h-4 w-4 text-amber-600" />
+                                  ) : run.passed ? (
+                                    <CheckCircle2 className="h-4 w-4 text-success" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  )}
                                 </div>
                                 <div className="flex-1 space-y-1">
                                   {(() => {
                                     const scenarioDef = scenarioDefinitionByResultId.get(sc.scenarioId);
-                                    const checks = scenarioDef ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons) : [];
+                                    const checks =
+                                      run.evaluationStatus === "skipped"
+                                        ? []
+                                        : scenarioDef
+                                        ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons)
+                                        : [];
                                     const failedChecks = checks.filter((c) => c.status === "failed");
                                     const passedChecks = checks.filter((c) => c.status === "passed");
                                     return (
@@ -1099,13 +1129,17 @@ const ResultDetail = () => {
                                     <span className="text-xs text-muted-foreground">{run.duration}ms</span>
                                     <span className="text-xs text-muted-foreground">·</span>
                                     <span className="text-xs text-muted-foreground">{formatTokenCount(run.toolTokenUsage?.totalTokens)} tool tokens</span>
-                                    {!run.passed && (
+                                    {run.evaluationStatus === "skipped" ? (
+                                      <Badge variant="outline" className="h-5 border-amber-300 bg-amber-100 text-amber-800 text-[10px]">
+                                        Skipped
+                                      </Badge>
+                                    ) : !run.passed ? (
                                       <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
                                         Failed
                                       </Badge>
-                                    )}
+                                    ) : null}
                                   </div>
-                                  {run.failureReasons.length > 0 && (
+                                  {run.evaluationStatus !== "skipped" && run.failureReasons.length > 0 && (
                                     <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
                                       <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
                                         <XCircle className="h-3.5 w-3.5" />
@@ -1358,7 +1392,13 @@ const ResultDetail = () => {
                                             className="h-7 gap-1.5 px-2 text-xs"
                                             onClick={() =>
                                               openAssistantWithPrompt(
-                                                `Explain Run #${run.runIndex + 1} for scenario '${scenarioLabel}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
+                                                `Explain Run #${run.runIndex + 1} for scenario '${scenarioLabel}'. It ${run.evaluationStatus === "skipped" ? "was skipped" : run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${
+                                                  run.evaluationStatus === "skipped"
+                                                    ? "what happened during execution"
+                                                    : run.passed
+                                                    ? "why it passed"
+                                                    : "what caused the failure"
+                                                }.`
                                               , { scenarioId: sc.scenarioId })
                                             }
                                           >

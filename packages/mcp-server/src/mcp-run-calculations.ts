@@ -4,6 +4,8 @@ type AggregateGroupBy = 'run' | 'scenario' | 'agent';
 
 type MetricSummary = {
   total_runs: number;
+  evaluated_runs: number;
+  skipped_runs: number;
   passed_runs: number;
   failed_runs: number;
   pass_rate: number;
@@ -233,15 +235,19 @@ export function buildCompareRunsReport(params: {
 export function computeMetricSummary(scenarios: ResultsJson['scenarios']): MetricSummary {
   const runs = scenarios.flatMap((s) => s.runs);
   const totalRuns = runs.length;
-  const passedRuns = runs.filter((r) => r.pass).length;
-  const failedRuns = totalRuns - passedRuns;
+  const evaluatedRuns = runs.filter((r) => r.evaluation_status !== 'skipped').length;
+  const skippedRuns = totalRuns - evaluatedRuns;
+  const passedRuns = runs.filter((r) => r.evaluation_status === 'passed').length;
+  const failedRuns = runs.filter((r) => r.evaluation_status === 'failed').length;
   const totalToolCalls = runs.reduce((sum, r) => sum + r.tool_call_count, 0);
   const allDurations = runs.flatMap((r) => r.tool_durations_ms ?? []);
   return {
     total_runs: totalRuns,
+    evaluated_runs: evaluatedRuns,
+    skipped_runs: skippedRuns,
     passed_runs: passedRuns,
     failed_runs: failedRuns,
-    pass_rate: totalRuns === 0 ? 0 : roundedDelta(passedRuns / totalRuns),
+    pass_rate: evaluatedRuns === 0 ? 0 : roundedDelta(passedRuns / evaluatedRuns),
     avg_tool_calls_per_run: totalRuns === 0 ? 0 : roundedDelta(totalToolCalls / totalRuns),
     avg_tool_latency_ms:
       allDurations.length === 0
@@ -409,6 +415,8 @@ function toSerializableAggregateRow(row: AggregateGroupRow): Record<string, unkn
     timestamp_range: row.timestamp_range,
     summary: {
       total_runs: row.total_runs,
+      evaluated_runs: row.evaluated_runs,
+      skipped_runs: row.skipped_runs,
       passed_runs: row.passed_runs,
       failed_runs: row.failed_runs,
       pass_rate: row.pass_rate,

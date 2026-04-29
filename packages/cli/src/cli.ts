@@ -54,6 +54,7 @@ interface RunCommandOptions {
   config?: string;
   scenario?: string;
   runs: string;
+  skipChecks: boolean;
   agents?: string;
   agentsAll: boolean;
   interactive: boolean;
@@ -72,6 +73,7 @@ program
   .option('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
+  .option('--skip-checks', 'Execute scenarios but skip pass/fail checks')
   .option(
     '--agents <agents>',
     'Comma-separated list of agents to test (runs each scenario with each agent)'
@@ -760,6 +762,7 @@ async function executeSingleConfigRun(params: {
   }
   const runNoteRaw = typeof options.runNote === 'string' ? String(options.runNote).trim() : '';
   const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+  console.log(kleur.cyan(`Checks mode: ${options.skipChecks ? 'skipped' : 'on'}`));
   const oauthTokens: Record<string, string> = {};
   for (const entry of options.oauthToken) {
     const eqIdx = entry.indexOf('=');
@@ -778,6 +781,7 @@ async function executeSingleConfigRun(params: {
   }
   const { runDir, results } = await runAll(selected, {
     runsPerScenario,
+    skipChecks: Boolean(options.skipChecks),
     scenarioId: options.scenario,
     runNote,
     configHash: hash,
@@ -846,7 +850,7 @@ async function executeSingleConfigRun(params: {
   }
 
   const failedRuns = results.scenarios.reduce(
-    (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
+    (sum, scenario) => sum + scenario.runs.filter((run) => run.evaluation_status === 'failed').length,
     0
   );
 
@@ -888,9 +892,15 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
     case 'scenario_run_finished':
+      const statusLabel =
+        event.evaluationStatus === 'skipped'
+          ? 'SKIPPED'
+          : event.evaluationStatus === 'passed'
+          ? 'PASS'
+          : 'FAIL';
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${statusLabel} (${
         event.toolCallCount
       } tool calls)`;
     case 'run_finished':

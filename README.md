@@ -377,6 +377,9 @@ mcplab run -c mcplab/evals/eval.yaml -s basic-test
 
 # Run with variance testing (5 iterations)
 mcplab run -c mcplab/evals/eval.yaml -n 5
+
+# Execute full runs but skip pass/fail checks
+mcplab run -c mcplab/evals/eval.yaml --skip-checks
 ```
 
 ### App Mode

@@ -18,6 +18,8 @@ function baseResults(): CoreResultsJson {
     summary: {
       total_scenarios: 1,
       total_runs: 2,
+      evaluated_runs: 2,
+      skipped_runs: 0,
       pass_rate: 0.5,
       avg_tool_calls_per_run: 1,
       avg_tool_latency_ms: 100
@@ -30,6 +32,7 @@ function baseResults(): CoreResultsJson {
         runs: [
           {
             run_index: 0,
+            evaluation_status: 'passed',
             pass: true,
             failures: [],
             tool_calls: ['search_tags'],
@@ -42,6 +45,7 @@ function baseResults(): CoreResultsJson {
           },
           {
             run_index: 1,
+            evaluation_status: 'failed',
             pass: false,
             failures: ['assertion failed'],
             tool_calls: ['search_tags'],

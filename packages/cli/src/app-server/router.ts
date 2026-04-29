@@ -136,6 +136,7 @@ interface RunJob {
   runParams: {
     configPath: string;
     runsPerScenario: number;
+    skipChecks?: boolean;
     scenarioId?: string;
     scenarioIds?: string[];
     requestedAgents?: string[];

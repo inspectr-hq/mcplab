@@ -149,6 +149,7 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
+  evaluationStatus?: 'passed' | 'failed' | 'skipped';
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
@@ -189,6 +190,8 @@ export interface EvalResult {
   overallPassRate: number;
   totalScenarios: number;
   totalRuns: number;
+  evaluatedRuns?: number;
+  skippedRuns?: number;
   avgToolCalls: number;
   avgLatency: number;
   snapshotEval?: {

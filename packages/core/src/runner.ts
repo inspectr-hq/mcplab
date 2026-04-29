@@ -16,6 +16,7 @@ import { aggregateResults, renderSummaryMarkdown } from './results.js';
 
 export interface RunOptions {
   runsPerScenario: number;
+  skipChecks?: boolean;
   scenarioId?: string;
   runNote?: string;
   configHash: string;
@@ -54,6 +55,7 @@ export type RunProgressEvent =
       totalScenarioRuns: number;
       runIndex: number;
       runsPerScenario: number;
+      evaluationStatus: 'passed' | 'failed' | 'skipped';
       pass: boolean;
       toolCallCount: number;
     }
@@ -200,11 +202,15 @@ export async function runAll(
               });
             }
           });
-          const evalResult = evaluateScenario(
-            runResult.finalText,
-            runResult.toolSequence,
-            scenario.eval
-          );
+          const checksSkipped = options.skipChecks === true;
+          const evalResult = checksSkipped
+            ? { pass: false, failures: [] as string[] }
+            : evaluateScenario(runResult.finalText, runResult.toolSequence, scenario.eval);
+          const evaluationStatus: ScenarioRunResult['evaluation_status'] = checksSkipped
+            ? 'skipped'
+            : evalResult.pass
+            ? 'passed'
+            : 'failed';
           const extracted = extractValues(
             runResult.finalText,
             scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
@@ -218,6 +224,7 @@ export async function runAll(
           const scenarioRun: ScenarioRunResult = {
             run_index: runIndex,
             request_id: requestId,
+            evaluation_status: evaluationStatus,
             pass: evalResult.pass,
             failures: evalResult.failures,
             tool_calls: runResult.toolSequence,
@@ -256,6 +263,7 @@ export async function runAll(
             totalScenarioRuns,
             runIndex,
             runsPerScenario: options.runsPerScenario,
+            evaluationStatus,
             pass: evalResult.pass,
             toolCallCount: runResult.toolSequence.length
           });
@@ -269,6 +277,7 @@ export async function runAll(
           const errorRun: ScenarioRunResult = {
             run_index: runIndex,
             request_id: requestId,
+            evaluation_status: 'failed',
             pass: false,
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
@@ -305,6 +314,7 @@ export async function runAll(
             totalScenarioRuns,
             runIndex,
             runsPerScenario: options.runsPerScenario,
+            evaluationStatus: 'failed',
             pass: false,
             toolCallCount: 0
           });
@@ -329,6 +339,7 @@ export async function runAll(
       gitCommit: options.gitCommit,
       configHash: options.configHash,
       cliVersion: options.cliVersion,
+      checksSkipped: options.skipChecks === true,
       mcpServerVersions,
       scenarioRuns
     });

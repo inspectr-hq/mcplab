@@ -141,6 +141,7 @@ export interface QueueEntry {
   runParams: {
     configPath: string;
     runsPerScenario: number;
+    skipChecks?: boolean;
     scenarioIds: string[] | null;
     agents: string[] | null;
     runNote: string | null;
@@ -712,6 +713,7 @@ export interface EvalDataSource {
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;
+    skipChecks?: boolean;
     scenarioId?: string;
     scenarioIds?: string[];
     agents?: string[];

@@ -7,6 +7,7 @@ export function aggregateResults(params: {
   gitCommit?: string;
   configHash: string;
   cliVersion: string;
+  checksSkipped?: boolean;
   mcpServerVersions?: Record<string, string | null>;
   scenarioRuns: Array<{
     scenario_id: string;
@@ -58,8 +59,12 @@ export function aggregateResults(params: {
       lastFinalAnswer = run.final_text || lastFinalAnswer;
     }
 
+    const evaluatedRuns = entry.runs.filter((run) => run.evaluation_status !== 'skipped');
     const passRate =
-      entry.runs.length === 0 ? 0 : entry.runs.filter((run) => run.pass).length / entry.runs.length;
+      evaluatedRuns.length === 0
+        ? 0
+        : evaluatedRuns.filter((run) => run.evaluation_status === 'passed').length /
+          evaluatedRuns.length;
 
     const toolConstraintsStats =
       Object.keys(requiredStats).length > 0 || Object.keys(forbiddenStats).length > 0
@@ -85,10 +90,15 @@ export function aggregateResults(params: {
 
   const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
   const totalScenarios = scenarios.length;
-  const totalPasses = scenarios.reduce(
-    (sum, scenario) => sum + scenario.runs.filter((run) => run.pass).length,
+  const evaluatedRuns = scenarios.reduce(
+    (sum, scenario) =>
+      sum + scenario.runs.filter((run) => run.evaluation_status !== 'skipped').length,
     0
   );
+  const skippedRuns = totalRuns - evaluatedRuns;
+  const totalPasses = scenarios.reduce((sum, scenario) => {
+    return sum + scenario.runs.filter((run) => run.evaluation_status === 'passed').length;
+  }, 0);
   const totalToolCalls = scenarios.reduce(
     (sum, scenario) => sum + scenario.runs.reduce((acc, run) => acc + run.tool_call_count, 0),
     0
@@ -109,12 +119,15 @@ export function aggregateResults(params: {
       git_commit: params.gitCommit,
       config_hash: params.configHash,
       cli_version: params.cliVersion,
+      checks_skipped: params.checksSkipped === true,
       mcp_server_versions: params.mcpServerVersions ?? {}
     },
     summary: {
       total_scenarios: totalScenarios,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : totalPasses / totalRuns,
+      evaluated_runs: evaluatedRuns,
+      skipped_runs: skippedRuns,
+      pass_rate: evaluatedRuns === 0 ? 0 : totalPasses / evaluatedRuns,
       avg_tool_calls_per_run: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       avg_tool_latency_ms: avgLatency
     },
@@ -146,6 +159,8 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   lines.push('');
   lines.push(`Total scenarios: ${results.summary.total_scenarios}`);
   lines.push(`Total runs: ${results.summary.total_runs}`);
+  lines.push(`Evaluated runs: ${results.summary.evaluated_runs}`);
+  lines.push(`Skipped runs: ${results.summary.skipped_runs}`);
   lines.push(`Pass rate: ${(results.summary.pass_rate * 100).toFixed(1)}%`);
   lines.push('');
   lines.push('| Scenario | Agent | Runs | Pass rate | Distinct sequences | Tool calls |');

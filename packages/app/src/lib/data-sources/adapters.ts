@@ -1077,6 +1077,7 @@ export function fromCoreResultsJson(
       return {
         runIndex: run.run_index,
         passed: run.pass,
+        evaluationStatus: run.evaluation_status ?? (run.pass ? "passed" : "failed"),
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
         toolTokenUsage: tokenUsage.tool,
@@ -1157,6 +1158,8 @@ export function fromCoreResultsJson(
     overallPassRate: results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
+    evaluatedRuns: results.summary.evaluated_runs ?? results.summary.total_runs,
+    skippedRuns: results.summary.skipped_runs ?? 0,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
     snapshotEval: results.metadata.snapshot_eval
@@ -1181,6 +1184,7 @@ export function fromCoreScenarioRunPreview(
   return {
     runIndex: run.run_index,
     passed: run.pass,
+    evaluationStatus: run.evaluation_status ?? (run.pass ? "passed" : "failed"),
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,
     toolTokenUsage: tokenUsage.tool,

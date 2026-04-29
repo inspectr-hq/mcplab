@@ -16,6 +16,7 @@ function makeRunResult(
 ): ScenarioRunResult {
   return {
     run_index: index,
+    evaluation_status: pass ? 'passed' : 'failed',
     pass,
     failures: pass ? [] : ['failed'],
     tool_calls: [],
@@ -33,7 +34,11 @@ function makeScenario(
   agent: string,
   runs: ScenarioRunResult[]
 ): ScenarioAggregate {
-  const passRate = runs.length === 0 ? 0 : runs.filter((run) => run.pass).length / runs.length;
+  const evaluated = runs.filter((run) => run.evaluation_status !== 'skipped');
+  const passRate =
+    evaluated.length === 0
+      ? 0
+      : evaluated.filter((run) => run.evaluation_status === 'passed').length / evaluated.length;
   return {
     scenario_id: scenarioId,
     agent,
@@ -53,7 +58,8 @@ function makeResults(
 ): ResultsJson {
   const allRuns = scenarios.flatMap((scenario) => scenario.runs);
   const totalRuns = allRuns.length;
-  const passed = allRuns.filter((run) => run.pass).length;
+  const evaluated = allRuns.filter((run) => run.evaluation_status !== 'skipped');
+  const passed = evaluated.filter((run) => run.evaluation_status === 'passed').length;
   const allDurations = allRuns.flatMap((run) => run.tool_durations_ms);
   const toolCalls = allRuns.reduce((sum, run) => sum + run.tool_call_count, 0);
   return {
@@ -67,7 +73,9 @@ function makeResults(
     summary: {
       total_scenarios: scenarios.length,
       total_runs: totalRuns,
-      pass_rate: totalRuns === 0 ? 0 : passed / totalRuns,
+      evaluated_runs: evaluated.length,
+      skipped_runs: totalRuns - evaluated.length,
+      pass_rate: evaluated.length === 0 ? 0 : passed / evaluated.length,
       avg_tool_calls_per_run: totalRuns === 0 ? 0 : toolCalls / totalRuns,
       avg_tool_latency_ms:
         allDurations.length === 0

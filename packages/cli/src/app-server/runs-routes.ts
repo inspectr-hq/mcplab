@@ -44,6 +44,7 @@ export type RunsRouteDeps = Pick<
 type RunParams = {
   configPath: string;
   runsPerScenario: number;
+  skipChecks?: boolean;
   scenarioId?: string;
   scenarioIds?: string[];
   requestedAgents?: string[];
@@ -78,6 +79,7 @@ export function applyLibraryAgents(
 type RunRequestBody = {
   configPath?: unknown;
   runsPerScenario?: unknown;
+  skipChecks?: unknown;
   scenarioId?: unknown;
   scenarioIds?: unknown;
   agents?: unknown;
@@ -211,6 +213,7 @@ export async function handleRunsRoutes(params: {
         runParams: {
           configPath: j.runParams.configPath,
           runsPerScenario: j.runParams.runsPerScenario,
+          skipChecks: j.runParams.skipChecks === true,
           scenarioIds: j.runParams.scenarioIds ?? null,
           agents: j.runParams.requestedAgents ?? null,
           runNote: j.runParams.runNote ?? null
@@ -224,6 +227,7 @@ export async function handleRunsRoutes(params: {
             runParams: {
               configPath: activeJob.runParams.configPath,
               runsPerScenario: activeJob.runParams.runsPerScenario,
+              skipChecks: activeJob.runParams.skipChecks === true,
               scenarioIds: activeJob.runParams.scenarioIds ?? null,
               agents: activeJob.runParams.requestedAgents ?? null,
               runNote: activeJob.runParams.runNote ?? null
@@ -272,6 +276,7 @@ export async function handleRunsRoutes(params: {
     const body = (await parseBody(req)) as RunRequestBody;
     const configPathRaw = String(body.configPath ?? '');
     const runsPerScenario = Number(body.runsPerScenario ?? 1);
+    const skipChecks = body.skipChecks === true;
     const scenarioId = body.scenarioId ? String(body.scenarioId) : undefined;
     const scenarioIds = Array.isArray(body.scenarioIds)
       ? body.scenarioIds.map((id: unknown) => String(id).trim()).filter(Boolean)
@@ -303,6 +308,7 @@ export async function handleRunsRoutes(params: {
     const runParamsObj: RunParams = {
       configPath,
       runsPerScenario,
+      skipChecks,
       scenarioId,
       scenarioIds,
       requestedAgents,
@@ -329,6 +335,7 @@ export async function handleRunsRoutes(params: {
         payload: {
           configPath,
           runsPerScenario,
+          skipChecks,
           scenarioId: scenarioId ?? null,
           scenarioIds: scenarioIds ?? null,
           agents: requestedAgents ?? null,
@@ -346,6 +353,7 @@ export async function handleRunsRoutes(params: {
         payload: {
           configPath,
           runsPerScenario,
+          skipChecks,
           scenarioId: scenarioId ?? null,
           scenarioIds: scenarioIds ?? null,
           agents: requestedAgents ?? null,
@@ -727,6 +735,7 @@ function advanceQueue(
       payload: {
         configPath: nextJob.runParams.configPath,
         runsPerScenario: nextJob.runParams.runsPerScenario,
+        skipChecks: nextJob.runParams.skipChecks === true,
         scenarioId: nextJob.runParams.scenarioId ?? null,
         scenarioIds: nextJob.runParams.scenarioIds ?? null,
         agents: nextJob.runParams.requestedAgents ?? null,
@@ -869,6 +878,7 @@ async function executeRunJob(
       }
       const { runDir, results } = await runAll(expandedConfig, {
         runsPerScenario,
+        skipChecks: job.runParams.skipChecks === true,
         scenarioId,
         runNote,
         configHash: loaded.hash,
@@ -1075,9 +1085,15 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
     case 'scenario_run_finished':
+      const statusLabel =
+        event.evaluationStatus === 'skipped'
+          ? 'SKIPPED'
+          : event.evaluationStatus === 'passed'
+          ? 'PASS'
+          : 'FAIL';
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
+      } [agent=${event.agentName}] -> ${statusLabel} (${
         event.toolCallCount
       } tool call(s))`;
     case 'agent_progress': {

@@ -324,6 +324,7 @@ export type PersistedTraceRecord =
 export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
+  evaluation_status: 'passed' | 'failed' | 'skipped';
   pass: boolean;
   error?: string;
   failures: string[];
@@ -384,6 +385,7 @@ export interface ResultsJson {
     config_hash: string;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
+    checks_skipped?: boolean;
     snapshot_eval?: {
       applied: boolean;
       mode: 'warn' | 'fail_on_drift';
@@ -397,6 +399,8 @@ export interface ResultsJson {
   summary: {
     total_scenarios: number;
     total_runs: number;
+    evaluated_runs: number;
+    skipped_runs: number;
     pass_rate: number;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;

@@ -6,10 +6,12 @@ function makeRun(
   pass: boolean,
   tools: string[] = [],
   toolUsage: Record<string, number> = {},
-  durations: number[] = []
+  durations: number[] = [],
+  evaluationStatus: ScenarioRunResult['evaluation_status'] = pass ? 'passed' : 'failed'
 ): ScenarioRunResult {
   return {
     run_index: 0,
+    evaluation_status: evaluationStatus,
     pass,
     failures: pass ? [] : ['some failure'],
     tool_calls: tools,
@@ -34,6 +36,8 @@ describe('aggregateResults', () => {
     const result = aggregateResults({ ...BASE, scenarioRuns: [] });
     expect(result.summary.total_scenarios).toBe(0);
     expect(result.summary.total_runs).toBe(0);
+    expect(result.summary.evaluated_runs).toBe(0);
+    expect(result.summary.skipped_runs).toBe(0);
     expect(result.summary.pass_rate).toBe(0);
     expect(result.scenarios).toHaveLength(0);
   });
@@ -129,6 +133,7 @@ describe('aggregateResults', () => {
     expect(result.metadata.config_hash).toBe('abc123');
     expect(result.metadata.cli_version).toBe('1.0.0');
     expect(result.metadata.mcp_server_versions).toEqual({});
+    expect(result.metadata.checks_skipped).toBe(false);
     expect(result.metadata.git_commit).toBeUndefined();
     expect(result.metadata.run_note).toBeUndefined();
   });
@@ -206,6 +211,23 @@ describe('aggregateResults', () => {
     const stats = result.scenarios[0].tool_constraints_stats!;
     expect(stats.required.search).toBe(1);
     expect(stats.forbidden.delete).toBe(0);
+  });
+
+  it('excludes skipped runs from pass-rate denominator', () => {
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        {
+          scenario_id: 's1',
+          agent: 'gpt-4',
+          runs: [makeRun(true), makeRun(false, [], {}, [], 'skipped')]
+        }
+      ]
+    });
+    expect(result.summary.total_runs).toBe(2);
+    expect(result.summary.evaluated_runs).toBe(1);
+    expect(result.summary.skipped_runs).toBe(1);
+    expect(result.summary.pass_rate).toBe(1);
   });
 });
 
