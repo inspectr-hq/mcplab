@@ -1,5 +1,5 @@
 export function formatTokenCount(value: number | null | undefined): string {
-  return typeof value === "number" ? value.toLocaleString() : "n/a";
+  return typeof value === 'number' ? value.toLocaleString() : 'n/a';
 }
 
 export function formatDurationShort(

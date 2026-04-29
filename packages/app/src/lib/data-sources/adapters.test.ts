@@ -498,12 +498,24 @@ describe('fromCoreResultsJson conversation mapping', () => {
     ]);
 
     const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
-    const toolCall = mapped.scenarios[0].runs[0].conversation.find((item) => item.kind === 'tool_call');
-    const toolResult = mapped.scenarios[0].runs[0].conversation.find((item) => item.kind === 'tool_result');
+    const toolCall = mapped.scenarios[0].runs[0].conversation.find(
+      (item) => item.kind === 'tool_call'
+    );
+    const toolResult = mapped.scenarios[0].runs[0].conversation.find(
+      (item) => item.kind === 'tool_result'
+    );
 
-    expect(toolCall?.estimatedTokens).toEqual({ inputTokens: 12, outputTokens: 8, totalTokens: 20 });
+    expect(toolCall?.estimatedTokens).toEqual({
+      inputTokens: 12,
+      outputTokens: 8,
+      totalTokens: 20
+    });
     expect(toolCall?.estimatedTokenMethod).toBe('js_tiktoken_estimate');
-    expect(toolResult?.estimatedTokens).toEqual({ inputTokens: 12, outputTokens: 8, totalTokens: 20 });
+    expect(toolResult?.estimatedTokens).toEqual({
+      inputTokens: 12,
+      outputTokens: 8,
+      totalTokens: 20
+    });
     expect(toolResult?.estimatedTokenMethod).toBe('js_tiktoken_estimate');
   });
 

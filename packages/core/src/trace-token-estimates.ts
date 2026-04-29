@@ -9,7 +9,10 @@ function normalizeJson(value: unknown): string {
   }
 }
 
-function estimateTokenCount(text: string, model: string): { count: number; method: EstimatedTokens['method'] } {
+function estimateTokenCount(
+  text: string,
+  model: string
+): { count: number; method: EstimatedTokens['method'] } {
   try {
     const encoding = encodingForModel(model as Parameters<typeof encodingForModel>[0]);
     return { count: encoding.encode(text).length, method: 'js_tiktoken_estimate' };
@@ -19,20 +22,17 @@ function estimateTokenCount(text: string, model: string): { count: number; metho
   }
 }
 
-function estimateForBlock(
-  inputText: string,
-  outputText: string,
-  model: string
-): EstimatedTokens {
+function estimateForBlock(inputText: string, outputText: string, model: string): EstimatedTokens {
   const input = estimateTokenCount(inputText, model);
   const output = estimateTokenCount(outputText, model);
   return {
     input: input.count,
     output: output.count,
     total: input.count + output.count,
-    method: input.method === 'js_tiktoken_estimate' && output.method === 'js_tiktoken_estimate'
-      ? 'js_tiktoken_estimate'
-      : 'js_tiktoken_fallback'
+    method:
+      input.method === 'js_tiktoken_estimate' && output.method === 'js_tiktoken_estimate'
+        ? 'js_tiktoken_estimate'
+        : 'js_tiktoken_fallback'
   };
 }
 
@@ -65,7 +65,9 @@ export function enrichTraceMessagesWithEstimatedTokens(
               block.type === 'tool_result'
           )
         : [];
-    const resultByUseId = new Map(nextToolBlocks.map((block) => [block.tool_use_id, block] as const));
+    const resultByUseId = new Map(
+      nextToolBlocks.map((block) => [block.tool_use_id, block] as const)
+    );
 
     for (const use of toolUses) {
       const useInputText = normalizeJson(use.input ?? {});
