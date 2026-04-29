@@ -49,6 +49,7 @@ type RunParams = {
   requestedAgents?: string[];
   applySnapshotEval: boolean;
   runNote?: string;
+  skipChecks?: boolean;
 };
 
 type RunJob = {
@@ -83,6 +84,7 @@ type RunRequestBody = {
   agents?: unknown;
   applySnapshotEval?: unknown;
   runNote?: unknown;
+  skipChecks?: unknown;
 };
 
 type PreviewRunRequestBody = {
@@ -282,6 +284,7 @@ export async function handleRunsRoutes(params: {
     const applySnapshotEval = body.applySnapshotEval !== false;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+    const skipChecks = body.skipChecks === true;
     if (!configPathRaw) {
       asJson(res, 400, { error: 'configPath is required' });
       return true;
@@ -307,7 +310,8 @@ export async function handleRunsRoutes(params: {
       scenarioIds,
       requestedAgents,
       applySnapshotEval,
-      runNote
+      runNote,
+      skipChecks
     };
     const job: RunJob = {
       id: jobId,
@@ -876,6 +880,7 @@ async function executeRunJob(
         runsDir: settings.runsDir,
         mcpServerAuthHeaders,
         signal: job.abortController.signal,
+        skipChecks: job.runParams.skipChecks === true,
         onProgress: async (event: RunProgressEvent) => {
           const message = formatRunProgressMessage(event);
           if (!message) return;
@@ -1074,12 +1079,10 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
-    case 'scenario_run_finished':
-      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
-        event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
-        event.toolCallCount
-      } tool call(s))`;
+    case 'scenario_run_finished': {
+      const label = event.checksSkipped ? 'EXEC' : event.pass ? 'PASS' : 'FAIL';
+      return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${label} (${event.toolCallCount} tool call(s))`;
+    }
     case 'agent_progress': {
       const p = event.event;
       switch (p.type) {

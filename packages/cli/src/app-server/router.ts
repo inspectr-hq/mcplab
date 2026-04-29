@@ -140,6 +140,7 @@ interface RunJob {
     scenarioIds?: string[];
     requestedAgents?: string[];
     applySnapshotEval: boolean;
+    skipChecks?: boolean;
   };
 }
 
