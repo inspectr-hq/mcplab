@@ -498,7 +498,10 @@ const Results = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <PassRateBadge rate={r.overallPassRate} />
+                      <PassRateBadge
+                        rate={r.overallPassRate}
+                        evaluatedRuns={r.evaluatedRuns ?? r.totalRuns}
+                      />
                     </TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>

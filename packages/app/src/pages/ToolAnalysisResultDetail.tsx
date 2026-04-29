@@ -6,7 +6,7 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { toast } from "@/hooks/use-toast";
 import type { SavedToolAnalysisReportRecord } from "@/lib/data-sources/types";
 import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
-import { Download, Trash2 } from "lucide-react";
+import { Clock, Download, Trash2 } from "lucide-react";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -91,13 +91,17 @@ export default function ToolAnalysisResultDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="font-mono text-xl font-semibold">{record.reportId}</h1>
-          <p className="text-sm text-muted-foreground">
-            {new Date(record.createdAt).toLocaleString()} · {record.serverNames.join(", ") || "—"}
+          <p className="text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1 align-middle">
+              <Clock className="h-3 w-3 shrink-0" />
+              {new Date(record.createdAt).toLocaleString()}
+            </span>{" "}
+            · {record.serverNames.join(", ") || "—"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {record.report.mcpServerVersions && Object.keys(record.report.mcpServerVersions).length > 0 && (
-            <span className="inline-flex items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center align-middle rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] leading-none text-muted-foreground">
               <span className="font-medium">MCP:</span>
               <span className="ml-1 font-mono">
                 {Object.entries(record.report.mcpServerVersions)
@@ -159,4 +163,3 @@ export default function ToolAnalysisResultDetailPage() {
     </div>
   );
 }
-
