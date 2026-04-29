@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight } from "lucide-react";
+import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight, Clock } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -701,8 +701,18 @@ const Compare = () => {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(r.timestamp).toLocaleString()}</TableCell>
-                    <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(r.timestamp).toLocaleString()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <PassRateBadge
+                        rate={r.overallPassRate}
+                        evaluatedRuns={r.evaluatedRuns ?? r.totalRuns}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}

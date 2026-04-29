@@ -704,8 +704,20 @@ const ResultDetail = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(result.timestamp).toLocaleString()}
-                {" "}·{requestedAgentId ? ` Agent: ${requestedAgentId} ·` : ""} Config hash: <span className="font-mono">{result.configHash}</span>
+                <span className="inline-flex items-center gap-1 align-middle">
+                  <Clock3 className="h-3 w-3 shrink-0" />
+                  {new Date(result.timestamp).toLocaleString()}
+                </span>
+                <span className="mx-1">·</span>
+                {requestedAgentId ? (
+                  <>
+                    <span className="inline-flex items-center align-middle">Agent: {requestedAgentId}</span>
+                    <span className="mx-1">·</span>
+                  </>
+                ) : null}
+                <span className="inline-flex items-center align-middle">
+                  Config hash: <span className="ml-1 font-mono">{result.configHash}</span>
+                </span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
@@ -1083,7 +1095,13 @@ const ResultDetail = () => {
                             {sc.runs.map((run) => (
                               <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
                                 <div className="mt-0.5">
-                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
+                                  {run.evaluationStatus === "skipped" ? (
+                                    <Clock3 className="h-4 w-4 text-amber-600" />
+                                  ) : run.passed ? (
+                                    <CheckCircle2 className="h-4 w-4 text-success" />
+                                  ) : (
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  )}
                                 </div>
                                 <div className="flex-1 space-y-1">
                                   {(() => {

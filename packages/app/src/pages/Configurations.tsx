@@ -413,7 +413,10 @@ const Configurations = () => {
                       <TableCell className="text-right font-mono text-sm">{scenarioCount(cfg)}</TableCell>
                       <TableCell className="text-right font-mono text-sm">{agentCount(cfg)}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
-                        {new Date(cfg.updatedAt).toLocaleDateString()}
+                        <div className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(cfg.updatedAt).toLocaleDateString()}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
