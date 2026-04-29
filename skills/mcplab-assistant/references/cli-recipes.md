@@ -21,6 +21,9 @@ mcplab run -c mcplab/evals/eval.yaml -s basic-check
 # Run variance testing
 mcplab run -c mcplab/evals/eval.yaml -n 5
 
+# Run scenarios and store artifacts, but skip evaluation checks
+mcplab run -c mcplab/evals/eval.yaml --skip-checks
+
 # Run each scenario with selected agents
 mcplab run -c mcplab/evals/eval.yaml --agents claude-haiku,gpt-4o-mini
 
@@ -35,6 +38,7 @@ Notes:
 - `-c/--config` is required unless using `--interactive`. Interactive mode prompts you to select a config file and scenarios without specifying flags.
 - `--agents` values must match agent IDs loaded from config/library.
 - `--runs`/`-n` must be a positive number.
+- `--skip-checks` executes scenarios normally but skips any evaluation tests.
 
 ## Batch Runs (Directory Config)
 

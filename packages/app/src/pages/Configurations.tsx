@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -413,7 +413,10 @@ const Configurations = () => {
                       <TableCell className="text-right font-mono text-sm">{scenarioCount(cfg)}</TableCell>
                       <TableCell className="text-right font-mono text-sm">{agentCount(cfg)}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">
-                        {new Date(cfg.updatedAt).toLocaleDateString()}
+                        <div className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(cfg.updatedAt).toLocaleDateString()}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">

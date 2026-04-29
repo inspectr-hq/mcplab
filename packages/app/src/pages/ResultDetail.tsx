@@ -714,7 +714,7 @@ const ResultDetail = () => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
-                <PassRateBadge rate={displayPassRate} />
+                <PassRateBadge rate={displayPassRate} evaluatedRuns={filteredEvaluatedRuns} />
                 {snapshotsUiEnabled && result.snapshotEval?.applied && (
                   <Badge variant="outline" className="text-xs">
                     Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
@@ -722,8 +722,20 @@ const ResultDetail = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(result.timestamp).toLocaleString()}
-                {" "}·{requestedAgentId ? ` Agent: ${requestedAgentId} ·` : ""} Config hash: <span className="font-mono">{result.configHash}</span>
+                <span className="inline-flex items-center gap-1 align-middle">
+                  <Clock3 className="h-3 w-3 shrink-0" />
+                  {new Date(result.timestamp).toLocaleString()}
+                </span>
+                <span className="mx-1">·</span>
+                {requestedAgentId ? (
+                  <>
+                    <span className="inline-flex items-center align-middle">Agent: {requestedAgentId}</span>
+                    <span className="mx-1">·</span>
+                  </>
+                ) : null}
+                <span className="inline-flex items-center align-middle">
+                  Config hash: <span className="ml-1 font-mono">{result.configHash}</span>
+                </span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
@@ -1034,7 +1046,14 @@ const ResultDetail = () => {
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
-                        <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
+                        <TableCell>
+                          <PassRateBadge
+                            rate={sc.passRate}
+                            evaluatedRuns={
+                              sc.runs.filter((run) => run.evaluationStatus !== "skipped").length
+                            }
+                          />
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
                         <TableCell className="font-mono text-sm">{formatTokenCount(sc.toolTokenUsage?.totalTokens)}</TableCell>
                         <TableCell>

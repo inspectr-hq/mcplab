@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents` and `--skip-checks`.
 ---
 
 # MCPLab Assistant
@@ -69,6 +69,7 @@ When the request is about analyzing results, the assistant must:
 - `report.html` (optional, interactive confirmation)
 3. Return analysis with:
 - overall pass/fail summary
+- skipped-run summary when checks were skipped
 - failing scenario IDs and failure reason category
 - tool-usage observations (missing required tools, forbidden tool usage, sequence drift)
 - concrete remediation steps per failing scenario
@@ -101,7 +102,8 @@ When the request is about analyzing results, the assistant must:
 - Rebuild HTML report from existing run -> `mcplab report`
 2. Use only documented flags from CLI source.
 3. For model comparison, use `mcplab run --agents ...`.
-4. If a run fails, capture exact error and switch to troubleshooting workflow.
+4. For execution-only runs without grading, use `mcplab run --skip-checks` (status becomes `Skipped`).
+5. If a run fails, capture exact error and switch to troubleshooting workflow.
 
 ## Troubleshooting Workflow
 
@@ -123,13 +125,14 @@ When the request is about analyzing results, the assistant must:
 - `mcplab_aggregate_runs` for historical trends
 - `mcplab_compare_runs` for deterministic run deltas
 2. Read run directory artifacts only when tool output is insufficient:
-- `results.json` for structured metrics and pass/fail
+- `results.json` for structured metrics and pass/fail/skipped
 - `summary.md` for quick human scan
 - `trace.jsonl` for call-by-call debugging
 - `report.html` for interactive investigation
 3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
-4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
-5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
+4. When checks are skipped, treat pass rate as "evaluated-only" and report skipped counts explicitly.
+5. Highlight regressions with concrete scenario IDs and observed behavior deltas.
+6. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
 
 ## Result Assistant Scopes
 

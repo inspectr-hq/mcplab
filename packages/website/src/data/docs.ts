@@ -506,7 +506,7 @@ const cliRunning: DocPage = {
   label: 'Running Evaluations',
   href: '/docs/cli/running-evaluations/',
   description: 'The mcplab run command and all its options.',
-  keywords: ['run', 'cli', 'scenarios', 'agents', 'variance', 'interactive'],
+  keywords: ['run', 'cli', 'scenarios', 'agents', 'variance', 'interactive', 'skip-checks'],
   seoTitle: 'CLI — Running Evaluations',
   track: 'cli',
   sections: [
@@ -571,6 +571,21 @@ const cliRunning: DocPage = {
           title: '5 runs per scenario',
           language: 'bash',
           code: 'npx @inspectr/mcplab run -c eval.yaml -n 5'
+        }
+      ]
+    },
+    {
+      id: 'skip-checks',
+      title: 'Skip Checks (Execution-Only Runs)',
+      paragraphs: [
+        'Use --skip-checks when you want to execute all scenarios and capture traces/results without executing any tests or checks.',
+        "Runs are marked as 'Skipped' for evaluation status and excluded from pass-rate calculations."
+      ],
+      codeBlocks: [
+        {
+          title: 'execute without check evaluation',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml --skip-checks'
         }
       ]
     },
@@ -1054,7 +1069,7 @@ const appRunning: DocPage = {
   label: 'Running Evaluations',
   href: '/docs/app/running-evaluations/',
   description: 'Launch and monitor evaluations from the web UI.',
-  keywords: ['run', 'evaluation', 'ui', 'agents', 'config', 'variance'],
+  keywords: ['run', 'evaluation', 'ui', 'agents', 'config', 'variance', 'skip checks'],
   seoTitle: 'App — Running Evaluations',
   track: 'app',
   sections: [
@@ -1078,6 +1093,14 @@ const appRunning: DocPage = {
       title: 'Set Variance Runs',
       paragraphs: [
         'Increase the run count to execute each scenario multiple times. This surfaces consistency issues — an agent that passes 3 out of 5 runs on the same prompt is less reliable than one that passes 5 out of 5.'
+      ]
+    },
+    {
+      id: 'skip-checks-ui',
+      title: 'Skip Checks in UI',
+      paragraphs: [
+        "Enable 'Skip checks (execute only, no pass/fail rating)' on the Run Evaluation page when you want execution artifacts without pass/fail grading.",
+        "Skipped runs still call MCP tools and store traces/results, but result status is shown as 'Skipped' and excluded from pass-rate."
       ]
     },
     {
@@ -1136,7 +1159,8 @@ const appResults: DocPage = {
       id: 'results-list',
       title: 'The Results List',
       paragraphs: [
-        'The Results page lists every completed run in reverse chronological order. Each entry shows the config name, run note, number of scenarios, and overall pass rate.'
+        'The Results page lists every completed run in reverse chronological order. Each entry shows the config name, run note, number of scenarios, and overall pass rate.',
+        "If checks were skipped for a run, you'll see 'Skipped' statuses in run details and skipped counts in summaries."
       ],
       screenshot: '/screenshots/evaluation-results-overview.png'
     },

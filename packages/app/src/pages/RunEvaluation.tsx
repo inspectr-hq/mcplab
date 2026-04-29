@@ -632,9 +632,9 @@ const RunEvaluation = () => {
             <span>Apply snapshot evaluation policy (if configured)</span>
           </label>
           )}
-          <label className="flex items-center gap-2 text-sm rounded-md border p-2">
+          <label className="inline-flex w-fit items-center gap-2 text-sm rounded-md border p-2">
             <Checkbox checked={skipChecks} onCheckedChange={(v) => setSkipChecks(v === true)} />
-            <span>Skip checks (execute only, no pass/fail rating)</span>
+            <span>Skip checks (execute only, no evaluation tests)</span>
           </label>
           <div className="flex gap-2">
             <Button
