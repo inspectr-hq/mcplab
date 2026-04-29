@@ -309,6 +309,7 @@ export const workspaceApiClient = {
   startRun: (params: {
     configPath: string;
     runsPerScenario: number;
+    skipChecks?: boolean;
     scenarioId?: string;
     scenarioIds?: string[];
     agents?: string[];

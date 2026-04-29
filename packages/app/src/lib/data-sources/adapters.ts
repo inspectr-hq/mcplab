@@ -1157,6 +1157,7 @@ export function fromCoreResultsJson(
     overallPassRate: results.summary.pass_rate,
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
+    checksSkipped: results.metadata.checks_skipped === true,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
     snapshotEval: results.metadata.snapshot_eval
