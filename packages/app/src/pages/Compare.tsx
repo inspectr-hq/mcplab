@@ -35,6 +35,7 @@ type AgentSummary = {
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
+  checksSkipped?: boolean;
 };
 
 type WithinRunScenarioRow = {
@@ -426,7 +427,8 @@ const Compare = () => {
         passRate: totalRuns === 0 ? 0 : passCount / totalRuns,
         totalRuns,
         avgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
-        avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns
+        avgLatency: totalRuns === 0 ? 0 : totalDuration / totalRuns,
+        checksSkipped: withinRun?.checksSkipped
       };
     });
   }, [withinRun, selectedWithinRunAgentOptions, withinRunScenarioRows]);
@@ -702,7 +704,7 @@ const Compare = () => {
                       })()}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{new Date(r.timestamp).toLocaleString()}</TableCell>
-                    <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
+                    <TableCell><PassRateBadge rate={r.overallPassRate} ungraded={r.checksSkipped} /></TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}
@@ -779,7 +781,7 @@ const Compare = () => {
                 <TableBody>
                   <TableRow>
                     <TableCell className="font-medium">Pass Rate</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id}><PassRateBadge rate={r.overallPassRate} /></TableCell>)}
+                    {selectedRuns.map((r) => <TableCell key={r.id}><PassRateBadge rate={r.overallPassRate} ungraded={r.checksSkipped} /></TableCell>)}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Total Runs</TableCell>
@@ -816,7 +818,7 @@ const Compare = () => {
                       <TableCell className="font-medium text-sm">{sid}</TableCell>
                       {selectedRuns.map((r) => {
                         const sc = r.scenarios.find((s) => s.scenarioId === sid);
-                        return <TableCell key={r.id}>{sc ? <PassRateBadge rate={sc.passRate} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>;
+                        return <TableCell key={r.id}>{sc ? <PassRateBadge rate={sc.passRate} ungraded={r.checksSkipped} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>;
                       })}
                     </TableRow>
                   ))}
@@ -906,7 +908,7 @@ const Compare = () => {
                     <TableCell className="font-medium">Pass Rate</TableCell>
                     {withinRunAgentSummary.map((summary) => (
                       <TableCell key={summary.agentId}>
-                        <PassRateBadge rate={summary.passRate} />
+                        <PassRateBadge rate={summary.passRate} ungraded={summary.checksSkipped} />
                       </TableCell>
                     ))}
                   </TableRow>
@@ -980,7 +982,7 @@ const Compare = () => {
                           <TableCell key={agent.id} className="min-w-0 align-top">
                             <div className="space-y-2">
                               <div className="text-xs text-muted-foreground">
-                                <PassRateBadge rate={scenario.passRate} />{" "}
+                                <PassRateBadge rate={scenario.passRate} ungraded={withinRun?.checksSkipped} />{" "}
                                 <span className="ml-2">runs: {scenario.runs.length}</span>{" "}
                                 · calls: {scenario.avgToolCalls.toFixed(1)} · latency: {Math.round(scenario.avgDuration)}ms
                               </div>
