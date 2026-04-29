@@ -64,6 +64,7 @@ interface RunCommandOptions {
   runsDir: string;
   snapshotsDir: string;
   oauthToken: string[];
+  skipChecks: boolean;
 }
 
 program
@@ -72,6 +73,7 @@ program
   .option('-c, --config <path>', 'Path to eval.yaml')
   .option('-s, --scenario <id>', 'Run a single scenario')
   .option('-n, --runs <count>', 'Variance runs', '1')
+  .option('--skip-checks', 'Execute scenarios but skip pass/fail checks')
   .option(
     '--agents <agents>',
     'Comma-separated list of agents to test (runs each scenario with each agent)'
@@ -776,6 +778,9 @@ async function executeSingleConfigRun(params: {
     }
     oauthTokens[serverName] = token;
   }
+  if (options.skipChecks) {
+    console.log(kleur.cyan('Checks mode: skipped'));
+  }
   const { runDir, results } = await runAll(selected, {
     runsPerScenario,
     scenarioId: options.scenario,
@@ -785,6 +790,7 @@ async function executeSingleConfigRun(params: {
     cliVersion: pkgVersion,
     runsDir: String(options.runsDir),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
+    skipChecks: Boolean(options.skipChecks),
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);
       if (line) {
@@ -845,10 +851,12 @@ async function executeSingleConfigRun(params: {
     console.log(formatSnapshotComparisonTable(comparison));
   }
 
-  const failedRuns = results.scenarios.reduce(
-    (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
-    0
-  );
+  const failedRuns = results.metadata.checks_skipped
+    ? 0
+    : results.scenarios.reduce(
+        (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
+        0
+      );
 
   return {
     runDir,
@@ -887,12 +895,12 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
-    case 'scenario_run_finished':
+    case 'scenario_run_finished': {
+      const label = event.checksSkipped ? 'EXEC' : event.pass ? 'PASS' : 'FAIL';
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${
         event.scenarioId
-      } [agent=${event.agentName}] -> ${event.pass ? 'PASS' : 'FAIL'} (${
-        event.toolCallCount
-      } tool calls)`;
+      } [agent=${event.agentName}] -> ${label} (${event.toolCallCount} tool calls)`;
+    }
     case 'run_finished':
       return `Run finished: ${event.runId}`;
     default:
