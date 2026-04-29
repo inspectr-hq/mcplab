@@ -252,6 +252,7 @@ const Compare = () => {
     () => [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))],
     [selectedRuns]
   );
+
   const scenarioLabelById = useMemo(() => {
     const map = new Map<string, string>();
     for (const run of selectedRuns) {
