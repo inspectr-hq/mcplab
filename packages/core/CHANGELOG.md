@@ -1,5 +1,15 @@
 # @inspectr/mcplab-core
 
+## 1.8.0
+
+### Minor Changes
+
+- feat: include model name in run summaries
+- feat: Stream assistant turn events
+- feat: Show estimated tool token usage
+- fix: Align date format elements
+- fix: Show scenario name in compare
+
 ## 1.7.0
 
 ### Minor Changes

@@ -1,5 +1,22 @@
 # @inspectr/mcplab
 
+## 1.10.0
+
+### Minor Changes
+
+- feat: include model name in run summaries
+- feat: Stream assistant turn events
+- feat: Show estimated tool token usage
+- fix: Align date format elements
+- fix: Show scenario name in compare
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.8.0
+  - @inspectr/mcplab-mcp-server@1.2.1
+  - @inspectr/mcplab-reporting@1.1.7
+
 ## 1.9.0
 
 ### Minor Changes
