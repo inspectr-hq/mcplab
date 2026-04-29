@@ -455,6 +455,91 @@ describe('fromCoreResultsJson conversation mapping', () => {
     ).toEqual(['{"hits":1}', '{"hits":2}']);
   });
 
+  it('maps per-instance estimated_tokens onto tool call/result conversation items', () => {
+    const run0Record = makeRecord(0, [
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: { q: 'ALPHA' },
+            server: 'my-server',
+            estimated_tokens: {
+              input: 12,
+              output: 8,
+              total: 20,
+              method: 'js_tiktoken_estimate'
+            }
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        ts: '2026-02-08T10:00:02.000Z',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu-1',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{"hits":1}' }],
+            is_error: false,
+            estimated_tokens: {
+              input: 12,
+              output: 8,
+              total: 20,
+              method: 'js_tiktoken_estimate'
+            }
+          }
+        ]
+      }
+    ]);
+
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
+    const toolCall = mapped.scenarios[0].runs[0].conversation.find((item) => item.kind === 'tool_call');
+    const toolResult = mapped.scenarios[0].runs[0].conversation.find((item) => item.kind === 'tool_result');
+
+    expect(toolCall?.estimatedTokens).toEqual({ inputTokens: 12, outputTokens: 8, totalTokens: 20 });
+    expect(toolCall?.estimatedTokenMethod).toBe('js_tiktoken_estimate');
+    expect(toolResult?.estimatedTokens).toEqual({ inputTokens: 12, outputTokens: 8, totalTokens: 20 });
+    expect(toolResult?.estimatedTokenMethod).toBe('js_tiktoken_estimate');
+  });
+
+  it('prefers persisted estimated_tokens over turn usage split for tool token estimate', () => {
+    const run0Record = makeRecord(0, [
+      {
+        role: 'assistant',
+        ts: '2026-02-08T10:00:01.000Z',
+        usage: { input_tokens: 2000, output_tokens: 500, total_tokens: 2500 },
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu-1',
+            name: 'search_tags',
+            input: { q: 'ALPHA' },
+            server: 'my-server',
+            estimated_tokens: {
+              input: 10,
+              output: 90,
+              total: 100,
+              method: 'js_tiktoken_estimate'
+            }
+          }
+        ]
+      }
+    ]);
+
+    const mapped = fromCoreResultsJson(baseResults(), [run0Record]);
+    const run = mapped.scenarios[0].runs[0];
+
+    expect(run.toolTokenUsage).toEqual({ inputTokens: 10, outputTokens: 90, totalTokens: 100 });
+    expect(run.toolTokenUsageByTool).toEqual({
+      search_tags: { inputTokens: 10, outputTokens: 90, totalTokens: 100 }
+    });
+  });
+
   it('does not crash on malformed tool_result content and emits an empty tool_result text', () => {
     const malformedToolMessage = {
       role: 'tool',

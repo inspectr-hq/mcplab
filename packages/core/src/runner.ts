@@ -13,6 +13,7 @@ import { McpClientManager } from './mcp.js';
 import { runAgentScenario, type AgentRunProgressEvent } from './agent.js';
 import { evaluateScenario, extractValues } from './eval.js';
 import { aggregateResults, renderSummaryMarkdown } from './results.js';
+import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 
 export interface RunOptions {
   runsPerScenario: number;
@@ -241,7 +242,10 @@ export async function runAll(
             ts_start: runResult.traceStartedAt,
             ts_end: runResult.traceEndedAt,
             pass: evalResult.pass,
-            messages: runResult.traceMessages,
+            messages: enrichTraceMessagesWithEstimatedTokens(
+              runResult.traceMessages,
+              runResult.traceModel
+            ),
             metrics: {
               tool_call_count: runResult.toolSequence.length,
               total_tool_duration_ms: runResult.toolDurationsMs.reduce((sum, ms) => sum + ms, 0)

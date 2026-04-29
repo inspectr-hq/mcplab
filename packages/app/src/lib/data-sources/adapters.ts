@@ -872,7 +872,15 @@ function toConversationItemsFromRecord(
             kind: 'tool_call',
             text: stringifySafe(use.input ?? {}),
             toolName: use.name,
-            timestamp: message.ts
+            timestamp: message.ts,
+            estimatedTokens: use.estimated_tokens
+              ? {
+                  inputTokens: use.estimated_tokens.input,
+                  outputTokens: use.estimated_tokens.output,
+                  totalTokens: use.estimated_tokens.total
+                }
+              : undefined,
+            estimatedTokenMethod: use.estimated_tokens?.method
           });
 
           const result = resultByUseId.get(use.id);
@@ -888,7 +896,15 @@ function toConversationItemsFromRecord(
             toolName: result.name,
             ok: !result.is_error,
             durationMs: result.duration_ms,
-            timestamp: result.ts_end ?? nextMessage.ts
+            timestamp: result.ts_end ?? nextMessage.ts,
+            estimatedTokens: result.estimated_tokens
+              ? {
+                  inputTokens: result.estimated_tokens.input,
+                  outputTokens: result.estimated_tokens.output,
+                  totalTokens: result.estimated_tokens.total
+                }
+              : undefined,
+            estimatedTokenMethod: result.estimated_tokens?.method
           });
           resultByUseId.delete(use.id);
         }
@@ -905,7 +921,15 @@ function toConversationItemsFromRecord(
             toolName: result.name,
             ok: !result.is_error,
             durationMs: result.duration_ms,
-            timestamp: result.ts_end ?? nextMessage.ts
+            timestamp: result.ts_end ?? nextMessage.ts,
+            estimatedTokens: result.estimated_tokens
+              ? {
+                  inputTokens: result.estimated_tokens.input,
+                  outputTokens: result.estimated_tokens.output,
+                  totalTokens: result.estimated_tokens.total
+                }
+              : undefined,
+            estimatedTokenMethod: result.estimated_tokens?.method
           });
         }
 
@@ -917,7 +941,15 @@ function toConversationItemsFromRecord(
             kind: 'tool_call',
             text: stringifySafe(use.input ?? {}),
             toolName: use.name,
-            timestamp: message.ts
+            timestamp: message.ts,
+            estimatedTokens: use.estimated_tokens
+              ? {
+                  inputTokens: use.estimated_tokens.input,
+                  outputTokens: use.estimated_tokens.output,
+                  totalTokens: use.estimated_tokens.total
+                }
+              : undefined,
+            estimatedTokenMethod: use.estimated_tokens?.method
           });
         }
       }
@@ -938,7 +970,15 @@ function toConversationItemsFromRecord(
           toolName: block.name,
           ok: !block.is_error,
           durationMs: block.duration_ms,
-          timestamp: block.ts_end ?? message.ts
+          timestamp: block.ts_end ?? message.ts,
+          estimatedTokens: block.estimated_tokens
+            ? {
+                inputTokens: block.estimated_tokens.input,
+                outputTokens: block.estimated_tokens.output,
+                totalTokens: block.estimated_tokens.total
+              }
+            : undefined,
+          estimatedTokenMethod: block.estimated_tokens?.method
         });
       }
     }
@@ -1009,6 +1049,29 @@ function estimateRunTokenUsage(record?: ScenarioRunTraceRecord): {
         block.type === 'tool_use'
     );
     if (toolUses.length === 0) continue;
+
+    const allHaveEstimatedTokens = toolUses.every((toolUse) => Boolean(toolUse.estimated_tokens));
+    if (allHaveEstimatedTokens) {
+      for (const toolUse of toolUses) {
+        const estimated = toolUse.estimated_tokens!;
+        toolAcc.input += estimated.input;
+        toolAcc.hasInput = true;
+        toolAcc.output += estimated.output;
+        toolAcc.hasOutput = true;
+        toolAcc.total += estimated.total;
+        toolAcc.hasTotal = true;
+
+        const entry = perToolAcc.get(toolUse.name) ?? createTokenAccumulator();
+        entry.input += estimated.input;
+        entry.hasInput = true;
+        entry.output += estimated.output;
+        entry.hasOutput = true;
+        entry.total += estimated.total;
+        entry.hasTotal = true;
+        perToolAcc.set(toolUse.name, entry);
+      }
+      continue;
+    }
 
     addTraceUsage(toolAcc, message.usage);
 

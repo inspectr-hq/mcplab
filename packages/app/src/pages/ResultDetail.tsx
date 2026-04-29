@@ -17,9 +17,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { sumTokenUsages } from "@/lib/token-usage";
+import { formatTokenCount } from "@/lib/format-duration";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -74,9 +76,6 @@ function formatCompactOneDecimal(value: number): string {
   return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
 }
 
-function formatTokenCount(value: number | null | undefined): string {
-  return typeof value === "number" ? value.toLocaleString() : "n/a";
-}
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -1278,13 +1277,33 @@ const ResultDetail = () => {
                                         ) : (
                                           <div className="space-y-2">
                                             <div className="flex flex-wrap gap-1">
-                                              {run.toolCalls.map((tc, i) => (
-                                                <Badge key={i} variant="outline" className="font-mono text-xs bg-background">
-                                                  <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                                  {tc.name}
-                                                  <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
-                                                </Badge>
-                                              ))}
+                                              <TooltipProvider delayDuration={0}>
+                                                {run.toolCalls.map((tc, i) => {
+                                                  const usage = run.conversation.filter((item) => item.kind === "tool_call")[i]?.estimatedTokens;
+                                                  const hasEstimate = typeof usage?.totalTokens === "number";
+                                                  return (
+                                                    <UiTooltip key={i}>
+                                                      <TooltipTrigger asChild>
+                                                        <Badge variant="outline" className="font-mono text-xs bg-background">
+                                                          <span className="mr-1 text-muted-foreground">#{i + 1}</span>
+                                                          {tc.name}
+                                                          <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
+                                                          {hasEstimate && (
+                                                            <span className="ml-1 text-muted-foreground">
+                                                              · {formatTokenCount(usage?.totalTokens)}tok
+                                                            </span>
+                                                          )}
+                                                        </Badge>
+                                                      </TooltipTrigger>
+                                                      {hasEstimate && (
+                                                        <TooltipContent className="text-xs">
+                                                          {`${tc.name} · tokens total: ${formatTokenCount(usage?.totalTokens)} · in: ${formatTokenCount(usage?.inputTokens)} · out: ${formatTokenCount(usage?.outputTokens)}`}
+                                                        </TooltipContent>
+                                                      )}
+                                                    </UiTooltip>
+                                                  );
+                                                })}
+                                              </TooltipProvider>
                                             </div>
                                             <div className="rounded-md border bg-background p-2">
                                               <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -1954,15 +1973,17 @@ const ResultDetail = () => {
 
 function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem; fallbackUserPrompt?: string }) {
   if (item.kind === "tool_call") {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, "input");
     return (
       <ToolEventRow
         variant="call"
-        title={`Tool call · ${item.toolName || "unknown"}`}
+        title={`Tool call · ${item.toolName || "unknown"}${tokenSuffix}`}
         text={item.text}
       />
     );
   }
   if (item.kind === "tool_result") {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, "output");
     const statusIcon = item.ok ? (
       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
     ) : (
@@ -1971,7 +1992,7 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
     return (
       <ToolEventRow
         variant={item.ok ? "result_ok" : "result_error"}
-        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}`}
+        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}${tokenSuffix}`}
         text={item.text}
         icon={statusIcon}
       />
@@ -2011,6 +2032,13 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
       )}
     </div>
   );
+}
+
+function formatEstimatedTokenSuffix(item: ConversationItem, mode: "input" | "output"): string {
+  const value =
+    mode === "input" ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
+  if (typeof value !== "number") return "";
+  return ` · ${formatTokenCount(value)} tokens`;
 }
 
 function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {

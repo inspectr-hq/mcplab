@@ -138,6 +138,8 @@ export interface ConversationItem {
   ok?: boolean;
   durationMs?: number;
   timestamp?: string;
+  estimatedTokens?: TokenUsage;
+  estimatedTokenMethod?: 'js_tiktoken_estimate' | 'js_tiktoken_fallback';
 }
 
 export interface TokenUsage {

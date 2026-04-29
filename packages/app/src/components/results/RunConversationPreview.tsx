@@ -4,6 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import type { ConversationItem, ScenarioRun } from "@/types/eval";
+import { formatTokenCount } from "@/lib/format-duration";
 
 export function RunConversationPreview({
   run,
@@ -75,15 +76,17 @@ export function RunConversationPreview({
 
 function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem; fallbackUserPrompt?: string }) {
   if (item.kind === "tool_call") {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, "input");
     return (
       <ToolEventRow
         variant="call"
-        title={`Tool call · ${item.toolName || "unknown"}`}
+        title={`Tool call · ${item.toolName || "unknown"}${tokenSuffix}`}
         text={item.text}
       />
     );
   }
   if (item.kind === "tool_result") {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, "output");
     const statusIcon = item.ok ? (
       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
     ) : (
@@ -92,7 +95,7 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
     return (
       <ToolEventRow
         variant={item.ok ? "result_ok" : "result_error"}
-        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}`}
+        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}${tokenSuffix}`}
         text={item.text}
         icon={statusIcon}
       />
@@ -134,6 +137,13 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
       )}
     </div>
   );
+}
+
+function formatEstimatedTokenSuffix(item: ConversationItem, mode: "input" | "output"): string {
+  const value =
+    mode === "input" ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
+  if (typeof value !== "number") return "";
+  return ` · estimated ${formatTokenCount(value)} tokens`;
 }
 
 function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {

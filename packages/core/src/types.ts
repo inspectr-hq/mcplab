@@ -261,6 +261,13 @@ export interface TraceMessageUsage {
   total_tokens?: number;
 }
 
+export interface EstimatedTokens {
+  input: number;
+  output: number;
+  total: number;
+  method: 'js_tiktoken_estimate' | 'js_tiktoken_fallback';
+}
+
 export type TraceMessageContentBlock =
   | { type: 'text'; text: string }
   | {
@@ -269,6 +276,7 @@ export type TraceMessageContentBlock =
       name: string;
       input: unknown;
       server: string;
+      estimated_tokens?: EstimatedTokens;
     }
   | {
       type: 'tool_result';
@@ -280,6 +288,7 @@ export type TraceMessageContentBlock =
       ts_start?: string;
       ts_end?: string;
       server?: string;
+      estimated_tokens?: EstimatedTokens;
     };
 
 export interface TraceMessage {
