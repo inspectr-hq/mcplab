@@ -4,6 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import type { ConversationItem, ScenarioRun } from "@/types/eval";
+import { formatTokenCount } from "@/lib/format-duration";
 
 export function RunConversationPreview({
   run,
@@ -142,7 +143,7 @@ function formatEstimatedTokenSuffix(item: ConversationItem, mode: "input" | "out
   const value =
     mode === "input" ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
   if (typeof value !== "number") return "";
-  return ` · estimated ${new Intl.NumberFormat().format(value)} tokens`;
+  return ` · estimated ${formatTokenCount(value)} tokens`;
 }
 
 function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {

@@ -21,6 +21,7 @@ import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { generateHtmlReport } from "@/lib/generate-html-report";
 import { sumTokenUsages } from "@/lib/token-usage";
+import { formatTokenCount } from "@/lib/format-duration";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useLibraries } from "@/contexts/LibraryContext";
@@ -75,9 +76,6 @@ function formatCompactOneDecimal(value: number): string {
   return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
 }
 
-function formatTokenCount(value: number | null | undefined): string {
-  return typeof value === "number" ? value.toLocaleString() : "n/a";
-}
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
