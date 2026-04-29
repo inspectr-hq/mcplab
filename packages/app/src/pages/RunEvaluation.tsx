@@ -33,6 +33,7 @@ const RunEvaluation = () => {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
+  const [skipChecks, setSkipChecks] = useState(false);
   const [runNote, setRunNote] = useState("");
   const [snapshotName, setSnapshotName] = useState("");
   const [savingSnapshot, setSavingSnapshot] = useState(false);
@@ -124,6 +125,7 @@ const RunEvaluation = () => {
     );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setApplySnapshotEval(true);
+    setSkipChecks(false);
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
   const startWorkspaceRun = async () => {
@@ -197,7 +199,7 @@ const RunEvaluation = () => {
         : "single-file/inline";
     setLogs([
       `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
-      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}${runNote.trim() ? ` note=${runNote.trim()}` : ""}`
+      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} checks=${skipChecks ? 'skipped' : 'on'} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}${runNote.trim() ? ` note=${runNote.trim()}` : ""}`
     ]);
     setProgress(10);
     try {
@@ -207,6 +209,7 @@ const RunEvaluation = () => {
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
+        skipChecks,
         runNote: runNote.trim() ? runNote.trim() : undefined,
       });
       setActiveJobId(jobId);
@@ -630,6 +633,10 @@ const RunEvaluation = () => {
             <span>Apply snapshot evaluation policy (if configured)</span>
           </label>
           )}
+          <label className="inline-flex w-fit items-center gap-2 text-sm rounded-md border p-2">
+            <Checkbox checked={skipChecks} onCheckedChange={(v) => setSkipChecks(v === true)} />
+            <span>Skip checks (execute only, no pass/fail evaluation)</span>
+          </label>
           <div className="flex gap-2">
             <Button
               onClick={startRun}
