@@ -16,6 +16,7 @@ import { aggregateResults, renderSummaryMarkdown } from './results.js';
 
 export interface RunOptions {
   runsPerScenario: number;
+  skipChecks?: boolean;
   scenarioId?: string;
   runNote?: string;
   configHash: string;
@@ -56,6 +57,7 @@ export type RunProgressEvent =
       runsPerScenario: number;
       pass: boolean;
       toolCallCount: number;
+      checksSkipped: boolean;
     }
   | {
       type: 'agent_progress';
@@ -200,11 +202,9 @@ export async function runAll(
               });
             }
           });
-          const evalResult = evaluateScenario(
-            runResult.finalText,
-            runResult.toolSequence,
-            scenario.eval
-          );
+          const evalResult = options.skipChecks
+            ? { pass: false, failures: [] as string[] }
+            : evaluateScenario(runResult.finalText, runResult.toolSequence, scenario.eval);
           const extracted = extractValues(
             runResult.finalText,
             scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
@@ -257,7 +257,8 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: evalResult.pass,
-            toolCallCount: runResult.toolSequence.length
+            toolCallCount: runResult.toolSequence.length,
+            checksSkipped: options.skipChecks === true
           });
         } catch (scenarioErr: any) {
           if (isAbortError(scenarioErr, options.signal)) {
@@ -306,7 +307,8 @@ export async function runAll(
             runIndex,
             runsPerScenario: options.runsPerScenario,
             pass: false,
-            toolCallCount: 0
+            toolCallCount: 0,
+            checksSkipped: options.skipChecks === true
           });
         }
       }
@@ -330,7 +332,8 @@ export async function runAll(
       configHash: options.configHash,
       cliVersion: options.cliVersion,
       mcpServerVersions,
-      scenarioRuns
+      scenarioRuns,
+      checksSkipped: options.skipChecks === true
     });
 
     const resultsPath = join(runDir, 'results.json');
