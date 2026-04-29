@@ -7,6 +7,7 @@ export function aggregateResults(params: {
   gitCommit?: string;
   configHash: string;
   cliVersion: string;
+  checksSkipped?: boolean;
   mcpServerVersions?: Record<string, string | null>;
   scenarioRuns: Array<{
     scenario_id: string;
@@ -109,6 +110,7 @@ export function aggregateResults(params: {
       git_commit: params.gitCommit,
       config_hash: params.configHash,
       cli_version: params.cliVersion,
+      checks_skipped: params.checksSkipped === true ? true : undefined,
       mcp_server_versions: params.mcpServerVersions ?? {}
     },
     summary: {
@@ -147,6 +149,9 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   lines.push(`Total scenarios: ${results.summary.total_scenarios}`);
   lines.push(`Total runs: ${results.summary.total_runs}`);
   lines.push(`Pass rate: ${(results.summary.pass_rate * 100).toFixed(1)}%`);
+  if (results.metadata.checks_skipped) {
+    lines.push('Checks: skipped');
+  }
   lines.push('');
   lines.push('| Scenario | Agent | Runs | Pass rate | Distinct sequences | Tool calls |');
   lines.push('|---|---|---|---|---|---|');

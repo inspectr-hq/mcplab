@@ -207,6 +207,16 @@ describe('aggregateResults', () => {
     expect(stats.required.search).toBe(1);
     expect(stats.forbidden.delete).toBe(0);
   });
+
+  it('sets checks_skipped in metadata when checksSkipped is true', () => {
+    const result = aggregateResults({ ...BASE, checksSkipped: true, scenarioRuns: [] });
+    expect(result.metadata.checks_skipped).toBe(true);
+  });
+
+  it('omits checks_skipped from metadata when not set', () => {
+    const result = aggregateResults({ ...BASE, scenarioRuns: [] });
+    expect(result.metadata.checks_skipped).toBeUndefined();
+  });
 });
 
 describe('renderSummaryMarkdown', () => {
@@ -257,5 +267,11 @@ describe('renderSummaryMarkdown', () => {
     expect(withVersionsMd).toContain('- api: 1.2.3');
     expect(withVersionsMd).toContain('- docs: unknown');
     expect(renderSummaryMarkdown(withoutVersions)).not.toContain('MCP server versions:');
+  });
+
+  it('includes checks skipped note when checksSkipped is true', () => {
+    const result = aggregateResults({ ...BASE, checksSkipped: true, scenarioRuns: [] });
+    const md = renderSummaryMarkdown(result);
+    expect(md).toContain('Checks: skipped');
   });
 });
