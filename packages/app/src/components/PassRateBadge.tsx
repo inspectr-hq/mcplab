@@ -1,11 +1,29 @@
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface PassRateBadgeProps {
   rate: number;
   className?: string;
+  ungraded?: boolean;
 }
 
-export function PassRateBadge({ rate, className }: PassRateBadgeProps) {
+export function PassRateBadge({ rate, className, ungraded }: PassRateBadgeProps) {
+  if (ungraded) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="secondary"
+            className={`font-mono text-xs border-0 bg-[rgba(245,158,11,0.18)] text-[rgb(245,158,11)] hover:bg-[rgba(245,158,11,0.22)] ${className ?? ""}`}
+          >
+            Ungraded
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs">Checks were skipped for this run</TooltipContent>
+      </Tooltip>
+    );
+  }
+
   const pct = Math.round(rate * 100);
   const variant = pct >= 80 ? "default" : pct >= 50 ? "secondary" : "destructive";
 
