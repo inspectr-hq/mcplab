@@ -1,6 +1,30 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  Activity,
+  BarChart3,
+  Timer,
+  Layers,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  Download,
+  User,
+  Bot,
+  Wrench,
+  GitCompare,
+  RefreshCw,
+  Sparkles,
+  Loader2,
+  PanelRightOpen,
+  PanelRightClose,
+  RectangleEllipsis,
+  Copy,
+  NotepadText,
+  Plus,
+  Clock3
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1095,13 +1119,7 @@ const ResultDetail = () => {
                             {sc.runs.map((run) => (
                               <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
                                 <div className="mt-0.5">
-                                  {run.evaluationStatus === "skipped" ? (
-                                    <Clock3 className="h-4 w-4 text-amber-600" />
-                                  ) : run.passed ? (
-                                    <CheckCircle2 className="h-4 w-4 text-success" />
-                                  ) : (
-                                    <XCircle className="h-4 w-4 text-destructive" />
-                                  )}
+                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
                                 </div>
                                 <div className="flex-1 space-y-1">
                                   {(() => {

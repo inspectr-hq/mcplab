@@ -730,12 +730,7 @@ const Compare = () => {
                         {new Date(r.timestamp).toLocaleString()}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <PassRateBadge
-                        rate={r.overallPassRate}
-                        evaluatedRuns={r.evaluatedRuns ?? r.totalRuns}
-                      />
-                    </TableCell>
+                    <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}
