@@ -150,6 +150,9 @@ export const workspaceSource: EvalDataSource = {
   async closeResultAssistantSession(sessionId) {
     await workspaceApiClient.closeResultAssistantSession(sessionId);
   },
+  subscribeResultAssistantSessionEvents(sessionId, onEvent) {
+    return workspaceApiClient.subscribeResultAssistantSessionEvents(sessionId, onEvent);
+  },
   async generateSnapshotEvalBaseline(runId, configId, name) {
     const response = await workspaceApiClient.generateSnapshotEvalBaseline(runId, configId, name);
     return {
@@ -197,6 +200,9 @@ export const workspaceSource: EvalDataSource = {
   },
   async closeScenarioAssistantSession(sessionId) {
     await workspaceApiClient.closeScenarioAssistantSession(sessionId);
+  },
+  subscribeScenarioAssistantSessionEvents(sessionId, onEvent) {
+    return workspaceApiClient.subscribeScenarioAssistantSessionEvents(sessionId, onEvent);
   },
   async discoverToolsForAnalysis(params) {
     return workspaceApiClient.discoverToolsForAnalysis(params);

@@ -62,16 +62,22 @@ import {
   cleanupAssistantSessions,
   touchAssistantSession,
   assistantSessionView,
-  preloadAssistantTools,
-  continueAssistantTurn,
-  executeAssistantToolCall,
-  summarizeToolResultForAssistant,
   resolveAssistantAgentFromConfig,
   resolveAssistantAgentFromLibraries,
   pickDefaultAssistantAgentName,
-  type ScenarioAssistantSession
+  type ScenarioAssistantSession,
+  preloadAssistantTools,
+  continueAssistantTurn,
+  executeAssistantToolCall,
+  summarizeToolResultForAssistant
 } from './scenario-assistant-domain.js';
-import type { ResultAssistantSession } from './result-assistant-domain.js';
+import {
+  preloadResultAssistantTools,
+  continueResultAssistantTurn,
+  executeResultAssistantToolCall,
+  summarizeToolResultForResultAssistant,
+  type ResultAssistantSession
+} from './result-assistant-domain.js';
 import {
   discoverMcpToolsForServers,
   runToolAnalysisJob,
@@ -231,6 +237,10 @@ export async function startAppServer(options: AppServerOptions) {
     pickDefaultAssistantAgentName,
     resolveAssistantAgentFromConfig,
     resolveAssistantAgentFromLibraries,
+    preloadResultAssistantTools,
+    continueResultAssistantTurn,
+    executeResultAssistantToolCall,
+    summarizeToolResultForResultAssistant,
     preloadAssistantTools,
     continueAssistantTurn,
     executeAssistantToolCall,

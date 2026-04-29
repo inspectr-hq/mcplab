@@ -36,6 +36,7 @@ export function useResultAssistant(params: {
   const [assistantLoading, setAssistantLoading] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
   const sourceRef = useRef(source);
+  const onSessionSyncRef = useRef(onSessionSync);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
   const assistantInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -47,14 +48,21 @@ export function useResultAssistant(params: {
     sourceRef.current = source;
   }, [source]);
 
+  useEffect(() => {
+    onSessionSyncRef.current = onSessionSync;
+  }, [onSessionSync]);
+
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
       setAssistantSessionId(sessionIdOverride ?? session.id);
-      setAssistantMessages(session.messages);
+      setAssistantMessages((prev) => {
+        if (prev.length > session.messages.length) return prev;
+        return session.messages;
+      });
       setAssistantPendingToolCalls(session.pendingToolCalls);
-      onSessionSync?.(session);
+      onSessionSyncRef.current?.(session);
     },
-    [onSessionSync]
+    []
   );
 
   const syncAndContinueAssistantTurn = useCallback(
@@ -235,6 +243,13 @@ export function useResultAssistant(params: {
     const next = Math.min(el.scrollHeight, 160);
     el.style.height = `${Math.max(40, next)}px`;
   }, [assistantInput, open]);
+
+  useEffect(() => {
+    if (!open || !assistantSessionId) return;
+    return sourceRef.current.subscribeResultAssistantSessionEvents(assistantSessionId, (event) => {
+      syncResultAssistantSession(event.payload.session, event.payload.sessionId);
+    });
+  }, [open, assistantSessionId, syncResultAssistantSession]);
 
   useEffect(() => {
     return () => {

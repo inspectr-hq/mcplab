@@ -310,6 +310,30 @@ export interface ResultAssistantTurnResponse {
   pendingToolCall?: ResultAssistantPendingToolCall;
 }
 
+export type AssistantSseEventType =
+  | 'session_started'
+  | 'turn_started'
+  | 'tool_call_requested'
+  | 'tool_call_approved'
+  | 'tool_call_denied'
+  | 'tool_call_resolved'
+  | 'assistant_message_completed'
+  | 'session_warning'
+  | 'session_error'
+  | 'session_finished';
+
+export interface AssistantSseEvent<TSession> {
+  type: AssistantSseEventType;
+  ts: string;
+  payload: Record<string, unknown> & {
+    sessionId: string;
+    session: TSession;
+  };
+}
+
+export type ResultAssistantSseEvent = AssistantSseEvent<ResultAssistantSessionView>;
+export type ScenarioAssistantSseEvent = AssistantSseEvent<ScenarioAssistantSessionView>;
+
 export interface ScenarioPreviewCoreRunResponse {
   runId: string;
   scenario: {
@@ -729,6 +753,10 @@ export interface EvalDataSource {
     callId: string
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   closeResultAssistantSession: (sessionId: string) => Promise<void>;
+  subscribeResultAssistantSessionEvents: (
+    sessionId: string,
+    onEvent: (event: ResultAssistantSseEvent) => void
+  ) => () => void;
   generateSnapshotEvalBaseline: (
     runId: string,
     configId: string,
@@ -803,6 +831,10 @@ export interface EvalDataSource {
     sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   closeScenarioAssistantSession: (sessionId: string) => Promise<void>;
+  subscribeScenarioAssistantSessionEvents: (
+    sessionId: string,
+    onEvent: (event: ScenarioAssistantSseEvent) => void
+  ) => () => void;
   runScenarioPreview: (params: {
     selectedAgentName: string;
     scenario: {

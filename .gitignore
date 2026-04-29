@@ -23,3 +23,4 @@ packages/app/.vite
 docs/plans
 .changeset
 packages/website/.astro
+skills-lock.json

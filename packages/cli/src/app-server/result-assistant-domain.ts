@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
 import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
@@ -8,6 +9,8 @@ import {
   touchSession,
   truncateJson
 } from './assistant-common.js';
+import type { AssistantSseEvent } from './assistant-events.js';
+import { endAssistantSseClients } from './assistant-events.js';
 import { isResultAssistantAllowedTool } from './result-assistant-tools.js';
 
 interface ParsedAssistantToolCall {
@@ -67,6 +70,8 @@ export interface ResultAssistantSession {
   chatMessages: ResultAssistantChatMessage[];
   llmMessages: LlmMessage[];
   systemPromptCache?: string;
+  events: AssistantSseEvent[];
+  clients: Set<ServerResponse>;
 }
 
 const RESULT_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -78,7 +83,7 @@ export function cleanupResultAssistantSessions(
   sessions: Map<string, ResultAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now);
+  cleanupSessionsByTtl(sessions, RESULT_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
 }
 
 export function touchResultAssistantSession(session: ResultAssistantSession): void {
@@ -209,7 +214,7 @@ export async function executeResultAssistantToolCall(
   session: ResultAssistantSession,
   pending: ResultAssistantPendingToolCall
 ): Promise<unknown> {
-  const timeoutMs = 10_000;
+  const timeoutMs = 30_000;
   let handle: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     handle = setTimeout(

@@ -37,10 +37,12 @@ export function makeAssistantToolPublicName(
 export function cleanupSessionsByTtl<T extends { lastTouchedAt: number }>(
   sessions: Map<string, T>,
   ttlMs: number,
-  now = Date.now()
+  now = Date.now(),
+  onExpire?: (session: T) => void
 ): void {
   for (const [id, session] of sessions) {
     if (now - session.lastTouchedAt > ttlMs) {
+      onExpire?.(session);
       sessions.delete(id);
     }
   }

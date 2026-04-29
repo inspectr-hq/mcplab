@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { AgentConfig, EvalConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
@@ -9,6 +10,8 @@ import {
   truncateJson,
   withTimeout
 } from './assistant-common.js';
+import type { AssistantSseEvent } from './assistant-events.js';
+import { endAssistantSseClients } from './assistant-events.js';
 import { readLibraries } from './libraries-store.js';
 
 export { truncateJson } from './assistant-common.js';
@@ -125,6 +128,8 @@ export interface ScenarioAssistantSession {
   llmMessages: LlmMessage[];
   warnings: string[];
   systemPromptCache?: string;
+  events: AssistantSseEvent[];
+  clients: Set<ServerResponse>;
 }
 
 const SCENARIO_ASSISTANT_SESSION_TTL_MS = 30 * 60 * 1000;
@@ -135,7 +140,7 @@ export function cleanupAssistantSessions(
   sessions: Map<string, ScenarioAssistantSession>,
   now = Date.now()
 ): void {
-  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now);
+  cleanupSessionsByTtl(sessions, SCENARIO_ASSISTANT_SESSION_TTL_MS, now, endAssistantSseClients);
 }
 
 export function touchAssistantSession(session: ScenarioAssistantSession): void {
@@ -739,7 +744,7 @@ export async function executeAssistantToolCall(
   session: ScenarioAssistantSession,
   pending: AssistantPendingToolCall
 ): Promise<unknown> {
-  const timeoutMs = 10_000;
+  const timeoutMs = 30_000;
   return withTimeout(
     () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
     timeoutMs,

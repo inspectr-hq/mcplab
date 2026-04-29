@@ -26,9 +26,11 @@ import type {
   ResultAssistantApplyReportResponse,
   ResultAssistantSessionView,
   ResultAssistantTurnResponse,
+  ResultAssistantSseEvent,
   ScenarioPreviewCoreRunResponse,
   WorkspaceHealthResponse,
-  CoreLibraryBundle
+  CoreLibraryBundle,
+  ScenarioAssistantSseEvent
 } from './types';
 
 function getBaseUrl(): string {
@@ -76,6 +78,72 @@ async function requestText(path: string, init?: RequestInit): Promise<string> {
     throw new ApiError(response.status, `Request failed (${response.status}): ${body}`);
   }
   return response.text();
+}
+
+function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
+  path: string,
+  onEvent: (event: TEvent) => void
+): () => void {
+  const source = new EventSource(`${BASE}${path}`);
+  const terminalSessionPath = path.replace(/\/events$/, '');
+  const eventTypes = [
+    'session_started',
+    'turn_started',
+    'tool_call_requested',
+    'tool_call_approved',
+    'tool_call_denied',
+    'tool_call_resolved',
+    'assistant_message_completed',
+    'session_warning',
+    'session_error',
+    'session_finished'
+  ] as const;
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    source.close();
+  };
+  const messageHandler = (event: MessageEvent) => {
+    if (closed) return;
+    if (typeof event.data !== 'string' || !event.data) return;
+    try {
+      const parsed = JSON.parse(event.data) as TEvent;
+      if (parsed.type === 'session_finished') close();
+      onEvent(parsed);
+    } catch {
+      // Ignore malformed or non-JSON assistant SSE payloads.
+    }
+  };
+  for (const eventType of eventTypes) {
+    source.addEventListener(eventType, messageHandler);
+  }
+  // Only close permanently when EventSource has given up (readyState CLOSED = 2).
+  // Transient errors (readyState CONNECTING = 0) let the browser auto-reconnect;
+  // the server replays session.events on reconnect so no events are lost.
+  source.onerror = () => {
+    if (closed) return;
+    if (source.readyState === 2) {
+      close();
+      return;
+    }
+    void fetch(`${BASE}${terminalSessionPath}`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        accept: 'application/json'
+      }
+    })
+      .then((response) => {
+        if (response.status === 404 || response.status === 410) {
+          close();
+        }
+      })
+      .catch(() => {
+        // Keep retrying on transient network failures.
+      });
+  };
+  return () => close();
 }
 
 export const workspaceApiClient = {
@@ -206,6 +274,11 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/result-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }).then(() => undefined),
+  subscribeResultAssistantSessionEvents: (
+    sessionId: string,
+    onEvent: (event: ResultAssistantSseEvent) => void
+  ) =>
+    subscribeAssistantSessionEvents(`/api/result-assistant/sessions/${sessionId}/events`, onEvent),
   generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
     request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
       '/api/snapshots/generate-eval',
@@ -324,6 +397,14 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/scenario-assistant/sessions/${sessionId}`, {
       method: 'DELETE'
     }),
+  subscribeScenarioAssistantSessionEvents: (
+    sessionId: string,
+    onEvent: (event: ScenarioAssistantSseEvent) => void
+  ) =>
+    subscribeAssistantSessionEvents(
+      `/api/scenario-assistant/sessions/${sessionId}/events`,
+      onEvent
+    ),
   discoverToolsForAnalysis: (params: { serverNames: string[] }) =>
     request<ToolAnalysisDiscoverResponse>('/api/tool-analysis/discover-tools', {
       method: 'POST',

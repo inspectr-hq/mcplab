@@ -1196,7 +1196,7 @@ const appAssistants: DocPage = {
       title: 'Result Assistant',
       paragraphs: [
         'The Result Assistant is an AI chat that answers questions based on run data. It is available in two scopes.',
-        'From a specific run (scope: run), it is scoped to that run\'s results, tool traces, and assertions. Use it to understand failures quickly without manually reading through trace files.',
+        "From a specific run (scope: run), it is scoped to that run's results, tool traces, and assertions. Use it to understand failures quickly without manually reading through trace files.",
         'From the Results overview (scope: all_runs), it has access to data across all runs and can answer questions about trends, regressions, and cross-run comparisons.'
       ],
       bullets: [

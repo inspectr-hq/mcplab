@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, Send, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import { formatAssistantToolName } from "@/lib/assistant-tool-name";
+import { formatProvider } from "@/components/ProviderBadge";
 import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
 import type {
   MarkdownReportContent,
@@ -106,11 +107,7 @@ const ResultDetail = () => {
     "assistant"
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
-  const [assistantMeta, setAssistantMeta] = useState<{
-    assistantAgentName: string;
-    provider: string;
-    model: string;
-  } | null>(null);
+
   const [applyReportOpen, setApplyReportOpen] = useState(false);
   const [applyReportMarkdown, setApplyReportMarkdown] = useState("");
   const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
@@ -142,13 +139,7 @@ const ResultDetail = () => {
     open: assistantOpen,
     scope: "run",
     runId: id,
-    onSessionSync: (session) => {
-      setAssistantMeta({
-        assistantAgentName: session.selectedAssistantAgentName,
-        provider: session.provider,
-        model: session.model
-      });
-    }
+    onSessionSync: undefined
   });
 
   const refreshReferenceReports = useCallback(
@@ -189,7 +180,6 @@ const ResultDetail = () => {
     if (!id) return;
     let active = true;
     resetAssistantSession();
-    setAssistantMeta(null);
     setLoading(true);
     source.getResult(id).then((next) => {
       if (active) {
@@ -1016,7 +1006,14 @@ const ResultDetail = () => {
                       <TableRow className="cursor-pointer hover:bg-muted/50">
                         <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(rowKey) ? "rotate-180" : ""}`} /></TableCell>
                         <TableCell className="font-medium text-sm">{sc.scenarioName}</TableCell>
-                        <TableCell className="text-sm">{sc.agentName}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{sc.agentName}</div>
+                          {(sc.provider || sc.model) && (
+                            <div className="text-xs text-muted-foreground">
+                              {[sc.provider ? formatProvider(sc.provider) : null, sc.model].filter(Boolean).join(" · ")}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                         <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
                         <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
