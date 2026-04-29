@@ -39,8 +39,9 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@anthropic-ai/sdk": "^0.78.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "js-tiktoken": "^1.0.21",
     "jsonpath-plus": "^10.3.0",
     "openai": "^6.25.0",
     "yaml": "^2.8.2",
