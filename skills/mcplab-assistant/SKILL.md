@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`. Supports `--skip-checks` for execution-only runs without evaluation grading.
 ---
 
 # MCPLab Assistant
@@ -101,7 +101,8 @@ When the request is about analyzing results, the assistant must:
 - Rebuild HTML report from existing run -> `mcplab report`
 2. Use only documented flags from CLI source.
 3. For model comparison, use `mcplab run --agents ...`.
-4. If a run fails, capture exact error and switch to troubleshooting workflow.
+4. For execution-only runs without grading, use `mcplab run --skip-checks` (result marked Ungraded).
+5. If a run fails, capture exact error and switch to troubleshooting workflow.
 
 ## Troubleshooting Workflow
 

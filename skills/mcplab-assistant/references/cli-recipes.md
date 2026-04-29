@@ -29,12 +29,16 @@ mcplab run -c mcplab/evals/eval.yaml --agents-all
 
 # Pick config and scenarios interactively at the terminal
 mcplab run --interactive
+
+# Run scenarios and store artifacts, but skip evaluation checks
+mcplab run -c mcplab/evals/eval.yaml --skip-checks
 ```
 
 Notes:
 - `-c/--config` is required unless using `--interactive`. Interactive mode prompts you to select a config file and scenarios without specifying flags.
 - `--agents` values must match agent IDs loaded from config/library.
 - `--runs`/`-n` must be a positive number.
+- `--skip-checks` executes scenarios normally but skips any evaluation tests. Result is marked Ungraded.
 
 ## Batch Runs (Directory Config)
 
