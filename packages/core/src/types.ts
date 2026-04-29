@@ -324,7 +324,7 @@ export type PersistedTraceRecord =
 export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
-  evaluation_status: 'passed' | 'failed' | 'skipped';
+  evaluation_status?: 'passed' | 'failed' | 'skipped';
   pass: boolean;
   error?: string;
   failures: string[];

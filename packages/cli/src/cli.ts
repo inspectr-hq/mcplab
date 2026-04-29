@@ -851,7 +851,11 @@ async function executeSingleConfigRun(params: {
 
   const failedRuns = results.scenarios.reduce(
     (sum, scenario) =>
-      sum + scenario.runs.filter((run) => run.evaluation_status === 'failed').length,
+      sum +
+      scenario.runs.filter(
+        (run) =>
+          run.evaluation_status === 'failed' || (!run.evaluation_status && run.pass === false)
+      ).length,
     0
   );
 
@@ -892,7 +896,7 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
-    case 'scenario_run_finished':
+    case 'scenario_run_finished': {
       const statusLabel =
         event.evaluationStatus === 'skipped'
           ? 'SKIPPED'
@@ -900,6 +904,7 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
           ? 'PASS'
           : 'FAIL';
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${statusLabel} (${event.toolCallCount} tool calls)`;
+    }
     case 'run_finished':
       return `Run finished: ${event.runId}`;
     default:

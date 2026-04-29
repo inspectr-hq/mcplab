@@ -1084,7 +1084,7 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId
       } [agent=${event.agentName}, run=${event.runIndex + 1}/${event.runsPerScenario}]`;
-    case 'scenario_run_finished':
+    case 'scenario_run_finished': {
       const statusLabel =
         event.evaluationStatus === 'skipped'
           ? 'SKIPPED'
@@ -1092,6 +1092,7 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
           ? 'PASS'
           : 'FAIL';
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} finished: ${event.scenarioId} [agent=${event.agentName}] -> ${statusLabel} (${event.toolCallCount} tool call(s))`;
+    }
     case 'agent_progress': {
       const p = event.event;
       switch (p.type) {

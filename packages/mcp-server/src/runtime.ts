@@ -80,8 +80,8 @@ const GenericObjectSchema = z.object({}).passthrough();
 const ResultsSummarySchema = z.object({
   total_scenarios: z.number().int().nonnegative(),
   total_runs: z.number().int().nonnegative(),
-  evaluated_runs: z.number().int().nonnegative(),
-  skipped_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative().default(0),
+  skipped_runs: z.number().int().nonnegative().default(0),
   pass_rate: z.number(),
   avg_tool_calls_per_run: z.number(),
   avg_tool_latency_ms: z.number().nullable()
@@ -99,8 +99,8 @@ const ResultsMetadataSchema = z
 
 const MetricSummarySchema = z.object({
   total_runs: z.number().int().nonnegative(),
-  evaluated_runs: z.number().int().nonnegative(),
-  skipped_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative().default(0),
+  skipped_runs: z.number().int().nonnegative().default(0),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
   pass_rate: z.number(),
@@ -121,8 +121,8 @@ const AggregateRowSchema = z.object({
     })
     .optional(),
   total_runs: z.number().int().nonnegative(),
-  evaluated_runs: z.number().int().nonnegative(),
-  skipped_runs: z.number().int().nonnegative(),
+  evaluated_runs: z.number().int().nonnegative().default(0),
+  skipped_runs: z.number().int().nonnegative().default(0),
   passed_runs: z.number().int().nonnegative(),
   failed_runs: z.number().int().nonnegative(),
   pass_rate: z.number(),
