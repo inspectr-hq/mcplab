@@ -189,6 +189,7 @@ export interface EvalResult {
   overallPassRate: number;
   totalScenarios: number;
   totalRuns: number;
+  checksSkipped?: boolean;
   avgToolCalls: number;
   avgLatency: number;
   snapshotEval?: {
