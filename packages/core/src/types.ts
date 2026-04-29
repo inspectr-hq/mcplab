@@ -384,6 +384,7 @@ export interface ResultsJson {
     config_hash: string;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
+    checks_skipped?: boolean;
     snapshot_eval?: {
       applied: boolean;
       mode: 'warn' | 'fail_on_drift';
