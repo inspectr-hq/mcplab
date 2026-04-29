@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus, Clock, Clock3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -704,8 +704,20 @@ const ResultDetail = () => {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(result.timestamp).toLocaleString()}
-                {" "}·{requestedAgentId ? ` Agent: ${requestedAgentId} ·` : ""} Config hash: <span className="font-mono">{result.configHash}</span>
+                <span className="inline-flex items-center gap-1 align-middle">
+                  <Clock3 className="h-3 w-3 shrink-0" />
+                  {new Date(result.timestamp).toLocaleString()}
+                </span>
+                <span className="mx-1">·</span>
+                {requestedAgentId ? (
+                  <>
+                    <span className="inline-flex items-center align-middle">Agent: {requestedAgentId}</span>
+                    <span className="mx-1">·</span>
+                  </>
+                ) : null}
+                <span className="inline-flex items-center align-middle">
+                  Config hash: <span className="ml-1 font-mono">{result.configHash}</span>
+                </span>
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">

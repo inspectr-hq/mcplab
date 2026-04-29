@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight } from "lucide-react";
+import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight, Clock } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,17 +57,28 @@ function isSameStringArray(a: string[], b: string[]): boolean {
 }
 
 function runScopeSummary(run: EvalResult): RunScopeSummary {
-  const scenarioIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.scenarioId).filter(Boolean)));
+  const scenarioLabels = Array.from(
+    new Map(
+      run.scenarios
+        .map((scenario) => {
+          const id = String(scenario.scenarioId ?? "").trim();
+          const name = String(scenario.scenarioName ?? "").trim();
+          if (!id && !name) return null;
+          return [id || name, name || id] as const;
+        })
+        .filter((entry): entry is readonly [string, string] => Boolean(entry))
+    ).values()
+  );
   const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
   const models = Array.from(
     new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
   );
-  const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
-  const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
+  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
+  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
   const modelPreview = models.slice(0, 2).join(", ");
   const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
   return {
-    scenarioCount: scenarioIds.length,
+    scenarioCount: scenarioLabels.length,
     agentCount: agentIds.length,
     scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
     modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
@@ -241,6 +252,19 @@ const Compare = () => {
     () => [...new Set(selectedRuns.flatMap((r) => r.scenarios.map((s) => s.scenarioId)))],
     [selectedRuns]
   );
+
+  const scenarioLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const run of selectedRuns) {
+      for (const scenario of run.scenarios) {
+        const id = String(scenario.scenarioId ?? "").trim();
+        if (!id) continue;
+        const name = String(scenario.scenarioName ?? "").trim();
+        map.set(id, name || id);
+      }
+    }
+    return map;
+  }, [selectedRuns]);
 
   const withinRun = useMemo(
     () => results.find((result) => result.id === withinRunId),
@@ -701,7 +725,12 @@ const Compare = () => {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(r.timestamp).toLocaleString()}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(r.timestamp).toLocaleString()}
+                      </div>
+                    </TableCell>
                     <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
                     <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="font-mono text-sm">
@@ -813,7 +842,7 @@ const Compare = () => {
                 <TableBody>
                   {allScenarioIds.map((sid) => (
                     <TableRow key={sid}>
-                      <TableCell className="font-medium text-sm">{sid}</TableCell>
+                      <TableCell className="font-medium text-sm">{scenarioLabelById.get(sid) ?? sid}</TableCell>
                       {selectedRuns.map((r) => {
                         const sc = r.scenarios.find((s) => s.scenarioId === sid);
                         return <TableCell key={r.id}>{sc ? <PassRateBadge rate={sc.passRate} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>;

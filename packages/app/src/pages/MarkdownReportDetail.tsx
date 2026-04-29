@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/MarkdownContent";
@@ -103,10 +104,16 @@ export default function MarkdownReportDetailPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="font-mono text-xl font-semibold">{report.name}</h1>
-          <p className="truncate text-sm text-muted-foreground">{report.relativePath}</p>
-          <p className="text-xs text-muted-foreground">
-            {new Date(report.mtime).toLocaleString()} {" · "} {formatBytes(report.sizeBytes)}
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-mono">{report.relativePath}</span>
+            <span aria-hidden>·</span>
+            <span className="inline-flex items-center gap-1 align-middle">
+              <Clock className="h-3 w-3 shrink-0" />
+              {new Date(report.mtime).toLocaleString()}
+            </span>
+            <span aria-hidden>·</span>
+            <span>{formatBytes(report.sizeBytes)}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {linkedRunId ? (
