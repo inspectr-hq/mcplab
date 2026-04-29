@@ -1077,7 +1077,7 @@ export function fromCoreResultsJson(
       return {
         runIndex: run.run_index,
         passed: run.pass,
-        evaluationStatus: run.evaluation_status ?? (run.pass ? "passed" : "failed"),
+        evaluationStatus: run.evaluation_status ?? (run.pass ? 'passed' : 'failed'),
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
         toolTokenUsage: tokenUsage.tool,
@@ -1184,7 +1184,7 @@ export function fromCoreScenarioRunPreview(
   return {
     runIndex: run.run_index,
     passed: run.pass,
-    evaluationStatus: run.evaluation_status ?? (run.pass ? "passed" : "failed"),
+    evaluationStatus: run.evaluation_status ?? (run.pass ? 'passed' : 'failed'),
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,
     toolTokenUsage: tokenUsage.tool,
