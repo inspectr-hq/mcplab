@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
+import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, MinusCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -696,7 +696,7 @@ const ResultDetail = () => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
-                <PassRateBadge rate={displayPassRate} />
+                <PassRateBadge rate={displayPassRate} ungraded={result.checksSkipped} />
                 {snapshotsUiEnabled && result.snapshotEval?.applied && (
                   <Badge variant="outline" className="text-xs">
                     Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
@@ -890,28 +890,34 @@ const ResultDetail = () => {
       <div className={`grid gap-4 ${assistantOpen ? "grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-6"}`}>
         <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
         <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
-        <StatCard title="Pass Rate" value={`${Math.round(displayPassRate * 100)}%`} icon={BarChart3} />
+        <StatCard
+          title="Pass Rate"
+          value={result.checksSkipped ? "—" : `${Math.round(displayPassRate * 100)}%`}
+          icon={BarChart3}
+        />
         <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(displayAvgToolCalls)} icon={CheckCircle2} />
         <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
         <StatCard title="Tool Tokens" value={formatTokenCount(displayToolTokenUsage?.totalTokens)} icon={Wrench} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Pass / Fail</CardTitle></CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <PieChart width={180} height={180}>
-              <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
-                {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-            <div className="ml-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
-              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
-            </div>
-          </CardContent>
-        </Card>
+        {!result.checksSkipped && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Pass / Fail</CardTitle></CardHeader>
+            <CardContent className="flex items-center justify-center">
+              <PieChart width={180} height={180}>
+                <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
+                  {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+              <div className="ml-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
+                <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Tool Usage</CardTitle></CardHeader>
@@ -1015,7 +1021,7 @@ const ResultDetail = () => {
                           )}
                         </TableCell>
                         <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
-                        <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
+                        <TableCell><PassRateBadge rate={sc.passRate} ungraded={result.checksSkipped} /></TableCell>
                         <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
                         <TableCell className="font-mono text-sm">{formatTokenCount(sc.toolTokenUsage?.totalTokens)}</TableCell>
                         <TableCell>
@@ -1083,7 +1089,11 @@ const ResultDetail = () => {
                             {sc.runs.map((run) => (
                               <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
                                 <div className="mt-0.5">
-                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
+                                  {result.checksSkipped
+                                    ? <MinusCircle className="h-4 w-4 text-muted-foreground" />
+                                    : run.passed
+                                    ? <CheckCircle2 className="h-4 w-4 text-success" />
+                                    : <XCircle className="h-4 w-4 text-destructive" />}
                                 </div>
                                 <div className="flex-1 space-y-1">
                                   {(() => {
@@ -1099,7 +1109,7 @@ const ResultDetail = () => {
                                     <span className="text-xs text-muted-foreground">{run.duration}ms</span>
                                     <span className="text-xs text-muted-foreground">·</span>
                                     <span className="text-xs text-muted-foreground">{formatTokenCount(run.toolTokenUsage?.totalTokens)} tool tokens</span>
-                                    {!run.passed && (
+                                    {!result.checksSkipped && !run.passed && (
                                       <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
                                         Failed
                                       </Badge>
