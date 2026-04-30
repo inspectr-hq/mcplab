@@ -956,9 +956,7 @@ async function executeRunJob(
         }
       });
       const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
-      const relativeConfigPath = relativeConfigPathRaw
-        .replace(/\\/g, '/')
-        .replace(/^\.\/+/, '');
+      const relativeConfigPath = relativeConfigPathRaw.replace(/\\/g, '/').replace(/^\.\/+/, '');
       results.metadata.config_path = relativeConfigPath || configPath;
       if (loaded.config.name && loaded.config.name.trim().length > 0) {
         results.metadata.config_name = loaded.config.name.trim();

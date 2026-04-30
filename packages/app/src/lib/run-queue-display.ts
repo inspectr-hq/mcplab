@@ -1,4 +1,4 @@
-import type { EvalConfig } from "@/types/eval";
+import type { EvalConfig } from '@/types/eval';
 
 type ScenarioLabelMapByConfigPath = ReadonlyMap<string, ReadonlyMap<string, string>>;
 
@@ -6,9 +6,9 @@ export function buildRelativePathBySourcePath(configs: EvalConfig[]): Map<string
   const pairs = configs
     .filter(
       (cfg): cfg is EvalConfig & { sourcePath: string; relativePath: string } =>
-        typeof cfg.sourcePath === "string" &&
+        typeof cfg.sourcePath === 'string' &&
         cfg.sourcePath.trim().length > 0 &&
-        typeof cfg.relativePath === "string" &&
+        typeof cfg.relativePath === 'string' &&
         cfg.relativePath.trim().length > 0
     )
     .map((cfg) => [cfg.sourcePath, cfg.relativePath] as const);
@@ -19,7 +19,7 @@ export function buildEvalNameBySourcePath(configs: EvalConfig[]): Map<string, st
   const pairs = configs
     .filter(
       (cfg): cfg is EvalConfig & { sourcePath: string } =>
-        typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0
+        typeof cfg.sourcePath === 'string' && cfg.sourcePath.trim().length > 0
     )
     .map((cfg) => [cfg.sourcePath, cfg.configName?.trim() || cfg.name] as const);
   return new Map<string, string>(pairs);
@@ -27,7 +27,7 @@ export function buildEvalNameBySourcePath(configs: EvalConfig[]): Map<string, st
 
 export function buildScenarioLabelByConfigPath(
   configs: EvalConfig[],
-  libraryScenarios: EvalConfig["scenarios"]
+  libraryScenarios: EvalConfig['scenarios']
 ): Map<string, Map<string, string>> {
   const byPath = new Map<string, Map<string, string>>();
   for (const config of configs) {
@@ -36,10 +36,10 @@ export function buildScenarioLabelByConfigPath(
     const entries =
       config.scenarioEntries && config.scenarioEntries.length > 0
         ? config.scenarioEntries
-        : config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+        : config.scenarios.map((scenario) => ({ kind: 'inline' as const, scenario }));
 
     for (const entry of entries) {
-      if (entry.kind === "inline") {
+      if (entry.kind === 'inline') {
         byScenarioId.set(entry.scenario.id, entry.scenario.name?.trim() || entry.scenario.id);
         continue;
       }
@@ -59,16 +59,16 @@ export function formatQueueConfigPath(
   const fromConfigCatalog = relativePathBySourcePath.get(configPath);
   if (fromConfigCatalog) return fromConfigCatalog;
 
-  const normalized = configPath.replace(/\\/g, "/");
-  const evalsMarker = "/evals/";
+  const normalized = configPath.replace(/\\/g, '/');
+  const evalsMarker = '/evals/';
   const markerIndex = normalized.lastIndexOf(evalsMarker);
   if (markerIndex >= 0) {
     return normalized.slice(markerIndex + evalsMarker.length);
   }
 
-  const parts = normalized.split("/").filter(Boolean);
+  const parts = normalized.split('/').filter(Boolean);
   if (parts.length <= 1) return normalized;
-  return parts.slice(-3).join("/");
+  return parts.slice(-3).join('/');
 }
 
 export function formatQueueScenarioLabel(
@@ -82,7 +82,7 @@ export function formatQueueScenarioLabel(
       const onlyScenario = labelsForConfig.values().next().value;
       if (onlyScenario) return onlyScenario;
     }
-    return "All scenarios";
+    return 'All scenarios';
   }
 
   if (!labelsForConfig) {
