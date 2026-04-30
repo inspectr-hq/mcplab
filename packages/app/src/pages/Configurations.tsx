@@ -452,6 +452,24 @@ const Configurations = () => {
                       </TableCell>
                       <TableCell className="w-[220px] whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => navigate(`/mcp-evaluations/${cfg.id}`)}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" />Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
+                                <Copy className="mr-2 h-3.5 w-3.5" />Clone
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -488,24 +506,6 @@ const Configurations = () => {
                               Run
                             </Link>
                           </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`/mcp-evaluations/${cfg.id}`)}>
-                                <Pencil className="mr-2 h-3.5 w-3.5" />Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => void handleClone(cfg.id)}>
-                                <Copy className="mr-2 h-3.5 w-3.5" />Clone
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive" onClick={() => void handleDelete(cfg.id, displayConfigName(cfg))}>
-                                <Trash2 className="mr-2 h-3.5 w-3.5" />Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
