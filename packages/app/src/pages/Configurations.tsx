@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock, ListPlus } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock, ListPlus, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,42 @@ const suiteTokenForKey = (suiteKey: SuiteKey): string =>
   suiteKey === null ? ROOT_SUITE_SELECT_VALUE : `suite:${suiteKey}`;
 const suiteKeyFromToken = (token: string): SuiteKey =>
   token === ROOT_SUITE_SELECT_VALUE ? null : token.startsWith("suite:") ? token.slice(6) : null;
+
+const firstScenarioIdForSuite = (items: Array<{
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}>): string | null => {
+  for (const cfg of items) {
+    const entries = cfg.scenarioEntries ?? [];
+    for (const entry of entries) {
+      if (entry.kind === "inline" && entry.scenario?.id) return String(entry.scenario.id);
+      if (entry.kind === "referenced" && entry.ref) return String(entry.ref);
+    }
+    const inlineScenarios = cfg.scenarios ?? [];
+    for (const scenario of inlineScenarios) {
+      if (scenario?.id) return String(scenario.id);
+    }
+  }
+  return null;
+};
+
+const firstScenarioIdForConfig = (cfg: {
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}): string | null => firstScenarioIdForSuite([cfg]);
+
+const resultsLinkForConfig = (cfg: {
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}): { href: string; tooltipLabel: string } => {
+  const firstScenarioId = firstScenarioIdForConfig(cfg);
+  return firstScenarioId
+    ? {
+        href: `/results?scenario=${encodeURIComponent(firstScenarioId)}`,
+        tooltipLabel: `Open results filtered by scenario ${firstScenarioId}`,
+      }
+    : { href: "/results", tooltipLabel: "Open results" };
+};
 
 const SUITE_ACCENT_CLASSES = [
   "bg-red-400",
@@ -419,7 +455,9 @@ const Configurations = () => {
                       </div>
                     </TableCell>
                   </TableRow>
-                  {!isCollapsed && items.map((cfg) => (
+                  {!isCollapsed && items.map((cfg) => {
+                    const resultsLink = resultsLinkForConfig(cfg);
+                    return (
                     <TableRow key={cfg.id}>
                       <TableCell>
                         <div>
@@ -474,6 +512,25 @@ const Configurations = () => {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  asChild
+                                  aria-label={resultsLink.tooltipLabel}
+                                >
+                                  <Link to={resultsLink.href}>
+                                    <BarChart3 className="h-3.5 w-3.5" />
+                                    <span className="sr-only">{resultsLink.tooltipLabel}</span>
+                                  </Link>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{resultsLink.tooltipLabel}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
                                   size="sm"
                                   variant="outline"
                                   className={`h-8 px-2 text-xs ${
@@ -509,7 +566,8 @@ const Configurations = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </Fragment>
               )})}
               {!loading && configs.length === 0 && (
