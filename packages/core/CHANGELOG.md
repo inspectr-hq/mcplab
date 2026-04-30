@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.9.0
+
+### Minor Changes
+
+- feat: support referenced scenario overrides
+- fix: add navigation for the eval configuration
+
 ## 1.8.0
 
 ### Minor Changes

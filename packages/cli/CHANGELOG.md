@@ -1,5 +1,19 @@
 # @inspectr/mcplab
 
+## 1.12.0
+
+### Minor Changes
+
+- feat: support referenced scenario overrides
+- fix: add navigation for the eval configuration
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.9.0
+  - @inspectr/mcplab-mcp-server@1.2.2
+  - @inspectr/mcplab-reporting@1.1.8
+
 ## 1.11.0
 
 ### Minor Changes
