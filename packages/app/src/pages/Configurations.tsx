@@ -95,8 +95,8 @@ const Configurations = () => {
       return new Set<string>();
     }
   });
-  const [queuedConfigIds, setQueuedConfigIds] = useState<Set<string>>(new Set());
   const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
+  const [queuingConfigIds, setQueuingConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
@@ -192,30 +192,32 @@ const Configurations = () => {
     });
   };
 
-  const toggleQueuedConfig = (configId: string) => {
-    setQueuedConfigIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(configId)) {
-        next.delete(configId);
-        setRecentlyQueuedConfigIds((recent) => {
-          const updated = new Set(recent);
-          updated.delete(configId);
-          return updated;
-        });
-        return next;
-      }
-
-      next.add(configId);
-      setRecentlyQueuedConfigIds((recent) => new Set(recent).add(configId));
+  const runConfig = async (configId: string, sourcePath: string) => {
+    if (queuingConfigIds.has(configId)) return;
+    setQueuingConfigIds((prev) => new Set(prev).add(configId));
+    try {
+      await source.startRun({ configPath: sourcePath, runsPerScenario: 1, applySnapshotEval: true });
+      setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
       window.setTimeout(() => {
-        setRecentlyQueuedConfigIds((recent) => {
-          const updated = new Set(recent);
-          updated.delete(configId);
-          return updated;
+        setRecentlyQueuedConfigIds((prev) => {
+          const next = new Set(prev);
+          next.delete(configId);
+          return next;
         });
       }, 2000);
-      return next;
-    });
+    } catch (error: unknown) {
+      toast({
+        title: "Could not queue evaluation",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setQueuingConfigIds((prev) => {
+        const next = new Set(prev);
+        next.delete(configId);
+        return next;
+      });
+    }
   };
 
   useEffect(() => {
@@ -454,26 +456,29 @@ const Configurations = () => {
                               <TooltipTrigger asChild>
                                 <Button
                                   size="sm"
-                                  variant={queuedConfigIds.has(cfg.id) ? "secondary" : "outline"}
+                                  variant="outline"
                                   className={`h-8 px-2 text-xs ${
                                     recentlyQueuedConfigIds.has(cfg.id)
                                       ? "border-green-600 bg-green-600 text-white hover:bg-green-700 hover:text-white"
                                       : ""
                                   }`}
-                                  onClick={() => toggleQueuedConfig(cfg.id)}
-                                  aria-label={`${queuedConfigIds.has(cfg.id) ? "Remove" : "Add"} ${displayConfigName(cfg)} ${queuedConfigIds.has(cfg.id) ? "from" : "to"} run queue`}
+                                  disabled={queuingConfigIds.has(cfg.id) || !cfg.sourcePath}
+                                  onClick={() => cfg.sourcePath && void runConfig(cfg.id, cfg.sourcePath)}
+                                  aria-label={`Queue ${displayConfigName(cfg)}`}
                                 >
-                                  {queuedConfigIds.has(cfg.id) ? (
+                                  {recentlyQueuedConfigIds.has(cfg.id) ? (
                                     "Queued"
+                                  ) : queuingConfigIds.has(cfg.id) ? (
+                                    "Queueing..."
                                   ) : (
                                     <>
                                       <ListPlus className="h-3.5 w-3.5" />
-                                      <span className="sr-only">Add to queue</span>
+                                      <span className="sr-only">Queue evaluation</span>
                                     </>
                                   )}
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Queue evaluation</TooltipContent>
+                              <TooltipContent>Queue evaluation run</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                           <Button size="sm" variant="outline" asChild>

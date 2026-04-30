@@ -382,6 +382,7 @@ const RunEvaluation = () => {
   };
 
   const attachRunJob = (jobId: string) => {
+    if (activeJobId === jobId && unsubscribeRef.current) return;
     unsubscribeRef.current?.();
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
@@ -409,12 +410,15 @@ const RunEvaluation = () => {
       if (event.type === "started") {
         setOauthRequired(null);
         oauthConnectingRef.current = false;
+        setRunning(true);
+        setDone(false);
+        setStopped(false);
         setLogs((prev) => {
           const line = `[${ts}] Run started.`;
           return prev.includes(line) ? prev : [...prev, line];
         });
         setProgress((prev) => Math.max(prev, 30));
-        setStopped(false);
+        void refreshQueue();
       }
       if (event.type === "log") {
         const message = String(event.payload.message ?? "").trim();
@@ -715,10 +719,18 @@ const RunEvaluation = () => {
                     })
                       .then(() => source.resumeQueue())
                       .then(() => {
+                        const jobId = oauthRequired?.jobId;
                         setLogs((prev) => [
                           ...prev,
                           `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
                         ]);
+                        if (jobId) {
+                          setActiveJobId(jobId);
+                          setActiveRunJob(jobId);
+                          setRunning(true);
+                          setDone(false);
+                          attachRunJob(jobId);
+                        }
                       })
                       .catch((err: unknown) => {
                         const msg = err instanceof Error ? err.message : String(err);
@@ -867,6 +879,11 @@ const RunEvaluation = () => {
                                   ...prev,
                                   `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
                                 ]);
+                                setActiveJobId(entry.jobId);
+                                setActiveRunJob(entry.jobId);
+                                setRunning(true);
+                                setDone(false);
+                                attachRunJob(entry.jobId);
                               })
                               .catch((err: unknown) => {
                                 const msg = err instanceof Error ? err.message : String(err);

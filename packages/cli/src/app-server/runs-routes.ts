@@ -160,7 +160,7 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     for (const event of job.events) sendSseEvent(res, event);
-    if (job.status !== 'running' && job.status !== 'queued') {
+    if (job.status !== 'running' && job.status !== 'queued' && job.status !== 'blocked_auth') {
       res.end();
       return true;
     }
