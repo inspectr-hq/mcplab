@@ -67,6 +67,15 @@ const RunEvaluation = () => {
     () => buildRelativePathBySourcePath(configs),
     [configs]
   );
+  const queueEvalNameBySourcePath = useMemo(() => {
+    const pairs = configs
+      .filter(
+        (cfg): cfg is typeof cfg & { sourcePath: string } =>
+          typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0
+      )
+      .map((cfg) => [cfg.sourcePath, cfg.configName?.trim() || cfg.name] as const);
+    return new Map<string, string>(pairs);
+  }, [configs]);
   const queueScenarioLabelByConfigPath = useMemo(
     () => buildScenarioLabelByConfigPath(configs, libraryScenarios),
     [configs, libraryScenarios]
@@ -807,11 +816,12 @@ const RunEvaluation = () => {
                   <div className="min-w-0 flex items-center gap-2">
                     <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Running</span>
                     <span className="text-xs font-bold">
-                      {formatQueueScenarioLabel(
-                        activeQueueEntry.runParams.scenarioIds,
-                        queueScenarioLabelByConfigPath,
-                        activeQueueEntry.runParams.configPath
-                      )}
+                      {queueEvalNameBySourcePath.get(activeQueueEntry.runParams.configPath) ||
+                        formatQueueScenarioLabel(
+                          activeQueueEntry.runParams.scenarioIds,
+                          queueScenarioLabelByConfigPath,
+                          activeQueueEntry.runParams.configPath
+                        )}
                     </span>
                     <span className="font-mono text-xs">
                       {formatQueueConfigPath(
@@ -857,6 +867,8 @@ const RunEvaluation = () => {
                   queueScenarioLabelByConfigPath,
                   entry.runParams.configPath
                 );
+                const evalLabel =
+                  queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
                 const isBlocked = entry.status === "blocked_auth";
                 return (
                   <div key={entry.jobId} className={`flex items-center justify-between rounded-md border p-2 text-sm ${isBlocked ? "border-yellow-500/40 bg-yellow-500/5" : ""}`}>
@@ -866,7 +878,7 @@ const RunEvaluation = () => {
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
                       )}
-                      <span className="text-xs font-bold">{scenarioLabel}</span>
+                      <span className="text-xs font-bold">{evalLabel}</span>
                       <span className="font-mono text-xs">{configName}</span>
                       {isBlocked && (entry.requiredServers ?? []).length > 0 && (
                         <span className="text-xs text-yellow-700 dark:text-yellow-400">

@@ -51,7 +51,7 @@ import type { EvalResult } from "@/types/eval";
 type RunScopeSummary = {
   scenarioCount: number;
   agentCount: number;
-  scenarioPreview: string;
+  scopePreview: string;
   modelSummary: string;
 };
 
@@ -76,10 +76,16 @@ function runScopeSummary(run: EvalResult): RunScopeSummary {
   const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
   const modelPreview = models.slice(0, 2).join(", ");
   const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
+  const evalName = run.configName?.trim() || "";
+  const configPath = run.configPath?.trim() || "";
+  const evalLabel =
+    evalName && configPath
+      ? `${evalName} · ${configPath}`
+      : evalName || configPath;
   return {
     scenarioCount: scenarioLabels.length,
     agentCount: agentNames.length,
-    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
+    scopePreview: evalLabel || (scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"),
     modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
   };
 }
@@ -490,7 +496,6 @@ const Results = () => {
                         <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">
                           {r.id}
                         </Link>
-                        {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
                         {r.runNote ? (
                           <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div>
                         ) : null}
@@ -501,7 +506,7 @@ const Results = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scenarioPreview: "n/a",
+                          scopePreview: "n/a",
                           modelSummary: ""
                         };
                         return (
@@ -511,7 +516,7 @@ const Results = () => {
                               {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
                               {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
                           </div>
                         );
                       })()}

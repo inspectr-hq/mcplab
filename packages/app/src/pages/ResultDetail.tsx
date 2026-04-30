@@ -273,6 +273,26 @@ const ResultDetail = () => {
     if (byRequested) return byRequested;
     return result ? configs.find((c) => c.id === result.configId) : undefined;
   }, [configs, requestedConfigId, result]);
+  const resultConfigLabel = useMemo(() => {
+    const explicitName = result?.configName?.trim();
+    if (explicitName) return explicitName;
+    const explicitPath = result?.configPath?.trim();
+    if (explicitPath) return explicitPath;
+    const fromActive = activeConfig?.relativePath?.trim() || activeConfig?.name?.trim();
+    if (fromActive) return fromActive;
+    const explicitId = result?.configId?.trim();
+    return explicitId || "";
+  }, [result, activeConfig]);
+  const resultEvalName = useMemo(() => {
+    const explicitName = result?.configName?.trim();
+    if (explicitName) return explicitName;
+    return activeConfig?.name?.trim() || "";
+  }, [result, activeConfig]);
+  const resultConfigPath = useMemo(() => {
+    const explicitPath = result?.configPath?.trim();
+    if (explicitPath) return explicitPath;
+    return activeConfig?.relativePath?.trim() || "";
+  }, [result, activeConfig]);
   const scenarioDefinitionByResultId = useMemo(() => {
     const map = new Map<string, UiEvalConfig["scenarios"][number]>();
     if (activeConfig) {
@@ -714,9 +734,22 @@ const ResultDetail = () => {
                     <span className="mx-1">·</span>
                   </>
                 ) : null}
-                <span className="inline-flex items-center align-middle">
-                  Config hash: <span className="ml-1 font-mono">{result.configHash}</span>
-                </span>
+                {resultEvalName ? (
+                  <span className="inline-flex items-center align-middle">
+                    Eval: <span className="ml-1 font-medium">{resultEvalName}</span>
+                  </span>
+                ) : null}
+                {resultEvalName && resultConfigPath ? <span className="mx-1">·</span> : null}
+                {resultConfigPath ? (
+                  <span className="inline-flex items-center align-middle">
+                    Path: <span className="ml-1 font-mono">{resultConfigPath}</span>
+                  </span>
+                ) : null}
+                {!resultEvalName && !resultConfigPath && resultConfigLabel ? (
+                  <span className="inline-flex items-center align-middle">
+                    Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
+                  </span>
+                ) : null}
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">

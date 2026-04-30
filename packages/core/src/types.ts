@@ -392,6 +392,8 @@ export interface ResultsJson {
     run_note?: string;
     git_commit?: string;
     config_hash: string;
+    config_path?: string;
+    config_name?: string;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
     snapshot_eval?: {

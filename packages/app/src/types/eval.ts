@@ -182,6 +182,8 @@ export interface EvalResult {
   id: string;
   configId: string;
   configHash: string;
+  configPath?: string;
+  configName?: string;
   timestamp: string;
   runNote?: string;
   mcpServerVersions: Record<string, string | null>;
