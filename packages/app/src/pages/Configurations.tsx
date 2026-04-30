@@ -30,6 +30,12 @@ const suiteTokenForKey = (suiteKey: SuiteKey): string =>
 const suiteKeyFromToken = (token: string): SuiteKey =>
   token === ROOT_SUITE_SELECT_VALUE ? null : token.startsWith("suite:") ? token.slice(6) : null;
 
+const suiteMatchesFilter = (suiteKey: SuiteKey, selectedSuiteKey: SuiteKey): boolean => {
+  if (selectedSuiteKey === null) return suiteKey === null;
+  if (suiteKey === null) return false;
+  return suiteKey === selectedSuiteKey || suiteKey.startsWith(`${selectedSuiteKey}/`);
+};
+
 const firstScenarioIdForSuite = (items: Array<{
   scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
   scenarios?: Array<{ id: string }>;
@@ -175,7 +181,15 @@ const Configurations = () => {
 
   const suiteOptions = useMemo(() => {
     const next = new Set<SuiteKey>();
-    for (const cfg of configs) next.add(suiteKeyForConfig(cfg));
+    for (const cfg of configs) {
+      const suiteKey = suiteKeyForConfig(cfg);
+      next.add(suiteKey);
+      if (!suiteKey) continue;
+      const parts = suiteKey.split("/").filter(Boolean);
+      for (let i = 1; i < parts.length; i += 1) {
+        next.add(parts.slice(0, i).join("/"));
+      }
+    }
     return Array.from(next).sort((a, b) => suiteLabelForKey(a).localeCompare(suiteLabelForKey(b)));
   }, [configs]);
 
@@ -184,7 +198,7 @@ const Configurations = () => {
       const suiteKey = suiteKeyForConfig(cfg);
       const selectedSuiteKey = suiteFilter === "all" ? undefined : suiteKeyFromToken(suiteFilter);
       const suiteLabel = suiteLabelForKey(suiteKey);
-      if (selectedSuiteKey !== undefined && suiteKey !== selectedSuiteKey) {
+      if (selectedSuiteKey !== undefined && !suiteMatchesFilter(suiteKey, selectedSuiteKey)) {
         return false;
       }
       if (normalizedConfigFilter.length === 0) return true;

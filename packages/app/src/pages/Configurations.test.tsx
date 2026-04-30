@@ -113,6 +113,28 @@ describe("Configurations suites", () => {
     expect(screen.queryByText("Alert Check")).not.toBeInTheDocument();
   });
 
+  it("filters configs by parent suite including nested sublevels", async () => {
+    render(
+      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/mcp-evaluations" element={<Configurations />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(reloadMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("combobox"));
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find(
+      (node) => node.textContent?.trim() === "trendminer"
+    ) as HTMLElement | undefined;
+    expect(option).toBeDefined();
+    fireEvent.click(option!);
+
+    expect(screen.getByText("Tag Search")).toBeInTheDocument();
+    expect(screen.getByText("Alert Check")).toBeInTheDocument();
+    expect(screen.queryByText("Root Config")).not.toBeInTheDocument();
+  });
+
   it("queues all configs in a suite when Run Suite is clicked", async () => {
     render(
       <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
