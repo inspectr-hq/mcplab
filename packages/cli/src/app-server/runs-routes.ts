@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import {
   McpClientManager,
   loadConfig,
@@ -955,6 +955,14 @@ async function executeRunJob(
           });
         }
       });
+      const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
+      const relativeConfigPath = relativeConfigPathRaw
+        .replace(/\\/g, '/')
+        .replace(/^\.\/+/, '');
+      results.metadata.config_path = relativeConfigPath || configPath;
+      if (loaded.config.name && loaded.config.name.trim().length > 0) {
+        results.metadata.config_name = loaded.config.name.trim();
+      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),

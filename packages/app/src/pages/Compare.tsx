@@ -21,6 +21,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } f
 import { useDataSource } from "@/contexts/DataSourceContext";
 import type { EvalResult, ScenarioResult, ScenarioRun } from "@/types/eval";
 import { toast } from "@/hooks/use-toast";
+import { buildRunScopeSummary, type RunScopeSummary } from "@/lib/run-scope-summary";
 
 const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)", "hsl(280, 60%, 50%)", "hsl(0, 72%, 51%)"];
 
@@ -44,45 +45,9 @@ type WithinRunScenarioRow = {
   byAgent: Record<string, ScenarioResult | undefined>;
 };
 
-type RunScopeSummary = {
-  scenarioCount: number;
-  agentCount: number;
-  scenarioPreview: string;
-  modelSummary: string;
-};
-
 function isSameStringArray(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
-}
-
-function runScopeSummary(run: EvalResult): RunScopeSummary {
-  const scenarioLabels = Array.from(
-    new Map(
-      run.scenarios
-        .map((scenario) => {
-          const id = String(scenario.scenarioId ?? "").trim();
-          const name = String(scenario.scenarioName ?? "").trim();
-          if (!id && !name) return null;
-          return [id || name, name || id] as const;
-        })
-        .filter((entry): entry is readonly [string, string] => Boolean(entry))
-    ).values()
-  );
-  const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
-  const models = Array.from(
-    new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
-  );
-  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
-  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
-  const modelPreview = models.slice(0, 2).join(", ");
-  const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
-  return {
-    scenarioCount: scenarioLabels.length,
-    agentCount: agentIds.length,
-    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
-    modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
-  };
 }
 
 function getRepresentativeScenarioMetadata(scenarios: ScenarioResult[]): Pick<AgentSummary, "provider" | "model"> {
@@ -224,7 +189,7 @@ const Compare = () => {
   const runScopesById = useMemo(() => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sortedResults) {
-      map.set(run.id, runScopeSummary(run));
+      map.set(run.id, buildRunScopeSummary(run));
     }
     return map;
   }, [sortedResults]);
@@ -711,7 +676,7 @@ const Compare = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scenarioPreview: "n/a",
+                          scopePreview: "n/a",
                           modelSummary: ""
                         };
                         return (
@@ -720,7 +685,7 @@ const Compare = () => {
                               Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
                               {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
                           </div>
                         );
                       })()}

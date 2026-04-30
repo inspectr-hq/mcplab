@@ -46,43 +46,8 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
 import { formatAssistantToolName } from "@/lib/assistant-tool-name";
+import { buildRunScopeSummary, type RunScopeSummary } from "@/lib/run-scope-summary";
 import type { EvalResult } from "@/types/eval";
-
-type RunScopeSummary = {
-  scenarioCount: number;
-  agentCount: number;
-  scenarioPreview: string;
-  modelSummary: string;
-};
-
-function runScopeSummary(run: EvalResult): RunScopeSummary {
-  const scenarioLabels = Array.from(
-    new Map(
-      run.scenarios
-        .map((scenario) => {
-          const id = String(scenario.scenarioId ?? "").trim();
-          const name = String(scenario.scenarioName ?? "").trim();
-          if (!id && !name) return null;
-          return [id || name, name || id] as const;
-        })
-        .filter((entry): entry is readonly [string, string] => Boolean(entry))
-    ).values()
-  );
-  const agentNames = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentName).filter(Boolean)));
-  const models = Array.from(
-    new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
-  );
-  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
-  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
-  const modelPreview = models.slice(0, 2).join(", ");
-  const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
-  return {
-    scenarioCount: scenarioLabels.length,
-    agentCount: agentNames.length,
-    scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
-    modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
-  };
-}
 
 const RESULT_ASSISTANT_SNIPPETS = [
   {
@@ -275,7 +240,7 @@ const Results = () => {
   const runScopesById = useMemo(() => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
-      map.set(run.id, runScopeSummary(run));
+      map.set(run.id, buildRunScopeSummary(run));
     }
     return map;
   }, [sorted]);
@@ -490,7 +455,6 @@ const Results = () => {
                         <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">
                           {r.id}
                         </Link>
-                        {r.configId ? <div className="text-[11px] text-muted-foreground">{r.configId}</div> : null}
                         {r.runNote ? (
                           <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div>
                         ) : null}
@@ -501,7 +465,7 @@ const Results = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scenarioPreview: "n/a",
+                          scopePreview: "n/a",
                           modelSummary: ""
                         };
                         return (
@@ -511,7 +475,7 @@ const Results = () => {
                               {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
                               {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
                           </div>
                         );
                       })()}

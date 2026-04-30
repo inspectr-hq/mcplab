@@ -1240,6 +1240,8 @@ export function fromCoreResultsJson(
     id: results.metadata.run_id,
     configId: '',
     configHash: results.metadata.config_hash,
+    configPath: results.metadata.config_path,
+    configName: results.metadata.config_name,
     timestamp: results.metadata.timestamp,
     runNote: results.metadata.run_note,
     mcpServerVersions: results.metadata.mcp_server_versions ?? {},
