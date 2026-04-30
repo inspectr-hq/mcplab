@@ -39,8 +39,10 @@ const RunEvaluation = () => {
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
+  const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
   const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
@@ -322,6 +324,15 @@ const RunEvaluation = () => {
       const q = await source.getRunQueue();
       setQueuedJobs(q.queued);
       setActiveQueueEntry(q.active);
+      // Restore blocked-auth state for page-load / reconnect scenarios where SSE was missed
+      const blockedEntry = q.queued.find((e) => e.status === "blocked_auth" && e.blockedReason === "oauth_required");
+      if (blockedEntry && (blockedEntry.requiredServers ?? []).length > 0) {
+        setOauthRequired((prev) =>
+          prev?.jobId === blockedEntry.jobId ? prev : { jobId: blockedEntry.jobId, servers: blockedEntry.requiredServers! }
+        );
+      } else if (!q.queued.some((e) => e.status === "blocked_auth")) {
+        setOauthRequired(null);
+      }
     } catch {
       // ignore fetch errors
     }
@@ -383,7 +394,21 @@ const RunEvaluation = () => {
         setProgress(5);
         return;
       }
+      if (event.type === "oauth_required") {
+        const servers = Array.isArray(event.payload.servers)
+          ? (event.payload.servers as string[])
+          : [];
+        const jobId = String(event.payload.jobId ?? "");
+        setOauthRequired({ jobId, servers });
+        setLogs((prev) => {
+          const line = `[${ts}] OAuth required for server(s): ${servers.join(", ")}. Click "Connect & Resume" to authenticate.`;
+          return prev.includes(line) ? prev : [...prev, line];
+        });
+        return;
+      }
       if (event.type === "started") {
+        setOauthRequired(null);
+        oauthConnectingRef.current = false;
         setLogs((prev) => {
           const line = `[${ts}] Run started.`;
           return prev.includes(line) ? prev : [...prev, line];
@@ -424,6 +449,8 @@ const RunEvaluation = () => {
       }
       if (event.type === "completed") {
         const nextRunId = String(event.payload.runId ?? "").trim();
+        setOauthRequired(null);
+        oauthConnectingRef.current = false;
         setLogs((prev) => {
           const line = `[${ts}] Run completed.`;
           return prev.includes(line) ? prev : [...prev, line];
@@ -456,6 +483,8 @@ const RunEvaluation = () => {
         const extraHint = message.includes("Anthropic model not found")
           ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
           : "";
+        setOauthRequired(null);
+        oauthConnectingRef.current = false;
         setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
         setRunning(false);
         setDone(false);
@@ -661,6 +690,50 @@ const RunEvaluation = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <Progress value={progress} className="h-2" />
+            {oauthRequired && (
+              <div className="flex items-center justify-between rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm">
+                <span className="text-yellow-700 dark:text-yellow-400">
+                  OAuth required for: <strong>{oauthRequired.servers.join(", ")}</strong>
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={oauthAuthInProgress}
+                  onClick={() => {
+                    if (oauthConnectingRef.current) return;
+                    oauthConnectingRef.current = true;
+                    setOauthAuthInProgress(true);
+                    void ensureOAuthForServers({
+                      serverNames: oauthRequired.servers,
+                      source,
+                      onServerAuthStart: (serverName) => {
+                        setLogs((prev) => [
+                          ...prev,
+                          `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`,
+                        ]);
+                      }
+                    })
+                      .then(() => source.resumeQueue())
+                      .then(() => {
+                        setLogs((prev) => [
+                          ...prev,
+                          `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
+                        ]);
+                      })
+                      .catch((err: unknown) => {
+                        const msg = err instanceof Error ? err.message : String(err);
+                        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`]);
+                        oauthConnectingRef.current = false;
+                      })
+                      .finally(() => {
+                        setOauthAuthInProgress(false);
+                      });
+                  }}
+                >
+                  {oauthAuthInProgress ? "Connecting..." : "Connect & Resume"}
+                </Button>
+              </div>
+            )}
             <div ref={logRef} className="h-64 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs space-y-0.5">
               {logs.map((log, i) => (
                 <div key={i} className={log.includes("✓") ? "text-success" : log.includes("aborted") ? "text-destructive" : "text-foreground"}>
@@ -738,12 +811,22 @@ const RunEvaluation = () => {
               )}
               {queuedJobs.map((entry, i) => {
                 const configName = entry.runParams.configPath.split("/").pop() ?? entry.runParams.configPath;
+                const isBlocked = entry.status === "blocked_auth";
                 return (
-                  <div key={entry.jobId} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                    <div className="min-w-0 flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
+                  <div key={entry.jobId} className={`flex items-center justify-between rounded-md border p-2 text-sm ${isBlocked ? "border-yellow-500/40 bg-yellow-500/5" : ""}`}>
+                    <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                      {isBlocked ? (
+                        <span className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">#{i + 1} Blocked</span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
+                      )}
                       <span className="font-mono text-xs">{configName}</span>
-                      {entry.runParams.agents && (
+                      {isBlocked && (entry.requiredServers ?? []).length > 0 && (
+                        <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                          OAuth: {entry.requiredServers!.join(", ")}
+                        </span>
+                      )}
+                      {!isBlocked && entry.runParams.agents && (
                         <span className="text-xs text-muted-foreground">
                           agents: {entry.runParams.agents.join(", ")}
                         </span>
@@ -754,15 +837,60 @@ const RunEvaluation = () => {
                         </span>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => void removeQueuedJob(entry.jobId)}
-                      title="Remove from queue"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isBlocked && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-yellow-500/50 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                          disabled={oauthAuthInProgress}
+                          onClick={() => {
+                            if (oauthConnectingRef.current) return;
+                            const servers = entry.requiredServers ?? [];
+                            if (servers.length === 0) return;
+                            oauthConnectingRef.current = true;
+                            setOauthRequired({ jobId: entry.jobId, servers });
+                            setOauthAuthInProgress(true);
+                            void ensureOAuthForServers({
+                              serverNames: servers,
+                              source,
+                              onServerAuthStart: (serverName) => {
+                                setLogs((prev) => [
+                                  ...prev,
+                                  `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`,
+                                ]);
+                              }
+                            })
+                              .then(() => source.resumeQueue())
+                              .then(() => {
+                                setLogs((prev) => [
+                                  ...prev,
+                                  `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
+                                ]);
+                              })
+                              .catch((err: unknown) => {
+                                const msg = err instanceof Error ? err.message : String(err);
+                                setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`]);
+                                oauthConnectingRef.current = false;
+                              })
+                              .finally(() => {
+                                setOauthAuthInProgress(false);
+                              });
+                          }}
+                        >
+                          {oauthAuthInProgress && oauthRequired?.jobId === entry.jobId ? "Connecting..." : "Connect & Resume"}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => void removeQueuedJob(entry.jobId)}
+                        title="Remove from queue"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 );
               })}

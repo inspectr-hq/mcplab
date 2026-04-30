@@ -71,6 +71,7 @@ export interface ActiveJobState {
 export interface RunQueueState {
   activeJobId: string | null;
   queue: string[]; // ordered jobIds waiting to run
+  isAdvancingQueue: boolean; // re-entrancy lock for async advanceQueue()
 }
 
 export interface HttpDeps {

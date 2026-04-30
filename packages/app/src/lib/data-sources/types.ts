@@ -130,14 +130,16 @@ export interface SnapshotComparison {
 }
 
 export interface RunJobEvent {
-  type: 'started' | 'log' | 'completed' | 'error' | 'queued';
+  type: 'started' | 'log' | 'completed' | 'error' | 'queued' | 'oauth_required' | (string & {});
   ts: string;
   payload: Record<string, unknown>;
 }
 
 export interface QueueEntry {
   jobId: string;
-  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
+  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
+  blockedReason?: 'oauth_required';
+  requiredServers?: string[];
   runParams: {
     configPath: string;
     runsPerScenario: number;
@@ -721,6 +723,7 @@ export interface EvalDataSource {
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
   removeQueuedRun: (jobId: string) => Promise<void>;
+  resumeQueue: () => Promise<{ ok: boolean }>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
   listSnapshots: () => Promise<SnapshotRecord[]>;
   createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;

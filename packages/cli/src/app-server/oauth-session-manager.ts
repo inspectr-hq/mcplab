@@ -427,4 +427,19 @@ export class OAuthSessionManager {
     }
     state.runtimeSessionId = runtimeSessionId;
   }
+
+  checkServersAuthStatus(
+    serverNames: string[]
+  ): { name: string; status: 'ready' | 'auth_required' | 'not_oauth' }[] {
+    return serverNames.map((name) => {
+      const serverConfig = this.getServerConfig(name);
+      if (!serverConfig || serverConfig.auth?.type !== 'oauth_authorization_code') {
+        return { name, status: 'not_oauth' as const };
+      }
+      const state = this.getState(name);
+      this.syncStateFromRuntimeSession(state);
+      const hasValidToken = !!state.accessToken && !this.tokenExpiredOrNearExpiry(state);
+      return { name, status: hasValidToken ? ('ready' as const) : ('auth_required' as const) };
+    });
+  }
 }

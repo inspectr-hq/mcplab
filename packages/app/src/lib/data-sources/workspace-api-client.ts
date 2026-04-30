@@ -616,6 +616,7 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/runs/queue/${jobId}`, { method: 'DELETE' }).then(
       () => undefined
     ),
+  resumeQueue: () => request<{ ok: boolean }>('/api/runs/queue/resume', { method: 'POST' }),
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => {
     const source = new EventSource(`${BASE}/api/runs/jobs/${jobId}/events`);
     let closed = false;
@@ -642,6 +643,7 @@ export const workspaceApiClient = {
     source.addEventListener('log', messageHandler);
     source.addEventListener('completed', messageHandler);
     source.addEventListener('error', messageHandler);
+    source.addEventListener('oauth_required', messageHandler);
     source.onerror = () => {
       if (closed) return;
       onEvent({

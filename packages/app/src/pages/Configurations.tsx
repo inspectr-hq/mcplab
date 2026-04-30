@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock, ListPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -94,6 +95,8 @@ const Configurations = () => {
       return new Set<string>();
     }
   });
+  const [queuedConfigIds, setQueuedConfigIds] = useState<Set<string>>(new Set());
+  const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
@@ -185,6 +188,32 @@ const Configurations = () => {
       const next = new Set(prev);
       if (next.has(suiteToken)) next.delete(suiteToken);
       else next.add(suiteToken);
+      return next;
+    });
+  };
+
+  const toggleQueuedConfig = (configId: string) => {
+    setQueuedConfigIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(configId)) {
+        next.delete(configId);
+        setRecentlyQueuedConfigIds((recent) => {
+          const updated = new Set(recent);
+          updated.delete(configId);
+          return updated;
+        });
+        return next;
+      }
+
+      next.add(configId);
+      setRecentlyQueuedConfigIds((recent) => new Set(recent).add(configId));
+      window.setTimeout(() => {
+        setRecentlyQueuedConfigIds((recent) => {
+          const updated = new Set(recent);
+          updated.delete(configId);
+          return updated;
+        });
+      }, 2000);
       return next;
     });
   };
@@ -334,7 +363,7 @@ const Configurations = () => {
                     {sortIcon("updatedAt")}
                   </button>
                 </TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="w-[220px] text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -418,8 +447,35 @@ const Configurations = () => {
                           {new Date(cfg.updatedAt).toLocaleDateString()}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[220px] whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant={queuedConfigIds.has(cfg.id) ? "secondary" : "outline"}
+                                  className={`h-8 px-2 text-xs ${
+                                    recentlyQueuedConfigIds.has(cfg.id)
+                                      ? "border-green-600 bg-green-600 text-white hover:bg-green-700 hover:text-white"
+                                      : ""
+                                  }`}
+                                  onClick={() => toggleQueuedConfig(cfg.id)}
+                                  aria-label={`${queuedConfigIds.has(cfg.id) ? "Remove" : "Add"} ${displayConfigName(cfg)} ${queuedConfigIds.has(cfg.id) ? "from" : "to"} run queue`}
+                                >
+                                  {queuedConfigIds.has(cfg.id) ? (
+                                    "Queued"
+                                  ) : (
+                                    <>
+                                      <ListPlus className="h-3.5 w-3.5" />
+                                      <span className="sr-only">Add to queue</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Queue evaluation</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button size="sm" variant="outline" asChild>
                             <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
                               <Play className="h-3.5 w-3.5" />
