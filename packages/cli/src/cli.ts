@@ -19,7 +19,7 @@ import {
   type RunProgressEvent
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
@@ -64,6 +64,7 @@ interface RunCommandOptions {
   runsDir: string;
   snapshotsDir: string;
   oauthToken: string[];
+  openBrowser: boolean;
 }
 
 program
@@ -89,6 +90,10 @@ program
     'Pre-obtained OAuth Bearer token for a server (repeatable, format: server-name=token)',
     (val: string, acc: string[]) => [...acc, val],
     [] as string[]
+  )
+  .option(
+    '--open-browser',
+    'Open browser to mcplab serve UI when OAuth is required (default: print URL only)'
   )
   .action(async (options: RunCommandOptions) => {
     try {
@@ -715,6 +720,17 @@ program
 
 program.parse();
 
+function openBrowserUrl(url: string): void {
+  const platform = process.platform;
+  if (platform === 'win32') {
+    // 'start' is a cmd.exe builtin — must invoke via cmd /c
+    spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref();
+  } else {
+    const cmd = platform === 'darwin' ? 'open' : 'xdg-open';
+    spawn(cmd, [url], { stdio: 'ignore', detached: true }).unref();
+  }
+}
+
 async function executeSingleConfigRun(params: {
   configPath: string;
   options: RunCommandOptions;
@@ -776,6 +792,39 @@ async function executeSingleConfigRun(params: {
     }
     oauthTokens[serverName] = token;
   }
+
+  // Detect OAuth servers missing a token and fail early with a helpful message
+  const oauthServers = Object.entries(config.servers ?? {})
+    .filter(
+      ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+    )
+    .map(([name]) => name);
+  const missingTokenServers = oauthServers.filter((name) => !oauthTokens[name]);
+  if (missingTokenServers.length > 0) {
+    for (const name of missingTokenServers) {
+      console.error(
+        kleur.red(`OAuth login required for server '${name}'.`) +
+          kleur.yellow(` Provide via --oauth-token ${name}=<token>.`)
+      );
+    }
+    const serveUrl = `http://localhost:8787`;
+    if (options.openBrowser || process.env['MCPLAB_OPEN_BROWSER'] === '1') {
+      console.log(kleur.cyan(`Opening browser to authenticate: ${serveUrl}`));
+      openBrowserUrl(serveUrl);
+    } else {
+      console.log(
+        kleur.yellow(
+          `Hint: Run 'mcplab serve --open' to authenticate via the UI, or use --open-browser to open the browser automatically.`
+        )
+      );
+    }
+    throw new Error(
+      `OAuth login required for server(s): ${missingTokenServers.join(
+        ', '
+      )}. Provide tokens via --oauth-token.`
+    );
+  }
+
   const { runDir, results } = await runAll(selected, {
     runsPerScenario,
     scenarioId: options.scenario,

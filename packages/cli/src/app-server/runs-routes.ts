@@ -49,15 +49,17 @@ type RunParams = {
   requestedAgents?: string[];
   applySnapshotEval: boolean;
   runNote?: string;
+  oauthServerNames?: string[]; // cached at enqueue time to avoid re-parsing config
 };
 
 type RunJob = {
   id: string;
-  status: 'queued' | 'running' | 'stopped' | 'completed' | 'error';
+  status: 'queued' | 'blocked_auth' | 'running' | 'stopped' | 'completed' | 'error';
   events: SseEvent[];
   clients: Set<ServerResponse>;
   abortController: AbortController;
   runParams: RunParams;
+  blockedAuthServers?: string[]; // actual missing-token subset set when blocked
 };
 
 export function mergeLibraryAgentsIntoConfig(
@@ -158,7 +160,7 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     for (const event of job.events) sendSseEvent(res, event);
-    if (job.status !== 'running' && job.status !== 'queued') {
+    if (job.status !== 'running' && job.status !== 'queued' && job.status !== 'blocked_auth') {
       res.end();
       return true;
     }
@@ -204,10 +206,12 @@ export async function handleRunsRoutes(params: {
     const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
     const queuedEntries = runQueueState.queue
       .map((id) => jobs.get(id))
-      .filter((j): j is RunJob => !!j && j.status === 'queued')
+      .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
       .map((j) => ({
         jobId: j.id,
         status: j.status,
+        blockedReason: j.status === 'blocked_auth' ? ('oauth_required' as const) : undefined,
+        requiredServers: j.status === 'blocked_auth' ? j.blockedAuthServers ?? [] : undefined,
         runParams: {
           configPath: j.runParams.configPath,
           runsPerScenario: j.runParams.runsPerScenario,
@@ -250,10 +254,11 @@ export async function handleRunsRoutes(params: {
       asJson(res, 400, { error: 'Cannot remove a running job. Use the /stop endpoint instead.' });
       return true;
     }
-    if (job.status !== 'queued') {
+    if (job.status !== 'queued' && job.status !== 'blocked_auth') {
       asJson(res, 404, { error: 'Job is not queued' });
       return true;
     }
+    const wasBlocked = job.status === 'blocked_auth';
     const idx = runQueueState.queue.indexOf(jobId);
     if (idx !== -1) runQueueState.queue.splice(idx, 1);
     job.status = 'stopped';
@@ -264,7 +269,16 @@ export async function handleRunsRoutes(params: {
     });
     for (const client of job.clients) client.end();
     job.clients.clear();
+    if (wasBlocked) {
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
+    }
     asJson(res, 200, { ok: true, jobId, status: 'stopped' });
+    return true;
+  }
+
+  if (pathname === '/api/runs/queue/resume' && method === 'POST') {
+    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
+    asJson(res, 200, { ok: true });
     return true;
   }
 
@@ -299,6 +313,19 @@ export async function handleRunsRoutes(params: {
       return true;
     }
 
+    // Eagerly cache OAuth server names to avoid re-parsing config in advanceQueue
+    let oauthServerNames: string[] | undefined;
+    try {
+      const loaded = loadConfig(configPath);
+      oauthServerNames = Object.entries(loaded.config.servers ?? {})
+        .filter(
+          ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+        )
+        .map(([name]) => name);
+    } catch {
+      // Will be resolved lazily in advanceQueue if needed
+    }
+
     const jobId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const runParamsObj: RunParams = {
       configPath,
@@ -307,7 +334,8 @@ export async function handleRunsRoutes(params: {
       scenarioIds,
       requestedAgents,
       applySnapshotEval,
-      runNote
+      runNote,
+      oauthServerNames
     };
     const job: RunJob = {
       id: jobId,
@@ -319,26 +347,8 @@ export async function handleRunsRoutes(params: {
     };
     jobs.set(jobId, job);
 
-    if (!runQueueState.activeJobId) {
-      // No active job — start immediately
-      job.status = 'running';
-      runQueueState.activeJobId = jobId;
-      addJobEvent(job, {
-        type: 'started',
-        ts: new Date().toISOString(),
-        payload: {
-          configPath,
-          runsPerScenario,
-          scenarioId: scenarioId ?? null,
-          scenarioIds: scenarioIds ?? null,
-          agents: requestedAgents ?? null,
-          runNote: runNote ?? null
-        }
-      });
-      void executeRunJob(job, settings, jobs, runQueueState, oauthSessionManager, deps);
-      asJson(res, 202, { jobId });
-    } else {
-      // Queue this job
+    if (runQueueState.activeJobId) {
+      // Another job is running — queue and emit position
       runQueueState.queue.push(jobId);
       addJobEvent(job, {
         type: 'queued',
@@ -354,6 +364,11 @@ export async function handleRunsRoutes(params: {
         }
       });
       asJson(res, 202, { jobId, queued: true, position: runQueueState.queue.length });
+    } else {
+      // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
+      runQueueState.queue.push(jobId);
+      asJson(res, 202, { jobId });
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
     return true;
   }
@@ -707,34 +722,88 @@ function toCoreExtractRules(
   return rules;
 }
 
-function advanceQueue(
+function resolveOAuthServersForJob(job: RunJob): string[] {
+  if (job.runParams.oauthServerNames !== undefined) {
+    return job.runParams.oauthServerNames;
+  }
+  try {
+    const loaded = loadConfig(job.runParams.configPath);
+    const names = Object.entries(loaded.config.servers ?? {})
+      .filter(
+        ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+      )
+      .map(([name]) => name);
+    job.runParams.oauthServerNames = names;
+    return names;
+  } catch {
+    return [];
+  }
+}
+
+async function advanceQueue(
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
   settings: AppRouteRequestContext['settings'],
   oauthSessionManager: OAuthSessionManager,
   deps: RunsRouteDeps
-) {
+): Promise<void> {
   if (runQueueState.activeJobId) return;
-  while (runQueueState.queue.length > 0) {
-    const nextId = runQueueState.queue.shift()!;
-    const nextJob = jobs.get(nextId);
-    if (!nextJob || nextJob.status !== 'queued') continue;
-    nextJob.status = 'running';
-    runQueueState.activeJobId = nextId;
-    deps.addJobEvent(nextJob, {
-      type: 'started',
-      ts: new Date().toISOString(),
-      payload: {
-        configPath: nextJob.runParams.configPath,
-        runsPerScenario: nextJob.runParams.runsPerScenario,
-        scenarioId: nextJob.runParams.scenarioId ?? null,
-        scenarioIds: nextJob.runParams.scenarioIds ?? null,
-        agents: nextJob.runParams.requestedAgents ?? null,
-        runNote: nextJob.runParams.runNote ?? null
+  if (runQueueState.isAdvancingQueue) return;
+  runQueueState.isAdvancingQueue = true;
+  try {
+    while (runQueueState.queue.length > 0) {
+      const nextId = runQueueState.queue[0]; // peek — do not shift yet
+      const nextJob = jobs.get(nextId);
+      if (!nextJob || (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth')) {
+        runQueueState.queue.shift();
+        continue;
       }
-    });
-    void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
-    return;
+
+      // Pre-check OAuth before starting
+      const oauthServers = resolveOAuthServersForJob(nextJob);
+      if (oauthServers.length > 0) {
+        const authStatus = oauthSessionManager.checkServersAuthStatus(oauthServers);
+        const needsAuth = authStatus.filter((s) => s.status === 'auth_required');
+        if (needsAuth.length > 0) {
+          const needsAuthNames = needsAuth.map((s) => s.name);
+          nextJob.blockedAuthServers = needsAuthNames; // always refresh to current missing subset
+          if (nextJob.status !== 'blocked_auth') {
+            nextJob.status = 'blocked_auth';
+          }
+          deps.addJobEvent(nextJob, {
+            type: 'oauth_required',
+            ts: new Date().toISOString(),
+            payload: {
+              jobId: nextJob.id,
+              servers: needsAuthNames,
+              message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
+            }
+          });
+          return; // pause — frontend must call /api/runs/queue/resume after auth
+        }
+      }
+
+      // OAuth ready (or not required) — start the job
+      runQueueState.queue.shift();
+      nextJob.status = 'running';
+      runQueueState.activeJobId = nextId;
+      deps.addJobEvent(nextJob, {
+        type: 'started',
+        ts: new Date().toISOString(),
+        payload: {
+          configPath: nextJob.runParams.configPath,
+          runsPerScenario: nextJob.runParams.runsPerScenario,
+          scenarioId: nextJob.runParams.scenarioId ?? null,
+          scenarioIds: nextJob.runParams.scenarioIds ?? null,
+          agents: nextJob.runParams.requestedAgents ?? null,
+          runNote: nextJob.runParams.runNote ?? null
+        }
+      });
+      void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
+      return;
+    }
+  } finally {
+    runQueueState.isAdvancingQueue = false;
   }
 }
 

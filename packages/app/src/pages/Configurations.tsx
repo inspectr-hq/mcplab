@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock } from "lucide-react";
+import { Plus, Upload, MoreHorizontal, Copy, Trash2, Pencil, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle, FlaskConical, Play, Folder, Home, ChevronRight, Clock, ListPlus, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SearchInput } from "@/components/SearchInput";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -28,6 +29,42 @@ const suiteTokenForKey = (suiteKey: SuiteKey): string =>
   suiteKey === null ? ROOT_SUITE_SELECT_VALUE : `suite:${suiteKey}`;
 const suiteKeyFromToken = (token: string): SuiteKey =>
   token === ROOT_SUITE_SELECT_VALUE ? null : token.startsWith("suite:") ? token.slice(6) : null;
+
+const firstScenarioIdForSuite = (items: Array<{
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}>): string | null => {
+  for (const cfg of items) {
+    const entries = cfg.scenarioEntries ?? [];
+    for (const entry of entries) {
+      if (entry.kind === "inline" && entry.scenario?.id) return String(entry.scenario.id);
+      if (entry.kind === "referenced" && entry.ref) return String(entry.ref);
+    }
+    const inlineScenarios = cfg.scenarios ?? [];
+    for (const scenario of inlineScenarios) {
+      if (scenario?.id) return String(scenario.id);
+    }
+  }
+  return null;
+};
+
+const firstScenarioIdForConfig = (cfg: {
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}): string | null => firstScenarioIdForSuite([cfg]);
+
+const resultsLinkForConfig = (cfg: {
+  scenarioEntries?: Array<{ kind: "inline"; scenario: { id: string } } | { kind: "referenced"; ref: string }>;
+  scenarios?: Array<{ id: string }>;
+}): { href: string; tooltipLabel: string } => {
+  const firstScenarioId = firstScenarioIdForConfig(cfg);
+  return firstScenarioId
+    ? {
+        href: `/results?scenario=${encodeURIComponent(firstScenarioId)}`,
+        tooltipLabel: `Open results filtered by scenario ${firstScenarioId}`,
+      }
+    : { href: "/results", tooltipLabel: "Open results" };
+};
 
 const SUITE_ACCENT_CLASSES = [
   "bg-red-400",
@@ -94,6 +131,8 @@ const Configurations = () => {
       return new Set<string>();
     }
   });
+  const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
+  const [queuingConfigIds, setQueuingConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
@@ -187,6 +226,35 @@ const Configurations = () => {
       else next.add(suiteToken);
       return next;
     });
+  };
+
+  const runConfig = async (configId: string, sourcePath: string, configName: string) => {
+    if (queuingConfigIds.has(configId)) return;
+    setQueuingConfigIds((prev) => new Set(prev).add(configId));
+    try {
+      await source.startRun({ configPath: sourcePath, runsPerScenario: 1, applySnapshotEval: true });
+      setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
+      window.setTimeout(() => {
+        setRecentlyQueuedConfigIds((prev) => {
+          const next = new Set(prev);
+          next.delete(configId);
+          return next;
+        });
+      }, 2000);
+      toast({ title: "Queued", description: `"${configName}" added to run queue.` });
+    } catch (error: unknown) {
+      toast({
+        title: "Could not queue evaluation",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setQueuingConfigIds((prev) => {
+        const next = new Set(prev);
+        next.delete(configId);
+        return next;
+      });
+    }
   };
 
   useEffect(() => {
@@ -334,7 +402,7 @@ const Configurations = () => {
                     {sortIcon("updatedAt")}
                   </button>
                 </TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="w-[220px] text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -387,7 +455,9 @@ const Configurations = () => {
                       </div>
                     </TableCell>
                   </TableRow>
-                  {!isCollapsed && items.map((cfg) => (
+                  {!isCollapsed && items.map((cfg) => {
+                    const resultsLink = resultsLinkForConfig(cfg);
+                    return (
                     <TableRow key={cfg.id}>
                       <TableCell>
                         <div>
@@ -418,14 +488,8 @@ const Configurations = () => {
                           {new Date(cfg.updatedAt).toLocaleDateString()}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[220px] whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
-                          <Button size="sm" variant="outline" asChild>
-                            <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
-                              <Play className="h-3.5 w-3.5" />
-                              Run
-                            </Link>
-                          </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -444,10 +508,66 @@ const Configurations = () => {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  className="h-8 w-8"
+                                  asChild
+                                  aria-label={resultsLink.tooltipLabel}
+                                >
+                                  <Link to={resultsLink.href}>
+                                    <BarChart3 className="h-3.5 w-3.5" />
+                                    <span className="sr-only">{resultsLink.tooltipLabel}</span>
+                                  </Link>
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{resultsLink.tooltipLabel}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={`h-8 px-2 text-xs ${
+                                    recentlyQueuedConfigIds.has(cfg.id)
+                                      ? "border-green-600 bg-green-600 text-white hover:bg-green-700 hover:text-white"
+                                      : ""
+                                  }`}
+                                  disabled={queuingConfigIds.has(cfg.id) || !cfg.sourcePath}
+                                  onClick={() => cfg.sourcePath && void runConfig(cfg.id, cfg.sourcePath, displayConfigName(cfg))}
+                                  aria-label={`Queue ${displayConfigName(cfg)}`}
+                                >
+                                  {recentlyQueuedConfigIds.has(cfg.id) ? (
+                                    "Queued"
+                                  ) : queuingConfigIds.has(cfg.id) ? (
+                                    "Queueing..."
+                                  ) : (
+                                    <>
+                                      <ListPlus className="h-3.5 w-3.5" />
+                                      <span className="sr-only">Queue evaluation</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Queue evaluation run</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <Button size="sm" variant="outline" asChild>
+                            <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
+                              <Play className="h-3.5 w-3.5" />
+                              Run
+                            </Link>
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </Fragment>
               )})}
               {!loading && configs.length === 0 && (

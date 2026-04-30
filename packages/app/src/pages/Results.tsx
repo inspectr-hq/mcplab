@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Clock,
   MoreHorizontal,
@@ -112,6 +112,7 @@ const RESULT_ASSISTANT_SNIPPETS = [
 ] as const;
 
 const Results = () => {
+  const [searchParams] = useSearchParams();
   const { source } = useDataSource();
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,17 +192,36 @@ const Results = () => {
   });
 
   const scenarioFilterOptions = useMemo(() => {
-    const labels = new Set<string>();
+    const options = new Map<string, string>();
     results.forEach((run) => {
       run.scenarios.forEach((scenario) => {
         const scenarioName = String(scenario.scenarioName ?? "").trim();
         const scenarioId = String(scenario.scenarioId ?? "").trim();
-        const label = scenarioName || scenarioId;
-        if (label) labels.add(label);
+        if (scenarioId) {
+          options.set(scenarioId, scenarioName || scenarioId);
+          return;
+        }
+        if (scenarioName) {
+          options.set(scenarioName, scenarioName);
+        }
       });
     });
-    return Array.from(labels).sort((a, b) => a.localeCompare(b));
+    return Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [results]);
+
+  useEffect(() => {
+    const requestedScenario = (searchParams.get("scenario") ?? "").trim();
+    if (!requestedScenario) return;
+    if (scenarioFilterOptions.some((option) => option.value === requestedScenario || option.label === requestedScenario)) {
+      setScenarioFilter(requestedScenario);
+      return;
+    }
+    if (results.length > 0) {
+      setScenarioFilter("all");
+    }
+  }, [searchParams, scenarioFilterOptions, results.length]);
 
   const filteredResults = useMemo(() => {
     if (scenarioFilter === "all") return results;
@@ -209,11 +229,16 @@ const Results = () => {
       run.scenarios.some((scenario) => {
         const scenarioName = String(scenario.scenarioName ?? "").trim();
         const scenarioId = String(scenario.scenarioId ?? "").trim();
-        const label = scenarioName || scenarioId;
-        return label === scenarioFilter;
+        return scenarioName === scenarioFilter || scenarioId === scenarioFilter;
       })
     );
   }, [results, scenarioFilter]);
+
+  const selectedScenarioFilterLabel = useMemo(() => {
+    if (scenarioFilter === "all") return "All scenarios";
+    const option = scenarioFilterOptions.find((item) => item.value === scenarioFilter || item.label === scenarioFilter);
+    return option?.label ?? scenarioFilter;
+  }, [scenarioFilter, scenarioFilterOptions]);
 
   const sorted = useMemo(() => {
     const compareNullableNumbers = (left: number | null, right: number | null) => {
@@ -332,7 +357,7 @@ const Results = () => {
                 className="w-[260px] justify-between font-normal"
               >
                 <span className="truncate text-left">
-                  {scenarioFilter === "all" ? "All scenarios" : scenarioFilter}
+                  {selectedScenarioFilterLabel}
                 </span>
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
@@ -352,16 +377,16 @@ const Results = () => {
                     >
                       All scenarios
                     </CommandItem>
-                    {scenarioFilterOptions.map((label) => (
+                    {scenarioFilterOptions.map((option) => (
                       <CommandItem
-                        key={label}
-                        value={label}
+                        key={option.value}
+                        value={`${option.label} ${option.value}`}
                         onSelect={() => {
-                          setScenarioFilter(label);
+                          setScenarioFilter(option.value);
                           setOpenScenarioFilterPicker(false);
                         }}
                       >
-                        {label}
+                        {option.label}
                       </CommandItem>
                     ))}
                   </CommandGroup>
