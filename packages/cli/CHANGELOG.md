@@ -1,5 +1,17 @@
 # @inspectr/mcplab
 
+## 1.12.1
+
+### Patch Changes
+
+- feat: Show path and eval name in Queue and Results
+- fix: Filter evals on levels
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.9.1
+  - @inspectr/mcplab-mcp-server@1.2.3
+  - @inspectr/mcplab-reporting@1.1.9
+
 ## 1.12.0
 
 ### Minor Changes

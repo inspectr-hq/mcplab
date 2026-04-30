@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.9.1
+
+### Patch Changes
+
+- feat: Show path and eval name in Queue and Results
+- fix: Filter evals on levels
+
 ## 1.9.0
 
 ### Minor Changes
