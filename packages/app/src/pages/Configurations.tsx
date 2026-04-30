@@ -192,7 +192,7 @@ const Configurations = () => {
     });
   };
 
-  const runConfig = async (configId: string, sourcePath: string) => {
+  const runConfig = async (configId: string, sourcePath: string, configName: string) => {
     if (queuingConfigIds.has(configId)) return;
     setQueuingConfigIds((prev) => new Set(prev).add(configId));
     try {
@@ -205,6 +205,7 @@ const Configurations = () => {
           return next;
         });
       }, 2000);
+      toast({ title: "Queued", description: `"${configName}" added to run queue.` });
     } catch (error: unknown) {
       toast({
         title: "Could not queue evaluation",
@@ -463,7 +464,7 @@ const Configurations = () => {
                                       : ""
                                   }`}
                                   disabled={queuingConfigIds.has(cfg.id) || !cfg.sourcePath}
-                                  onClick={() => cfg.sourcePath && void runConfig(cfg.id, cfg.sourcePath)}
+                                  onClick={() => cfg.sourcePath && void runConfig(cfg.id, cfg.sourcePath, displayConfigName(cfg))}
                                   aria-label={`Queue ${displayConfigName(cfg)}`}
                                 >
                                   {recentlyQueuedConfigIds.has(cfg.id) ? (
