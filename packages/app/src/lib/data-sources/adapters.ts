@@ -114,6 +114,76 @@ function toCoreResponseAssertion(
   return null;
 }
 
+function toUiServerConfigFromMcpEntry(
+  entry: Record<string, unknown>
+): { id: string; server: EvalConfig['servers'][number] } | null {
+  if (!('id' in entry) || !entry.id) return null;
+  const id = String(entry.id);
+  const auth = entry.auth as Record<string, unknown> | undefined;
+  const server = {
+    id,
+    name: String(entry.name || id),
+    transport: 'streamable-http' as const,
+    url: String(entry.url || ''),
+    authType:
+      auth?.type === 'bearer'
+        ? 'bearer'
+        : auth?.type === 'api_key'
+        ? 'api-key'
+        : auth?.type === 'oauth_client_credentials'
+        ? 'api-key'
+        : auth?.type === 'oauth_authorization_code'
+        ? 'oauth2'
+        : 'none',
+    authValue:
+      auth?.type === 'bearer'
+        ? String(auth.token || '') || (auth.env ? `\${${auth.env}}` : undefined)
+        : auth?.type === 'api_key'
+        ? String(auth.value || '')
+        : undefined,
+    apiKeyHeaderName: auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
+    oauthClientId:
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.client_id || '') || undefined
+        : undefined,
+    oauthClientSecret:
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.client_secret || '') || undefined
+        : undefined,
+    oauthRedirectUrl:
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.redirect_url || '') || undefined
+        : undefined,
+    oauthScope:
+      auth?.type === 'oauth_authorization_code' || auth?.type === 'oauth_client_credentials'
+        ? String((auth.scope as string) || '') || undefined
+        : undefined,
+    oauthMode:
+      auth?.type === 'oauth_authorization_code'
+        ? (auth.mode as 'pre_registered' | 'dcr' | undefined)
+        : undefined,
+    oauthAuthorizationUrl:
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.authorization_url || '') || undefined
+        : undefined,
+    oauthTokenEndpoint:
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.token_url || '') || undefined
+        : undefined,
+    oauthTokenUrl:
+      auth?.type === 'oauth_client_credentials' ? String(auth.token_url || '') : undefined,
+    oauthClientIdEnv:
+      auth?.type === 'oauth_client_credentials' ? String(auth.client_id_env || '') : undefined,
+    oauthClientSecretEnv:
+      auth?.type === 'oauth_client_credentials' ? String(auth.client_secret_env || '') : undefined,
+    oauthAudience:
+      auth?.type === 'oauth_client_credentials'
+        ? String(auth.audience || '') || undefined
+        : undefined
+  };
+  return { id, server };
+}
+
 export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
   const configName =
     typeof record.config.name === 'string' && record.config.name.trim().length > 0
@@ -222,7 +292,21 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     if ('ref' in scenario) {
       const ref = String(scenario.ref || '').trim();
       if (!ref) return;
-      scenarioEntries.push({ kind: 'referenced', ref });
+      const mcpServers = scenario.mcp_servers;
+      const mappedMcpServers: ServerEntry[] | undefined = Array.isArray(mcpServers)
+        ? mcpServers.flatMap((entry: Record<string, unknown>) => {
+            if ('ref' in entry && entry.ref)
+              return [{ kind: 'referenced' as const, ref: String(entry.ref) }];
+            const mapped = toUiServerConfigFromMcpEntry(entry);
+            if (mapped) return [{ kind: 'inline' as const, server: mapped.server }];
+            return [];
+          })
+        : undefined;
+      scenarioEntries.push({
+        kind: 'referenced',
+        ref,
+        ...(mappedMcpServers ? { mcpServers: mappedMcpServers } : {})
+      });
       return;
     }
     const evalRules: EvalRule[] = [];
@@ -249,82 +333,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         if (Array.isArray(mcpServers)) {
           return mcpServers.flatMap((entry: Record<string, unknown>) => {
             if ('ref' in entry && entry.ref) return [String(entry.ref)];
-            if ('id' in entry && entry.id) {
-              const id = String(entry.id);
+            const mapped = toUiServerConfigFromMcpEntry(entry);
+            if (mapped) {
+              const id = mapped.id;
               // Register inline mcp_servers entry in the server pool so it survives round-trips
               if (!serverIdByName.has(id)) {
                 serverIdByName.set(id, id);
-                const auth = entry.auth as Record<string, unknown> | undefined;
-                const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
-                  auth?.type === 'bearer'
-                    ? 'bearer'
-                    : auth?.type === 'api_key'
-                    ? 'api-key'
-                    : auth?.type === 'oauth_client_credentials'
-                    ? 'api-key'
-                    : auth?.type === 'oauth_authorization_code'
-                    ? 'oauth2'
-                    : 'none';
-                servers.push({
-                  id,
-                  name: String(entry.name || id),
-                  transport: 'streamable-http' as const,
-                  url: String(entry.url || ''),
-                  authType,
-                  authValue:
-                    auth?.type === 'bearer'
-                      ? String(auth.token || '') || (auth.env ? `\${${auth.env}}` : undefined)
-                      : auth?.type === 'api_key'
-                      ? String(auth.value || '')
-                      : undefined,
-                  apiKeyHeaderName:
-                    auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
-                  oauthClientId:
-                    auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_id || '') || undefined
-                      : undefined,
-                  oauthClientSecret:
-                    auth?.type === 'oauth_authorization_code'
-                      ? String(auth.client_secret || '') || undefined
-                      : undefined,
-                  oauthRedirectUrl:
-                    auth?.type === 'oauth_authorization_code'
-                      ? String(auth.redirect_url || '') || undefined
-                      : undefined,
-                  oauthScope:
-                    auth?.type === 'oauth_authorization_code' ||
-                    auth?.type === 'oauth_client_credentials'
-                      ? String((auth.scope as string) || '') || undefined
-                      : undefined,
-                  oauthMode:
-                    auth?.type === 'oauth_authorization_code'
-                      ? (auth.mode as 'pre_registered' | 'dcr' | undefined)
-                      : undefined,
-                  oauthAuthorizationUrl:
-                    auth?.type === 'oauth_authorization_code'
-                      ? String(auth.authorization_url || '') || undefined
-                      : undefined,
-                  oauthTokenEndpoint:
-                    auth?.type === 'oauth_authorization_code'
-                      ? String(auth.token_url || '') || undefined
-                      : undefined,
-                  oauthTokenUrl:
-                    auth?.type === 'oauth_client_credentials'
-                      ? String(auth.token_url || '')
-                      : undefined,
-                  oauthClientIdEnv:
-                    auth?.type === 'oauth_client_credentials'
-                      ? String(auth.client_id_env || '')
-                      : undefined,
-                  oauthClientSecretEnv:
-                    auth?.type === 'oauth_client_credentials'
-                      ? String(auth.client_secret_env || '')
-                      : undefined,
-                  oauthAudience:
-                    auth?.type === 'oauth_client_credentials'
-                      ? String(auth.audience || '') || undefined
-                      : undefined
-                });
+                servers.push(mapped.server);
                 mixedServerEntries.push({ kind: 'inline', server: servers[servers.length - 1] });
               }
               return [id];
@@ -592,7 +607,21 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   const scenarios = (
     config.scenarioEntries && config.scenarioEntries.length > 0
       ? config.scenarioEntries.map((entry) => {
-          if (entry.kind === 'referenced') return { ref: entry.ref };
+          if (entry.kind === 'referenced') {
+            return {
+              ref: entry.ref,
+              ...(Array.isArray(entry.mcpServers)
+                ? {
+                    mcp_servers: entry.mcpServers.map((serverEntry) => {
+                      if (serverEntry.kind === 'referenced') {
+                        return { ref: serverEntry.ref };
+                      }
+                      return mapInlineServer(serverEntry.server);
+                    })
+                  }
+                : {})
+            };
+          }
           return mapInlineScenario(entry.scenario);
         })
       : [...config.scenarios.map((scenario) => mapInlineScenario(scenario))]

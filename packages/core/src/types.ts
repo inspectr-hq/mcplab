@@ -176,6 +176,7 @@ export interface Scenario {
 
 export interface ScenarioRefEntry {
   ref: string;
+  mcp_servers?: ServerListEntry[];
 }
 
 export type ScenarioInlineEntry = Scenario;

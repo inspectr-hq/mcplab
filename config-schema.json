@@ -152,6 +152,91 @@
                 "type": "string",
                 "minLength": 1,
                 "description": "Scenario ID from mcplab/scenarios/*.yaml"
+              },
+              "mcp_servers": {
+                "type": "array",
+                "description": "Optional MCP server override for referenced scenario. Each entry is a library ref or inline server config.",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["ref"],
+                      "properties": {
+                        "ref": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Server name from mcplab/servers.yaml"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["id", "transport", "url"],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Inline server id"
+                        },
+                        "transport": {
+                          "type": "string",
+                          "enum": ["http"],
+                          "description": "MCP transport"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "MCP server URL"
+                        },
+                        "auth": {
+                          "description": "Optional server authentication",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "env"],
+                              "properties": {
+                                "type": { "const": "bearer" },
+                                "env": { "type": "string", "minLength": 1 }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                              "properties": {
+                                "type": { "const": "oauth_client_credentials" },
+                                "token_url": { "type": "string", "format": "uri" },
+                                "client_id_env": { "type": "string", "minLength": 1 },
+                                "client_secret_env": { "type": "string", "minLength": 1 },
+                                "scope": { "type": "string" },
+                                "audience": { "type": "string" },
+                                "token_params": {
+                                  "type": "object",
+                                  "additionalProperties": { "type": "string" }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["type", "client_id", "redirect_url"],
+                              "properties": {
+                                "type": { "const": "oauth_authorization_code" },
+                                "client_id": { "type": "string", "minLength": 1 },
+                                "client_secret": { "type": "string" },
+                                "redirect_url": { "type": "string", "format": "uri" },
+                                "scope": { "type": "string" }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
               }
             }
           },

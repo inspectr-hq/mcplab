@@ -461,12 +461,15 @@ const librariesAndRefs: DocPage = {
     {
       id: 'use-refs',
       title: 'Reference Library Items in eval.yaml',
-      paragraphs: ['Use `ref` entries to pull shared items into an eval config by id.'],
+      paragraphs: [
+        'Use `ref` entries to pull shared items into an eval config by id.',
+        'For referenced scenarios, you can override MCP targets with `mcp_servers` while keeping prompt/eval logic in the test-case.'
+      ],
       codeBlocks: [
         {
           title: 'eval.yaml using refs',
           language: 'yaml',
-          code: `servers:\n  - ref: my-server\nagents:\n  - ref: claude-sonnet\nscenarios:\n  - ref: scenario-a`
+          code: `agents:\n  - ref: claude-sonnet\n\nscenarios:\n  - ref: add-calculations\n    mcp_servers:\n      - ref: kpi-api-stage`
         }
       ]
     },
@@ -476,7 +479,8 @@ const librariesAndRefs: DocPage = {
       bullets: [
         'Server refs resolve from `servers.yaml`.',
         'Agent refs resolve from `agents.yaml`.',
-        'Scenario refs resolve from files in `scenarios/`.',
+        'Scenario refs resolve from files in `test-cases/`.',
+        'When a referenced scenario includes `mcp_servers` overlay, that overlay is used for runtime MCP binding.',
         'Missing refs are reported and should be fixed before running.'
       ]
     },
@@ -659,18 +663,14 @@ const cliConfiguration: DocPage = {
       id: 'structure',
       title: 'Structure Overview',
       paragraphs: [
-        'An eval file has three required top-level keys: servers, agents, and scenarios.'
+        'An eval file requires `agents` and `scenarios`.',
+        'Top-level `servers` exists for backward compatibility but is deprecated. Prefer scenario-owned `mcp_servers`.'
       ],
       codeBlocks: [
         {
           title: 'eval.yaml skeleton',
           language: 'yaml',
-          code: `servers:
-  - id: my-server
-    transport: http
-    url: http://localhost:3000/mcp
-
-agents:
+          code: `agents:
   - id: claude
     provider: anthropic
     model: claude-haiku-4-5-20251001
@@ -678,7 +678,10 @@ agents:
 
 scenarios:
   - id: basic-test
-    servers: [my-server]
+    mcp_servers:
+      - id: my-server
+        transport: http
+        url: http://localhost:3000/mcp
     prompt: Describe what you want the agent to do.
     eval:
       tool_constraints:
@@ -743,27 +746,17 @@ scenarios:
       id: 'scenarios',
       title: 'Scenarios',
       paragraphs: [
-        'Each scenario has an id, a list of servers to give the agent access to, a prompt describing the task, and an eval block with assertions.',
-        'The agent field is optional — when omitted all agents in the config run the scenario.'
+        'Inline scenarios define prompt/eval and may include `mcp_servers`.',
+        'Referenced scenarios can override only MCP target with `mcp_servers` while keeping test-case prompt/eval.'
       ],
       codeBlocks: [
         {
-          title: 'scenario',
+          title: 'referenced scenario with mcp override',
           language: 'yaml',
           code: `scenarios:
-  - id: weather-lookup
-    servers: [weather-server]
-    prompt: Return JSON with city and temperature_c for Amsterdam.
-    eval:
-      tool_constraints:
-        required_tools: [get_weather]
-        forbidden_tools: [send_email]
-      response_assertions:
-        - type: regex
-          pattern: "Amsterdam"
-        - type: jsonpath
-          path: "$.city"
-          equals: "Amsterdam"`
+  - ref: add-calculations
+    mcp_servers:
+      - ref: kpi-api-stage`
         }
       ]
     },
@@ -782,32 +775,19 @@ scenarios:
       id: 'refs',
       title: 'Reusable Refs',
       paragraphs: [
-        'Use $ref to reference a server or agent definition from a separate file instead of repeating it across configs.'
+        'Use `ref` to reference library items from `agents.yaml`, `servers.yaml`, and `test-cases/`.'
       ],
       codeBlocks: [
         {
-          title: 'servers.yaml (shared library file)',
+          title: 'library refs in eval',
           language: 'yaml',
-          code: `servers:
-  - id: my-server
-    transport: http
-    url: http://localhost:3000/mcp`
-        },
-        {
-          title: 'eval.yaml using a library ref',
-          language: 'yaml',
-          code: `servers:
-  - $ref: servers.yaml#my-server
-
-agents:
-  - id: claude
-    provider: anthropic
-    model: claude-haiku-4-5-20251001
+          code: `agents:
+  - ref: claude-sonnet-46
 
 scenarios:
-  - id: basic-test
-    servers: [my-server]
-    prompt: Complete the task.`
+  - ref: add-calculations
+    mcp_servers:
+      - ref: kpi-api-prod`
         }
       ]
     },
@@ -1428,6 +1408,7 @@ const appScenarioSetup: DocPage = {
       ],
       bullets: [
         'Add Ref: reference a scenario from the scenario library.',
+        'Referenced rows can define `mcp_servers` override to swap target server without duplicating the test-case.',
         'Import Inline: copy a library scenario into this config for local customization.',
         'Add scenario: create a brand-new inline scenario from scratch.'
       ]
@@ -1451,6 +1432,7 @@ const appScenarioSetup: DocPage = {
       bullets: [
         'Use up/down arrows to reorder scenario execution.',
         'Use Convert to inline to copy a referenced scenario into editable inline form.',
+        'Referenced rows show Override badge when `mcp_servers` override is active.',
         'Use Remove to drop scenarios you no longer need.',
         'Fix Missing badges for broken references before running.'
       ]
@@ -1608,11 +1590,10 @@ const refConfiguration: DocPage = {
       id: 'scenarios-schema',
       title: 'scenarios[ ]',
       bullets: [
-        'id (string, required) — unique identifier for the scenario.',
-        'servers (string[], required) — list of server ids to give the agent access to.',
-        'prompt (string, required) — the task description sent to the agent.',
-        'agent (string, optional) — id of a specific agent to run. When omitted all agents run this scenario.',
-        'eval (object, optional) — assertions to check after the agent completes.'
+        'Inline scenario: `id`, `prompt`, optional `name`, optional `mcp_servers`, optional `eval` and `extract`.',
+        'Referenced scenario: `ref` with optional `mcp_servers` override.',
+        '`mcp_servers` entries can be `{ ref: <server-id> }` or inline server objects.',
+        'Legacy top-level `servers` pool is deprecated; prefer scenario-owned `mcp_servers`.'
       ]
     },
     {
@@ -1627,16 +1608,21 @@ const refConfiguration: DocPage = {
     },
     {
       id: 'refs-schema',
-      title: '$ref Syntax',
+      title: 'Reference Syntax',
       paragraphs: [
-        'Use $ref inside a servers or agents list item to pull in a definition from an external YAML file.'
+        'Use `ref` inside `agents` and `scenarios` list items to pull from library ids.'
       ],
       codeBlocks: [
         {
-          title: 'example',
+          title: 'referenced scenario with mcp override',
           language: 'yaml',
-          code: `servers:
-  - $ref: ./shared/servers.yaml#my-server`
+          code: `agents:
+  - ref: claude-sonnet-46
+
+scenarios:
+  - ref: add-calculations
+    mcp_servers:
+      - ref: kpi-api-prod`
         }
       ]
     }

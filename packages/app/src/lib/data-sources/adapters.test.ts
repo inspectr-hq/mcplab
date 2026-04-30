@@ -669,7 +669,10 @@ describe('config adapters round-trip', () => {
           }
         ],
         scenarios: [
-          { ref: 'scn-weather' },
+          {
+            ref: 'scn-weather',
+            mcp_servers: [{ ref: 'weather-mcp' }]
+          },
           {
             id: 'scn-inline',
             name: 'Inline Scenario',

@@ -49,7 +49,7 @@ const ConfigEditor = () => {
   const isView = !isNew && !!id;
   const existing = isView ? getConfig(id!) : undefined;
 
-  const [editing, setEditing] = useState(isNew);
+  const [editing, setEditing] = useState(isNew || tabParam === "edit");
   const [config, setConfig] = useState<EvalConfig>(() =>
     existing ? structuredClone(existing) : emptyConfig()
   );
@@ -75,6 +75,10 @@ const ConfigEditor = () => {
       setConfig(structuredClone(existing));
     }
   }, [existing, editing]);
+
+  useEffect(() => {
+    if (tabParam === "edit" && !isNew) setEditing(true);
+  }, [tabParam, isNew]);
 
   useEffect(() => {
     let active = true;
@@ -248,7 +252,18 @@ const ConfigEditor = () => {
     const normalizedScenarioEntries = scenarioEntries.map((entry) => {
       if (entry.kind === "referenced") {
         const matched = libScenarios.find((item) => item.id === entry.ref);
-        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+        const normalizedMcpServers = (entry.mcpServers ?? []).map((serverEntry) => {
+          if (serverEntry.kind === "referenced") {
+            const serverMatch = libServers.find((item) => item.id === serverEntry.ref);
+            return { kind: "referenced" as const, ref: serverMatch?.id || serverEntry.ref };
+          }
+          return serverEntry;
+        });
+        return {
+          kind: "referenced" as const,
+          ref: matched?.id || entry.ref,
+          ...(entry.mcpServers !== undefined ? { mcpServers: normalizedMcpServers } : {})
+        };
       }
       return entry;
     });
@@ -318,9 +333,7 @@ const ConfigEditor = () => {
       const updatedDisplayName = updated.configName?.trim() || updated.name;
       toast({ title: "MCP Evaluation Updated", description: `"${updatedDisplayName}" has been updated.` });
       setEditing(false);
-      if (updated.id !== id) {
-        navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
-      }
+      navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
     }
   };
 
@@ -584,7 +597,12 @@ const ConfigEditor = () => {
       ...structuredClone(template),
       id: `scn-${createdAt}`,
       name: nextName,
-      serverIds: [...template.serverIds],
+      serverIds:
+        entry.mcpServers && entry.mcpServers.length > 0
+          ? entry.mcpServers.map((serverEntry) =>
+              serverEntry.kind === "referenced" ? serverEntry.ref : serverEntry.server.id
+            )
+          : [...template.serverIds],
     };
     const nextEntries = [...scenarioEntries];
     nextEntries[index] = { kind: "inline", scenario: inlineCopy };
@@ -626,12 +644,20 @@ const ConfigEditor = () => {
     .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
     .map((entry) => entry.ref);
   const scenarioViewRows = scenarioEntries.flatMap(
-    (entry): { scenario: Scenario; origin: "inline" | "referenced" }[] => {
+    (entry): { scenario: Scenario; origin: "inline" | "referenced"; hasMcpServerOverride: boolean }[] => {
       if (entry.kind === "referenced") {
         const scenario = findLibraryScenarioByRef(entry.ref);
-        return scenario ? [{ scenario, origin: "referenced" }] : [];
+        if (!scenario) return [];
+        if (entry.mcpServers === undefined) {
+          return [{ scenario, origin: "referenced", hasMcpServerOverride: false }];
+        }
+        const overrideServerIds = entry.mcpServers.flatMap((serverEntry) => {
+          if (serverEntry.kind === "referenced") return [serverEntry.ref];
+          return [serverEntry.server.id];
+        });
+        return [{ scenario: { ...scenario, serverIds: overrideServerIds }, origin: "referenced", hasMcpServerOverride: true }];
       }
-      return [{ scenario: entry.scenario, origin: "inline" }];
+      return [{ scenario: entry.scenario, origin: "inline", hasMcpServerOverride: false }];
     }
   );
   const scenarioViewAgents = Array.from(
@@ -644,13 +670,51 @@ const ConfigEditor = () => {
       [...libServers, ...(config.servers ?? []), ...referencedServers].map((server) => [server.id, server] as const)
     ).values()
   );
-  const missingServerRefs = referencedServerRefs.filter((ref) => !findLibraryServerByRef(ref));
+  const scenarioOverrideServerRefs = scenarioEntries
+    .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .flatMap((entry) =>
+      (entry.mcpServers ?? [])
+        .filter(
+          (serverEntry): serverEntry is Extract<ServerEntry, { kind: "referenced" }> =>
+            serverEntry.kind === "referenced"
+        )
+        .map((serverEntry) => serverEntry.ref)
+    );
+  const missingServerRefs = Array.from(
+    new Set(
+      [...referencedServerRefs, ...scenarioOverrideServerRefs].filter(
+        (ref) => !findLibraryServerByRef(ref)
+      )
+    )
+  );
   const missingAgentRefs = referencedAgentRefs.filter((ref) => !findLibraryAgentByRef(ref));
   const missingScenarioRefs = referencedScenarioIds.filter((ref) => !findLibraryScenarioByRef(ref));
   const missingServerRefSet = new Set(missingServerRefs);
   const missingScenarioRefSet = new Set(missingScenarioRefs);
   const totalAgentCount = agentEntries.length;
   const totalScenarioCount = scenarioEntries.length;
+
+  const allServerOptions = [...libServers];
+
+  const updateReferencedScenarioServers = (index: number, nextServerIds: string[]) => {
+    const entry = scenarioEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const nextEntries = [...scenarioEntries];
+    nextEntries[index] = {
+      kind: "referenced",
+      ref: entry.ref,
+      mcpServers: nextServerIds.map((id) => ({ kind: "referenced" as const, ref: id }))
+    };
+    setScenarioEntries(nextEntries);
+  };
+
+  const resetReferencedScenarioServersOverride = (index: number) => {
+    const entry = scenarioEntries[index];
+    if (!entry || entry.kind !== "referenced") return;
+    const nextEntries = [...scenarioEntries];
+    nextEntries[index] = { kind: "referenced", ref: entry.ref };
+    setScenarioEntries(nextEntries);
+  };
 
   useEffect(() => {
     if (!selectedLibraryAgentId) return;
@@ -681,7 +745,7 @@ const ConfigEditor = () => {
         </div>
         <div className="flex gap-2 shrink-0">
           {isView && !editing && (
-            <Button size="sm" onClick={() => setEditing(true)}>Edit</Button>
+            <Button size="sm" onClick={() => { setEditing(true); navigate(`${configBasePath}/edit`); }}>Edit</Button>
           )}
           {isView && !editing && existing && !isBrokenConfig && (
             <Button size="sm" variant="outline" asChild>
@@ -700,7 +764,7 @@ const ConfigEditor = () => {
           {editing && (
             <>
               {!isNew && (
-                <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); }}>Cancel</Button>
+                <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); navigate(configBasePath); }}>Cancel</Button>
               )}
                 <Button size="sm" onClick={() => void handleSave()}>
                   <Save className="mr-1.5 h-3.5 w-3.5" />Save
@@ -1348,6 +1412,9 @@ const ConfigEditor = () => {
                     const hasMissingInlineName =
                       entry.kind === "inline" && !entry.scenario.name?.trim();
                     const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
+                    const hasOverrides =
+                      entry.kind === "referenced" &&
+                      Array.isArray(entry.mcpServers);
                     const scenarioExpanded =
                       entry.kind === "inline" && Boolean(expandedInlineScenarioIds[entry.scenario.id]);
                     return (
@@ -1383,6 +1450,7 @@ const ConfigEditor = () => {
                             <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
                               {entry.kind === "inline" ? "Inline" : "Referenced"}
                             </Badge>
+                            {hasOverrides && <Badge variant="secondary">Override</Badge>}
                             {hasMissingInlineName && <Badge variant="destructive">Name required</Badge>}
                             {isMissingRef && <Badge variant="destructive">Missing</Badge>}
                           </div>
@@ -1454,6 +1522,55 @@ const ConfigEditor = () => {
                             />
                           </div>
                         )}
+                        {entry.kind === "referenced" && !isMissingRef && (
+                          <div className="border-t px-3 py-3 space-y-2">
+                            <div className="text-xs text-muted-foreground">
+                              Optional MCP server override for this referenced scenario.
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {allServerOptions.map((server) => {
+                                const selected = (entry.mcpServers ?? []).some(
+                                  (serverEntry) =>
+                                    serverEntry.kind === "referenced" && serverEntry.ref === server.id
+                                );
+                                return (
+                                  <Button
+                                    key={`${entry.ref}-override-server-${server.id}`}
+                                    type="button"
+                                    size="sm"
+                                    variant={selected ? "default" : "outline"}
+                                    className={`h-7 text-xs ${selected ? "" : "opacity-70"}`}
+                                    onClick={() => {
+                                      const current = (entry.mcpServers ?? [])
+                                        .filter(
+                                          (serverEntry): serverEntry is Extract<ServerEntry, { kind: "referenced" }> =>
+                                            serverEntry.kind === "referenced"
+                                        )
+                                        .map((serverEntry) => serverEntry.ref);
+                                      const next = current.includes(server.id)
+                                        ? current.filter((id) => id !== server.id)
+                                        : [...current, server.id];
+                                      updateReferencedScenarioServers(index, next);
+                                    }}
+                                  >
+                                    {server.name || server.id}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                            {hasOverrides && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs"
+                                onClick={() => resetReferencedScenarioServersOverride(index)}
+                              >
+                                Reset override
+                              </Button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1477,6 +1594,7 @@ const ConfigEditor = () => {
                 <ScenarioForm
                   scenarios={scenarioViewRows.map((row) => row.scenario)}
                   scenarioOrigins={scenarioViewRows.map((row) => row.origin)}
+                  scenarioOverrides={scenarioViewRows.map((row) => row.hasMcpServerOverride)}
                   agents={scenarioViewAgents}
                   servers={scenarioViewServers}
                   configId={config.id}
