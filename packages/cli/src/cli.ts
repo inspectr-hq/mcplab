@@ -91,7 +91,10 @@ program
     (val: string, acc: string[]) => [...acc, val],
     [] as string[]
   )
-  .option('--open-browser', 'Open browser to mcplab serve UI when OAuth is required (default: print URL only)')
+  .option(
+    '--open-browser',
+    'Open browser to mcplab serve UI when OAuth is required (default: print URL only)'
+  )
   .action(async (options: RunCommandOptions) => {
     try {
       const hasAgentOverride = Boolean(options.agents) || Boolean(options.agentsAll);
@@ -792,7 +795,9 @@ async function executeSingleConfigRun(params: {
 
   // Detect OAuth servers missing a token and fail early with a helpful message
   const oauthServers = Object.entries(config.servers ?? {})
-    .filter(([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code')
+    .filter(
+      ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+    )
     .map(([name]) => name);
   const missingTokenServers = oauthServers.filter((name) => !oauthTokens[name]);
   if (missingTokenServers.length > 0) {
@@ -814,7 +819,9 @@ async function executeSingleConfigRun(params: {
       );
     }
     throw new Error(
-      `OAuth login required for server(s): ${missingTokenServers.join(', ')}. Provide tokens via --oauth-token.`
+      `OAuth login required for server(s): ${missingTokenServers.join(
+        ', '
+      )}. Provide tokens via --oauth-token.`
     );
   }
 

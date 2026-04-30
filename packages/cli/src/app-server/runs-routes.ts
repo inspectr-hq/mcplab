@@ -211,7 +211,7 @@ export async function handleRunsRoutes(params: {
         jobId: j.id,
         status: j.status,
         blockedReason: j.status === 'blocked_auth' ? ('oauth_required' as const) : undefined,
-        requiredServers: j.status === 'blocked_auth' ? (j.blockedAuthServers ?? []) : undefined,
+        requiredServers: j.status === 'blocked_auth' ? j.blockedAuthServers ?? [] : undefined,
         runParams: {
           configPath: j.runParams.configPath,
           runsPerScenario: j.runParams.runsPerScenario,
@@ -318,7 +318,9 @@ export async function handleRunsRoutes(params: {
     try {
       const loaded = loadConfig(configPath);
       oauthServerNames = Object.entries(loaded.config.servers ?? {})
-        .filter(([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code')
+        .filter(
+          ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+        )
         .map(([name]) => name);
     } catch {
       // Will be resolved lazily in advanceQueue if needed
@@ -727,7 +729,9 @@ function resolveOAuthServersForJob(job: RunJob): string[] {
   try {
     const loaded = loadConfig(job.runParams.configPath);
     const names = Object.entries(loaded.config.servers ?? {})
-      .filter(([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code')
+      .filter(
+        ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
+      )
       .map(([name]) => name);
     job.runParams.oauthServerNames = names;
     return names;
