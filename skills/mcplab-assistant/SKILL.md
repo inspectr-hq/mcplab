@@ -88,10 +88,13 @@ When the request is about analyzing results, the assistant must:
 - optional `agent` key when scenario should pin to one model
 - at least one `servers` entry (labels available to the scenario)
 - `prompt`
-5. Add optional `eval` and `extract` blocks after baseline run succeeds.
-6. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
-7. Validate references and shape against `config-schema.json`.
-8. Prefer minimal deterministic edits over large rewrites.
+5. For reusable test-cases across environments, prefer referenced scenario overlays:
+- `scenarios: [{ ref: "<test-case-id>", mcp_servers: [{ ref: "<env-server-id>" }] }]`
+- This keeps prompt/eval in library test-case and swaps only MCP target per eval.
+6. Add optional `eval` and `extract` blocks after baseline run succeeds.
+7. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
+8. Validate references and shape against `config-schema.json`.
+9. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
 

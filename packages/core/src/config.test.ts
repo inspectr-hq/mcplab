@@ -317,6 +317,255 @@ describe('loadConfig normalization', () => {
     }
   });
 
+  it('supports referenced scenario mcp_servers override via eval config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        [
+          'kpi-api-dev:',
+          '  transport: http',
+          '  url: http://localhost:3001/mcp',
+          'kpi-api-stage:',
+          '  transport: http',
+          '  url: http://localhost:3002/mcp'
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        [
+          'id: add-calculations',
+          'name: Add calculations',
+          'mcp_servers:',
+          '  - ref: kpi-api-dev',
+          'prompt: add calculations'
+        ].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: kpi-api-stage'].join('\n'),
+        'utf8'
+      );
+
+      const { config, sourceConfig } = loadConfig(configPath);
+      expect(config.scenarios[0]?.id).toBe('add-calculations');
+      expect(config.scenarios[0]?.servers).toEqual(['kpi-api-stage']);
+      expect(config.servers['kpi-api-stage']).toBeTruthy();
+      expect(config.servers['kpi-api-dev']).toBeUndefined();
+      expect((sourceConfig.scenarios[0] as { mcp_servers?: unknown })?.mcp_servers).toEqual([
+        { ref: 'kpi-api-stage' }
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows referenced scenario mcp_servers override when base scenario has no mcp_servers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['kpi-api-stage:', '  transport: http', '  url: http://localhost:3002/mcp'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        ['id: add-calculations', 'name: Add calculations', 'prompt: add calculations'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: kpi-api-stage'].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.scenarios[0]?.servers).toEqual(['kpi-api-stage']);
+      expect(config.servers['kpi-api-stage']).toBeTruthy();
+      expect(config.servers['kpi-api-dev']).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('treats referenced scenario mcp_servers: [] as clear override (no bound servers)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        [
+          'kpi-api-dev:',
+          '  transport: http',
+          '  url: http://localhost:3001/mcp',
+          'kpi-api-stage:',
+          '  transport: http',
+          '  url: http://localhost:3002/mcp'
+        ].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        [
+          'id: add-calculations',
+          'name: Add calculations',
+          'mcp_servers:',
+          '  - ref: kpi-api-dev',
+          'prompt: add calculations'
+        ].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers: []'].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.scenarios[0]?.servers).toEqual([]);
+      expect(config.servers['kpi-api-dev']).toBeUndefined();
+      expect(config.servers['kpi-api-stage']).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when referenced scenario overlay mcp_servers ref cannot be resolved', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        ['id: add-calculations', 'name: Add calculations', 'prompt: add calculations'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: missing-server'].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow(
+        'Unresolved mcp_servers ref "missing-server" in scenario "add-calculations"'
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsupported overlay fields on referenced scenarios', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        ['id: add-calculations', 'name: Add calculations', 'prompt: add calculations'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    prompt: should-fail'].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow(
+        'Invalid config: referenced scenario "add-calculations" contains unsupported fields: prompt'
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('allows overlay mcp_servers ref to reuse identical inline server defined elsewhere', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        ['id: add-calculations', 'name: Add calculations', 'prompt: add calculations'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents: []',
+          'scenarios:',
+          '  - id: seed-inline',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3100/mcp',
+          '    prompt: seed',
+          '  - ref: add-calculations',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3100/mcp'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { config } = loadConfig(configPath);
+      expect(config.scenarios.find((s) => s.id === 'add-calculations')?.servers).toEqual(['shared']);
+      expect(config.servers['shared']).toBeTruthy();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when overlay mcp_servers conflicts with server definition from another scenario', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const testCasesDir = join(dir, 'test-cases');
+      mkdirSync(testCasesDir, { recursive: true });
+      writeFileSync(
+        join(testCasesDir, 'add-calculations.yaml'),
+        ['id: add-calculations', 'name: Add calculations', 'prompt: add calculations'].join('\n'),
+        'utf8'
+      );
+      const configPath = join(dir, 'eval.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents: []',
+          'scenarios:',
+          '  - id: seed-inline',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3100/mcp',
+          '    prompt: seed',
+          '  - ref: add-calculations',
+          '    mcp_servers:',
+          '      - id: shared',
+          '        transport: http',
+          '        url: http://localhost:3200/mcp'
+        ].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow('Conflicting mcp_servers definition for id: shared');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('defaults referenced scenario servers to empty array when omitted', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

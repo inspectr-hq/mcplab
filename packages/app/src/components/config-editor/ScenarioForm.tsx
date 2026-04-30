@@ -19,6 +19,7 @@ import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 interface ScenarioFormProps {
   scenarios: Scenario[];
   scenarioOrigins?: Array<"referenced" | "inline">;
+  scenarioOverrides?: boolean[];
   agents: AgentConfig[];
   servers: ServerConfig[];
   configId?: string;
@@ -49,6 +50,7 @@ const emptyScenario = (): Scenario => ({
 export function ScenarioForm({
   scenarios,
   scenarioOrigins,
+  scenarioOverrides,
   agents,
   servers,
   configId,
@@ -95,6 +97,7 @@ export function ScenarioForm({
           key={sc.id}
           scenario={sc}
           scenarioOrigin={scenarioOrigins?.[i]}
+          hasMcpServerOverride={scenarioOverrides?.[i]}
           index={i}
           total={scenarios.length}
           agents={agents}
@@ -120,9 +123,10 @@ export function ScenarioForm({
   );
 }
 
-function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, assistantInitialPrompt, assistantAutoOpenNonce, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly, allowStructureEdits }: {
+function ScenarioCard({ scenario, scenarioOrigin, hasMcpServerOverride, index, total, agents, servers, configId, configPath, defaultAssistantAgentName, assistantInitialPrompt, assistantAutoOpenNonce, snapshotEval, onUpdate, onMoveUp, onMoveDown, onRemove, readOnly, allowStructureEdits }: {
   scenario: Scenario; index: number; total: number; agents: AgentConfig[]; servers: ServerConfig[];
   scenarioOrigin?: "referenced" | "inline";
+  hasMcpServerOverride?: boolean;
   configId?: string;
   configPath?: string;
   defaultAssistantAgentName?: string;
@@ -412,6 +416,7 @@ function ScenarioCard({ scenario, scenarioOrigin, index, total, agents, servers,
                   {scenarioOrigin === "referenced" ? "Referenced" : "Inline"}
                 </Badge>
               )}
+              {hasMcpServerOverride && <Badge variant="secondary">Override</Badge>}
               <CollapsibleTrigger asChild>
                 <Button
                   type="button"

@@ -82,7 +82,7 @@ export interface Scenario {
 
 export type ScenarioEntry =
   | { kind: 'inline'; scenario: Scenario }
-  | { kind: 'referenced'; ref: string };
+  | { kind: 'referenced'; ref: string; mcpServers?: ServerEntry[] };
 
 export type AgentEntry =
   | { kind: 'inline'; agent: AgentConfig }

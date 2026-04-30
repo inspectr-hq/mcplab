@@ -185,11 +185,24 @@ function resolveReferences(
         missingScenarioRefs.push(ref);
         continue;
       }
-      if (seenScenarioIds.has(scenario.id)) {
-        throw new Error(`Duplicate scenario id detected while resolving refs: ${scenario.id}`);
+      const scenarioCopy: Scenario = {
+        ...scenario,
+        servers: Array.isArray(scenario.servers) ? [...scenario.servers] : [],
+        ...(scenario.mcp_servers ? { mcp_servers: [...scenario.mcp_servers] } : {})
+      };
+      const rawOverlayMcpServers = (entry as { mcp_servers?: unknown }).mcp_servers;
+      if (Array.isArray(rawOverlayMcpServers)) {
+        scenarioCopy.mcp_servers = rawOverlayMcpServers as ServerListEntry[];
+        if (rawOverlayMcpServers.length === 0) {
+          // Explicit empty overlay clears inherited runtime server bindings.
+          scenarioCopy.servers = [];
+        }
       }
-      seenScenarioIds.add(scenario.id);
-      scenarios.push(scenario);
+      if (seenScenarioIds.has(scenarioCopy.id)) {
+        throw new Error(`Duplicate scenario id detected while resolving refs: ${scenarioCopy.id}`);
+      }
+      seenScenarioIds.add(scenarioCopy.id);
+      scenarios.push(scenarioCopy);
       continue;
     }
 
@@ -440,9 +453,23 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
   const normalizedScenarios: ScenarioListEntry[] = [];
   for (const scenario of scenariosInput) {
     if (isScenarioRefEntry(scenario)) {
+      const rawRefScenario = scenario as unknown as Record<string, unknown>;
       const ref = String((scenario as ScenarioRefEntry).ref ?? '').trim();
       if (!ref) throw new Error('Invalid config: scenario ref must be a non-empty id');
-      normalizedScenarios.push({ ref });
+      const invalidKeys = Object.keys(rawRefScenario).filter(
+        (key) => key !== 'ref' && key !== 'mcp_servers'
+      );
+      if (invalidKeys.length > 0) {
+        throw new Error(
+          `Invalid config: referenced scenario "${ref}" contains unsupported fields: ${invalidKeys.join(', ')}`
+        );
+      }
+      const rawMcpServers = (scenario as { mcp_servers?: unknown }).mcp_servers;
+      const normalizedRefScenario: ScenarioRefEntry = { ref };
+      if (Array.isArray(rawMcpServers)) {
+        normalizedRefScenario.mcp_servers = normalizeMcpServerEntries(rawMcpServers);
+      }
+      normalizedScenarios.push(normalizedRefScenario);
       continue;
     }
     const rawScenario = scenario as Scenario & {
@@ -472,30 +499,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
     // Propagate mcp_servers if present in raw YAML
     const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
     if (Array.isArray(rawMcpServers)) {
-      const normalizedMcpServers: ServerListEntry[] = [];
-      for (const entry of rawMcpServers) {
-        if (isServerRefEntry(entry as ServerListEntry)) {
-          const ref = String((entry as ServerRefEntry).ref ?? '').trim();
-          if (!ref) throw new Error('Invalid config: mcp_servers ref must be a non-empty id');
-          normalizedMcpServers.push({ ref });
-        } else {
-          const inlineEntry = entry as ServerInlineEntry;
-          const id = String(inlineEntry.id ?? '').trim();
-          if (!id)
-            throw new Error('Invalid config: inline mcp_servers entry is missing required id');
-          if (!inlineEntry.transport)
-            throw new Error(`Invalid config: mcp_servers entry "${id}" is missing transport`);
-          if (!inlineEntry.url)
-            throw new Error(`Invalid config: mcp_servers entry "${id}" is missing url`);
-          normalizedMcpServers.push({
-            id,
-            transport: inlineEntry.transport,
-            url: inlineEntry.url,
-            auth: inlineEntry.auth
-          });
-        }
-      }
-      nextScenario.mcp_servers = normalizedMcpServers;
+      nextScenario.mcp_servers = normalizeMcpServerEntries(rawMcpServers);
     }
     normalizedScenarios.push(nextScenario);
   }
@@ -768,4 +772,34 @@ function isAgentRefEntry(entry: AgentListEntry): entry is AgentRefEntry {
 
 function isServerRefEntry(entry: ServerListEntry): entry is ServerRefEntry {
   return Boolean(entry && typeof entry === 'object' && 'ref' in entry);
+}
+
+function normalizeMcpServerEntries(rawMcpServers: unknown[]): ServerListEntry[] {
+  const normalizedMcpServers: ServerListEntry[] = [];
+  for (const entry of rawMcpServers) {
+    if (isServerRefEntry(entry as ServerListEntry)) {
+      const ref = String((entry as ServerRefEntry).ref ?? '').trim();
+      if (!ref) throw new Error('Invalid config: mcp_servers ref must be a non-empty id');
+      normalizedMcpServers.push({ ref });
+    } else {
+      const inlineEntry = entry as ServerInlineEntry;
+      const id = String(inlineEntry.id ?? '').trim();
+      if (!id) {
+        throw new Error('Invalid config: inline mcp_servers entry is missing required id');
+      }
+      if (!inlineEntry.transport) {
+        throw new Error(`Invalid config: mcp_servers entry "${id}" is missing transport`);
+      }
+      if (!inlineEntry.url) {
+        throw new Error(`Invalid config: mcp_servers entry "${id}" is missing url`);
+      }
+      normalizedMcpServers.push({
+        id,
+        transport: inlineEntry.transport,
+        url: inlineEntry.url,
+        auth: inlineEntry.auth
+      });
+    }
+  }
+  return normalizedMcpServers;
 }
