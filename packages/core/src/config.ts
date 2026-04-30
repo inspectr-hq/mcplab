@@ -461,7 +461,9 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       );
       if (invalidKeys.length > 0) {
         throw new Error(
-          `Invalid config: referenced scenario "${ref}" contains unsupported fields: ${invalidKeys.join(', ')}`
+          `Invalid config: referenced scenario "${ref}" contains unsupported fields: ${invalidKeys.join(
+            ', '
+          )}`
         );
       }
       const rawMcpServers = (scenario as { mcp_servers?: unknown }).mcp_servers;

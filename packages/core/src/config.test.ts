@@ -348,7 +348,13 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'eval.yaml');
       writeFileSync(
         configPath,
-        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: kpi-api-stage'].join('\n'),
+        [
+          'agents: []',
+          'scenarios:',
+          '  - ref: add-calculations',
+          '    mcp_servers:',
+          '      - ref: kpi-api-stage'
+        ].join('\n'),
         'utf8'
       );
 
@@ -383,7 +389,13 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'eval.yaml');
       writeFileSync(
         configPath,
-        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: kpi-api-stage'].join('\n'),
+        [
+          'agents: []',
+          'scenarios:',
+          '  - ref: add-calculations',
+          '    mcp_servers:',
+          '      - ref: kpi-api-stage'
+        ].join('\n'),
         'utf8'
       );
 
@@ -453,7 +465,13 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'eval.yaml');
       writeFileSync(
         configPath,
-        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    mcp_servers:', '      - ref: missing-server'].join('\n'),
+        [
+          'agents: []',
+          'scenarios:',
+          '  - ref: add-calculations',
+          '    mcp_servers:',
+          '      - ref: missing-server'
+        ].join('\n'),
         'utf8'
       );
 
@@ -478,7 +496,9 @@ describe('loadConfig normalization', () => {
       const configPath = join(dir, 'eval.yaml');
       writeFileSync(
         configPath,
-        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    prompt: should-fail'].join('\n'),
+        ['agents: []', 'scenarios:', '  - ref: add-calculations', '    prompt: should-fail'].join(
+          '\n'
+        ),
         'utf8'
       );
 
@@ -522,7 +542,9 @@ describe('loadConfig normalization', () => {
       );
 
       const { config } = loadConfig(configPath);
-      expect(config.scenarios.find((s) => s.id === 'add-calculations')?.servers).toEqual(['shared']);
+      expect(config.scenarios.find((s) => s.id === 'add-calculations')?.servers).toEqual([
+        'shared'
+      ]);
       expect(config.servers['shared']).toBeTruthy();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -560,7 +582,9 @@ describe('loadConfig normalization', () => {
         'utf8'
       );
 
-      expect(() => loadConfig(configPath)).toThrow('Conflicting mcp_servers definition for id: shared');
+      expect(() => loadConfig(configPath)).toThrow(
+        'Conflicting mcp_servers definition for id: shared'
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

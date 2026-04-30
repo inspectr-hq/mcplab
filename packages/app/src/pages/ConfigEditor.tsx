@@ -49,7 +49,7 @@ const ConfigEditor = () => {
   const isView = !isNew && !!id;
   const existing = isView ? getConfig(id!) : undefined;
 
-  const [editing, setEditing] = useState(isNew);
+  const [editing, setEditing] = useState(isNew || tabParam === "edit");
   const [config, setConfig] = useState<EvalConfig>(() =>
     existing ? structuredClone(existing) : emptyConfig()
   );
@@ -75,6 +75,10 @@ const ConfigEditor = () => {
       setConfig(structuredClone(existing));
     }
   }, [existing, editing]);
+
+  useEffect(() => {
+    if (tabParam === "edit" && !isNew) setEditing(true);
+  }, [tabParam, isNew]);
 
   useEffect(() => {
     let active = true;
@@ -329,9 +333,7 @@ const ConfigEditor = () => {
       const updatedDisplayName = updated.configName?.trim() || updated.name;
       toast({ title: "MCP Evaluation Updated", description: `"${updatedDisplayName}" has been updated.` });
       setEditing(false);
-      if (updated.id !== id) {
-        navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
-      }
+      navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
     }
   };
 
@@ -743,7 +745,7 @@ const ConfigEditor = () => {
         </div>
         <div className="flex gap-2 shrink-0">
           {isView && !editing && (
-            <Button size="sm" onClick={() => setEditing(true)}>Edit</Button>
+            <Button size="sm" onClick={() => { setEditing(true); navigate(`${configBasePath}/edit`); }}>Edit</Button>
           )}
           {isView && !editing && existing && !isBrokenConfig && (
             <Button size="sm" variant="outline" asChild>
@@ -762,7 +764,7 @@ const ConfigEditor = () => {
           {editing && (
             <>
               {!isNew && (
-                <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); }}>Cancel</Button>
+                <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); navigate(configBasePath); }}>Cancel</Button>
               )}
                 <Button size="sm" onClick={() => void handleSave()}>
                   <Save className="mr-1.5 h-3.5 w-3.5" />Save

@@ -143,7 +143,9 @@ function toUiServerConfigFromMcpEntry(
         : undefined,
     apiKeyHeaderName: auth?.type === 'api_key' ? String(auth.header_name || '') : undefined,
     oauthClientId:
-      auth?.type === 'oauth_authorization_code' ? String(auth.client_id || '') || undefined : undefined,
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.client_id || '') || undefined
+        : undefined,
     oauthClientSecret:
       auth?.type === 'oauth_authorization_code'
         ? String(auth.client_secret || '') || undefined
@@ -165,7 +167,9 @@ function toUiServerConfigFromMcpEntry(
         ? String(auth.authorization_url || '') || undefined
         : undefined,
     oauthTokenEndpoint:
-      auth?.type === 'oauth_authorization_code' ? String(auth.token_url || '') || undefined : undefined,
+      auth?.type === 'oauth_authorization_code'
+        ? String(auth.token_url || '') || undefined
+        : undefined,
     oauthTokenUrl:
       auth?.type === 'oauth_client_credentials' ? String(auth.token_url || '') : undefined,
     oauthClientIdEnv:
@@ -173,7 +177,9 @@ function toUiServerConfigFromMcpEntry(
     oauthClientSecretEnv:
       auth?.type === 'oauth_client_credentials' ? String(auth.client_secret_env || '') : undefined,
     oauthAudience:
-      auth?.type === 'oauth_client_credentials' ? String(auth.audience || '') || undefined : undefined
+      auth?.type === 'oauth_client_credentials'
+        ? String(auth.audience || '') || undefined
+        : undefined
   };
   return { id, server };
 }
@@ -289,13 +295,18 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       const mcpServers = scenario.mcp_servers;
       const mappedMcpServers: ServerEntry[] | undefined = Array.isArray(mcpServers)
         ? mcpServers.flatMap((entry: Record<string, unknown>) => {
-            if ('ref' in entry && entry.ref) return [{ kind: 'referenced' as const, ref: String(entry.ref) }];
+            if ('ref' in entry && entry.ref)
+              return [{ kind: 'referenced' as const, ref: String(entry.ref) }];
             const mapped = toUiServerConfigFromMcpEntry(entry);
             if (mapped) return [{ kind: 'inline' as const, server: mapped.server }];
             return [];
           })
         : undefined;
-      scenarioEntries.push({ kind: 'referenced', ref, ...(mappedMcpServers ? { mcpServers: mappedMcpServers } : {}) });
+      scenarioEntries.push({
+        kind: 'referenced',
+        ref,
+        ...(mappedMcpServers ? { mcpServers: mappedMcpServers } : {})
+      });
       return;
     }
     const evalRules: EvalRule[] = [];
