@@ -14,6 +14,12 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import {
+  buildRelativePathBySourcePath,
+  buildScenarioLabelByConfigPath,
+  formatQueueConfigPath,
+  formatQueueScenarioLabel
+} from "@/lib/run-queue-display";
 import type { QueueEntry } from "@/lib/data-sources/types";
 import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
 
@@ -57,6 +63,14 @@ const RunEvaluation = () => {
     ? `/results/${encodeURIComponent(normalizedRunId)}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`
     : "/results";
   const selectedConfig = configs.find((item) => item.id === configId);
+  const queueRelativePathBySourcePath = useMemo(
+    () => buildRelativePathBySourcePath(configs),
+    [configs]
+  );
+  const queueScenarioLabelByConfigPath = useMemo(
+    () => buildScenarioLabelByConfigPath(configs, libraryScenarios),
+    [configs, libraryScenarios]
+  );
   const requestedConfigId = searchParams.get("configId");
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
@@ -792,7 +806,19 @@ const RunEvaluation = () => {
                 >
                   <div className="min-w-0 flex items-center gap-2">
                     <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Running</span>
-                    <span className="font-mono text-xs">{activeQueueEntry.runParams.configPath.split("/").pop() ?? activeQueueEntry.runParams.configPath}</span>
+                    <span className="text-xs font-bold">
+                      {formatQueueScenarioLabel(
+                        activeQueueEntry.runParams.scenarioIds,
+                        queueScenarioLabelByConfigPath,
+                        activeQueueEntry.runParams.configPath
+                      )}
+                    </span>
+                    <span className="font-mono text-xs">
+                      {formatQueueConfigPath(
+                        activeQueueEntry.runParams.configPath,
+                        queueRelativePathBySourcePath
+                      )}
+                    </span>
                     {activeQueueEntry.runParams.agents && (
                       <span className="text-xs text-muted-foreground">
                         agents: {activeQueueEntry.runParams.agents.join(", ")}
@@ -822,7 +848,15 @@ const RunEvaluation = () => {
                 </div>
               )}
               {queuedJobs.map((entry, i) => {
-                const configName = entry.runParams.configPath.split("/").pop() ?? entry.runParams.configPath;
+                const configName = formatQueueConfigPath(
+                  entry.runParams.configPath,
+                  queueRelativePathBySourcePath
+                );
+                const scenarioLabel = formatQueueScenarioLabel(
+                  entry.runParams.scenarioIds,
+                  queueScenarioLabelByConfigPath,
+                  entry.runParams.configPath
+                );
                 const isBlocked = entry.status === "blocked_auth";
                 return (
                   <div key={entry.jobId} className={`flex items-center justify-between rounded-md border p-2 text-sm ${isBlocked ? "border-yellow-500/40 bg-yellow-500/5" : ""}`}>
@@ -832,6 +866,7 @@ const RunEvaluation = () => {
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
                       )}
+                      <span className="text-xs font-bold">{scenarioLabel}</span>
                       <span className="font-mono text-xs">{configName}</span>
                       {isBlocked && (entry.requiredServers ?? []).length > 0 && (
                         <span className="text-xs text-yellow-700 dark:text-yellow-400">
