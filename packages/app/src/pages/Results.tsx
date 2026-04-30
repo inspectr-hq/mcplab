@@ -46,49 +46,8 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import { useResultAssistant } from "@/hooks/use-result-assistant";
 import { toast } from "@/hooks/use-toast";
 import { formatAssistantToolName } from "@/lib/assistant-tool-name";
+import { buildRunScopeSummary, type RunScopeSummary } from "@/lib/run-scope-summary";
 import type { EvalResult } from "@/types/eval";
-
-type RunScopeSummary = {
-  scenarioCount: number;
-  agentCount: number;
-  scopePreview: string;
-  modelSummary: string;
-};
-
-function runScopeSummary(run: EvalResult): RunScopeSummary {
-  const scenarioLabels = Array.from(
-    new Map(
-      run.scenarios
-        .map((scenario) => {
-          const id = String(scenario.scenarioId ?? "").trim();
-          const name = String(scenario.scenarioName ?? "").trim();
-          if (!id && !name) return null;
-          return [id || name, name || id] as const;
-        })
-        .filter((entry): entry is readonly [string, string] => Boolean(entry))
-    ).values()
-  );
-  const agentNames = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentName).filter(Boolean)));
-  const models = Array.from(
-    new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
-  );
-  const scenarioPreview = scenarioLabels.slice(0, 2).join(", ");
-  const scenarioRemainder = scenarioLabels.length > 2 ? ` +${scenarioLabels.length - 2}` : "";
-  const modelPreview = models.slice(0, 2).join(", ");
-  const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
-  const evalName = run.configName?.trim() || "";
-  const configPath = run.configPath?.trim() || "";
-  const evalLabel =
-    evalName && configPath
-      ? `${evalName} · ${configPath}`
-      : evalName || configPath;
-  return {
-    scenarioCount: scenarioLabels.length,
-    agentCount: agentNames.length,
-    scopePreview: evalLabel || (scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a"),
-    modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
-  };
-}
 
 const RESULT_ASSISTANT_SNIPPETS = [
   {
@@ -281,7 +240,7 @@ const Results = () => {
   const runScopesById = useMemo(() => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
-      map.set(run.id, runScopeSummary(run));
+      map.set(run.id, buildRunScopeSummary(run));
     }
     return map;
   }, [sorted]);

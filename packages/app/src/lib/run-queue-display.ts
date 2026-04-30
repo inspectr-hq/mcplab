@@ -15,6 +15,16 @@ export function buildRelativePathBySourcePath(configs: EvalConfig[]): Map<string
   return new Map<string, string>(pairs);
 }
 
+export function buildEvalNameBySourcePath(configs: EvalConfig[]): Map<string, string> {
+  const pairs = configs
+    .filter(
+      (cfg): cfg is EvalConfig & { sourcePath: string } =>
+        typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0
+    )
+    .map((cfg) => [cfg.sourcePath, cfg.configName?.trim() || cfg.name] as const);
+  return new Map<string, string>(pairs);
+}
+
 export function buildScenarioLabelByConfigPath(
   configs: EvalConfig[],
   libraryScenarios: EvalConfig["scenarios"]

@@ -15,6 +15,7 @@ import { useLibraries } from "@/contexts/LibraryContext";
 import { toast } from "@/hooks/use-toast";
 import { isUiFeatureEnabled } from "@/lib/feature-flags";
 import {
+  buildEvalNameBySourcePath,
   buildRelativePathBySourcePath,
   buildScenarioLabelByConfigPath,
   formatQueueConfigPath,
@@ -67,15 +68,10 @@ const RunEvaluation = () => {
     () => buildRelativePathBySourcePath(configs),
     [configs]
   );
-  const queueEvalNameBySourcePath = useMemo(() => {
-    const pairs = configs
-      .filter(
-        (cfg): cfg is typeof cfg & { sourcePath: string } =>
-          typeof cfg.sourcePath === "string" && cfg.sourcePath.trim().length > 0
-      )
-      .map((cfg) => [cfg.sourcePath, cfg.configName?.trim() || cfg.name] as const);
-    return new Map<string, string>(pairs);
-  }, [configs]);
+  const queueEvalNameBySourcePath = useMemo(
+    () => buildEvalNameBySourcePath(configs),
+    [configs]
+  );
   const queueScenarioLabelByConfigPath = useMemo(
     () => buildScenarioLabelByConfigPath(configs, libraryScenarios),
     [configs, libraryScenarios]
