@@ -1,3 +1,4 @@
+import React from 'react';
 import { Github } from "lucide-react";
 import IconInspectr from "@/components/ui/IconInspectr";
 

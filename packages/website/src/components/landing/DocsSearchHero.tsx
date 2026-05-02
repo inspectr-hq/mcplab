@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import DocsSearch from '@/components/docs/DocsSearch';

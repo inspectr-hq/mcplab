@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect, useState } from 'react';
 import { Menu, X, Search, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';

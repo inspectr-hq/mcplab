@@ -1,3 +1,4 @@
+import React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import Prism from '@/lib/prism-setup';

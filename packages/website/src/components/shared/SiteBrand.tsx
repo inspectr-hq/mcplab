@@ -1,3 +1,4 @@
+import React from 'react';
 import IconInspectr from '@/components/ui/IconInspectr';
 
 interface SiteBrandProps {
