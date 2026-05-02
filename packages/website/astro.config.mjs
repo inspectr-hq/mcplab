@@ -1,6 +1,5 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
-import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
 import path from 'path';
 
@@ -13,7 +12,7 @@ export default defineConfig({
     '/docs/usage/': '/docs/cli/running-evaluations/',
     '/docs/app-mode/': '/docs/app/getting-started/',
   },
-  integrations: [react(), tailwind(), sitemap()],
+  integrations: [react(), sitemap()],
   server: {
     host: '::',
     port: 8558,
