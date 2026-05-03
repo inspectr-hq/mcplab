@@ -626,7 +626,11 @@ const Results = () => {
                             : "border-border/80 bg-background shadow-sm"
                     }`}
                   >
-                    <MarkdownContent text={message.text} className="text-sm" />
+                    {isUser ? (
+                      <p className="whitespace-pre-wrap">{message.text}</p>
+                    ) : (
+                      <MarkdownContent text={message.text} className="text-sm" />
+                    )}
                   </div>
                   {isUser && (
                     <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
