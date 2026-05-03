@@ -650,13 +650,13 @@ const Compare = () => {
                       {sortIcon("passRate")}
                     </button>
                   </TableHead>
-                <TableHead>
+                <TableHead className="text-right">
                   <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
                     Scenarios
                     {sortIcon("scenarios")}
                   </button>
                 </TableHead>
-                <TableHead>Agents</TableHead>
+                <TableHead className="text-right">Agents</TableHead>
                 <TableHead className="w-[140px] text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -697,8 +697,8 @@ const Compare = () => {
                       </div>
                     </TableCell>
                     <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
-                    <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
-                    <TableCell className="font-mono text-sm">
+                    <TableCell className="text-right font-mono text-sm">{r.totalScenarios}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}
                     </TableCell>
                     <TableCell className="text-right">
@@ -723,7 +723,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "runs" && selectedRuns.length === 0 && (
+      {mode === "runs" && selectedRuns.length < 2 && (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm font-medium">No runs selected</p>

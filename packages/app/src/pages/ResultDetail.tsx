@@ -1630,7 +1630,11 @@ const ResultDetail = () => {
                             {isTool ? "Tool" : "Assistant"}
                           </p>
                         )}
-                        <MarkdownContent text={message.text} className="text-sm" />
+                        {isUser ? (
+                          <p className="whitespace-pre-wrap">{message.text}</p>
+                        ) : (
+                          <MarkdownContent text={message.text} className="text-sm" />
+                        )}
                         {canShowHandoff && (
                           <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                             <Button

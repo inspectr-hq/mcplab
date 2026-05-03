@@ -83,4 +83,7 @@ Default pre-registered client:
 - `mcplab_list_library`
 - `mcplab_get_library_item`
 - `mcplab_run_eval`
+- `mcplab_results_search`
+- `mcplab_results_context`
+- `mcplab_results_index`
 - `mcplab_read_run_artifact`

@@ -10,6 +10,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { useConfigs } from "@/contexts/ConfigContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import type { EvalResult } from "@/types/eval";
+import { buildRunScopeSummary } from "@/lib/run-scope-summary";
 
 const Dashboard = () => {
   const { configs } = useConfigs();
@@ -54,27 +55,16 @@ const Dashboard = () => {
     return sorted;
   }, [results, sortBy, sortDir]);
 
+  const formatToolTokenTotal = (result: EvalResult) => {
+    const total = result.toolTokenUsage?.totalTokens;
+    return typeof total === "number" ? total.toLocaleString() : "n/a";
+  };
+
   const chartData = [...recentRuns].reverse().map((r) => ({
     date: new Date(r.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     passRate: Math.round(r.overallPassRate * 100),
     latency: r.avgLatency,
   }));
-
-  const runScopeSummary = (r: EvalResult) => {
-    const scenarioIds = Array.from(new Set(r.scenarios.map((s) => s.scenarioId).filter(Boolean)));
-    const agentNames = Array.from(new Set(r.scenarios.map((s) => s.agentName).filter(Boolean)));
-    const models = Array.from(new Set(r.scenarios.map((s) => s.model).filter((m): m is string => Boolean(m))));
-    const scenarioPreview = scenarioIds.slice(0, 2).join(", ");
-    const scenarioRemainder = scenarioIds.length > 2 ? ` +${scenarioIds.length - 2}` : "";
-    const modelPreview = models.slice(0, 2).join(", ");
-    const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : "";
-    return {
-      scenarioCount: scenarioIds.length,
-      agentCount: agentNames.length,
-      scenarioPreview: scenarioPreview ? `${scenarioPreview}${scenarioRemainder}` : "n/a",
-      modelSummary: modelPreview ? `${modelPreview}${modelRemainder}` : ""
-    };
-  };
 
   return (
     <div className="space-y-6">
@@ -182,6 +172,8 @@ const Dashboard = () => {
                       )}
                     </button>
                   </TableHead>
+                  <TableHead className="text-right">Avg Tool Calls</TableHead>
+                  <TableHead className="text-right">Tool Tokens</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -194,14 +186,14 @@ const Dashboard = () => {
                     </TableCell>
                     <TableCell className="text-[11px] text-muted-foreground">
                       {(() => {
-                        const scope = runScopeSummary(run);
+                        const scope = buildRunScopeSummary(run);
                         return (
                           <div className="space-y-0.5">
                             <div>
                               Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
                               {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scenarioPreview}</div>
+                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
                           </div>
                         );
                       })()}
@@ -214,6 +206,8 @@ const Dashboard = () => {
                     </TableCell>
                     <TableCell><PassRateBadge rate={run.overallPassRate} /></TableCell>
                     <TableCell className="text-right font-mono text-sm">{run.totalScenarios}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{run.avgToolCalls.toFixed(0)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatToolTokenTotal(run)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

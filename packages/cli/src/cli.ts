@@ -40,6 +40,17 @@ import {
   loadSnapshot,
   saveSnapshot
 } from './snapshot.js';
+import { loadOrBuildSearchIndex } from './results/indexer.js';
+import { searchDocs } from './results/search.js';
+import {
+  formatContext,
+  formatRunList,
+  formatSearchHits,
+  listRuns,
+  showRun
+} from './results/format.js';
+import type { ResultSource } from './results/types.js';
+import { getContext } from './results/context.js';
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   ?.version as string;
@@ -465,6 +476,171 @@ program
           } else {
             console.log(formatSnapshotComparisonTable(comparison));
           }
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  );
+
+program
+  .command('results')
+  .description('Query evaluation run artifacts for LLM-first workflows')
+  .addCommand(
+    new Command('list')
+      .description('List available evaluation runs')
+      .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
+      .option('--format <format>', 'Output format: table|json', 'table')
+      .action((options) => {
+        try {
+          const format = String(options.format) === 'json' ? 'json' : 'table';
+          const rows = listRuns(resolve(String(options.runsDir)));
+          console.log(formatRunList(rows, format));
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    new Command('show')
+      .description('Show run results in json or markdown')
+      .requiredOption('--run <runId>', 'Run id under runs dir')
+      .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
+      .option('--format <format>', 'Output format: json|markdown', 'json')
+      .action((options) => {
+        try {
+          const format = String(options.format) === 'markdown' ? 'markdown' : 'json';
+          const output = showRun(resolve(String(options.runsDir)), String(options.run), format);
+          console.log(output);
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    new Command('index')
+      .description('Build or refresh local results search index')
+      .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
+      .option('--rebuild', 'Force full rebuild')
+      .action((options) => {
+        try {
+          const runsDir = resolve(String(options.runsDir));
+          const docs = loadOrBuildSearchIndex(runsDir, Boolean(options.rebuild));
+          console.log(kleur.green(`Indexed ${docs.length} searchable docs.`));
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    new Command('search')
+      .description('Search run artifacts and return compact structured hits')
+      .argument('<query>', 'Search query')
+      .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
+      .option('--status <status>', 'Filter: passed|failed|all', 'all')
+      .option('--agent <agent>', 'Filter by agent id')
+      .option('--scenario <id>', 'Filter by scenario id')
+      .option(
+        '--source <sources>',
+        'Comma-separated sources: results,trace,summary',
+        'results,trace,summary'
+      )
+      .option('--limit <n>', 'Maximum results', '10')
+      .option('--format <format>', 'Output format: json|jsonl|markdown', 'json')
+      .action((query, options) => {
+        try {
+          const queryText = String(query).trim();
+          if (!queryText) {
+            throw new Error('query must not be empty');
+          }
+          const status = String(options.status) as 'passed' | 'failed' | 'all';
+          if (!['passed', 'failed', 'all'].includes(status)) {
+            throw new Error('status must be passed, failed, or all');
+          }
+          const source = String(options.source ?? '')
+            .split(',')
+            .map((v) => v.trim())
+            .filter(Boolean) as ResultSource[];
+          if (source.length === 0) {
+            throw new Error('source must include at least one of results, trace, summary');
+          }
+          const sourceSet = new Set(source);
+          for (const value of sourceSet) {
+            if (!['results', 'trace', 'summary'].includes(value)) {
+              throw new Error(`invalid source: ${value}`);
+            }
+          }
+          const limit = Number(options.limit);
+          if (Number.isNaN(limit) || limit <= 0) {
+            throw new Error('limit must be a positive number');
+          }
+          const format = String(options.format);
+          if (!['json', 'jsonl', 'markdown'].includes(format)) {
+            throw new Error('format must be json, jsonl, or markdown');
+          }
+          const runsDir = resolve(String(options.runsDir));
+          const docs = loadOrBuildSearchIndex(runsDir, false);
+          const hits = searchDocs(docs, {
+            query: queryText,
+            limit,
+            status,
+            source: [...sourceSet],
+            scenario: options.scenario ? String(options.scenario) : undefined,
+            agent: options.agent ? String(options.agent) : undefined
+          });
+          console.log(formatSearchHits(hits, format as 'json' | 'jsonl' | 'markdown'));
+        } catch (err: any) {
+          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
+          process.exit(1);
+        }
+      })
+  )
+  .addCommand(
+    new Command('context')
+      .description('Fetch focused context for a scenario/run')
+      .requiredOption('--run <runId>', 'Run id under runs dir')
+      .requiredOption('--scenario <id>', 'Scenario id')
+      .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
+      .option('--source <source>', 'Source: results|trace|summary')
+      .option('--around <line>', 'Trace line to center context around')
+      .option('--before <n>', 'Lines before around line', '20')
+      .option('--after <n>', 'Lines after around line', '20')
+      .option('--format <format>', 'Output format: json|markdown', 'markdown')
+      .action((options) => {
+        try {
+          const sourceRaw = options.source ? String(options.source) : undefined;
+          if (sourceRaw && !['results', 'trace', 'summary'].includes(sourceRaw)) {
+            throw new Error('source must be results, trace, or summary');
+          }
+          const around = options.around !== undefined ? Number(options.around) : undefined;
+          if (around !== undefined && (Number.isNaN(around) || around <= 0)) {
+            throw new Error('around must be a positive integer');
+          }
+          if (around !== undefined && sourceRaw && sourceRaw !== 'trace') {
+            throw new Error('around can only be used when source=trace');
+          }
+          const before = Number(options.before);
+          const after = Number(options.after);
+          if (Number.isNaN(before) || before < 0 || Number.isNaN(after) || after < 0) {
+            throw new Error('before/after must be non-negative integers');
+          }
+          const result = getContext({
+            runsDir: resolve(String(options.runsDir)),
+            runId: String(options.run),
+            scenarioId: String(options.scenario),
+            source: sourceRaw as ResultSource | undefined,
+            around,
+            before,
+            after
+          });
+          const format = String(options.format);
+          if (!['json', 'markdown'].includes(format)) {
+            throw new Error('format must be json or markdown');
+          }
+          console.log(formatContext(result, format as 'json' | 'markdown'));
         } catch (err: any) {
           console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
           process.exit(1);

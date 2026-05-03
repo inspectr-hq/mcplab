@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report/results`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
 ---
 
 # MCPLab Assistant
@@ -59,7 +59,6 @@ When the request is about analyzing results, the assistant must:
 1. Prefer MCP analysis tools first to reduce context/token usage:
 - `mcplab_aggregate_runs` for multi-run trends and compact metric summaries
 - `mcplab_compare_runs` for structured run-to-run regressions/improvements
-- `mcplab_search_runs` to locate runs by filter criteria
 - `mcplab_search_markdown_reports` to locate report files
 - `mcplab_search_tool_analysis_results` to query stored tool analysis data
 2. Read artifacts directly only when needed:
@@ -102,6 +101,7 @@ When the request is about analyzing results, the assistant must:
 - Execute evaluations -> `mcplab run`
 - Open local UI/API bridge -> `mcplab app`
 - Rebuild HTML report from existing run -> `mcplab report`
+- Query run artifacts in LLM-friendly format -> `mcplab results`
 2. Use only documented flags from CLI source.
 3. For model comparison, use `mcplab run --agents ...`.
 4. If a run fails, capture exact error and switch to troubleshooting workflow.
@@ -122,17 +122,20 @@ When the request is about analyzing results, the assistant must:
 
 ## Output Analysis Workflow
 
-1. Start with MCP comparison tools:
+1. Start with LLM-first MCP results triage:
+- `mcplab_results_search` for compact candidate hits
+- `mcplab_results_context` for focused excerpts
+2. Use low-level artifact reads only when exact/raw evidence is required:
+- `mcplab_read_run_artifact` with optional `line_start`/`line_end`
+3. Then use MCP comparison tools for trend/delta analysis:
 - `mcplab_aggregate_runs` for historical trends
 - `mcplab_compare_runs` for deterministic run deltas
-2. Read run directory artifacts only when tool output is insufficient:
-- `results.json` for structured metrics and pass/fail
-- `summary.md` for quick human scan
-- `trace.jsonl` for call-by-call debugging
-- `report.html` for interactive investigation
-3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
-4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
-5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
+4. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
+5. Highlight regressions with concrete scenario IDs and observed behavior deltas.
+6. When quality drift is requested, compare deterministic run metrics first, then inspect targeted artifact excerpts (`results.json`, `trace.jsonl`) for output-level drift.
+
+Path ownership note:
+MCPLab MCP tools own base directories (runs/reports/tool-analysis/library roots). Provide logical IDs and relative filenames only; do not attempt to pass root directory overrides.
 
 ## Result Assistant Scopes
 
@@ -168,7 +171,7 @@ User request:
 
 Assistant behavior:
 1. Provide one `mcplab run --agents ...` command for comparison.
-2. Provide one follow-up analysis step using `results.json` and `report.html`.
+2. Provide one follow-up analysis step using `mcplab results search ...` then `mcplab results context ...`.
 
 ### Pattern 5: Historical Trend Request
 
@@ -178,7 +181,7 @@ User request:
 Assistant behavior:
 1. Use `mcplab_aggregate_runs` for compact trend metrics over selected runs.
 2. Use `mcplab_compare_runs` to identify deterministic regressions/improvements.
-3. If semantic output quality is requested, inspect `results.json` and targeted `trace.jsonl` entries for representative scenario deltas.
+3. If semantic output quality is requested, use `mcplab_results_search` then `mcplab_results_context` for representative scenario deltas; fallback to `mcplab_read_run_artifact` only if needed.
 4. Return top regressions first with scenario IDs and suggested next checks.
 
 ### Pattern 3: Failure Triage Request
@@ -197,7 +200,7 @@ User request:
 "Analyze this run and tell me why it failed."
 
 Assistant behavior:
-1. Read `results.json` first and list failing scenario IDs.
-2. Use `summary.md` for quick trend context.
-3. Use `trace.jsonl` only for failed/ambiguous scenarios to explain root cause.
+1. Start with `mcplab_results_search` to list likely failing scenarios.
+2. Use `mcplab_results_context` for focused scenario evidence.
+3. Use `mcplab_read_run_artifact` only when exact raw lines or full artifact slices are required.
 4. Return actionable fixes mapped scenario-by-scenario, with rerun command.

@@ -23,9 +23,18 @@ import {
   loadConfig,
   runAll,
   selectScenarios,
+  loadOrBuildSearchIndex,
+  indexNeedsRefresh,
+  getResultsIndexPaths,
+  resolveRunArtifactPath,
+  searchDocs,
+  getContext,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
+  type SearchDoc,
+  type SearchHit,
+  type ResultSource,
   type ScenarioRunTraceRecord,
   type TraceMessage,
   type TraceMessageContentBlock
@@ -70,6 +79,15 @@ type MarkdownReportListItem = {
   mtime: string;
 };
 
+type ServerOwnedRoots = {
+  reportsDir: string;
+  runsDir: string;
+  toolAnalysisDir: string;
+  bundleRoot: string;
+};
+
+const SERVER_OWNED_ROOTS: ServerOwnedRoots = resolveServerOwnedRoots();
+
 const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_MCP_PORT = 3011;
 const DEFAULT_MCP_HOST = '127.0.0.1';
@@ -94,6 +112,9 @@ const ResultsMetadataSchema = z
     mcp_server_versions: z.record(z.string())
   })
   .passthrough();
+
+const ResultsQueryStatusSchema = z.enum(['passed', 'failed', 'all']);
+const ResultsQuerySourceSchema = z.enum(['results', 'trace', 'summary']);
 
 const MetricSummarySchema = z.object({
   total_runs: z.number().int().nonnegative(),
@@ -162,10 +183,31 @@ const AgentEntrySchema = z.object({
   system: z.string().optional()
 });
 
+const LibraryServerEntryContentSchema = z
+  .object({
+    transport: z.string().optional(),
+    url: z.string().optional(),
+    auth: GenericObjectSchema.optional(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional()
+  })
+  .passthrough();
+
+const LibraryServerEntrySchema = z.object({
+  id: z.string(),
+  entry: LibraryServerEntryContentSchema.optional()
+});
+
+const LibraryAgentEntrySchema = z.object({
+  id: z.string(),
+  entry: AgentEntrySchema.optional()
+});
+
 const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
-  servers: z.union([z.array(z.object({ id: z.string() })), z.record(GenericObjectSchema)]),
-  agents: z.union([z.array(z.object({ id: z.string() })), z.record(AgentEntrySchema)]),
+  servers: z.array(LibraryServerEntrySchema),
+  agents: z.array(LibraryAgentEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
 
@@ -228,6 +270,45 @@ const ConfigSummarySchema = z.object({
     })
   )
 });
+
+const ResolvedScenarioSchema = z.object({
+  id: z.string(),
+  servers: z.array(z.string()),
+  agent: z.string().optional(),
+  prompt: z.string().optional(),
+  eval: z
+    .object({
+      type: z.string(),
+      assertions: z.array(z.string()).optional(),
+      rubric: GenericObjectSchema.optional()
+    })
+    .passthrough()
+    .optional(),
+  extract: z
+    .array(
+      z
+        .object({
+          name: z.string(),
+          from: z.string().optional(),
+          regex: z.string().optional(),
+          path: z.string().optional(),
+          expression: z.string().optional(),
+          transform: z.string().optional()
+        })
+        .passthrough()
+    )
+    .optional()
+});
+
+const RunDefaultsSchema = z
+  .object({
+    selected_agents: z.array(z.string()).optional(),
+    runs_per_scenario: z.number().int().positive().optional(),
+    timeout_ms: z.number().int().positive().optional(),
+    retries: z.number().int().nonnegative().optional(),
+    concurrency: z.number().int().positive().optional()
+  })
+  .passthrough();
 
 const ToolAnalysisListItemSchema = z.object({
   report_id: z.string(),
@@ -361,38 +442,109 @@ const WriteMarkdownReportSuccessSchema = z.object({
   workspace_root: z.string().describe('Workspace root used for path safety validation.')
 });
 
+const WriteMarkdownReportErrorCodeSchema = z.enum([
+  'PATH_ESCAPE',
+  'PERMISSION_DENIED',
+  'FILE_EXISTS',
+  'INVALID_EXTENSION',
+  'PARENT_DIR_MISSING',
+  'IO_ERROR'
+]);
+
 const WriteMarkdownReportErrorSchema = z.object({
   ok: z.literal(false),
-  error_code: z.enum([
-    'PATH_ESCAPE',
-    'PERMISSION_DENIED',
-    'FILE_EXISTS',
-    'INVALID_EXTENSION',
-    'PARENT_DIR_MISSING',
-    'IO_ERROR'
-  ]),
+  error_code: WriteMarkdownReportErrorCodeSchema,
   error_message: z.string(),
   attempted_path: z.string().optional(),
   violated_constraint: z.string().optional()
 });
 
-const GenerateServerEntryInputSchema = z
-  .object({
-    id: z.string(),
-    url: z.string(),
-    transport: z.enum(['http']).optional(),
-    auth_type: z.enum(['none', 'bearer', 'api_key', 'oauth_client_credentials']).optional(),
+const WriteMarkdownReportOutputSchema = z.object({
+  ok: z.boolean(),
+  path: z.string().optional(),
+  bytes: z.number().int().nonnegative().optional(),
+  chars: z.number().int().nonnegative().optional(),
+  overwritten: z.boolean().optional(),
+  workspace_root: z.string().optional(),
+  error_code: WriteMarkdownReportErrorCodeSchema.optional(),
+  error_message: z.string().optional(),
+  attempted_path: z.string().optional(),
+  violated_constraint: z.string().optional()
+});
+
+const SafeRelativePathSchema = z
+  .string()
+  .max(200)
+  .regex(
+    /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/,
+    'Must be a relative workspace path without ".." segments or absolute prefixes.'
+  );
+
+const GenerateServerEntryInputCoreSchema = z.object({
+  id: z.string().describe('Server id key (kebab-case recommended).'),
+  url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
+  transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).')
+});
+
+const GenerateServerEntryInputBaseSchema = GenerateServerEntryInputCoreSchema.extend({
+  auth_type: z
+    .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
+    .optional()
+    .describe('Authentication mode.'),
+  bearer_token: z
+    .string()
+    .optional()
+    .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
+  bearer_env: z.string().optional().describe('Env var for bearer token when auth_type=bearer.'),
+  api_key_header_name: z
+    .string()
+    .optional()
+    .describe('Header name for API key auth (default: X-API-Key).'),
+  api_key_value: z
+    .string()
+    .optional()
+    .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
+  oauth_token_url: z
+    .string()
+    .optional()
+    .describe('OAuth token URL when auth_type=oauth_client_credentials.'),
+  oauth_client_id_env: z.string().optional().describe('OAuth client id env var.'),
+  oauth_client_secret_env: z.string().optional().describe('OAuth client secret env var.'),
+  oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
+  oauth_audience: z.string().optional().describe('Optional OAuth audience.')
+});
+
+const GenerateServerEntryPublicInputSchema = z.union([
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.enum(['none']).optional()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('bearer'),
+    bearer_token: z.string(),
+    bearer_env: z.string().optional()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('bearer'),
     bearer_token: z.string().optional(),
-    bearer_env: z.string().optional(),
+    bearer_env: z.string()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('api_key'),
     api_key_header_name: z.string().optional(),
-    api_key_value: z.string().optional(),
-    oauth_token_url: z.string().optional(),
-    oauth_client_id_env: z.string().optional(),
-    oauth_client_secret_env: z.string().optional(),
+    api_key_value: z.string()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('oauth_client_credentials'),
+    oauth_token_url: z.string(),
+    oauth_client_id_env: z.string(),
+    oauth_client_secret_env: z.string(),
     oauth_scope: z.string().optional(),
     oauth_audience: z.string().optional()
   })
-  .superRefine((value, ctx) => {
+]);
+
+const GenerateServerEntryInputSchema = GenerateServerEntryInputBaseSchema.superRefine(
+  (value, ctx) => {
     const authType = value.auth_type ?? 'none';
     if (authType === 'bearer') {
       if (!value.bearer_token && !value.bearer_env) {
@@ -430,7 +582,8 @@ const GenerateServerEntryInputSchema = z
         });
       }
     }
-  });
+  }
+);
 
 export type SessionRuntime = {
   transport: StreamableHTTPServerTransport;
@@ -571,10 +724,12 @@ export function registerTools(server: McpServer): void {
     {
       description:
         'Write a Markdown (.md or .markdown) file to a path within the current workspace. Returns structured output with ok:true and the resolved path on success. On failure, returns ok:false with an error_code from: PATH_ESCAPE (path traversal attempt), FILE_EXISTS (file already exists and overwrite is false), PERMISSION_DENIED, PARENT_DIR_MISSING (create_dirs is false and parent does not exist), INVALID_EXTENSION (not .md or .markdown), IO_ERROR.',
-      outputSchema: z.union([WriteMarkdownReportSuccessSchema, WriteMarkdownReportErrorSchema]),
+      outputSchema: WriteMarkdownReportOutputSchema,
       inputSchema: {
         output_path: z
           .string()
+          .max(200)
+          .regex(/^[^\0]+\.(?:md|markdown)$/i, 'output_path must end with .md or .markdown.')
           .describe(
             "Target .md/.markdown path. Use a relative path (e.g. mcplab/reports/my-report.md) — relative paths are always safe and resolve against the server's working directory (process.cwd()). Absolute paths are accepted only if they stay inside that directory; any path that escapes it is rejected with error_code PATH_ESCAPE."
           ),
@@ -719,7 +874,11 @@ export function registerTools(server: McpServer): void {
         reports_dir: z.string(),
         run_id_filter: z.string().optional(),
         query: z.string().optional(),
+        offset: z.number().int().min(0),
+        limit: z.number().int().positive().max(200),
+        returned: z.number().int().nonnegative(),
         total_matching: z.number().int().nonnegative(),
+        next_offset: z.number().int().min(0).nullable(),
         items: z.array(
           z.object({
             path: z.string(),
@@ -731,10 +890,6 @@ export function registerTools(server: McpServer): void {
         )
       },
       inputSchema: {
-        reports_dir: z
-          .string()
-          .optional()
-          .describe('Markdown reports root (default mcplab/reports).'),
         run_id: z
           .string()
           .optional()
@@ -748,13 +903,19 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .max(200)
-          .optional()
-          .describe('Max reports to return (default 20).')
+          .default(20)
+          .describe('Max reports to return (default 20).'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe('Pagination offset into matching results (default 0).')
       }
     },
-    async ({ reports_dir, run_id, query, limit }) => {
+    async ({ run_id, query, limit, offset }) => {
       return withToolHandling(async () => {
-        const root = resolveMarkdownReportsDir(reports_dir);
+        const root = resolveMarkdownReportsDir();
         const all = listMarkdownReportsFromDisk(root);
         const runFilter = String(run_id ?? '').trim();
         const searchQuery = String(query ?? '')
@@ -772,12 +933,19 @@ export function registerTools(server: McpServer): void {
           const hay = `${item.path}\n${item.relativePath}\n${item.name}`.toLowerCase();
           return hay.includes(searchQuery);
         });
-        const capped = filtered.slice(0, limit ?? 20);
+        const start = Math.max(0, offset ?? 0);
+        const pageSize = limit ?? 20;
+        const capped = filtered.slice(start, start + pageSize);
+        const nextOffset = start + capped.length < filtered.length ? start + capped.length : null;
         return ok(`Found ${capped.length}/${filtered.length} markdown report(s) in ${root}`, {
           reports_dir: root,
           run_id_filter: runFilter || undefined,
           query: searchQuery || undefined,
+          offset: start,
+          limit: pageSize,
+          returned: capped.length,
           total_matching: filtered.length,
+          next_offset: nextOffset,
           items: capped
         });
       });
@@ -788,7 +956,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_read_markdown_report',
     {
       description:
-        'Read a saved markdown report by relative path (under mcplab/reports by default) or by workspace-relative path, with optional truncation.',
+        'Read a saved markdown report by reports-root-relative path (under mcplab/reports), with optional truncation.',
       outputSchema: {
         reports_dir: z.string(),
         path: z.string(),
@@ -800,15 +968,9 @@ export function registerTools(server: McpServer): void {
         content: z.string()
       },
       inputSchema: {
-        path: z
-          .string()
-          .describe(
-            'Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'
-          ),
-        reports_dir: z
-          .string()
-          .optional()
-          .describe('Markdown reports root (default mcplab/reports).'),
+        path: SafeRelativePathSchema.describe(
+          'Report path relative to the reports root (e.g. team/run-2026-05-03.md). Do not prefix with mcplab/reports/.'
+        ),
         max_chars: z
           .number()
           .int()
@@ -817,9 +979,10 @@ export function registerTools(server: McpServer): void {
           .describe('Optional truncation for markdown content preview (default 20000).')
       }
     },
-    async ({ path, reports_dir, max_chars }) => {
+    async ({ path, max_chars }) => {
       return withToolHandling(async () => {
-        const root = resolveMarkdownReportsDir(reports_dir);
+        validateWorkspaceRelativePath(path, 'path');
+        const root = resolveMarkdownReportsDir();
         const targetPath = resolveMarkdownReportPath(root, path);
         if (!isMarkdownReportExt(targetPath)) {
           throw new Error('path must point to a .md or .markdown file');
@@ -855,12 +1018,6 @@ export function registerTools(server: McpServer): void {
         'List reusable MCPLab library entries (servers, agents, scenarios) from a bundle root such as mcplab/ or examples/libraries/.',
       outputSchema: LibraryEntrySchema,
       inputSchema: {
-        bundleRoot: z
-          .string()
-          .optional()
-          .describe(
-            'Optional library bundle root. Defaults to mcplab/ or examples/libraries/ if present.'
-          ),
         kind: z
           .enum(['all', 'servers', 'agents', 'scenarios'])
           .optional()
@@ -871,9 +1028,9 @@ export function registerTools(server: McpServer): void {
           .describe('Include parsed YAML content for each item (larger output).')
       }
     },
-    async ({ bundleRoot, kind, includeContent }) => {
+    async ({ kind, includeContent }) => {
       return withToolHandling(async () => {
-        const root = resolveBundleRoot(bundleRoot);
+        const root = resolveBundleRoot();
         const data = readLibrary(root, Boolean(includeContent));
         const selectedKind = kind ?? 'all';
         const structured =
@@ -881,10 +1038,12 @@ export function registerTools(server: McpServer): void {
             ? data
             : {
                 bundleRoot: data.bundleRoot,
-                [selectedKind]: data[selectedKind]
+                servers: selectedKind === 'servers' ? data.servers : [],
+                agents: selectedKind === 'agents' ? data.agents : [],
+                scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
 
-        return ok(`Loaded MCPLab library from ${root}`, structured as Record<string, unknown>);
+        return ok(`Loaded MCPLab library from ${root}`, structured);
       });
     }
   );
@@ -903,14 +1062,13 @@ export function registerTools(server: McpServer): void {
         content: GenericObjectSchema
       },
       inputSchema: {
-        bundleRoot: z.string().optional().describe('Optional library bundle root path.'),
         kind: z.enum(['servers', 'agents', 'scenarios']).describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
     },
-    async ({ bundleRoot, kind, id }) => {
+    async ({ kind, id }) => {
       return withToolHandling(async () => {
-        const root = resolveBundleRoot(bundleRoot);
+        const root = resolveBundleRoot();
         const item = getLibraryItem(root, kind, id);
         return ok(`Loaded ${kind.slice(0, -1)} '${id}' from ${root}`, item);
       });
@@ -927,39 +1085,7 @@ export function registerTools(server: McpServer): void {
         entry: ServerEntrySchema,
         yaml: z.string()
       },
-      inputSchema: {
-        id: z.string().describe('Server id key (kebab-case recommended).'),
-        url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
-        transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).'),
-        auth_type: z
-          .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
-          .optional()
-          .describe('Authentication mode.'),
-        bearer_token: z
-          .string()
-          .optional()
-          .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
-        bearer_env: z
-          .string()
-          .optional()
-          .describe('Env var for bearer token when auth_type=bearer.'),
-        api_key_header_name: z
-          .string()
-          .optional()
-          .describe('Header name for API key auth (default: X-API-Key).'),
-        api_key_value: z
-          .string()
-          .optional()
-          .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
-        oauth_token_url: z
-          .string()
-          .optional()
-          .describe('OAuth token URL when auth_type=oauth_client_credentials.'),
-        oauth_client_id_env: z.string().optional().describe('OAuth client id env var.'),
-        oauth_client_secret_env: z.string().optional().describe('OAuth client secret env var.'),
-        oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
-        oauth_audience: z.string().optional().describe('Optional OAuth audience.')
-      }
+      inputSchema: GenerateServerEntryPublicInputSchema
     },
     async (input) => {
       return withToolHandling(async () => {
@@ -1105,34 +1231,28 @@ export function registerTools(server: McpServer): void {
         resolved_config: z.object({
           servers: z.record(GenericObjectSchema),
           agents: z.record(AgentEntrySchema),
-          scenarios: z.array(GenericObjectSchema),
-          run_defaults: GenericObjectSchema.optional()
+          scenarios: z.array(ResolvedScenarioSchema),
+          run_defaults: RunDefaultsSchema.optional()
         })
       },
       inputSchema: {
         config_path: z.string().describe('Path to MCPLab eval YAML config.'),
-        bundle_root: z
-          .string()
-          .optional()
-          .describe('Optional bundle root override for refs resolution.'),
         scenario_id: z
           .string()
           .optional()
           .describe('Optional single scenario id to validate selection.')
       }
     },
-    async ({ config_path, bundle_root, scenario_id }) => {
+    async ({ config_path, scenario_id }) => {
       return withToolHandling(async () => {
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: bundle_root ? resolve(bundle_root) : undefined
+          bundleRoot: resolveBundleRoot()
         });
         const selected = selectScenarios(loaded.config, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
           configPath: resolve(config_path),
-          bundleRoot: bundle_root
-            ? resolve(bundle_root)
-            : detectLikelyBundleRoot(resolve(config_path)),
+          bundleRoot: detectLikelyBundleRoot(resolve(config_path)),
           hash: loaded.hash,
           summary,
           resolved_config: selected
@@ -1168,27 +1288,19 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         config_path: z.string().describe('Path to MCPLab eval YAML config.'),
-        bundle_root: z
-          .string()
-          .optional()
-          .describe('Optional bundle root override for library refs.'),
         scenario_id: z.string().optional().describe('Optional scenario id to run.'),
         runs_per_scenario: z
           .number()
           .int()
           .positive()
           .optional()
-          .describe('Runs per scenario (default 1).'),
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Output directory for run artifacts (default mcplab/results/evaluation-runs).')
+          .describe('Runs per scenario (default 1).')
       }
     },
-    async ({ config_path, bundle_root, scenario_id, runs_per_scenario, runs_dir }) => {
+    async ({ config_path, scenario_id, runs_per_scenario }) => {
       return withToolHandling(async () => {
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: bundle_root ? resolve(bundle_root) : undefined
+          bundleRoot: resolveBundleRoot()
         });
         const selected = selectScenarios(loaded.config, scenario_id);
         const executable = expandConfigForAgents(selected, selected.run_defaults?.selected_agents);
@@ -1197,7 +1309,7 @@ export function registerTools(server: McpServer): void {
           scenarioId: scenario_id,
           configHash: loaded.hash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
-          runsDir: runs_dir ?? 'mcplab/results/evaluation-runs'
+          runsDir: resolveRunsDir()
         });
 
         const reportHtml = renderReport(results);
@@ -1241,62 +1353,6 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_search_runs',
-    {
-      description:
-        'Search MCPLab run artifact directories with results.json summary metrics. Use the optional query parameter to filter by run_id, path, or summary fields (case-insensitive substring). Set include_summary=false to skip reading results.json for faster listing.',
-      outputSchema: {
-        runsDir: z.string(),
-        query: z.string().optional(),
-        total_matching: z.number().int().nonnegative(),
-        runs: z.array(RunListEntrySchema)
-      },
-      inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
-        query: z
-          .string()
-          .optional()
-          .describe(
-            'Optional case-insensitive search query across run id/path and summary fields.'
-          ),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(100)
-          .default(10)
-          .describe('Max runs to return. Defaults to 10.'),
-        include_summary: z
-          .boolean()
-          .default(true)
-          .describe('Read results.json summary for each run when available. Defaults to true.')
-      }
-    },
-    async ({ runs_dir, query, limit, include_summary }) => {
-      return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
-        const entries = listRunsWithFallback(base, undefined, include_summary);
-        const searchQuery = String(query ?? '')
-          .trim()
-          .toLowerCase();
-        const filtered = searchQuery
-          ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
-          : entries;
-        const capped = filtered.slice(0, limit);
-        return ok(`Found ${filtered.length} run(s) in ${base}`, {
-          runsDir: base,
-          query: searchQuery || undefined,
-          total_matching: filtered.length,
-          runs: capped
-        });
-      });
-    }
-  );
-
-  registerTool(
     'mcplab_aggregate_runs',
     {
       description:
@@ -1324,10 +1380,6 @@ export function registerTools(server: McpServer): void {
         details: z.array(AggregateRowSchema).optional()
       }),
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_ids: z
           .array(z.string())
           .optional()
@@ -1362,19 +1414,9 @@ export function registerTools(server: McpServer): void {
           .describe('Include full grouped rows. Defaults to false (summary-first).')
       }
     },
-    async ({
-      runs_dir,
-      run_ids,
-      latest_n,
-      scenario_ids,
-      agents,
-      group_by,
-      top_n,
-      include_details
-    }) => {
+    async ({ run_ids, latest_n, scenario_ids, agents, group_by, top_n, include_details }) => {
       return withToolHandling(async () => {
         const loaded = loadRunsForAnalysis({
-          runsDirInput: runs_dir,
           runIds: run_ids,
           latestN: latest_n ?? 20
         });
@@ -1437,10 +1479,6 @@ export function registerTools(server: McpServer): void {
         details: z.array(CompareRowSchema).optional()
       }),
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         left_run_id: z.string().describe("Left run id or 'LATEST'."),
         right_run_id: z.string().describe("Right run id or 'LATEST'."),
         scenario_ids: z.array(z.string()).optional().describe('Optional scenario id filter.'),
@@ -1458,17 +1496,9 @@ export function registerTools(server: McpServer): void {
           .describe('Include full classification rows. Defaults to false (summary-first).')
       }
     },
-    async ({
-      runs_dir,
-      left_run_id,
-      right_run_id,
-      scenario_ids,
-      agents,
-      top_n,
-      include_details
-    }) => {
+    async ({ left_run_id, right_run_id, scenario_ids, agents, top_n, include_details }) => {
       return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
+        const base = resolveRunsDir();
         const left = loadSingleRunForAnalysis(base, left_run_id);
         const right = loadSingleRunForAnalysis(base, right_run_id);
         const report = buildCompareRunsReport({
@@ -1495,10 +1525,6 @@ export function registerTools(server: McpServer): void {
         items: z.array(ToolAnalysisListItemSchema)
       },
       inputSchema: {
-        tool_analysis_results_dir: z
-          .string()
-          .optional()
-          .describe('Directory containing saved tool analysis report folders.'),
         query: z
           .string()
           .optional()
@@ -1514,9 +1540,9 @@ export function registerTools(server: McpServer): void {
           .describe('Max reports to return. Defaults to 20.')
       }
     },
-    async ({ tool_analysis_results_dir, query, limit }) => {
+    async ({ query, limit }) => {
       return withToolHandling(async () => {
-        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const baseDir = resolveToolAnalysisResultsDir();
         const reports = listToolAnalysisReportsFromDiskWithFallback(baseDir, undefined);
         const searchQuery = String(query ?? '')
           .trim()
@@ -1550,12 +1576,6 @@ export function registerTools(server: McpServer): void {
       }),
       inputSchema: {
         report_id: z.string().describe("Report id directory name (or 'LATEST')."),
-        tool_analysis_results_dir: z
-          .string()
-          .optional()
-          .describe(
-            'Directory containing saved tool analysis reports (default mcplab/results/tool-analysis).'
-          ),
         max_chars: z
           .number()
           .int()
@@ -1568,9 +1588,9 @@ export function registerTools(server: McpServer): void {
           .describe('Include the full parsed record in structured content. Defaults to true.')
       }
     },
-    async ({ report_id, tool_analysis_results_dir, max_chars, include_record }) => {
+    async ({ report_id, max_chars, include_record }) => {
       return withToolHandling(async () => {
-        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const baseDir = resolveToolAnalysisResultsDir();
         const resolvedReportId =
           report_id === 'LATEST'
             ? latestToolAnalysisReportIdWithFallback(baseDir)
@@ -1615,25 +1635,23 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         report_id: z.string().describe('Report id directory name to delete.'),
-        tool_analysis_results_dir: z
-          .string()
-          .optional()
-          .describe(
-            'Directory containing saved tool analysis reports (default mcplab/results/tool-analysis).'
-          ),
         dry_run: z
           .boolean()
-          .optional()
-          .describe('If true, return what would be deleted without deleting anything.'),
+          .default(false)
+          .describe(
+            'If true, return what would be deleted without deleting anything. Defaults to false.'
+          ),
         confirm: z
           .boolean()
-          .optional()
-          .describe('Must be true to execute deletion when dry_run is false.')
+          .default(false)
+          .describe(
+            'Must be true to execute deletion when dry_run is false. If confirm is false, deletion is rejected with an error.'
+          )
       }
     },
-    async ({ report_id, tool_analysis_results_dir, dry_run, confirm }) => {
+    async ({ report_id, dry_run, confirm }) => {
       return withToolHandling(async () => {
-        const baseDir = resolveToolAnalysisResultsDir(tool_analysis_results_dir);
+        const baseDir = resolveToolAnalysisResultsDir();
         const dirPath = toolAnalysisReportDirPathWithFallback(baseDir, report_id.trim());
         const existed = existsSync(dirPath);
         const isDryRun = Boolean(dry_run);
@@ -1688,10 +1706,6 @@ export function registerTools(server: McpServer): void {
         items: z.array(FlattenedTraceItemSchema)
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         event_types: z
           .array(z.string())
@@ -1708,12 +1722,9 @@ export function registerTools(server: McpServer): void {
           .describe('Max items to return (default 200).')
       }
     },
-    async ({ runs_dir, run_id, event_types, scenario_id, agent, limit }) => {
+    async ({ run_id, event_types, scenario_id, agent, limit }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
-          runs_dir,
-          run_id
-        );
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const typeSet: Set<string> | null = event_types?.length
           ? new Set<string>(event_types)
           : null;
@@ -1759,10 +1770,6 @@ export function registerTools(server: McpServer): void {
         )
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         scenario_id: z.string().optional().describe('Optional scenario id filter.'),
         agent: z.string().optional().describe('Optional agent filter.'),
@@ -1775,12 +1782,9 @@ export function registerTools(server: McpServer): void {
           .describe('Optional truncation per final answer text (default 8000).')
       }
     },
-    async ({ runs_dir, run_id, scenario_id, agent, max_chars_per_answer }) => {
+    async ({ run_id, scenario_id, agent, max_chars_per_answer }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
-          runs_dir,
-          run_id
-        );
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const maxChars = max_chars_per_answer ?? 8000;
         const items = records
           .filter(
@@ -1824,10 +1828,6 @@ export function registerTools(server: McpServer): void {
         timeline: z.array(ConversationTimelineItemSchema)
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         scenario_id: z.string().describe('Scenario id to filter.'),
         agent: z.string().describe('Agent name to filter.'),
@@ -1847,12 +1847,9 @@ export function registerTools(server: McpServer): void {
           .describe('Max chars for text fields (default 4000).')
       }
     },
-    async ({ runs_dir, run_id, scenario_id, agent, max_items, max_text_chars }) => {
+    async ({ run_id, scenario_id, agent, max_items, max_text_chars }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
-          runs_dir,
-          run_id
-        );
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const textMax = max_text_chars ?? 4000;
         const record = records.find((r) => r.scenario_id === scenario_id && r.agent === agent);
         const timeline = record
@@ -1880,15 +1877,11 @@ export function registerTools(server: McpServer): void {
         'Search scenario_run trace content for a text query and return matching message/block items.',
       outputSchema: {
         run_id: z.string(),
-        query: z.string(),
+        query: z.string().trim().min(1),
         legacy_trace_detected: z.boolean().optional(),
         matches: z.array(FlattenedTraceItemSchema)
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
         query: z.string().describe('Case-insensitive text query.'),
         event_types: z
@@ -1904,14 +1897,11 @@ export function registerTools(server: McpServer): void {
           .describe('Max matches to return (default 50).')
       }
     },
-    async ({ runs_dir, run_id, query, event_types, limit }) => {
+    async ({ run_id, query, event_types, limit }) => {
       return withToolHandling(async () => {
         const q = query.trim().toLowerCase();
         if (!q) throw new Error('query is required');
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
-          runs_dir,
-          run_id
-        );
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const typeSet: Set<string> | null = event_types?.length
           ? new Set<string>(event_types)
           : null;
@@ -1958,19 +1948,12 @@ export function registerTools(server: McpServer): void {
         )
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe("Run id directory name or 'LATEST'.")
       }
     },
-    async ({ runs_dir, run_id }) => {
+    async ({ run_id }) => {
       return withToolHandling(async () => {
-        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(
-          runs_dir,
-          run_id
-        );
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const messageRoleCounts: Record<string, number> = {};
         const blockTypeCounts: Record<string, number> = {};
         const toolUsage: Record<string, number> = {};
@@ -2048,10 +2031,6 @@ export function registerTools(server: McpServer): void {
           .optional()
       },
       inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
         run_id: z.string().describe('Run id directory name or LATEST.'),
         artifact: z
           .enum([
@@ -2084,15 +2063,15 @@ export function registerTools(server: McpServer): void {
           .describe('1-indexed line to stop reading at (inclusive).')
       }
     },
-    async ({ runs_dir, run_id, artifact, max_chars, line_start, line_end }) => {
+    async ({ run_id, artifact, max_chars, line_start, line_end }) => {
       return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
+        const base = resolveRunsDir();
         const readBase = resolveExistingRunReadDir(base, run_id === 'LATEST' ? undefined : run_id);
         const resolvedRunId = run_id === 'LATEST' ? latestRunId(readBase) : run_id;
         if (!resolvedRunId) {
           throw new Error(`No runs found in ${base}`);
         }
-        const fullPath = join(readBase, resolvedRunId, artifact);
+        const fullPath = resolveRunArtifactPath(readBase, resolvedRunId, artifact);
         if (!existsSync(fullPath)) {
           throw new Error(`Artifact not found: ${fullPath}`);
         }
@@ -2135,123 +2114,150 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
-    'mcplab_grep_run_artifact',
+    'mcplab_results_index',
     {
       description:
-        'Search for text within a MCPLab run artifact and return matching lines with surrounding context. Use this to find specific sections in large files (e.g. a tool name in report.html) without reading the full file. Returns line numbers so you can follow up with mcplab_read_run_artifact line_start/line_end to read the full section.',
+        'Build or refresh local MCPLab results search index under mcplab/results/.index for LLM-first querying.',
       outputSchema: {
-        run_id: z.string(),
-        artifact: z.enum([
-          'results.json',
-          'summary.md',
-          'trace.jsonl',
-          'resolved-config.yaml',
-          'report.html'
-        ]),
+        runs_dir: z.string(),
+        rebuilt: z.boolean(),
+        doc_count: z.number().int().nonnegative(),
+        index_path: z.string(),
+        manifest_path: z.string()
+      },
+      inputSchema: {
+        rebuild: z.boolean().optional().describe('Force full index rebuild.')
+      }
+    },
+    async ({ rebuild }) => {
+      return withToolHandling(async () => {
+        const runsDir = resolveRunsDir();
+        const wasStale = indexNeedsRefresh(runsDir);
+        const docs = loadOrBuildSearchIndex(runsDir, Boolean(rebuild));
+        const paths = getResultsIndexPaths(runsDir);
+        return ok(`Results index ready (${docs.length} docs).`, {
+          runs_dir: runsDir,
+          rebuilt: Boolean(rebuild) || wasStale,
+          doc_count: docs.length,
+          index_path: paths.indexPath,
+          manifest_path: paths.manifestPath
+        });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_results_search',
+    {
+      description:
+        'Search MCPLab run results in compact LLM-first format. Auto-refreshes index when artifacts changed.',
+      outputSchema: {
         query: z.string(),
-        total_lines: z.number().int().nonnegative(),
-        match_count: z.number().int().nonnegative(),
-        truncated_at_limit: z.boolean(),
-        matches: z.array(
+        runs_dir: z.string(),
+        total_hits: z.number().int().nonnegative(),
+        hits: z.array(
           z.object({
-            match_line: z.number().int().positive(),
-            context_start_line: z.number().int().positive(),
-            context_end_line: z.number().int().positive(),
-            lines: z.array(
-              z.object({
-                line: z.number().int().positive(),
-                text: z.string(),
-                is_match: z.boolean()
-              })
-            )
+            run_id: z.string(),
+            scenario_id: z.string().optional(),
+            agent: z.string().optional(),
+            status: z.enum(['passed', 'failed']).optional(),
+            source: ResultsQuerySourceSchema,
+            file: z.string(),
+            line_start: z.number().int().positive().optional(),
+            line_end: z.number().int().positive().optional(),
+            snippet: z.string(),
+            score: z.number(),
+            context_command: z.string().optional()
           })
         )
       },
       inputSchema: {
-        runs_dir: z
-          .string()
+        query: z.string().trim().min(1).describe('Search query.'),
+        status: ResultsQueryStatusSchema.optional().describe('Filter by status (default all).'),
+        source: z
+          .array(ResultsQuerySourceSchema)
           .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
+          .describe('Sources to search (default results,trace,summary).'),
+        scenario: z.string().optional().describe('Filter by scenario id.'),
+        agent: z.string().optional().describe('Filter by agent id.'),
+        limit: z.number().int().positive().max(100).optional().describe('Max hits (default 10).')
+      }
+    },
+    async ({ query, status, source, scenario, agent, limit }) => {
+      return withToolHandling(async () => {
+        const runsDir = resolveRunsDir();
+        const docs = loadOrBuildSearchIndex(runsDir, false);
+        const hits = searchDocs(docs, {
+          query,
+          status: status ?? 'all',
+          source: source && source.length > 0 ? source : ['results', 'trace', 'summary'],
+          scenario,
+          agent,
+          limit: limit ?? 10
+        });
+        return ok(`Found ${hits.length} result hit(s).`, {
+          query,
+          runs_dir: runsDir,
+          total_hits: hits.length,
+          hits
+        });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_results_context',
+    {
+      description:
+        'Fetch focused context for a scenario/run from results, trace, or summary. Returns bounded excerpts only. around is trace-line context and is only valid with source=trace (or when source is omitted).',
+      outputSchema: {
+        run_id: z.string(),
+        scenario_id: z.string(),
+        source: z.enum(['results', 'trace', 'summary', 'mixed']),
+        line_start: z.number().int().positive().optional(),
+        line_end: z.number().int().positive().optional(),
+        excerpt: z.string()
+      },
+      inputSchema: {
         run_id: z.string().describe("Run id directory name or 'LATEST'."),
-        artifact: z
-          .enum([
-            'results.json',
-            'summary.md',
-            'trace.jsonl',
-            'resolved-config.yaml',
-            'report.html'
-          ])
-          .describe('Artifact filename to search.'),
-        query: z.string().describe('Text to search for (case-insensitive by default).'),
-        context_lines: z
+        scenario_id: z.string().describe('Scenario id to focus.'),
+        source: ResultsQuerySourceSchema.optional().describe('Context source; default mixed.'),
+        around: z.number().int().positive().optional().describe('Trace line center.'),
+        before: z
           .number()
           .int()
           .min(0)
-          .max(50)
+          .max(200)
           .optional()
-          .describe('Lines of context before and after each match (default 5).'),
-        max_matches: z
+          .describe('Lines before around for trace (default 20).'),
+        after: z
           .number()
           .int()
-          .positive()
-          .max(50)
+          .min(0)
+          .max(200)
           .optional()
-          .describe('Maximum number of matches to return (default 10).'),
-        case_sensitive: z.boolean().optional().describe('Case-sensitive search (default false).')
+          .describe('Lines after around for trace (default 20).')
       }
     },
-    async ({ runs_dir, run_id, artifact, query, context_lines, max_matches, case_sensitive }) => {
+    async ({ run_id, scenario_id, source, around, before, after }) => {
       return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
+        const base = resolveRunsDir();
         const readBase = resolveExistingRunReadDir(base, run_id === 'LATEST' ? undefined : run_id);
         const resolvedRunId = run_id === 'LATEST' ? latestRunId(readBase) : run_id;
         if (!resolvedRunId) throw new Error(`No runs found in ${base}`);
 
-        const fullPath = join(readBase, resolvedRunId, artifact);
-        if (!existsSync(fullPath)) throw new Error(`Artifact not found: ${fullPath}`);
-
-        const lines = readFileSync(fullPath, 'utf8').split('\n');
-        const q = case_sensitive ? query.trim() : query.trim().toLowerCase();
-        if (!q) throw new Error('query must not be empty');
-        const ctx = context_lines ?? 5;
-        const limit = max_matches ?? 10;
-
-        const matchIndices: number[] = [];
-        for (let i = 0; i < lines.length; i++) {
-          const hay = case_sensitive ? lines[i] : lines[i].toLowerCase();
-          if (hay.includes(q)) {
-            matchIndices.push(i);
-            if (matchIndices.length >= limit) break;
-          }
-        }
-
-        const matches = matchIndices.map((matchIdx) => {
-          const start = Math.max(0, matchIdx - ctx);
-          const end = Math.min(lines.length - 1, matchIdx + ctx);
-          return {
-            match_line: matchIdx + 1,
-            context_start_line: start + 1,
-            context_end_line: end + 1,
-            lines: lines.slice(start, end + 1).map((text, offset) => ({
-              line: start + offset + 1,
-              text,
-              is_match: start + offset === matchIdx
-            }))
-          };
+        const result = getContext({
+          runsDir: readBase,
+          runId: resolvedRunId,
+          scenarioId: scenario_id,
+          source,
+          around,
+          before: before ?? 20,
+          after: after ?? 20
         });
-
-        return ok(
-          `Found ${matchIndices.length} match(es) for "${query}" in ${artifact} (run ${resolvedRunId})`,
-          {
-            run_id: resolvedRunId,
-            artifact,
-            query,
-            total_lines: lines.length,
-            match_count: matches.length,
-            truncated_at_limit: matchIndices.length >= limit,
-            matches
-          }
-        );
+        return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, {
+          ...result
+        });
       });
     }
   );
@@ -2265,10 +2271,6 @@ export function registerPrompts(server: McpServer): void {
         'Guide an LLM to author or refine MCPLab scenarios, prioritizing reusable scenario library files and deterministic eval rules.',
       argsSchema: {
         task: z.string().describe('What the scenario should test.'),
-        bundle_root: z
-          .string()
-          .optional()
-          .describe('Optional MCPLab library bundle root to inspect.'),
         server_ids: z
           .string()
           .optional()
@@ -2276,12 +2278,11 @@ export function registerPrompts(server: McpServer): void {
         agent_id: z.string().optional().describe('Optional pinned agent id.')
       }
     },
-    async ({ task, bundle_root, server_ids, agent_id }) => {
+    async ({ task, server_ids, agent_id }) => {
       const maybeServers = server_ids
         ? `Target servers (if valid): ${server_ids}\n`
         : 'First inspect available servers with mcplab_list_library.\n';
       const maybeAgent = agent_id ? `Pinned agent (optional): ${agent_id}\n` : '';
-      const maybeBundle = bundle_root ? `Bundle root hint: ${bundle_root}\n` : '';
       return {
         messages: [
           {
@@ -2290,7 +2291,7 @@ export function registerPrompts(server: McpServer): void {
               type: 'text',
               text:
                 `Help me author a MCPLab scenario for this testing task:\n\n${task}\n\n` +
-                `${maybeBundle}${maybeServers}${maybeAgent}` +
+                `${maybeServers}${maybeAgent}` +
                 `Workflow:\n` +
                 `1. Inspect library entries (servers/agents/scenarios) if needed.\n` +
                 `2. Draft a scenario with mcplab_generate_scenario_entry.\n` +
@@ -2349,10 +2350,8 @@ const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_search_markdown_reports: 'Search Markdown Reports',
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
-  mcplab_search_runs: 'Search Evaluation Runs',
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
-  mcplab_trace_search: 'Search Trace Events',
-  mcplab_grep_run_artifact: 'Search Run Artifact Text'
+  mcplab_trace_search: 'Search Trace Events'
 };
 
 function normalizeOptionalNonEmpty(value?: string): string | undefined {
@@ -2420,18 +2419,42 @@ function humanizeToolName(toolName: string): string {
     .join(' ');
 }
 
-function resolveBundleRoot(bundleRoot?: string): string {
-  if (bundleRoot?.trim()) return resolve(bundleRoot);
+function resolveServerOwnedRoots(): ServerOwnedRoots {
   const cwd = process.cwd();
+  const reportsDir = resolvePathInsideWorkspace(process.env.MCPLAB_REPORTS_DIR || 'mcplab/reports');
+  const runsDir = resolvePathInsideWorkspace(
+    process.env.MCPLAB_RUNS_DIR || 'mcplab/results/evaluation-runs'
+  );
+  const toolAnalysisDir = resolvePathInsideWorkspace(
+    process.env.MCPLAB_TOOL_ANALYSIS_DIR || 'mcplab/results/tool-analysis'
+  );
+  const configuredBundleRoot = process.env.MCPLAB_BUNDLE_ROOT?.trim();
+  if (configuredBundleRoot) {
+    return {
+      reportsDir,
+      runsDir,
+      toolAnalysisDir,
+      bundleRoot: resolve(configuredBundleRoot)
+    };
+  }
   const candidates = ['mcplab', 'examples/libraries'];
   for (const candidate of candidates) {
     const abs = resolve(cwd, candidate);
-    if (existsSync(abs)) return abs;
+    if (existsSync(abs)) {
+      return { reportsDir, runsDir, toolAnalysisDir, bundleRoot: abs };
+    }
   }
-  return resolve(cwd, 'mcplab');
+  return { reportsDir, runsDir, toolAnalysisDir, bundleRoot: resolve(cwd, 'mcplab') };
 }
 
-function readLibrary(bundleRoot: string, includeContent: boolean): Record<string, unknown> {
+function resolveBundleRoot(): string {
+  return SERVER_OWNED_ROOTS.bundleRoot;
+}
+
+function readLibrary(
+  bundleRoot: string,
+  includeContent: boolean
+): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
   const scenariosDir = join(bundleRoot, 'scenarios');
@@ -2443,7 +2466,7 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
     ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
     : {};
 
-  const scenarioEntries: Array<Record<string, unknown>> = [];
+  const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
     const files = readdirSync(scenariosDir)
       .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
@@ -2462,18 +2485,20 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
     }
   }
 
-  const out: Record<string, unknown> = {
+  const out: z.infer<typeof LibraryEntrySchema> = {
     bundleRoot,
-    servers: includeContent
-      ? servers
-      : Object.keys(servers)
-          .sort()
-          .map((id) => ({ id })),
-    agents: includeContent
-      ? agents
-      : Object.keys(agents)
-          .sort()
-          .map((id) => ({ id })),
+    servers: Object.keys(servers)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent ? { entry: (servers[id] as Record<string, unknown>) ?? {} } : {})
+      })),
+    agents: Object.keys(agents)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
+      })),
     scenarios: scenarioEntries
   };
   return out;
@@ -2711,12 +2736,8 @@ function filterScenarios(
   });
 }
 
-function loadRunsForAnalysis(params: {
-  runsDirInput?: string;
-  runIds?: string[];
-  latestN: number;
-}): LoadedRunResult[] {
-  const base = resolveRunsDir(params.runsDirInput);
+function loadRunsForAnalysis(params: { runIds?: string[]; latestN: number }): LoadedRunResult[] {
+  const base = resolveRunsDir();
   const ids = selectRunIdsForAnalysis(base, params.runIds, params.latestN);
   return ids.map((id) => loadSingleRunForAnalysis(base, id));
 }
@@ -2724,8 +2745,8 @@ function loadRunsForAnalysis(params: {
 function loadSingleRunForAnalysis(primaryRunsDir: string, runIdInput: string): LoadedRunResult {
   const resolvedRunId = resolveRunIdToken(primaryRunsDir, runIdInput);
   const readBase = resolveExistingRunReadDir(primaryRunsDir, resolvedRunId);
-  const runPath = join(readBase, resolvedRunId);
-  const resultsPath = join(runPath, 'results.json');
+  const runPath = resolve(readBase, resolvedRunId);
+  const resultsPath = resolveRunArtifactPath(readBase, resolvedRunId, 'results.json');
   if (!existsSync(resultsPath)) {
     throw new Error(`results.json not found for run '${resolvedRunId}' at ${resultsPath}`);
   }
@@ -2815,15 +2836,15 @@ function listRuns(
 }
 
 function defaultRunsDirPath(): string {
-  return resolvePathInsideWorkspace('mcplab/results/evaluation-runs');
+  return SERVER_OWNED_ROOTS.runsDir;
 }
 
 function legacyRunsDirPath(): string {
   return resolvePathInsideWorkspace('mcplab/runs');
 }
 
-function resolveRunsDir(input?: string): string {
-  return resolve(input?.trim() ? input : defaultRunsDirPath());
+function resolveRunsDir(): string {
+  return SERVER_OWNED_ROOTS.runsDir;
 }
 
 function runReadDirs(primaryRunsDir: string): string[] {
@@ -2903,12 +2924,12 @@ function detectLikelyBundleRoot(configPath: string): string | null {
   return existsSync(fallback) ? fallback : null;
 }
 
-function resolveToolAnalysisResultsDir(input?: string): string {
-  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/results/tool-analysis');
+function resolveToolAnalysisResultsDir(): string {
+  return SERVER_OWNED_ROOTS.toolAnalysisDir;
 }
 
-function resolveMarkdownReportsDir(input?: string): string {
-  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/reports');
+function resolveMarkdownReportsDir(): string {
+  return SERVER_OWNED_ROOTS.reportsDir;
 }
 
 function isMarkdownReportExt(path: string): boolean {
@@ -2961,12 +2982,11 @@ function listMarkdownReportsFromDisk(root: string): MarkdownReportListItem[] {
 function resolveMarkdownReportPath(root: string, pathInput: string): string {
   const trimmed = pathInput.trim();
   if (!trimmed) throw new Error('path is required');
-  const workspaceRelativePrefix = `mcplab${sep}reports${sep}`;
   const normalized = trimmed.replaceAll('/', sep);
-  const candidate =
-    normalized === `mcplab${sep}reports` || normalized.startsWith(workspaceRelativePrefix)
-      ? resolvePathInsideWorkspace(normalized)
-      : resolve(root, normalized);
+  if (normalized === `mcplab${sep}reports` || normalized.startsWith(`mcplab${sep}reports${sep}`)) {
+    throw new Error('path must be relative to reports root; do not prefix with mcplab/reports/');
+  }
+  const candidate = resolve(root, normalized);
   const withinRoot = candidate === root || candidate.startsWith(`${root}${sep}`);
   if (!withinRoot) throw new Error('path escapes markdown reports root');
   return candidate;
@@ -3164,18 +3184,15 @@ function isScenarioRunTraceRecord(value: unknown): value is ScenarioRunTraceReco
   );
 }
 
-function readScenarioRunTraceRecordsForRun(
-  runsDirInput: string | undefined,
-  runIdInput: string
-): ReadScenarioRunTraceResult {
-  const base = resolveRunsDir(runsDirInput);
+function readScenarioRunTraceRecordsForRun(runIdInput: string): ReadScenarioRunTraceResult {
+  const base = resolveRunsDir();
   const readBase = resolveExistingRunReadDir(
     base,
     runIdInput === 'LATEST' ? undefined : runIdInput
   );
   const runId = runIdInput === 'LATEST' ? latestRunId(readBase) : runIdInput;
   if (!runId) throw new Error(`No runs found in ${base}`);
-  const tracePath = join(readBase, runId, 'trace.jsonl');
+  const tracePath = resolveRunArtifactPath(readBase, runId, 'trace.jsonl');
   if (!existsSync(tracePath)) throw new Error(`Artifact not found: ${tracePath}`);
   const raw = readFileSync(tracePath, 'utf8');
   const lines = raw.split(/\r?\n/).filter(Boolean);
@@ -3360,6 +3377,15 @@ function resolvePathInsideWorkspace(pathInput: string): string {
   return target;
 }
 
+function validateWorkspaceRelativePath(value: string, fieldName: string): void {
+  if (value.startsWith('/') || /^[A-Za-z]:/.test(value)) {
+    throw new Error(`${fieldName} must be relative (absolute paths are not allowed)`);
+  }
+  if (value.split(/[\\/]/).some((part) => part === '..')) {
+    throw new Error(`${fieldName} must not contain ".." path segments`);
+  }
+}
+
 function ok(summary: string, structuredContent?: Record<string, unknown>): ToolResult {
   const payload = structuredContent ?? {};
   return {
@@ -3377,8 +3403,7 @@ function err(error: unknown): ToolResult {
   const message = error instanceof Error ? error.message : String(error);
   return {
     isError: true,
-    content: [{ type: 'text', text: `Error: ${message}` }],
-    structuredContent: { error: message }
+    content: [{ type: 'text', text: `Error: ${message}` }]
   };
 }
 
