@@ -92,6 +92,16 @@ describe('mcp tool contracts', () => {
     expect(schema.safeParse({}).success).toBe(false);
     expect(schema.safeParse({ id: 's1' }).success).toBe(false);
     expect(schema.safeParse({ url: 'http://x/mcp' }).success).toBe(false);
+    expect(schema.safeParse({ id: 's1', url: 'http://x/mcp', auth_type: 'bearer' }).success).toBe(
+      false
+    );
+    expect(schema.safeParse({ id: 's1', url: 'http://x/mcp', auth_type: 'api_key' }).success).toBe(
+      false
+    );
+    expect(
+      schema.safeParse({ id: 's1', url: 'http://x/mcp', auth_type: 'oauth_client_credentials' })
+        .success
+    ).toBe(false);
 
     expect(
       schema.safeParse({
@@ -149,6 +159,8 @@ describe('mcp tool contracts', () => {
     const schema = asSchema(tool!.config.inputSchema);
     expect(schema.safeParse({ path: '../../etc/passwd' }).success).toBe(false);
     expect(schema.safeParse({ path: '/etc/passwd' }).success).toBe(false);
+    const prefixed = await tool!.cb({ path: 'mcplab/reports/ok.md' });
+    expect(prefixed.isError).toBe(true);
 
     const bad = await tool!.cb({ path: '../../etc/passwd' });
     expect(bad.isError).toBe(true);

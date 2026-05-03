@@ -183,9 +183,20 @@ const AgentEntrySchema = z.object({
   system: z.string().optional()
 });
 
+const LibraryServerEntryContentSchema = z
+  .object({
+    transport: z.string().optional(),
+    url: z.string().optional(),
+    auth: GenericObjectSchema.optional(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional()
+  })
+  .passthrough();
+
 const LibraryServerEntrySchema = z.object({
   id: z.string(),
-  entry: GenericObjectSchema.optional()
+  entry: LibraryServerEntryContentSchema.optional()
 });
 
 const LibraryAgentEntrySchema = z.object({
@@ -265,8 +276,28 @@ const ResolvedScenarioSchema = z.object({
   servers: z.array(z.string()),
   agent: z.string().optional(),
   prompt: z.string().optional(),
-  eval: GenericObjectSchema.optional(),
-  extract: z.array(GenericObjectSchema).optional()
+  eval: z
+    .object({
+      type: z.string(),
+      assertions: z.array(z.string()).optional(),
+      rubric: GenericObjectSchema.optional()
+    })
+    .passthrough()
+    .optional(),
+  extract: z
+    .array(
+      z
+        .object({
+          name: z.string(),
+          from: z.string().optional(),
+          regex: z.string().optional(),
+          path: z.string().optional(),
+          expression: z.string().optional(),
+          transform: z.string().optional()
+        })
+        .passthrough()
+    )
+    .optional()
 });
 
 const RunDefaultsSchema = z
@@ -449,10 +480,13 @@ const SafeRelativePathSchema = z
     'Must be a relative workspace path without ".." segments or absolute prefixes.'
   );
 
-const GenerateServerEntryInputBaseSchema = z.object({
+const GenerateServerEntryInputCoreSchema = z.object({
   id: z.string().describe('Server id key (kebab-case recommended).'),
   url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
-  transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).'),
+  transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).')
+});
+
+const GenerateServerEntryInputBaseSchema = GenerateServerEntryInputCoreSchema.extend({
   auth_type: z
     .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
     .optional()
@@ -479,6 +513,35 @@ const GenerateServerEntryInputBaseSchema = z.object({
   oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
   oauth_audience: z.string().optional().describe('Optional OAuth audience.')
 });
+
+const GenerateServerEntryPublicInputSchema = z.union([
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.enum(['none']).optional()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('bearer'),
+    bearer_token: z.string(),
+    bearer_env: z.string().optional()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('bearer'),
+    bearer_token: z.string().optional(),
+    bearer_env: z.string()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('api_key'),
+    api_key_header_name: z.string().optional(),
+    api_key_value: z.string()
+  }),
+  GenerateServerEntryInputCoreSchema.extend({
+    auth_type: z.literal('oauth_client_credentials'),
+    oauth_token_url: z.string(),
+    oauth_client_id_env: z.string(),
+    oauth_client_secret_env: z.string(),
+    oauth_scope: z.string().optional(),
+    oauth_audience: z.string().optional()
+  })
+]);
 
 const GenerateServerEntryInputSchema = GenerateServerEntryInputBaseSchema.superRefine(
   (value, ctx) => {
@@ -876,7 +939,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_read_markdown_report',
     {
       description:
-        'Read a saved markdown report by relative path (under mcplab/reports by default) or by workspace-relative path, with optional truncation.',
+        'Read a saved markdown report by reports-root-relative path (under mcplab/reports), with optional truncation.',
       outputSchema: {
         reports_dir: z.string(),
         path: z.string(),
@@ -889,7 +952,7 @@ export function registerTools(server: McpServer): void {
       },
       inputSchema: {
         path: SafeRelativePathSchema.describe(
-          'Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'
+          'Report path relative to the reports root (e.g. team/run-2026-05-03.md). Do not prefix with mcplab/reports/.'
         ),
         max_chars: z
           .number()
@@ -1005,7 +1068,7 @@ export function registerTools(server: McpServer): void {
         entry: ServerEntrySchema,
         yaml: z.string()
       },
-      inputSchema: GenerateServerEntryInputBaseSchema
+      inputSchema: GenerateServerEntryPublicInputSchema
     },
     async (input) => {
       return withToolHandling(async () => {
@@ -2902,12 +2965,11 @@ function listMarkdownReportsFromDisk(root: string): MarkdownReportListItem[] {
 function resolveMarkdownReportPath(root: string, pathInput: string): string {
   const trimmed = pathInput.trim();
   if (!trimmed) throw new Error('path is required');
-  const workspaceRelativePrefix = `mcplab${sep}reports${sep}`;
   const normalized = trimmed.replaceAll('/', sep);
-  const candidate =
-    normalized === `mcplab${sep}reports` || normalized.startsWith(workspaceRelativePrefix)
-      ? resolvePathInsideWorkspace(normalized)
-      : resolve(root, normalized);
+  if (normalized === `mcplab${sep}reports` || normalized.startsWith(`mcplab${sep}reports${sep}`)) {
+    throw new Error('path must be relative to reports root; do not prefix with mcplab/reports/');
+  }
+  const candidate = resolve(root, normalized);
   const withinRoot = candidate === root || candidate.startsWith(`${root}${sep}`);
   if (!withinRoot) throw new Error('path escapes markdown reports root');
   return candidate;
