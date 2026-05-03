@@ -833,7 +833,7 @@ const cliReports: DocPage = {
   label: 'Reports & Output',
   href: '/docs/cli/reports-output/',
   description: 'What MCPLab writes after a run and how to work with it.',
-  keywords: ['reports', 'output', 'results', 'trace', 'html', 'json', 'mcplab report'],
+  keywords: ['reports', 'output', 'results', 'trace', 'html', 'json', 'mcplab report', 'mcplab results'],
   seoTitle: 'CLI — Reports & Output',
   track: 'cli',
   sections: [
@@ -862,6 +862,26 @@ const cliReports: DocPage = {
       title: 'trace.jsonl',
       paragraphs: [
         'The trace captures the full sequence of LLM messages and tool calls for every scenario run. Each line is a JSON object representing one exchange. Use the trace to understand exactly what the agent did and why.'
+      ]
+    },
+    {
+      id: 'results-query-workflow',
+      title: 'LLM-First Results Query Workflow',
+      paragraphs: [
+        'Use mcplab results commands when you need compact, structured output that is easy for LLMs and automation to consume.',
+        'mcplab results search auto-builds or refreshes local index when run artifacts changed. You can also prebuild manually with mcplab results index.'
+      ],
+      codeBlocks: [
+        {
+          title: 'list and inspect runs',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results list\\nnpx @inspectr/mcplab results show --run <run-id> --format json'
+        },
+        {
+          title: 'search and fetch focused context',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results search \"tool failed timeout\" --status failed --format json\\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown'
+        }
       ]
     },
     {
@@ -958,6 +978,87 @@ jobs:
         }
       ]
     }
+  ]
+};
+
+const cliCommandReference: DocPage = {
+  slug: 'cli-command-reference',
+  label: 'Command Reference',
+  href: '/docs/cli/command-reference/',
+  description: 'All mcplab commands and their flags in one place.',
+  keywords: ['cli', 'commands', 'flags', 'options', 'reference', 'run', 'app', 'report'],
+  seoTitle: 'CLI — Command Reference',
+  track: 'cli',
+  sections: [
+    {
+      id: 'run',
+      title: 'mcplab run',
+      paragraphs: ['Run evaluation scenarios against one or more eval configs.'],
+      codeBlocks: [
+        {
+          title: 'usage',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run [options]'
+        }
+      ],
+      bullets: [
+        '-c, --config <path> — Path to eval.yaml or a directory of eval configs. Required (or use --interactive).',
+        '-s, --scenario <id> — Run a single scenario by ID. Repeatable to run several.',
+        '-n, --runs <count> — Number of variance runs per scenario. Default: 1.',
+        '--agents <agents> — Comma-separated list of agent IDs to test.',
+        '--agents-all — Run all agents configured in the eval config.',
+        '--interactive — Prompt for config path and agents at the terminal.',
+        '--bail — Stop after the first failed config when --config points to a directory.',
+        '--run-note <text> — Human-readable note attached to run metadata. Max 500 chars.',
+        '--runs-dir <path> — Output directory for run artifacts. Default: mcplab/results/evaluation-runs.',
+        '--snapshots-dir <path> — Directory for snapshot files. Default: mcplab/snapshots.',
+        '--oauth-token <server=token> — Pre-obtained OAuth bearer token for a named server. Repeatable.',
+        '--open-browser — Open browser to the MCPLab UI when OAuth authentication is required.',
+        '--snapshot-eval — Apply the snapshot_eval policy defined in the config.',
+        '--compare-snapshot <snapshotId> — Compare the completed run against a snapshot after it finishes.'
+      ]
+    },
+    {
+      id: 'report',
+      title: 'mcplab report',
+      paragraphs: ['Regenerate report.html from an existing run directory.'],
+      codeBlocks: [
+        {
+          title: 'usage',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab report [options]'
+        }
+      ],
+      bullets: [
+        '--input <runDir> — Path to the run directory containing results.json. Required unless --interactive.',
+        '--runs-dir <path> — Directory containing run artifacts. Default: mcplab/results/evaluation-runs.',
+        '--interactive — Pick a run directory from an interactive list.'
+      ]
+    },
+    {
+      id: 'app',
+      title: 'mcplab app',
+      paragraphs: ['Start the local web UI and API bridge.'],
+      codeBlocks: [
+        {
+          title: 'usage',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab app [options]'
+        }
+      ],
+      bullets: [
+        '--evals-dir <path> — Directory for eval YAML files. Default: mcplab/evals.',
+        '--runs-dir <path> — Directory for run artifacts. Default: mcplab/results/evaluation-runs.',
+        '--snapshots-dir <path> — Directory for snapshot files. Default: mcplab/snapshots.',
+        '--tool-analysis-results-dir <path> — Directory for tool analysis reports. Default: mcplab/results/tool-analysis.',
+        '--libraries-dir <path> — Bundle root for shared servers, agents, and test cases. Default: mcplab.',
+        '--port <number> — Port to bind the server to. Default: 8787.',
+        '--host <host> — Host to bind. Default: 127.0.0.1.',
+        '--open — Open the browser automatically after startup.',
+        '--dev — Proxy frontend requests to a Vite dev server. API remains local.',
+        '--interactive — Prompt for host, port, and directory paths before startup.'
+      ]
+    },
   ]
 };
 
@@ -1210,7 +1311,7 @@ const appMcplabAssistantSkill: DocPage = {
       ],
       bullets: [
         'Config authoring and edits for MCPLab eval files.',
-        'Command help for `mcplab run`, `mcplab app`, and `mcplab report`.',
+        'Command help for `mcplab run`, `mcplab app`, `mcplab report`, and `mcplab results`.',
         'Failure triage for auth/config/selection/numeric-flag errors.',
         'Output analysis for `results.json`, `summary.md`, `trace.jsonl`, and `report.html`.'
       ]
@@ -1851,6 +1952,7 @@ const pageIndex: DocPage[] = [
   cliConfiguration,
   cliReports,
   cliCicd,
+  cliCommandReference,
   appGettingStarted,
   appConfigurations,
   appRunning,
@@ -1882,7 +1984,7 @@ export const docsNavSections = [
   },
   {
     title: 'CLI',
-    items: [cliRunning, cliConfiguration, cliReports, cliCicd]
+    items: [cliRunning, cliConfiguration, cliReports, cliCicd, cliCommandReference]
   },
   {
     title: 'App',

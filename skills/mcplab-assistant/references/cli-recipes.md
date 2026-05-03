@@ -8,6 +8,7 @@ Source of truth: `packages/cli/src/cli.ts`.
 - Run evaluations once: `mcplab run`
 - Start local app/API bridge: `mcplab app`
 - Rebuild report from prior run: `mcplab report`
+- Query run artifacts for LLM/automation: `mcplab results`
 
 ## Run Evaluations
 
@@ -77,3 +78,27 @@ mcplab report --interactive --runs-dir mcplab/results/evaluation-runs
 ```
 
 This reads `results.json` in the run directory and writes a fresh `report.html`.
+
+## Query Results (LLM-First)
+
+```bash
+# List known runs
+mcplab results list
+
+# Show run payload
+mcplab results show --run <run-id> --format json
+
+# Search compact structured hits (auto refreshes index if run files changed)
+mcplab results search "tool failed timeout" --status failed --limit 10 --format json
+
+# Fetch focused context only
+mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown
+
+# Optional manual rebuild
+mcplab results index --rebuild
+```
+
+Notes:
+- `mcplab results search` calls index load/build automatically; explicit `results index` is optional.
+- Search defaults: `--status all --source results,trace,summary --limit 10 --format json`.
+- Use `--source` and `--scenario` filters to keep context small.

@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report/results`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
 ---
 
 # MCPLab Assistant
@@ -102,6 +102,7 @@ When the request is about analyzing results, the assistant must:
 - Execute evaluations -> `mcplab run`
 - Open local UI/API bridge -> `mcplab app`
 - Rebuild HTML report from existing run -> `mcplab report`
+- Query run artifacts in LLM-friendly format -> `mcplab results`
 2. Use only documented flags from CLI source.
 3. For model comparison, use `mcplab run --agents ...`.
 4. If a run fails, capture exact error and switch to troubleshooting workflow.
@@ -130,9 +131,12 @@ When the request is about analyzing results, the assistant must:
 - `summary.md` for quick human scan
 - `trace.jsonl` for call-by-call debugging
 - `report.html` for interactive investigation
-3. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
-4. Highlight regressions with concrete scenario IDs and observed behavior deltas.
-5. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
+3. Prefer CLI narrowing before deep file reads:
+- `mcplab results search "<query>" --format json` for compact candidate hits
+- `mcplab results context --run <id> --scenario <id>` for focused excerpts
+4. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
+5. Highlight regressions with concrete scenario IDs and observed behavior deltas.
+6. When quality drift is requested, compare deterministic run metrics first, then inspect run artifacts (`results.json`, `trace.jsonl`) for output-level drift.
 
 ## Result Assistant Scopes
 
@@ -168,7 +172,7 @@ User request:
 
 Assistant behavior:
 1. Provide one `mcplab run --agents ...` command for comparison.
-2. Provide one follow-up analysis step using `results.json` and `report.html`.
+2. Provide one follow-up analysis step using `mcplab results search ...` then `mcplab results context ...`.
 
 ### Pattern 5: Historical Trend Request
 
