@@ -577,6 +577,10 @@ program
           if (Number.isNaN(limit) || limit <= 0) {
             throw new Error('limit must be a positive number');
           }
+          const format = String(options.format);
+          if (!['json', 'jsonl', 'markdown'].includes(format)) {
+            throw new Error('format must be json, jsonl, or markdown');
+          }
           const runsDir = resolve(String(options.runsDir));
           const docs = loadOrBuildSearchIndex(runsDir, false);
           const hits = searchDocs(docs, {
@@ -587,10 +591,6 @@ program
             scenario: options.scenario ? String(options.scenario) : undefined,
             agent: options.agent ? String(options.agent) : undefined
           });
-          const format = String(options.format);
-          if (!['json', 'jsonl', 'markdown'].includes(format)) {
-            throw new Error('format must be json, jsonl, or markdown');
-          }
           console.log(formatSearchHits(hits, format as 'json' | 'jsonl' | 'markdown'));
         } catch (err: any) {
           console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));

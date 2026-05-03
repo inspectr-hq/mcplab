@@ -124,7 +124,7 @@ function getRunMtime(runDir: string, files: string[]): number {
   return maxMtime;
 }
 
-function resolveRunFilePath(runsDir: string, runId: string, file: string): string {
+export function resolveRunArtifactPath(runsDir: string, runId: string, file: string): string {
   if (!runId.trim()) throw new Error('run id must not be empty');
   const base = resolve(runsDir);
   const target = resolve(base, runId, file);
@@ -319,7 +319,7 @@ export function buildSearchIndex(runsDir: string): SearchDoc[] {
   const runIds = listRunDirs(runsDir);
   for (const runId of runIds) {
     const runDir = resolve(runsDir, runId);
-    const resultsPath = resolveRunFilePath(runsDir, runId, 'results.json');
+    const resultsPath = resolveRunArtifactPath(runsDir, runId, 'results.json');
     if (!existsSync(resultsPath)) continue;
     let results: ResultsJson;
     try {
@@ -375,11 +375,15 @@ export function loadOrBuildSearchIndex(runsDir: string, rebuild = false): Search
 }
 
 export function tokenize(input: string): string[] {
-  return input
+  return Array.from(
+    new Set(
+      input
     .toLowerCase()
     .replace(/[^a-z0-9_.:-]+/g, ' ')
     .split(/\s+/)
-    .filter(Boolean);
+        .filter(Boolean)
+    )
+  );
 }
 
 export function makeSnippet(text: string, query: string, size = 240): string {
@@ -468,7 +472,7 @@ export function searchDocs(docs: SearchDoc[], filters: SearchFilters): SearchHit
 }
 
 function readResults(runsDir: string, runId: string): ResultsJson {
-  const path = resolveRunFilePath(runsDir, runId, 'results.json');
+  const path = resolveRunArtifactPath(runsDir, runId, 'results.json');
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as ResultsJson;
   } catch (error) {
@@ -482,7 +486,7 @@ function contextFromTrace(opts: Required<Pick<ContextOptions, 'runsDir' | 'runId
   before: number;
   after: number;
 }): ContextResult {
-  const tracePath = resolveRunFilePath(opts.runsDir, opts.runId, 'trace.jsonl');
+  const tracePath = resolveRunArtifactPath(opts.runsDir, opts.runId, 'trace.jsonl');
   if (!existsSync(tracePath)) throw new Error(`trace.jsonl not found for run ${opts.runId}`);
   const lines = readFileSync(tracePath, 'utf8').split('\n');
   const center = Math.max(1, opts.around ?? 1);
@@ -546,7 +550,7 @@ function contextFromScenarioMixed(opts: Required<Pick<ContextOptions, 'runsDir' 
 }
 
 function contextFromSummary(opts: Required<Pick<ContextOptions, 'runsDir' | 'runId' | 'scenarioId'>>): ContextResult {
-  const summaryPath = resolveRunFilePath(opts.runsDir, opts.runId, 'summary.md');
+  const summaryPath = resolveRunArtifactPath(opts.runsDir, opts.runId, 'summary.md');
   if (!existsSync(summaryPath)) throw new Error(`summary.md not found for run ${opts.runId}`);
   const lines = readFileSync(summaryPath, 'utf8').split('\n');
   const matched = lines.filter((line) => line.includes(opts.scenarioId));
@@ -592,16 +596,6 @@ export function getContext(opts: ContextOptions): ContextResult {
       runsDir: opts.runsDir,
       runId: opts.runId,
       scenarioId: opts.scenarioId
-    });
-  }
-  if (opts.source === 'trace') {
-    return contextFromTrace({
-      runsDir: opts.runsDir,
-      runId: opts.runId,
-      scenarioId: opts.scenarioId,
-      around: opts.around,
-      before,
-      after
     });
   }
   if (opts.source === 'summary') {

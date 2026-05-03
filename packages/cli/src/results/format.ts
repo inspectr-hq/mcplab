@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { listRunIdsDesc, type ResultsJson } from '@inspectr/mcplab-core';
+import { listRunIdsDesc, resolveRunArtifactPath, type ResultsJson } from '@inspectr/mcplab-core';
 import type { ContextResult } from './context.js';
 import type { SearchHit } from './types.js';
 
@@ -36,14 +36,13 @@ export function listRuns(runsDir: string): RunListItem[] {
 }
 
 export function showRun(runsDir: string, runId: string, format: 'json' | 'markdown'): string {
-  const runDir = join(runsDir, runId);
   if (format === 'markdown') {
-    const summaryPath = join(runDir, 'summary.md');
+    const summaryPath = resolveRunArtifactPath(runsDir, runId, 'summary.md');
     if (existsSync(summaryPath)) {
       return readFileSync(summaryPath, 'utf8');
     }
   }
-  const resultsPath = join(runDir, 'results.json');
+  const resultsPath = resolveRunArtifactPath(runsDir, runId, 'results.json');
   if (!existsSync(resultsPath)) {
     throw new Error(`results.json not found for run ${runId}`);
   }
