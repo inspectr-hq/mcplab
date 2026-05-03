@@ -245,4 +245,16 @@ describe('mcp tool contracts', () => {
       schema.safeParse({ run_id: 'r1', scenario_id: 's1', source: 'trace', around: 42 }).success
     ).toBe(true);
   });
+
+  it('mcplab_search_markdown_reports schema supports pagination and defaults', () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_search_markdown_reports');
+    expect(tool).toBeDefined();
+    const schema = asSchema(tool!.config.inputSchema);
+    expect(schema.safeParse({ offset: -1 }).success).toBe(false);
+    expect(schema.safeParse({ limit: 0 }).success).toBe(false);
+    const parsed = schema.parse({});
+    expect(parsed.limit).toBe(20);
+    expect(parsed.offset).toBe(0);
+  });
 });

@@ -874,7 +874,11 @@ export function registerTools(server: McpServer): void {
         reports_dir: z.string(),
         run_id_filter: z.string().optional(),
         query: z.string().optional(),
+        offset: z.number().int().min(0),
+        limit: z.number().int().positive().max(200),
+        returned: z.number().int().nonnegative(),
         total_matching: z.number().int().nonnegative(),
+        next_offset: z.number().int().min(0).nullable(),
         items: z.array(
           z.object({
             path: z.string(),
@@ -899,11 +903,17 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .max(200)
-          .optional()
-          .describe('Max reports to return (default 20).')
+          .default(20)
+          .describe('Max reports to return (default 20).'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .default(0)
+          .describe('Pagination offset into matching results (default 0).')
       }
     },
-    async ({ run_id, query, limit }) => {
+    async ({ run_id, query, limit, offset }) => {
       return withToolHandling(async () => {
         const root = resolveMarkdownReportsDir();
         const all = listMarkdownReportsFromDisk(root);
@@ -923,12 +933,19 @@ export function registerTools(server: McpServer): void {
           const hay = `${item.path}\n${item.relativePath}\n${item.name}`.toLowerCase();
           return hay.includes(searchQuery);
         });
-        const capped = filtered.slice(0, limit ?? 20);
+        const start = Math.max(0, offset ?? 0);
+        const pageSize = limit ?? 20;
+        const capped = filtered.slice(start, start + pageSize);
+        const nextOffset = start + capped.length < filtered.length ? start + capped.length : null;
         return ok(`Found ${capped.length}/${filtered.length} markdown report(s) in ${root}`, {
           reports_dir: root,
           run_id_filter: runFilter || undefined,
           query: searchQuery || undefined,
+          offset: start,
+          limit: pageSize,
+          returned: capped.length,
           total_matching: filtered.length,
+          next_offset: nextOffset,
           items: capped
         });
       });
