@@ -480,8 +480,8 @@ const GenerateServerEntryInputBaseSchema = z.object({
   oauth_audience: z.string().optional().describe('Optional OAuth audience.')
 });
 
-const GenerateServerEntryInputSchema = GenerateServerEntryInputBaseSchema
-  .superRefine((value, ctx) => {
+const GenerateServerEntryInputSchema = GenerateServerEntryInputBaseSchema.superRefine(
+  (value, ctx) => {
     const authType = value.auth_type ?? 'none';
     if (authType === 'bearer') {
       if (!value.bearer_token && !value.bearer_env) {
@@ -519,7 +519,8 @@ const GenerateServerEntryInputSchema = GenerateServerEntryInputBaseSchema
         });
       }
     }
-  });
+  }
+);
 
 export type SessionRuntime = {
   transport: StreamableHTTPServerTransport;
@@ -1333,15 +1334,7 @@ export function registerTools(server: McpServer): void {
           .describe('Include full grouped rows. Defaults to false (summary-first).')
       }
     },
-    async ({
-      run_ids,
-      latest_n,
-      scenario_ids,
-      agents,
-      group_by,
-      top_n,
-      include_details
-    }) => {
+    async ({ run_ids, latest_n, scenario_ids, agents, group_by, top_n, include_details }) => {
       return withToolHandling(async () => {
         const loaded = loadRunsForAnalysis({
           runIds: run_ids,
@@ -1423,14 +1416,7 @@ export function registerTools(server: McpServer): void {
           .describe('Include full classification rows. Defaults to false (summary-first).')
       }
     },
-    async ({
-      left_run_id,
-      right_run_id,
-      scenario_ids,
-      agents,
-      top_n,
-      include_details
-    }) => {
+    async ({ left_run_id, right_run_id, scenario_ids, agents, top_n, include_details }) => {
       return withToolHandling(async () => {
         const base = resolveRunsDir();
         const left = loadSingleRunForAnalysis(base, left_run_id);
@@ -2670,10 +2656,7 @@ function filterScenarios(
   });
 }
 
-function loadRunsForAnalysis(params: {
-  runIds?: string[];
-  latestN: number;
-}): LoadedRunResult[] {
+function loadRunsForAnalysis(params: { runIds?: string[]; latestN: number }): LoadedRunResult[] {
   const base = resolveRunsDir();
   const ids = selectRunIdsForAnalysis(base, params.runIds, params.latestN);
   return ids.map((id) => loadSingleRunForAnalysis(base, id));
