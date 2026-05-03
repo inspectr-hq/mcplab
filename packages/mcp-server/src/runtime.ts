@@ -3427,8 +3427,7 @@ function err(error: unknown): ToolResult {
   const message = error instanceof Error ? error.message : String(error);
   return {
     isError: true,
-    content: [{ type: 'text', text: `Error: ${message}` }],
-    structuredContent: { error: message }
+    content: [{ type: 'text', text: `Error: ${message}` }]
   };
 }
 
