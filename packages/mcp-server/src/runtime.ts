@@ -2203,7 +2203,7 @@ export function registerTools(server: McpServer): void {
             line_end: z.number().int().positive().optional(),
             snippet: z.string(),
             score: z.number(),
-            context_command: z.string()
+            context_command: z.string().optional()
           })
         )
       },

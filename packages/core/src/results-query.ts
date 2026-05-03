@@ -32,7 +32,7 @@ export interface SearchHit {
   line_end?: number;
   snippet: string;
   score: number;
-  context_command: string;
+  context_command?: string;
 }
 
 export interface SearchFilters {
@@ -106,17 +106,32 @@ function listRunDirs(runsDir: string): string[] {
     .sort();
 }
 
+export function listRunIdsDesc(runsDir: string): string[] {
+  return listRunDirs(runsDir).slice().reverse();
+}
+
 function getRunFileSet(runDir: string): string[] {
   return ['results.json', 'trace.jsonl', 'summary.md'].filter((name) => existsSync(join(runDir, name)));
 }
 
 function getRunMtime(runDir: string, files: string[]): number {
+  // Empty run directories return 0; treated as stable sentinel for "no artifact mtime".
   let maxMtime = 0;
   for (const file of files) {
     const st = statSync(join(runDir, file));
     maxMtime = Math.max(maxMtime, st.mtimeMs);
   }
   return maxMtime;
+}
+
+function resolveRunFilePath(runsDir: string, runId: string, file: string): string {
+  if (!runId.trim()) throw new Error('run id must not be empty');
+  const base = resolve(runsDir);
+  const target = resolve(base, runId, file);
+  if (target !== base && !target.startsWith(`${base}/`)) {
+    throw new Error(`Invalid run id path: ${runId}`);
+  }
+  return target;
 }
 
 export function indexNeedsRefresh(runsDir: string): boolean {
@@ -264,8 +279,14 @@ function buildDocsFromTrace(runId: string, tracePath: string, runTimestamp?: str
         if (block.type === 'text') eventTexts.push(block.text);
         if (block.type === 'tool_use') eventTexts.push(`tool_use ${block.name} ${toShortText(block.input, 400)}`);
         if (block.type === 'tool_result') {
+          const contentText = Array.isArray(block.content)
+            ? block.content
+                .filter((c): c is { type: 'text'; text: string } => c?.type === 'text')
+                .map((c) => c.text)
+                .join(' ')
+            : '';
           eventTexts.push(
-            `tool_result ${block.name} error=${block.is_error ? 'true' : 'false'} ${toShortText(block.content, 600)}`
+            `tool_result ${block.name} error=${block.is_error ? 'true' : 'false'} ${toShortText(contentText, 600)}`
           );
         }
       }
@@ -297,8 +318,8 @@ export function buildSearchIndex(runsDir: string): SearchDoc[] {
   const docs: SearchDoc[] = [];
   const runIds = listRunDirs(runsDir);
   for (const runId of runIds) {
-    const runDir = join(runsDir, runId);
-    const resultsPath = join(runDir, 'results.json');
+    const runDir = resolve(runsDir, runId);
+    const resultsPath = resolveRunFilePath(runsDir, runId, 'results.json');
     if (!existsSync(resultsPath)) continue;
     let results: ResultsJson;
     try {
@@ -391,6 +412,7 @@ export function scoreDoc(doc: SearchDoc, query: string): number {
     if (doc.status?.includes(term as 'passed' | 'failed')) score += 2;
   }
 
+  // Intentional ranking biases: failed scenarios first, then structured results docs.
   if (doc.status === 'failed') score += 4;
   if (doc.source === 'results') score += 2;
   if (doc.source === 'trace') score += 1;
@@ -435,13 +457,24 @@ export function searchDocs(docs: SearchDoc[], filters: SearchFilters): SearchHit
       line_end: doc.line_end,
       snippet: makeSnippet(doc.text, filters.query),
       score,
-      context_command: `mcplab results context --run ${doc.run_id}${doc.scenario_id ? ` --scenario ${doc.scenario_id}` : ''}${doc.line_start ? ` --around ${doc.line_start}` : ''}`
+      ...(doc.scenario_id
+        ? {
+            context_command: `mcplab results context --run ${doc.run_id} --scenario ${doc.scenario_id}${
+              doc.line_start ? ` --around ${doc.line_start}` : ''
+            }`
+          }
+        : {})
     }));
 }
 
 function readResults(runsDir: string, runId: string): ResultsJson {
-  const path = join(runsDir, runId, 'results.json');
-  return JSON.parse(readFileSync(path, 'utf8')) as ResultsJson;
+  const path = resolveRunFilePath(runsDir, runId, 'results.json');
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as ResultsJson;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not read results.json for run ${runId} at ${path}: ${msg}`);
+  }
 }
 
 function contextFromTrace(opts: Required<Pick<ContextOptions, 'runsDir' | 'runId' | 'scenarioId'>> & {
@@ -449,7 +482,7 @@ function contextFromTrace(opts: Required<Pick<ContextOptions, 'runsDir' | 'runId
   before: number;
   after: number;
 }): ContextResult {
-  const tracePath = join(opts.runsDir, opts.runId, 'trace.jsonl');
+  const tracePath = resolveRunFilePath(opts.runsDir, opts.runId, 'trace.jsonl');
   if (!existsSync(tracePath)) throw new Error(`trace.jsonl not found for run ${opts.runId}`);
   const lines = readFileSync(tracePath, 'utf8').split('\n');
   const center = Math.max(1, opts.around ?? 1);
@@ -513,7 +546,7 @@ function contextFromScenarioMixed(opts: Required<Pick<ContextOptions, 'runsDir' 
 }
 
 function contextFromSummary(opts: Required<Pick<ContextOptions, 'runsDir' | 'runId' | 'scenarioId'>>): ContextResult {
-  const summaryPath = join(opts.runsDir, opts.runId, 'summary.md');
+  const summaryPath = resolveRunFilePath(opts.runsDir, opts.runId, 'summary.md');
   if (!existsSync(summaryPath)) throw new Error(`summary.md not found for run ${opts.runId}`);
   const lines = readFileSync(summaryPath, 'utf8').split('\n');
   const matched = lines.filter((line) => line.includes(opts.scenarioId));
@@ -541,6 +574,9 @@ function contextFromResults(opts: Required<Pick<ContextOptions, 'runsDir' | 'run
 export function getContext(opts: ContextOptions): ContextResult {
   const before = opts.before ?? 20;
   const after = opts.after ?? 20;
+  if (opts.source === 'trace' && opts.around === undefined) {
+    throw new Error('around is required when source=trace');
+  }
   if (opts.around !== undefined) {
     return contextFromTrace({
       runsDir: opts.runsDir,

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ResultsJson } from '@inspectr/mcplab-core';
+import { listRunIdsDesc, type ResultsJson } from '@inspectr/mcplab-core';
 import type { ContextResult } from './context.js';
 import type { SearchHit } from './types.js';
 
@@ -12,19 +12,7 @@ export interface RunListItem {
 }
 
 function listRunIds(runsDir: string): string[] {
-  if (!existsSync(runsDir)) return [];
-  return readdirSync(runsDir)
-    .map((name) => ({ name, path: join(runsDir, name) }))
-    .filter((entry) => {
-      try {
-        return statSync(entry.path).isDirectory();
-      } catch {
-        return false;
-      }
-    })
-    .map((entry) => entry.name)
-    .sort()
-    .reverse();
+  return listRunIdsDesc(runsDir);
 }
 
 export function listRuns(runsDir: string): RunListItem[] {
@@ -92,7 +80,9 @@ export function formatSearchHits(hits: SearchHit[], format: 'json' | 'jsonl' | '
       `   source=${hit.source} file=${hit.file}${hit.line_start ? `:${hit.line_start}` : ''}`
     );
     lines.push(`   snippet: ${hit.snippet}`);
-    lines.push(`   next: ${hit.context_command}`);
+    if (hit.context_command) {
+      lines.push(`   next: ${hit.context_command}`);
+    }
   });
   return lines.join('\n');
 }
@@ -100,7 +90,7 @@ export function formatSearchHits(hits: SearchHit[], format: 'json' | 'jsonl' | '
 export function formatContext(result: ContextResult, format: 'json' | 'markdown'): string {
   if (format === 'json') return JSON.stringify(result, null, 2);
   return [
-    `# Context`,
+    `# Context ${result.run_id}/${result.scenario_id}`,
     '',
     `run: ${result.run_id}`,
     `scenario: ${result.scenario_id}`,
