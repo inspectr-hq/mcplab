@@ -59,7 +59,6 @@ When the request is about analyzing results, the assistant must:
 1. Prefer MCP analysis tools first to reduce context/token usage:
 - `mcplab_aggregate_runs` for multi-run trends and compact metric summaries
 - `mcplab_compare_runs` for structured run-to-run regressions/improvements
-- `mcplab_search_runs` to locate runs by filter criteria
 - `mcplab_search_markdown_reports` to locate report files
 - `mcplab_search_tool_analysis_results` to query stored tool analysis data
 2. Read artifacts directly only when needed:
@@ -134,6 +133,9 @@ When the request is about analyzing results, the assistant must:
 4. For multi-agent runs, compare by pass rate, tool efficiency, and latency.
 5. Highlight regressions with concrete scenario IDs and observed behavior deltas.
 6. When quality drift is requested, compare deterministic run metrics first, then inspect targeted artifact excerpts (`results.json`, `trace.jsonl`) for output-level drift.
+
+Path ownership note:
+MCPLab MCP tools own base directories (runs/reports/tool-analysis/library roots). Provide logical IDs and relative filenames only; do not attempt to pass root directory overrides.
 
 ## Result Assistant Scopes
 
