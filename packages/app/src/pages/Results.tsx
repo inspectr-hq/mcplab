@@ -414,7 +414,7 @@ const Results = () => {
                       {sortIcon("passRate")}
                     </button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -424,7 +424,7 @@ const Results = () => {
                       {sortIcon("scenarios")}
                     </button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -434,7 +434,7 @@ const Results = () => {
                       {sortIcon("avgToolCalls")}
                     </button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -489,9 +489,9 @@ const Results = () => {
                     <TableCell>
                       <PassRateBadge rate={r.overallPassRate} />
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{r.totalScenarios}</TableCell>
-                    <TableCell className="font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
-                    <TableCell className="font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{r.totalScenarios}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
