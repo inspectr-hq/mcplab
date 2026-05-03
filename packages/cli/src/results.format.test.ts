@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
-import { formatContext, formatSearchHits, showRun } from './results/format.js';
+import { formatContext, formatRunList, formatSearchHits, showRun } from './results/format.js';
 
 function setupRun() {
   const root = mkdtempSync(join(tmpdir(), 'mcplab-format-'));
@@ -60,5 +60,15 @@ describe('results format helpers', () => {
       'markdown'
     );
     expect(text).toContain('# Context r1/s1');
+  });
+
+  it('formatRunList table renders null pass_rate as dash', () => {
+    const table = formatRunList(
+      [{ run_id: 'r1', timestamp: '2026-01-01T00:00:00.000Z', pass_rate: null, total_runs: 3 }],
+      'table'
+    );
+    const lines = table.split('\n');
+    expect(lines[0]).toBe('RUN_ID\tTIMESTAMP\tPASS_RATE\tTOTAL_RUNS');
+    expect(lines[1]).toContain('r1\t2026-01-01T00:00:00.000Z\t-\t3');
   });
 });
