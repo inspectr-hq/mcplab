@@ -549,7 +549,7 @@ const cliRunning: DocPage = {
       id: 'select-agents',
       title: 'Select Agents',
       paragraphs: [
-        'By default all agents defined in the config are used. Narrow the selection with --agents or expand to include all agents defined in the library with --agents-all.'
+        'By default all agents defined in the config are used. Narrow the selection with --agents or expand to include agents from the config and library with --agents-all.'
       ],
       codeBlocks: [
         {
@@ -841,7 +841,7 @@ const cliReports: DocPage = {
       id: 'run-directory',
       title: 'Run Directory',
       paragraphs: [
-        'Every mcplab run creates a timestamped directory under runs/ (or --runs-dir if set). The directory contains four files.'
+        'Every mcplab run creates a timestamped directory under mcplab/results/evaluation-runs (or --runs-dir if set). The directory contains four files.'
       ],
       bullets: [
         'results.json — structured pass/fail for every scenario, assertion, and tool call.',
@@ -875,12 +875,12 @@ const cliReports: DocPage = {
         {
           title: 'list and inspect runs',
           language: 'bash',
-          code: 'npx @inspectr/mcplab results list\\nnpx @inspectr/mcplab results show --run <run-id> --format json'
+          code: `npx @inspectr/mcplab results list\nnpx @inspectr/mcplab results show --run <run-id> --format json`
         },
         {
           title: 'search and fetch focused context',
           language: 'bash',
-          code: 'npx @inspectr/mcplab results search \"tool failed timeout\" --status failed --format json\\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown'
+          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown`
         }
       ]
     },
@@ -936,7 +936,7 @@ const cliResultsQuery: DocPage = {
         {
           title: 'broad search then focused context',
           language: 'bash',
-          code: 'npx @inspectr/mcplab results search \"tool failed timeout\" --status failed --limit 10 --format json\\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown'
+          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --limit 10 --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown`
         }
       ]
     },
@@ -1092,7 +1092,7 @@ const cliCommandReference: DocPage = {
         '-s, --scenario <id> — Run a single scenario by ID. Repeatable to run several.',
         '-n, --runs <count> — Number of variance runs per scenario. Default: 1.',
         '--agents <agents> — Comma-separated list of agent IDs to test.',
-        '--agents-all — Run all agents configured in the eval config.',
+        '--agents-all — Run all agents configured in the eval config plus any loaded from the library.',
         '--interactive — Prompt for config path and agents at the terminal.',
         '--bail — Stop after the first failed config when --config points to a directory.',
         '--run-note <text> — Human-readable note attached to run metadata. Max 500 chars.',
@@ -1207,7 +1207,7 @@ const appGettingStarted: DocPage = {
       ],
       bullets: [
         '--evals-dir defaults to the current working directory.',
-        '--runs-dir defaults to ~/.mcplab/runs.',
+        '--runs-dir defaults to mcplab/results/evaluation-runs.',
         '--libraries-dir is optional. No library is loaded if omitted.'
       ]
     },
@@ -1383,7 +1383,7 @@ const appAssistants: DocPage = {
       title: 'Result Assistant',
       paragraphs: [
         'The Result Assistant is an AI chat that answers questions based on run data. It is available in two scopes.',
-        "From a specific run (scope: run), it is scoped to that run's results, tool traces, and assertions. Use it to understand failures quickly without manually reading through trace files.",
+        "From a specific run (scope: run), it is scoped to that run's results, tool traces, and assertions. Default analysis flow is: search for likely matches, open focused context, then read raw artifact lines only when needed.",
         'From the Results overview (scope: all_runs), it has access to data across all runs and can answer questions about trends, regressions, and cross-run comparisons.'
       ],
       bullets: [
