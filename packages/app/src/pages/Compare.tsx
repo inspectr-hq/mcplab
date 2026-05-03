@@ -723,7 +723,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "runs" && selectedRuns.length === 0 && (
+      {mode === "runs" && selectedRuns.length < 2 && (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm font-medium">No runs selected</p>
