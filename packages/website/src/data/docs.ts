@@ -889,7 +889,7 @@ const cliReports: DocPage = {
         {
           title: 'search and fetch focused context',
           language: 'bash',
-          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown`
+          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --source trace --around 42 --format markdown`
         }
       ]
     },
@@ -945,7 +945,7 @@ const cliResultsQuery: DocPage = {
         {
           title: 'broad search then focused context',
           language: 'bash',
-          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --limit 10 --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown`
+          code: `npx @inspectr/mcplab results search "tool failed timeout" --status failed --limit 10 --format json\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --source trace --around 42 --format markdown`
         }
       ]
     },

@@ -155,6 +155,19 @@ describe('results-query core', () => {
     ).toThrow('around must be a positive integer');
   });
 
+  it('rejects source=trace with non-positive around using positive-integer message', () => {
+    const { runsDir, runId } = fixture();
+    expect(() =>
+      getContext({
+        runsDir,
+        runId,
+        scenarioId: 'search-tags',
+        source: 'trace',
+        around: 0
+      })
+    ).toThrow('around must be a positive integer');
+  });
+
   it('rejects around with non-trace source', () => {
     const { runsDir, runId } = fixture();
     expect(() =>

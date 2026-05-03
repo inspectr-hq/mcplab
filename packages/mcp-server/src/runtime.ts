@@ -1892,7 +1892,7 @@ export function registerTools(server: McpServer): void {
         'Search scenario_run trace content for a text query and return matching message/block items.',
       outputSchema: {
         run_id: z.string(),
-        query: z.string(),
+        query: z.string().trim().min(1),
         legacy_trace_detected: z.boolean().optional(),
         matches: z.array(FlattenedTraceItemSchema)
       },

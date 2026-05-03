@@ -482,9 +482,9 @@ export function searchDocs(docs: SearchDoc[], filters: SearchFilters): SearchHit
         ? {
             context_command: `mcplab results context --run ${JSON.stringify(
               doc.run_id
-            )} --scenario ${JSON.stringify(doc.scenario_id)} --source ${JSON.stringify(doc.source)}${
-              doc.line_start ? ` --around ${doc.line_start}` : ''
-            }`
+            )} --scenario ${JSON.stringify(doc.scenario_id)} --source ${JSON.stringify(
+              doc.source
+            )}${doc.line_start ? ` --around ${doc.line_start}` : ''}`
           }
         : {})
     }));
@@ -607,8 +607,11 @@ export function getContext(opts: ContextOptions): ContextResult {
   const before = opts.before ?? 20;
   const after = opts.after ?? 20;
   if (opts.source === 'trace') {
-    if (opts.around === undefined || opts.around <= 0) {
+    if (opts.around === undefined) {
       throw new Error('around is required when source=trace');
+    }
+    if (opts.around <= 0) {
+      throw new Error('around must be a positive integer');
     }
     return contextFromTrace({
       runsDir: opts.runsDir,
