@@ -107,6 +107,22 @@ describe('results-query core', () => {
     expect(hits.some((h) => h.context_command === undefined)).toBe(true);
   });
 
+  it('adds quoted context_command including source for scenario docs', () => {
+    const { runsDir } = fixture();
+    const docs = buildSearchIndex(runsDir);
+    const hits = searchDocs(docs, {
+      query: 'timeout',
+      limit: 5,
+      status: 'failed',
+      source: ['results', 'trace', 'summary'],
+      scenario: 'search-tags',
+      agent: 'claude-haiku'
+    });
+    expect(hits[0]?.context_command).toContain('--source');
+    expect(hits[0]?.context_command).toContain('"20260206-212239"');
+    expect(hits[0]?.context_command).toContain('"search-tags"');
+  });
+
   it('indexes tool_result text content, not raw JSON wrappers', () => {
     const { runsDir } = fixture();
     const docs = buildSearchIndex(runsDir);
@@ -125,6 +141,18 @@ describe('results-query core', () => {
         source: 'trace'
       })
     ).toThrow('around is required when source=trace');
+  });
+
+  it('rejects around=0', () => {
+    const { runsDir, runId } = fixture();
+    expect(() =>
+      getContext({
+        runsDir,
+        runId,
+        scenarioId: 'search-tags',
+        around: 0
+      })
+    ).toThrow('around must be a positive integer');
   });
 
   it('blocks runId path traversal', () => {

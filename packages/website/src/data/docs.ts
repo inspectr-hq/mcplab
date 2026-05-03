@@ -833,7 +833,16 @@ const cliReports: DocPage = {
   label: 'Reports & Output',
   href: '/docs/cli/reports-output/',
   description: 'What MCPLab writes after a run and how to work with it.',
-  keywords: ['reports', 'output', 'results', 'trace', 'html', 'json', 'mcplab report', 'mcplab results'],
+  keywords: [
+    'reports',
+    'output',
+    'results',
+    'trace',
+    'html',
+    'json',
+    'mcplab report',
+    'mcplab results'
+  ],
   seoTitle: 'CLI — Reports & Output',
   track: 'cli',
   sections: [
@@ -966,7 +975,7 @@ const cliResultsQuery: DocPage = {
         {
           title: 'filtered search',
           language: 'bash',
-          code: 'npx @inspectr/mcplab results search \"timeout\" --status failed --agent claude-haiku --scenario search-tags --source trace --limit 5 --format json'
+          code: 'npx @inspectr/mcplab results search "timeout" --status failed --agent claude-haiku --scenario search-tags --source trace --limit 5 --format json'
         }
       ]
     },

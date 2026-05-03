@@ -7,7 +7,7 @@ import type { SearchHit } from './types.js';
 export interface RunListItem {
   run_id: string;
   timestamp?: string;
-  pass_rate?: number;
+  pass_rate?: number | null;
   total_runs?: number;
 }
 
@@ -26,7 +26,7 @@ export function listRuns(runsDir: string): RunListItem[] {
       return {
         run_id: runId,
         timestamp: parsed.metadata.timestamp,
-        pass_rate: parsed.summary.pass_rate,
+        pass_rate: typeof parsed.summary.pass_rate === 'number' ? parsed.summary.pass_rate : null,
         total_runs: parsed.summary.total_runs
       };
     } catch {
@@ -46,8 +46,13 @@ export function showRun(runsDir: string, runId: string, format: 'json' | 'markdo
   if (!existsSync(resultsPath)) {
     throw new Error(`results.json not found for run ${runId}`);
   }
-  const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
-  return JSON.stringify(parsed, null, 2);
+  try {
+    const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+    return JSON.stringify(parsed, null, 2);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not parse results.json for run ${runId}: ${msg}`);
+  }
 }
 
 export function formatRunList(list: RunListItem[], format: 'json' | 'table'): string {
@@ -58,7 +63,9 @@ export function formatRunList(list: RunListItem[], format: 'json' | 'table'): st
   for (const item of list) {
     lines.push(
       `${item.run_id}\t${item.timestamp ?? '-'}\t${
-        item.pass_rate === undefined ? '-' : (item.pass_rate * 100).toFixed(1) + '%'
+        item.pass_rate === undefined || item.pass_rate === null
+          ? '-'
+          : (item.pass_rate * 100).toFixed(1) + '%'
       }\t${item.total_runs ?? '-'}`
     );
   }

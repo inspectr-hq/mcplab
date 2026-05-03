@@ -26,6 +26,7 @@ import {
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
   getResultsIndexPaths,
+  resolveRunArtifactPath,
   searchDocs,
   getContext,
   type EvalConfig,
@@ -2103,7 +2104,7 @@ export function registerTools(server: McpServer): void {
         if (!resolvedRunId) {
           throw new Error(`No runs found in ${base}`);
         }
-        const fullPath = join(readBase, resolvedRunId, artifact);
+        const fullPath = resolveRunArtifactPath(readBase, resolvedRunId, artifact);
         if (!existsSync(fullPath)) {
           throw new Error(`Artifact not found: ${fullPath}`);
         }
@@ -2299,7 +2300,9 @@ export function registerTools(server: McpServer): void {
           before: before ?? 20,
           after: after ?? 20
         });
-        return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, { ...result });
+        return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, {
+          ...result
+        });
       });
     }
   );
@@ -2771,8 +2774,8 @@ function loadRunsForAnalysis(params: {
 function loadSingleRunForAnalysis(primaryRunsDir: string, runIdInput: string): LoadedRunResult {
   const resolvedRunId = resolveRunIdToken(primaryRunsDir, runIdInput);
   const readBase = resolveExistingRunReadDir(primaryRunsDir, resolvedRunId);
-  const runPath = join(readBase, resolvedRunId);
-  const resultsPath = join(runPath, 'results.json');
+  const runPath = resolve(readBase, resolvedRunId);
+  const resultsPath = resolveRunArtifactPath(readBase, resolvedRunId, 'results.json');
   if (!existsSync(resultsPath)) {
     throw new Error(`results.json not found for run '${resolvedRunId}' at ${resultsPath}`);
   }
@@ -3222,7 +3225,7 @@ function readScenarioRunTraceRecordsForRun(
   );
   const runId = runIdInput === 'LATEST' ? latestRunId(readBase) : runIdInput;
   if (!runId) throw new Error(`No runs found in ${base}`);
-  const tracePath = join(readBase, runId, 'trace.jsonl');
+  const tracePath = resolveRunArtifactPath(readBase, runId, 'trace.jsonl');
   if (!existsSync(tracePath)) throw new Error(`Artifact not found: ${tracePath}`);
   const raw = readFileSync(tracePath, 'utf8');
   const lines = raw.split(/\r?\n/).filter(Boolean);

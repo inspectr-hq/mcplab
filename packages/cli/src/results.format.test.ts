@@ -25,6 +25,14 @@ describe('results format helpers', () => {
     expect(() => showRun(runsDir, '../../etc/passwd', 'json')).toThrow('Invalid run id path');
   });
 
+  it('showRun adds run context on parse error', () => {
+    const { runsDir, runId } = setupRun();
+    writeFileSync(join(runsDir, runId, 'results.json'), '{bad json', 'utf8');
+    expect(() => showRun(runsDir, runId, 'json')).toThrow(
+      `Could not parse results.json for run ${runId}`
+    );
+  });
+
   it('markdown formatter omits next when context_command missing', () => {
     const text = formatSearchHits(
       [
