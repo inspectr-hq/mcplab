@@ -986,7 +986,7 @@ const cliCommandReference: DocPage = {
   label: 'Command Reference',
   href: '/docs/cli/command-reference/',
   description: 'All mcplab commands and their flags in one place.',
-  keywords: ['cli', 'commands', 'flags', 'options', 'reference', 'run', 'app', 'report'],
+  keywords: ['cli', 'commands', 'flags', 'options', 'reference', 'run', 'app', 'report', 'results'],
   seoTitle: 'CLI — Command Reference',
   track: 'cli',
   sections: [
@@ -1016,6 +1016,26 @@ const cliCommandReference: DocPage = {
         '--open-browser — Open browser to the MCPLab UI when OAuth authentication is required.',
         '--snapshot-eval — Apply the snapshot_eval policy defined in the config.',
         '--compare-snapshot <snapshotId> — Compare the completed run against a snapshot after it finishes.'
+      ]
+    },
+    {
+      id: 'results',
+      title: 'mcplab results',
+      paragraphs: ['Query evaluation run artifacts with LLM-first structured outputs.'],
+      codeBlocks: [
+        {
+          title: 'usage',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results <subcommand> [options]'
+        }
+      ],
+      bullets: [
+        'list — List run directories and basic run metadata.',
+        'show --run <runId> — Show a run in json or markdown.',
+        'index [--rebuild] — Build/refresh local results index under mcplab/results/.index.',
+        'search <query> — Search indexed results/trace/summary and return compact hits.',
+        'context --run <runId> --scenario <id> — Fetch focused excerpt, optionally with --around for trace line windows.',
+        'search defaults: --status all, --source results,trace,summary, --limit 10, --format json.'
       ]
     },
     {
@@ -1058,7 +1078,7 @@ const cliCommandReference: DocPage = {
         '--dev — Proxy frontend requests to a Vite dev server. API remains local.',
         '--interactive — Prompt for host, port, and directory paths before startup.'
       ]
-    },
+    }
   ]
 };
 
