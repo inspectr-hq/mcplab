@@ -23,9 +23,17 @@ import {
   loadConfig,
   runAll,
   selectScenarios,
+  loadOrBuildSearchIndex,
+  indexNeedsRefresh,
+  getResultsIndexPaths,
+  searchDocs,
+  getContext,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
+  type SearchDoc,
+  type SearchHit,
+  type ResultSource,
   type ScenarioRunTraceRecord,
   type TraceMessage,
   type TraceMessageContentBlock
@@ -2160,8 +2168,8 @@ export function registerTools(server: McpServer): void {
     async ({ runs_dir, rebuild }) => {
       return withToolHandling(async () => {
         const runsDir = resolveRunsDir(runs_dir);
-        const wasStale = resultsIndexNeedsRefresh(runsDir);
-        const docs = loadOrBuildResultsSearchIndex(runsDir, Boolean(rebuild));
+        const wasStale = indexNeedsRefresh(runsDir);
+        const docs = loadOrBuildSearchIndex(runsDir, Boolean(rebuild));
         const paths = getResultsIndexPaths(runsDir);
         return ok(`Results index ready (${docs.length} docs).`, {
           runs_dir: runsDir,
@@ -2218,8 +2226,8 @@ export function registerTools(server: McpServer): void {
     async ({ query, runs_dir, status, source, scenario, agent, limit }) => {
       return withToolHandling(async () => {
         const runsDir = resolveRunsDir(runs_dir);
-        const docs = loadOrBuildResultsSearchIndex(runsDir, false);
-        const hits = searchResultsDocs(docs, {
+        const docs = loadOrBuildSearchIndex(runsDir, false);
+        const hits = searchDocs(docs, {
           query,
           status: status ?? 'all',
           source: source && source.length > 0 ? source : ['results', 'trace', 'summary'],
@@ -2282,7 +2290,7 @@ export function registerTools(server: McpServer): void {
         const resolvedRunId = run_id === 'LATEST' ? latestRunId(readBase) : run_id;
         if (!resolvedRunId) throw new Error(`No runs found in ${base}`);
 
-        const result = readResultsContext({
+        const result = getContext({
           runsDir: readBase,
           runId: resolvedRunId,
           scenarioId: scenario_id,
@@ -2291,7 +2299,7 @@ export function registerTools(server: McpServer): void {
           before: before ?? 20,
           after: after ?? 20
         });
-        return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, result);
+        return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, { ...result });
       });
     }
   );
@@ -2851,497 +2859,6 @@ function listRuns(
     }
     return out;
   });
-}
-
-type ResultsQuerySource = 'results' | 'trace' | 'summary';
-type ResultsQueryStatus = 'passed' | 'failed';
-type ResultsSearchDoc = {
-  id: string;
-  run_id: string;
-  run_timestamp?: string;
-  scenario_id?: string;
-  agent?: string;
-  status?: ResultsQueryStatus;
-  source: ResultsQuerySource;
-  file: string;
-  line_start?: number;
-  line_end?: number;
-  title: string;
-  text: string;
-  tags: string[];
-};
-type ResultsSearchHit = {
-  run_id: string;
-  scenario_id?: string;
-  agent?: string;
-  status?: ResultsQueryStatus;
-  source: ResultsQuerySource;
-  file: string;
-  line_start?: number;
-  line_end?: number;
-  snippet: string;
-  score: number;
-  context_command: string;
-};
-
-function getResultsIndexPaths(runsDir: string): {
-  indexDir: string;
-  indexPath: string;
-  manifestPath: string;
-} {
-  const indexDir = resolve(runsDir, '../.index');
-  return {
-    indexDir,
-    indexPath: join(indexDir, 'results-search.jsonl'),
-    manifestPath: join(indexDir, 'manifest.json')
-  };
-}
-
-function ensureResultsIndexDir(runsDir: string): ReturnType<typeof getResultsIndexPaths> {
-  const paths = getResultsIndexPaths(runsDir);
-  mkdirSync(paths.indexDir, { recursive: true });
-  return paths;
-}
-
-function listResultRunIds(runsDir: string): string[] {
-  if (!existsSync(runsDir)) return [];
-  return readdirSync(runsDir)
-    .map((name) => ({ name, full: join(runsDir, name) }))
-    .filter((entry) => {
-      try {
-        return statSync(entry.full).isDirectory();
-      } catch {
-        return false;
-      }
-    })
-    .map((entry) => entry.name)
-    .sort();
-}
-
-function resultRunFiles(runDir: string): string[] {
-  return ['results.json', 'trace.jsonl', 'summary.md'].filter((file) => existsSync(join(runDir, file)));
-}
-
-function resultRunMtimeMs(runDir: string, files: string[]): number {
-  let max = 0;
-  for (const file of files) {
-    max = Math.max(max, statSync(join(runDir, file)).mtimeMs);
-  }
-  return max;
-}
-
-function resultsIndexNeedsRefresh(runsDir: string): boolean {
-  const { indexPath, manifestPath } = getResultsIndexPaths(runsDir);
-  if (!existsSync(indexPath) || !existsSync(manifestPath)) return true;
-  let manifest: { version: number; runs: Record<string, { mtime_ms: number; files: string[] }> };
-  try {
-    manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
-      version: number;
-      runs: Record<string, { mtime_ms: number; files: string[] }>;
-    };
-  } catch {
-    return true;
-  }
-  if (manifest.version !== 1) return true;
-  const runIds = listResultRunIds(runsDir);
-  if (runIds.join(',') !== Object.keys(manifest.runs).sort().join(',')) return true;
-  for (const runId of runIds) {
-    const runDir = join(runsDir, runId);
-    const files = resultRunFiles(runDir);
-    const mtime = resultRunMtimeMs(runDir, files);
-    const saved = manifest.runs[runId];
-    if (!saved) return true;
-    if (saved.mtime_ms !== mtime) return true;
-    if (saved.files.join(',') !== files.join(',')) return true;
-  }
-  return false;
-}
-
-function tokenizeResultsQuery(input: string): string[] {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9_.:-]+/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-}
-
-function statusFromPass(pass: boolean): ResultsQueryStatus {
-  return pass ? 'passed' : 'failed';
-}
-
-function shortText(input: unknown, max = 2000): string {
-  const text = typeof input === 'string' ? input : JSON.stringify(input);
-  return text.length > max ? `${text.slice(0, max)}...` : text;
-}
-
-function buildResultsDocsFromRun(runId: string, runDir: string, parsed: ResultsJson): ResultsSearchDoc[] {
-  const docs: ResultsSearchDoc[] = [
-    {
-      id: `${runId}:summary`,
-      run_id: runId,
-      run_timestamp: parsed.metadata.timestamp,
-      source: 'results',
-      file: 'results.json',
-      title: `Run ${runId} summary`,
-      text: JSON.stringify({ summary: parsed.summary, metadata: parsed.metadata }),
-      tags: ['run', 'summary', 'results']
-    }
-  ];
-  for (const scenario of parsed.scenarios) {
-    const status: ResultsQueryStatus = scenario.runs.every((run) => run.pass) ? 'passed' : 'failed';
-    docs.push({
-      id: `${runId}:scenario:${scenario.scenario_id}:${scenario.agent}`,
-      run_id: runId,
-      run_timestamp: parsed.metadata.timestamp,
-      scenario_id: scenario.scenario_id,
-      agent: scenario.agent,
-      status,
-      source: 'results',
-      file: 'results.json',
-      title: `Scenario ${scenario.scenario_id} (${scenario.agent})`,
-      text: JSON.stringify({
-        pass_rate: scenario.pass_rate,
-        failures: scenario.runs.flatMap((run) => run.failures),
-        errors: scenario.runs.map((run) => run.error).filter(Boolean),
-        last_final_answer: scenario.last_final_answer
-      }),
-      tags: ['scenario', status, 'results', 'assertion']
-    });
-    for (const run of scenario.runs) {
-      if (run.pass && run.failures.length === 0 && !run.error) continue;
-      docs.push({
-        id: `${runId}:failure:${scenario.scenario_id}:${scenario.agent}:${run.run_index}`,
-        run_id: runId,
-        run_timestamp: parsed.metadata.timestamp,
-        scenario_id: scenario.scenario_id,
-        agent: scenario.agent,
-        status: statusFromPass(run.pass),
-        source: 'results',
-        file: 'results.json',
-        title: `Failure ${scenario.scenario_id} run ${run.run_index}`,
-        text: JSON.stringify({
-          failures: run.failures,
-          error: run.error,
-          tool_calls: run.tool_calls,
-          final_text: run.final_text
-        }),
-        tags: ['failure', 'error', 'assertion', 'results']
-      });
-    }
-  }
-
-  const summaryPath = join(runDir, 'summary.md');
-  if (existsSync(summaryPath)) {
-    const sections = readFileSync(summaryPath, 'utf8')
-      .split('\n## ')
-      .map((section, idx) => (idx === 0 ? section : `## ${section}`))
-      .map((section) => section.trim())
-      .filter(Boolean);
-    sections.forEach((section, idx) => {
-      docs.push({
-        id: `${runId}:summarymd:${idx}`,
-        run_id: runId,
-        run_timestamp: parsed.metadata.timestamp,
-        source: 'summary',
-        file: 'summary.md',
-        title: `Summary section ${idx + 1}`,
-        text: shortText(section),
-        tags: ['summary', 'markdown']
-      });
-    });
-  }
-  return docs;
-}
-
-function buildTraceDocsForRun(
-  runId: string,
-  tracePath: string,
-  runTimestamp?: string
-): ResultsSearchDoc[] {
-  if (!existsSync(tracePath)) return [];
-  const lines = readFileSync(tracePath, 'utf8').split('\n');
-  const docs: ResultsSearchDoc[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i]?.trim();
-    if (!line) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const rec = parsed as Partial<ScenarioRunTraceRecord>;
-    if (rec.type !== 'scenario_run' || !rec.scenario_id || !rec.agent) continue;
-    const texts: string[] = [];
-    for (const msg of rec.messages ?? []) {
-      for (const block of msg.content ?? []) {
-        if (block.type === 'text') texts.push(block.text);
-        if (block.type === 'tool_use') texts.push(`tool_use ${block.name} ${shortText(block.input, 600)}`);
-        if (block.type === 'tool_result') {
-          texts.push(
-            `tool_result ${block.name} error=${block.is_error ? 'true' : 'false'} ${shortText(block.content, 700)}`
-          );
-        }
-      }
-    }
-    const text = texts.join(' ').trim();
-    if (!text) continue;
-    docs.push({
-      id: `${runId}:trace:${i + 1}`,
-      run_id: runId,
-      run_timestamp: runTimestamp,
-      scenario_id: rec.scenario_id,
-      agent: rec.agent,
-      status: statusFromPass(Boolean(rec.pass)),
-      source: 'trace',
-      file: 'trace.jsonl',
-      line_start: i + 1,
-      line_end: i + 1,
-      title: `Trace ${rec.scenario_id} (${rec.agent}) line ${i + 1}`,
-      text: shortText(text, 2400),
-      tags: ['trace', rec.pass ? 'ok' : 'error', 'tool_result']
-    });
-  }
-  return docs;
-}
-
-function buildResultsSearchIndex(runsDir: string): ResultsSearchDoc[] {
-  const docs: ResultsSearchDoc[] = [];
-  for (const runId of listResultRunIds(runsDir)) {
-    const runDir = join(runsDir, runId);
-    const resultsPath = join(runDir, 'results.json');
-    if (!existsSync(resultsPath)) continue;
-    let parsed: ResultsJson;
-    try {
-      parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
-    } catch {
-      continue;
-    }
-    docs.push(...buildResultsDocsFromRun(runId, runDir, parsed));
-    docs.push(...buildTraceDocsForRun(runId, join(runDir, 'trace.jsonl'), parsed.metadata.timestamp));
-  }
-  return docs;
-}
-
-function writeResultsSearchIndex(runsDir: string, docs: ResultsSearchDoc[]): void {
-  const { indexPath, manifestPath } = ensureResultsIndexDir(runsDir);
-  writeFileSync(
-    indexPath,
-    docs.map((doc) => JSON.stringify(doc)).join('\n') + (docs.length > 0 ? '\n' : ''),
-    'utf8'
-  );
-
-  const runs: Record<string, { mtime_ms: number; files: string[] }> = {};
-  for (const runId of listResultRunIds(runsDir)) {
-    const runDir = join(runsDir, runId);
-    const files = resultRunFiles(runDir);
-    runs[runId] = { mtime_ms: resultRunMtimeMs(runDir, files), files };
-  }
-  writeFileSync(manifestPath, `${JSON.stringify({ version: 1, runs }, null, 2)}\n`, 'utf8');
-}
-
-function loadResultsSearchIndex(runsDir: string): ResultsSearchDoc[] {
-  const { indexPath } = ensureResultsIndexDir(runsDir);
-  if (!existsSync(indexPath)) return [];
-  return readFileSync(indexPath, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as ResultsSearchDoc];
-      } catch {
-        return [];
-      }
-    });
-}
-
-function loadOrBuildResultsSearchIndex(runsDir: string, rebuild: boolean): ResultsSearchDoc[] {
-  if (rebuild || resultsIndexNeedsRefresh(runsDir)) {
-    const docs = buildResultsSearchIndex(runsDir);
-    writeResultsSearchIndex(runsDir, docs);
-    return docs;
-  }
-  return loadResultsSearchIndex(runsDir);
-}
-
-function makeResultsSnippet(text: string, query: string, size = 240): string {
-  if (!text) return '';
-  const lower = text.toLowerCase();
-  const terms = tokenizeResultsQuery(query);
-  const pos =
-    terms
-      .map((term) => lower.indexOf(term))
-      .filter((idx) => idx >= 0)
-      .sort((a, b) => a - b)[0] ?? 0;
-  const start = Math.max(0, pos - Math.floor(size / 2));
-  return text.slice(start, start + size).replace(/\s+/g, ' ').trim();
-}
-
-function scoreResultsDoc(doc: ResultsSearchDoc, query: string): number {
-  const terms = tokenizeResultsQuery(query);
-  if (terms.length === 0) return 0;
-  const title = doc.title.toLowerCase();
-  const text = doc.text.toLowerCase();
-  const tags = new Set(doc.tags.map((tag) => tag.toLowerCase()));
-  let score = 0;
-  for (const term of terms) {
-    if (title.includes(term)) score += 8;
-    if (tags.has(term)) score += 6;
-    if (text.includes(term)) score += 3;
-    if (doc.scenario_id?.toLowerCase().includes(term)) score += 4;
-    if (doc.agent?.toLowerCase().includes(term)) score += 4;
-    if (doc.status?.includes(term as ResultsQueryStatus)) score += 2;
-  }
-  if (doc.status === 'failed') score += 4;
-  if (doc.source === 'results') score += 2;
-  if (doc.source === 'trace') score += 1;
-  for (const bonus of ['error', 'timeout', 'assertion', 'tool_result']) {
-    if (tags.has(bonus) && terms.some((term) => bonus.includes(term) || term.includes(bonus))) score += 3;
-  }
-  const ts = doc.run_timestamp ? Date.parse(doc.run_timestamp) : NaN;
-  if (!Number.isNaN(ts)) {
-    const ageDays = Math.max(0, (Date.now() - ts) / (1000 * 60 * 60 * 24));
-    score += Math.max(0, 2 - ageDays / 7);
-  }
-  return Number(score.toFixed(4));
-}
-
-function searchResultsDocs(
-  docs: ResultsSearchDoc[],
-  filters: {
-    query: string;
-    limit: number;
-    status: 'passed' | 'failed' | 'all';
-    source: ResultsQuerySource[];
-    scenario?: string;
-    agent?: string;
-  }
-): ResultsSearchHit[] {
-  return docs
-    .filter((doc) => filters.source.includes(doc.source))
-    .filter((doc) => filters.status === 'all' || doc.status === filters.status)
-    .filter((doc) => !filters.scenario || doc.scenario_id === filters.scenario)
-    .filter((doc) => !filters.agent || doc.agent === filters.agent)
-    .map((doc) => ({ doc, score: scoreResultsDoc(doc, filters.query) }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, filters.limit)
-    .map(({ doc, score }) => ({
-      run_id: doc.run_id,
-      scenario_id: doc.scenario_id,
-      agent: doc.agent,
-      status: doc.status,
-      source: doc.source,
-      file: doc.file,
-      line_start: doc.line_start,
-      line_end: doc.line_end,
-      snippet: makeResultsSnippet(doc.text, filters.query),
-      score,
-      context_command: `mcplab results context --run ${doc.run_id}${doc.scenario_id ? ` --scenario ${doc.scenario_id}` : ''}${doc.line_start ? ` --around ${doc.line_start}` : ''}`
-    }));
-}
-
-function readResultsContext(params: {
-  runsDir: string;
-  runId: string;
-  scenarioId: string;
-  source?: ResultsQuerySource;
-  around?: number;
-  before: number;
-  after: number;
-}): {
-  run_id: string;
-  scenario_id: string;
-  source: ResultsQuerySource | 'mixed';
-  line_start?: number;
-  line_end?: number;
-  excerpt: string;
-} {
-  const runDir = join(params.runsDir, params.runId);
-  if (params.around !== undefined || params.source === 'trace') {
-    const tracePath = join(runDir, 'trace.jsonl');
-    if (!existsSync(tracePath)) throw new Error(`trace.jsonl not found for run ${params.runId}`);
-    const lines = readFileSync(tracePath, 'utf8').split('\n');
-    const center = Math.max(1, params.around ?? 1);
-    const start = Math.max(1, center - params.before);
-    const end = Math.min(lines.length, center + params.after);
-    const excerpt = lines
-      .slice(start - 1, end)
-      .map((line, idx) => `${start + idx}: ${line}`)
-      .join('\n')
-      .trim();
-    return {
-      run_id: params.runId,
-      scenario_id: params.scenarioId,
-      source: 'trace',
-      line_start: start,
-      line_end: end,
-      excerpt
-    };
-  }
-
-  if (params.source === 'summary') {
-    const summaryPath = join(runDir, 'summary.md');
-    if (!existsSync(summaryPath)) throw new Error(`summary.md not found for run ${params.runId}`);
-    const allLines = readFileSync(summaryPath, 'utf8').split('\n');
-    const scoped = allLines.filter((line) => line.includes(params.scenarioId));
-    return {
-      run_id: params.runId,
-      scenario_id: params.scenarioId,
-      source: 'summary',
-      excerpt: (scoped.length > 0 ? scoped : allLines.slice(0, 80)).join('\n')
-    };
-  }
-
-  const resultsPath = join(runDir, 'results.json');
-  if (!existsSync(resultsPath)) throw new Error(`results.json not found for run ${params.runId}`);
-  const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
-  const scenario = parsed.scenarios.find((item) => item.scenario_id === params.scenarioId);
-  if (!scenario) throw new Error(`Scenario not found in run: ${params.scenarioId}`);
-
-  if (params.source === 'results') {
-    return {
-      run_id: params.runId,
-      scenario_id: params.scenarioId,
-      source: 'results',
-      excerpt: JSON.stringify(scenario, null, 2)
-    };
-  }
-
-  const failedRuns = scenario.runs.filter((run) => !run.pass);
-  const latestFailed = failedRuns[failedRuns.length - 1];
-  return {
-    run_id: params.runId,
-    scenario_id: params.scenarioId,
-    source: 'mixed',
-    excerpt: JSON.stringify(
-      {
-        metadata: {
-          run_id: parsed.metadata.run_id,
-          timestamp: parsed.metadata.timestamp,
-          run_note: parsed.metadata.run_note
-        },
-        scenario: {
-          scenario_id: scenario.scenario_id,
-          agent: scenario.agent,
-          pass_rate: scenario.pass_rate,
-          tool_usage_frequency: scenario.tool_usage_frequency,
-          last_final_answer: scenario.last_final_answer
-        },
-        recent_failure: latestFailed
-          ? {
-              run_index: latestFailed.run_index,
-              error: latestFailed.error,
-              failures: latestFailed.failures,
-              tool_calls: latestFailed.tool_calls,
-              final_text: latestFailed.final_text
-            }
-          : null
-      },
-      null,
-      2
-    )
-  };
 }
 
 function defaultRunsDirPath(): string {

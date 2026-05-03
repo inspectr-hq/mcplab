@@ -1,9 +1,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ResultsJson } from '@inspectr/mcplab-core';
-import type { ContextResult, ContextOptions } from './context.js';
+import type { ContextResult } from './context.js';
 import type { SearchHit } from './types.js';
-import { getContext } from './context.js';
 
 export interface RunListItem {
   run_id: string;
@@ -57,6 +56,9 @@ export function showRun(runsDir: string, runId: string, format: 'json' | 'markdo
     }
   }
   const resultsPath = join(runDir, 'results.json');
+  if (!existsSync(resultsPath)) {
+    throw new Error(`results.json not found for run ${runId}`);
+  }
   const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
   return JSON.stringify(parsed, null, 2);
 }
@@ -93,10 +95,6 @@ export function formatSearchHits(hits: SearchHit[], format: 'json' | 'jsonl' | '
     lines.push(`   next: ${hit.context_command}`);
   });
   return lines.join('\n');
-}
-
-export function readContext(options: ContextOptions): ContextResult {
-  return getContext(options);
 }
 
 export function formatContext(result: ContextResult, format: 'json' | 'markdown'): string {

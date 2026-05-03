@@ -47,10 +47,10 @@ import {
   formatRunList,
   formatSearchHits,
   listRuns,
-  readContext,
   showRun
 } from './results/format.js';
 import type { ResultSource } from './results/types.js';
+import { getContext } from './results/context.js';
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   ?.version as string;
@@ -552,16 +552,21 @@ program
       .option('--format <format>', 'Output format: json|jsonl|markdown', 'json')
       .action((query, options) => {
         try {
-          const runsDir = resolve(String(options.runsDir));
-          const docs = loadOrBuildSearchIndex(runsDir, false);
+          const queryText = String(query).trim();
+          if (!queryText) {
+            throw new Error('query must not be empty');
+          }
           const status = String(options.status) as 'passed' | 'failed' | 'all';
           if (!['passed', 'failed', 'all'].includes(status)) {
             throw new Error('status must be passed, failed, or all');
           }
-          const source = String(options.source)
+          const source = String(options.source ?? '')
             .split(',')
             .map((v) => v.trim())
             .filter(Boolean) as ResultSource[];
+          if (source.length === 0) {
+            throw new Error('source must include at least one of results, trace, summary');
+          }
           const sourceSet = new Set(source);
           for (const value of sourceSet) {
             if (!['results', 'trace', 'summary'].includes(value)) {
@@ -572,8 +577,10 @@ program
           if (Number.isNaN(limit) || limit <= 0) {
             throw new Error('limit must be a positive number');
           }
+          const runsDir = resolve(String(options.runsDir));
+          const docs = loadOrBuildSearchIndex(runsDir, false);
           const hits = searchDocs(docs, {
-            query: String(query),
+            query: queryText,
             limit,
             status,
             source: [...sourceSet],
@@ -617,7 +624,7 @@ program
           if (Number.isNaN(before) || before < 0 || Number.isNaN(after) || after < 0) {
             throw new Error('before/after must be non-negative integers');
           }
-          const result = readContext({
+          const result = getContext({
             runsDir: resolve(String(options.runsDir)),
             runId: String(options.run),
             scenarioId: String(options.scenario),

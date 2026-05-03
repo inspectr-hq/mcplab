@@ -24,3 +24,6 @@ docs/plans
 .changeset
 packages/website/.astro
 skills-lock.json
+.code-review-graph/
+.mcp.json
+CLAUDE.md

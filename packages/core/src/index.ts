@@ -13,3 +13,4 @@ export { renderSummaryMarkdown } from './results.js';
 export { McpClientManager } from './mcp.js';
 export { chatWithAgent } from './agent.js';
 export { formatAssistantToolName } from './assistant-tools.js';
+export * from './results-query.js';

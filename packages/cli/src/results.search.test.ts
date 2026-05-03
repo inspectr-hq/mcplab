@@ -161,4 +161,39 @@ describe('results index/search/context', () => {
     expect(context.line_start).toBe(1);
     expect(context.excerpt).toContain('scenario_run');
   });
+
+  it('returns mixed context by default without before/after', () => {
+    const { runsDir, runId } = setupRunFixture();
+    const context = getContext({
+      runsDir,
+      runId,
+      scenarioId: 'search-tags'
+    });
+    expect(context.source).toBe('mixed');
+    expect(context.excerpt).toContain('"scenario_id": "search-tags"');
+  });
+
+  it('returns summary context when source=summary', () => {
+    const { runsDir, runId } = setupRunFixture();
+    const context = getContext({
+      runsDir,
+      runId,
+      scenarioId: 'search-tags',
+      source: 'summary'
+    });
+    expect(context.source).toBe('summary');
+    expect(context.excerpt).toContain('search-tags');
+  });
+
+  it('returns results context when source=results', () => {
+    const { runsDir, runId } = setupRunFixture();
+    const context = getContext({
+      runsDir,
+      runId,
+      scenarioId: 'search-tags',
+      source: 'results'
+    });
+    expect(context.source).toBe('results');
+    expect(context.excerpt).toContain('"scenario_id": "search-tags"');
+  });
 });
