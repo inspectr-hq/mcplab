@@ -1,5 +1,19 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.3.0
+
+### Minor Changes
+
+- feat: Result CLI commands
+- docs: Update docs
+- mcp: Clean up tools and update MCP schemas
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.10.0
+  - @inspectr/mcplab-reporting@1.1.10
+
 ## 1.2.3
 
 ### Patch Changes
