@@ -1,32 +1,17 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { formatContext, formatRunList, formatSearchHits, showRun } from './results/format.js';
-
-function setupRun() {
-  const root = mkdtempSync(join(tmpdir(), 'mcplab-format-'));
-  const runsDir = join(root, 'runs');
-  const runId = '20260206-212239';
-  const runDir = join(runsDir, runId);
-  mkdirSync(runDir, { recursive: true });
-  writeFileSync(
-    join(runDir, 'results.json'),
-    JSON.stringify({ metadata: { run_id: runId }, summary: { pass_rate: 1 }, scenarios: [] }),
-    'utf8'
-  );
-  writeFileSync(join(runDir, 'summary.md'), '# ok\n', 'utf8');
-  return { runsDir, runId };
-}
+import { createResultsRunFixture } from './test-results-fixture.js';
 
 describe('results format helpers', () => {
   it('showRun blocks path traversal', () => {
-    const { runsDir } = setupRun();
+    const { runsDir } = createResultsRunFixture();
     expect(() => showRun(runsDir, '../../etc/passwd', 'json')).toThrow('Invalid run id path');
   });
 
   it('showRun adds run context on parse error', () => {
-    const { runsDir, runId } = setupRun();
+    const { runsDir, runId } = createResultsRunFixture();
     writeFileSync(join(runsDir, runId, 'results.json'), '{bad json', 'utf8');
     expect(() => showRun(runsDir, runId, 'json')).toThrow(
       `Could not parse results.json for run ${runId}`
