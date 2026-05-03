@@ -619,6 +619,9 @@ program
           if (around !== undefined && (Number.isNaN(around) || around <= 0)) {
             throw new Error('around must be a positive integer');
           }
+          if (around !== undefined && sourceRaw && sourceRaw !== 'trace') {
+            throw new Error('around can only be used when source=trace');
+          }
           const before = Number(options.before);
           const after = Number(options.after);
           if (Number.isNaN(before) || before < 0 || Number.isNaN(after) || after < 0) {

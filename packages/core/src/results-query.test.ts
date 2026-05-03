@@ -155,6 +155,19 @@ describe('results-query core', () => {
     ).toThrow('around must be a positive integer');
   });
 
+  it('rejects around with non-trace source', () => {
+    const { runsDir, runId } = fixture();
+    expect(() =>
+      getContext({
+        runsDir,
+        runId,
+        scenarioId: 'search-tags',
+        source: 'results',
+        around: 5
+      })
+    ).toThrow('around can only be used when source=trace');
+  });
+
   it('blocks runId path traversal', () => {
     const { runsDir } = fixture();
     expect(() =>

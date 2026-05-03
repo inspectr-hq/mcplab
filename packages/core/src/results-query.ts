@@ -430,7 +430,7 @@ export function scoreDoc(doc: SearchDoc, query: string): number {
     if (text.includes(term)) score += 3;
     if (doc.scenario_id?.toLowerCase().includes(term)) score += 4;
     if (doc.agent?.toLowerCase().includes(term)) score += 4;
-    if (doc.status?.includes(term as 'passed' | 'failed')) score += 2;
+    if (doc.status && term === doc.status) score += 2;
   }
 
   // Intentional ranking biases: failed scenarios first, then structured results docs.
@@ -482,7 +482,7 @@ export function searchDocs(docs: SearchDoc[], filters: SearchFilters): SearchHit
         ? {
             context_command: `mcplab results context --run ${JSON.stringify(
               doc.run_id
-            )} --scenario ${JSON.stringify(doc.scenario_id)} --source ${doc.source}${
+            )} --scenario ${JSON.stringify(doc.scenario_id)} --source ${JSON.stringify(doc.source)}${
               doc.line_start ? ` --around ${doc.line_start}` : ''
             }`
           }
@@ -525,7 +525,7 @@ function contextFromTrace(
     source: 'trace',
     line_start: start,
     line_end: end,
-    excerpt
+    excerpt: toShortText(excerpt, 20_000)
   };
 }
 
@@ -584,7 +584,7 @@ function contextFromSummary(
     run_id: opts.runId,
     scenario_id: opts.scenarioId,
     source: 'summary',
-    excerpt
+    excerpt: toShortText(excerpt, 20_000)
   };
 }
 
@@ -606,10 +606,10 @@ function contextFromResults(
 export function getContext(opts: ContextOptions): ContextResult {
   const before = opts.before ?? 20;
   const after = opts.after ?? 20;
-  if (opts.source === 'trace' && (opts.around === undefined || opts.around <= 0)) {
-    throw new Error('around is required when source=trace');
-  }
-  if (opts.around !== undefined && opts.around > 0) {
+  if (opts.source === 'trace') {
+    if (opts.around === undefined || opts.around <= 0) {
+      throw new Error('around is required when source=trace');
+    }
     return contextFromTrace({
       runsDir: opts.runsDir,
       runId: opts.runId,
@@ -621,6 +621,19 @@ export function getContext(opts: ContextOptions): ContextResult {
   }
   if (opts.around !== undefined && opts.around <= 0) {
     throw new Error('around must be a positive integer');
+  }
+  if (opts.source && opts.around !== undefined) {
+    throw new Error('around can only be used when source=trace');
+  }
+  if (opts.around !== undefined) {
+    return contextFromTrace({
+      runsDir: opts.runsDir,
+      runId: opts.runId,
+      scenarioId: opts.scenarioId,
+      around: opts.around,
+      before,
+      after
+    });
   }
   if (!opts.source) {
     return contextFromScenarioMixed({

@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { listRunIdsDesc, resolveRunArtifactPath, type ResultsJson } from '@inspectr/mcplab-core';
 import type { ContextResult } from './context.js';
 import type { SearchHit } from './types.js';
@@ -17,7 +16,7 @@ function listRunIds(runsDir: string): string[] {
 
 export function listRuns(runsDir: string): RunListItem[] {
   return listRunIds(runsDir).map((runId) => {
-    const resultsPath = join(runsDir, runId, 'results.json');
+    const resultsPath = resolveRunArtifactPath(runsDir, runId, 'results.json');
     if (!existsSync(resultsPath)) {
       return { run_id: runId };
     }
