@@ -906,6 +906,92 @@ const cliReports: DocPage = {
   ]
 };
 
+const cliResultsQuery: DocPage = {
+  slug: 'cli-results-query',
+  label: 'Results Query',
+  href: '/docs/cli/results-query/',
+  description: 'LLM-first querying of run artifacts with mcplab results.',
+  keywords: ['results query', 'mcplab results', 'search', 'context', 'index', 'jsonl'],
+  seoTitle: 'CLI — Results Query',
+  track: 'cli',
+  sections: [
+    {
+      id: 'overview',
+      title: 'What This Command Does',
+      paragraphs: [
+        'mcplab results provides machine-first access to evaluation run artifacts. Use it to find failures quickly with compact structured output, then fetch only focused context.',
+        'This is the recommended workflow for LLM and automation analysis over large result sets.'
+      ]
+    },
+    {
+      id: 'workflow',
+      title: 'Recommended Workflow',
+      bullets: [
+        'List runs to identify target run IDs.',
+        'Search broadly with compact JSON output.',
+        'Fetch focused scenario context only for top hit(s).',
+        'Avoid loading full trace.jsonl unless needed.'
+      ],
+      codeBlocks: [
+        {
+          title: 'broad search then focused context',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results search \"tool failed timeout\" --status failed --limit 10 --format json\\nnpx @inspectr/mcplab results context --run <run-id> --scenario <scenario-id> --around 42 --format markdown'
+        }
+      ]
+    },
+    {
+      id: 'subcommands',
+      title: 'Subcommands',
+      bullets: [
+        'mcplab results list — list available runs.',
+        'mcplab results show --run <runId> — show run as json or summary markdown.',
+        'mcplab results index [--rebuild] — manual index build/refresh.',
+        'mcplab results search <query> — search indexed results/trace/summary.',
+        'mcplab results context --run <runId> --scenario <id> — fetch focused excerpt.'
+      ]
+    },
+    {
+      id: 'search-options',
+      title: 'Search Options and Defaults',
+      paragraphs: ['Defaults are tuned for LLM use: compact and structured.'],
+      bullets: [
+        '--runs-dir: mcplab/results/evaluation-runs',
+        '--status: all',
+        '--source: results,trace,summary',
+        '--limit: 10',
+        '--format: json'
+      ],
+      codeBlocks: [
+        {
+          title: 'filtered search',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results search \"timeout\" --status failed --agent claude-haiku --scenario search-tags --source trace --limit 5 --format json'
+        }
+      ]
+    },
+    {
+      id: 'auto-index',
+      title: 'Automatic Index Refresh',
+      paragraphs: [
+        'mcplab results search auto-refreshes local index when run files changed since last index build.',
+        'You can still prebuild or force rebuild for CI or batch workflows.'
+      ],
+      codeBlocks: [
+        {
+          title: 'manual rebuild',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab results index --rebuild'
+        }
+      ],
+      bullets: [
+        'Index file: mcplab/results/.index/results-search.jsonl',
+        'Manifest file: mcplab/results/.index/manifest.json'
+      ]
+    }
+  ]
+};
+
 const cliCicd: DocPage = {
   slug: 'cli-ci-cd',
   label: 'CI/CD',
@@ -1971,6 +2057,7 @@ const pageIndex: DocPage[] = [
   cliRunning,
   cliConfiguration,
   cliReports,
+  cliResultsQuery,
   cliCicd,
   cliCommandReference,
   appGettingStarted,
@@ -2004,7 +2091,7 @@ export const docsNavSections = [
   },
   {
     title: 'CLI',
-    items: [cliRunning, cliConfiguration, cliReports, cliCicd, cliCommandReference]
+    items: [cliRunning, cliConfiguration, cliReports, cliResultsQuery, cliCicd, cliCommandReference]
   },
   {
     title: 'App',
