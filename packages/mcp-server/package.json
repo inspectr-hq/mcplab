@@ -47,7 +47,11 @@
     "mcplab-mcp-server": "dist/index.js"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -b --force"
+    "build": "rm -rf dist && tsc -b --force",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@inspectr/mcplab-core": "1.9.1",

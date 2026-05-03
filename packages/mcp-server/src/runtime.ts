@@ -174,10 +174,20 @@ const AgentEntrySchema = z.object({
   system: z.string().optional()
 });
 
+const LibraryServerEntrySchema = z.object({
+  id: z.string(),
+  entry: GenericObjectSchema.optional()
+});
+
+const LibraryAgentEntrySchema = z.object({
+  id: z.string(),
+  entry: AgentEntrySchema.optional()
+});
+
 const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
-  servers: z.union([z.array(z.object({ id: z.string() })), z.record(GenericObjectSchema)]),
-  agents: z.union([z.array(z.object({ id: z.string() })), z.record(AgentEntrySchema)]),
+  servers: z.array(LibraryServerEntrySchema),
+  agents: z.array(LibraryAgentEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
 
@@ -387,6 +397,13 @@ const WriteMarkdownReportErrorSchema = z.object({
   attempted_path: z.string().optional(),
   violated_constraint: z.string().optional()
 });
+
+const SafeRelativePathSchema = z
+  .string()
+  .regex(
+    /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/,
+    'Must be a relative workspace path without ".." segments or absolute prefixes.'
+  );
 
 const GenerateServerEntryInputSchema = z
   .object({
@@ -745,6 +762,10 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         reports_dir: z
           .string()
+          .regex(
+            /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/,
+            'reports_dir must be a relative workspace path without ".." segments.'
+          )
           .optional()
           .describe('Markdown reports root (default mcplab/reports).'),
         run_id: z
@@ -812,15 +833,19 @@ export function registerTools(server: McpServer): void {
         content: z.string()
       },
       inputSchema: {
-        path: z
-          .string()
-          .describe(
-            'Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'
-          ),
+        path: SafeRelativePathSchema.describe(
+          'Report path (relative to reports root or workspace-relative, e.g. mcplab/reports/... ).'
+        ),
         reports_dir: z
           .string()
+          .regex(
+            /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[\w./-]+$/,
+            'reports_dir must be a relative workspace path without ".." segments.'
+          )
           .optional()
-          .describe('Markdown reports root (default mcplab/reports).'),
+          .describe(
+            'Markdown reports root (default mcplab/reports). Must stay within workspace root.'
+          ),
         max_chars: z
           .number()
           .int()
@@ -831,6 +856,7 @@ export function registerTools(server: McpServer): void {
     },
     async ({ path, reports_dir, max_chars }) => {
       return withToolHandling(async () => {
+        validateWorkspaceRelativePath(path, 'path');
         const root = resolveMarkdownReportsDir(reports_dir);
         const targetPath = resolveMarkdownReportPath(root, path);
         if (!isMarkdownReportExt(targetPath)) {
@@ -893,10 +919,12 @@ export function registerTools(server: McpServer): void {
             ? data
             : {
                 bundleRoot: data.bundleRoot,
-                [selectedKind]: data[selectedKind]
+                servers: selectedKind === 'servers' ? data.servers : [],
+                agents: selectedKind === 'agents' ? data.agents : [],
+                scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
 
-        return ok(`Loaded MCPLab library from ${root}`, structured as Record<string, unknown>);
+        return ok(`Loaded MCPLab library from ${root}`, structured);
       });
     }
   );
@@ -939,39 +967,7 @@ export function registerTools(server: McpServer): void {
         entry: ServerEntrySchema,
         yaml: z.string()
       },
-      inputSchema: {
-        id: z.string().describe('Server id key (kebab-case recommended).'),
-        url: z.string().describe('MCP server URL (Streamable HTTP endpoint).'),
-        transport: z.enum(['http']).optional().describe('MCPLab transport type (currently http).'),
-        auth_type: z
-          .enum(['none', 'bearer', 'api_key', 'oauth_client_credentials'])
-          .optional()
-          .describe('Authentication mode.'),
-        bearer_token: z
-          .string()
-          .optional()
-          .describe('Direct bearer token value or ${VAR} env reference when auth_type=bearer.'),
-        bearer_env: z
-          .string()
-          .optional()
-          .describe('Env var for bearer token when auth_type=bearer.'),
-        api_key_header_name: z
-          .string()
-          .optional()
-          .describe('Header name for API key auth (default: X-API-Key).'),
-        api_key_value: z
-          .string()
-          .optional()
-          .describe('API key value or ${VAR} env reference when auth_type=api_key.'),
-        oauth_token_url: z
-          .string()
-          .optional()
-          .describe('OAuth token URL when auth_type=oauth_client_credentials.'),
-        oauth_client_id_env: z.string().optional().describe('OAuth client id env var.'),
-        oauth_client_secret_env: z.string().optional().describe('OAuth client secret env var.'),
-        oauth_scope: z.string().optional().describe('Optional OAuth scope.'),
-        oauth_audience: z.string().optional().describe('Optional OAuth audience.')
-      }
+      inputSchema: GenerateServerEntryInputSchema
     },
     async (input) => {
       return withToolHandling(async () => {
@@ -1247,62 +1243,6 @@ export function registerTools(server: McpServer): void {
             tool_usage_frequency: scenario.tool_usage_frequency
           })),
           report_html_preview: truncate(reportHtml, 4000)
-        });
-      });
-    }
-  );
-
-  registerTool(
-    'mcplab_search_runs',
-    {
-      description:
-        'Search MCPLab run artifact directories with results.json summary metrics. Use the optional query parameter to filter by run_id, path, or summary fields (case-insensitive substring). Set include_summary=false to skip reading results.json for faster listing.',
-      outputSchema: {
-        runsDir: z.string(),
-        query: z.string().optional(),
-        total_matching: z.number().int().nonnegative(),
-        runs: z.array(RunListEntrySchema)
-      },
-      inputSchema: {
-        runs_dir: z
-          .string()
-          .optional()
-          .describe('Runs directory (default mcplab/results/evaluation-runs).'),
-        query: z
-          .string()
-          .optional()
-          .describe(
-            'Optional case-insensitive search query across run id/path and summary fields.'
-          ),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(100)
-          .default(10)
-          .describe('Max runs to return. Defaults to 10.'),
-        include_summary: z
-          .boolean()
-          .default(true)
-          .describe('Read results.json summary for each run when available. Defaults to true.')
-      }
-    },
-    async ({ runs_dir, query, limit, include_summary }) => {
-      return withToolHandling(async () => {
-        const base = resolveRunsDir(runs_dir);
-        const entries = listRunsWithFallback(base, undefined, include_summary);
-        const searchQuery = String(query ?? '')
-          .trim()
-          .toLowerCase();
-        const filtered = searchQuery
-          ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
-          : entries;
-        const capped = filtered.slice(0, limit);
-        return ok(`Found ${filtered.length} run(s) in ${base}`, {
-          runsDir: base,
-          query: searchQuery || undefined,
-          total_matching: filtered.length,
-          runs: capped
         });
       });
     }
@@ -2400,7 +2340,6 @@ const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_search_markdown_reports: 'Search Markdown Reports',
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
-  mcplab_search_runs: 'Search Evaluation Runs',
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
   mcplab_trace_search: 'Search Trace Events'
 };
@@ -2481,7 +2420,10 @@ function resolveBundleRoot(bundleRoot?: string): string {
   return resolve(cwd, 'mcplab');
 }
 
-function readLibrary(bundleRoot: string, includeContent: boolean): Record<string, unknown> {
+function readLibrary(
+  bundleRoot: string,
+  includeContent: boolean
+): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
   const scenariosDir = join(bundleRoot, 'scenarios');
@@ -2493,7 +2435,7 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
     ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
     : {};
 
-  const scenarioEntries: Array<Record<string, unknown>> = [];
+  const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
     const files = readdirSync(scenariosDir)
       .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
@@ -2512,18 +2454,20 @@ function readLibrary(bundleRoot: string, includeContent: boolean): Record<string
     }
   }
 
-  const out: Record<string, unknown> = {
+  const out: z.infer<typeof LibraryEntrySchema> = {
     bundleRoot,
-    servers: includeContent
-      ? servers
-      : Object.keys(servers)
-          .sort()
-          .map((id) => ({ id })),
-    agents: includeContent
-      ? agents
-      : Object.keys(agents)
-          .sort()
-          .map((id) => ({ id })),
+    servers: Object.keys(servers)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent ? { entry: (servers[id] as Record<string, unknown>) ?? {} } : {})
+      })),
+    agents: Object.keys(agents)
+      .sort()
+      .map((id) => ({
+        id,
+        ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
+      })),
     scenarios: scenarioEntries
   };
   return out;
@@ -2958,7 +2902,9 @@ function resolveToolAnalysisResultsDir(input?: string): string {
 }
 
 function resolveMarkdownReportsDir(input?: string): string {
-  return resolvePathInsideWorkspace(input?.trim() ? input : 'mcplab/reports');
+  const trimmed = input?.trim();
+  if (trimmed) validateWorkspaceRelativePath(trimmed, 'reports_dir');
+  return resolvePathInsideWorkspace(trimmed ? trimmed : 'mcplab/reports');
 }
 
 function isMarkdownReportExt(path: string): boolean {
@@ -3408,6 +3354,15 @@ function resolvePathInsideWorkspace(pathInput: string): string {
     throw new Error(`Path escapes workspace root: ${pathInput}`);
   }
   return target;
+}
+
+function validateWorkspaceRelativePath(value: string, fieldName: string): void {
+  if (value.startsWith('/') || /^[A-Za-z]:/.test(value)) {
+    throw new Error(`${fieldName} must be relative (absolute paths are not allowed)`);
+  }
+  if (value.split(/[\\/]/).some((part) => part === '..')) {
+    throw new Error(`${fieldName} must not contain ".." path segments`);
+  }
 }
 
 function ok(summary: string, structuredContent?: Record<string, unknown>): ToolResult {
