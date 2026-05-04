@@ -105,7 +105,7 @@ describe('GET /api/oauth-debugger/sessions/:id/callback', () => {
     expect(captured[0]?.body).toContain('<title>OAuth callback captured - MCPLab</title>');
     expect(captured[0]?.body).toContain('<strong>MCPLab</strong>');
     expect(captured[0]?.body).toContain('<link rel="icon" type="image/svg+xml" href="');
-    expect(captured[0]?.body).toContain('OAuth callback captured by MCP Lab OAuth Debugger.');
+    expect(captured[0]?.body).toContain('OAuth callback captured by MCPLab.');
     expect(captured[0]?.body).toContain('Close this tab and return to MCPLab');
     expect(captured[0]?.body).not.toContain('code: abc123');
     expect(captured[0]?.body).not.toContain('state: xyz');
