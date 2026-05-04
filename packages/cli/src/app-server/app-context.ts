@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppSettings } from './types.js';
-import type { parseBody, asJson, asText } from './http.js';
+import type { parseBody, asHtml, asJson, asText } from './http.js';
 import type { addJobEvent, sendSseEvent } from './jobs.js';
 import type { readLibraries } from './libraries-store.js';
 import type {
@@ -76,6 +76,7 @@ export interface RunQueueState {
 
 export interface HttpDeps {
   parseBody: typeof parseBody;
+  asHtml: typeof asHtml;
   asJson: typeof asJson;
   asText: typeof asText;
 }

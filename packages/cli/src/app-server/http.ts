@@ -6,6 +6,12 @@ export function asJson(res: ServerResponse, code: number, body: unknown) {
   res.end(`${JSON.stringify(body)}\n`);
 }
 
+export function asHtml(res: ServerResponse, code: number, body: string) {
+  res.statusCode = code;
+  res.setHeader('content-type', 'text/html; charset=utf-8');
+  res.end(body);
+}
+
 export function asText(res: ServerResponse, code: number, body: string) {
   res.statusCode = code;
   res.setHeader('content-type', 'text/plain; charset=utf-8');

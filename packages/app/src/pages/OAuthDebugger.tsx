@@ -53,6 +53,15 @@ function oauthDebuggerApiBase(): string {
   return window.location.port === '8685' ? 'http://127.0.0.1:8787' : '';
 }
 
+function formatJsonForDisplay(bodyText?: string): string {
+  if (!bodyText) return 'No metadata payload captured.';
+  try {
+    return JSON.stringify(JSON.parse(bodyText), null, 2);
+  } catch {
+    return bodyText;
+  }
+}
+
 function toMarkdownClient(session: OAuthDebuggerSessionView, events: OAuthDebuggerSessionEvent[]) {
   const lines: string[] = [];
   lines.push('# OAuth Debugger Report');
@@ -258,6 +267,35 @@ export default function OAuthDebuggerPage() {
     });
     return mapping;
   }, [session?.stepStates]);
+
+  const metadataSources = useMemo(() => {
+    const responseExchanges = (session?.network ?? []).filter((exchange) => exchange.phase === 'response');
+    return {
+      resourceMetadata: responseExchanges.find(
+        (exchange) => exchange.label === 'Protected Resource Metadata'
+      ),
+      authorizationServerMetadata: responseExchanges.find(
+        (exchange) => exchange.label === 'Authorization Server Metadata'
+      )
+    };
+  }, [session?.network]);
+
+  const stepNetwork = useMemo(() => {
+    const byStep = new Map<
+      string,
+      {
+        requests: OAuthDebuggerSessionView['network'];
+        responses: OAuthDebuggerSessionView['network'];
+      }
+    >();
+    for (const exchange of session?.network ?? []) {
+      const current = byStep.get(exchange.stepId) ?? { requests: [], responses: [] };
+      if (exchange.phase === 'request') current.requests.push(exchange);
+      if (exchange.phase === 'response') current.responses.push(exchange);
+      byStep.set(exchange.stepId, current);
+    }
+    return byStep;
+  }, [session?.network]);
 
   const setStepIfAllowed = (next: ViewStep) => {
     if (next === 'configure') return setViewStep(next);
@@ -931,6 +969,10 @@ export default function OAuthDebuggerPage() {
               <div className="space-y-2">
                 {session?.stepStates.map((s) => {
                   const stepNumber = stepNumberById.get(s.id);
+                  const normalizedOutcomeSummary =
+                    s.outcomeSummary && !s.outcomeSummary.includes('\n')
+                      ? s.outcomeSummary.replace(' Description:', '\nDescription:')
+                      : s.outcomeSummary;
                   return (
                   <div key={s.id} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -962,8 +1004,86 @@ export default function OAuthDebuggerPage() {
                         {s.status}
                       </Badge>
                     </div>
-                    {s.outcomeSummary && (
-                      <p className="mt-2 text-xs text-muted-foreground break-all">{s.outcomeSummary}</p>
+                    {normalizedOutcomeSummary && (
+                      <p className="mt-2 text-xs text-muted-foreground break-all whitespace-pre-line">
+                        {normalizedOutcomeSummary}
+                      </p>
+                    )}
+                    {s.id === 'resolve_target_metadata' && (
+                      <details className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                          OAuth Metadata Sources
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium">Resource Metadata</div>
+                            <p className="text-xs text-muted-foreground break-all">
+                              From {metadataSources.resourceMetadata?.url ?? 'not captured'}
+                            </p>
+                            <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                              {formatJsonForDisplay(metadataSources.resourceMetadata?.bodyText)}
+                            </pre>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium">Authorization Server Metadata</div>
+                            <p className="text-xs text-muted-foreground break-all">
+                              From {metadataSources.authorizationServerMetadata?.url ?? 'not captured'}
+                            </p>
+                            <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                              {formatJsonForDisplay(metadataSources.authorizationServerMetadata?.bodyText)}
+                            </pre>
+                          </div>
+                        </div>
+                      </details>
+                    )}
+                    {(s.id === 'token_exchange' || s.id === 'resource_probe') && (
+                      (() => {
+                        const captures = stepNetwork.get(s.id);
+                        const hasCapturedExchanges = Boolean(
+                          captures && (captures.requests.length > 0 || captures.responses.length > 0)
+                        );
+                        if (s.status === 'pending' || !hasCapturedExchanges) return null;
+                        return (
+                      <details className="mt-3 rounded-md border bg-muted/20 p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                          Captured exchange details
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          {(() => {
+                            const captures = stepNetwork.get(s.id)!;
+                            const count = Math.max(captures.requests.length, captures.responses.length);
+                            return Array.from({ length: count }).map((_, index) => {
+                              const request = captures.requests[index];
+                              const response = captures.responses[index];
+                              return (
+                                <div key={`${s.id}-exchange-${index}`} className="rounded-md border bg-background p-2">
+                                  <div className="text-xs font-medium">
+                                    {request?.label ?? response?.label ?? `Exchange ${index + 1}`}
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground break-all">
+                                    {request?.method ? `${request.method} ` : ''}{request?.url ?? response?.url ?? '-'}
+                                  </p>
+                                  {typeof response?.status === 'number' && (
+                                    <p className="mt-1 text-xs text-muted-foreground">HTTP {response.status}</p>
+                                  )}
+                                  {request?.bodyText && (
+                                    <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
+                                      {request.bodyText}
+                                    </pre>
+                                  )}
+                                  {response?.bodyText && (
+                                    <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+                                      {formatJsonForDisplay(response.bodyText)}
+                                    </pre>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </details>
+                        );
+                      })()
                     )}
                   </div>
                 )}) || (
@@ -1117,6 +1237,7 @@ export default function OAuthDebuggerPage() {
                 </Tabs>
               </CardContent>
             </Card>
+
           </div>
           </div>
 
@@ -1274,6 +1395,7 @@ export default function OAuthDebuggerPage() {
               )}
             </CardContent>
           </Card>
+
         </div>
       )}
     </div>

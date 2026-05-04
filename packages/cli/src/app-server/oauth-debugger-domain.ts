@@ -154,6 +154,7 @@ export interface OAuthDebuggerSession {
       state?: string;
       error?: string;
       errorDescription?: string;
+      issuer?: string;
     };
     tokenResponse?: any;
     tokenReceivedAt?: number;
@@ -586,7 +587,8 @@ function parseCallbackInput(input: { redirectUrl?: string; code?: string; state?
       code: parsed.searchParams.get('code') ?? undefined,
       state: parsed.searchParams.get('state') ?? undefined,
       error: parsed.searchParams.get('error') ?? undefined,
-      errorDescription: parsed.searchParams.get('error_description') ?? undefined
+      errorDescription: parsed.searchParams.get('error_description') ?? undefined,
+      issuer: parsed.searchParams.get('iss') ?? undefined
     };
   }
   return {
@@ -943,7 +945,9 @@ function stepValidateCallback(session: OAuthDebuggerSession) {
       recommendation:
         'Inspect the authorization request parameters and client registration details.'
     });
-    throw new Error(`Authorization error: ${cb.error}`);
+    const firstLine = `Authorization error: ${cb.error}`;
+    const secondLine = cb.errorDescription ? `Description: ${cb.errorDescription}` : undefined;
+    throw new Error([firstLine, secondLine].filter((line): line is string => Boolean(line)).join('\n'));
   }
   if (!cb.code) {
     addValidation(session, {
@@ -1084,16 +1088,53 @@ async function stepResourceProbe(session: OAuthDebuggerSession) {
     return;
   }
   try {
-    const { response, responseText } = await fetchWithTrace({
-      session,
-      stepId,
-      label: 'Protected resource probe',
-      url: probeUrl,
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        accept: 'application/json'
+    const commonHeaders = {
+      authorization: `Bearer ${accessToken}`,
+      accept: 'application/json, text/event-stream'
+    };
+    const postProbeBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 'oauth-debugger-probe',
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: {
+          name: 'oauth-debugger',
+          version: '0.1.0'
+        }
       }
     });
+
+    const postAttempt = await fetchWithTrace({
+      session,
+      stepId,
+      label: 'Protected resource probe (MCP POST)',
+      url: probeUrl,
+      method: 'POST',
+      headers: {
+        ...commonHeaders,
+        'content-type': 'application/json'
+      },
+      bodyText: postProbeBody
+    });
+    let response = postAttempt.response;
+    let responseText = postAttempt.responseText;
+    let probeMethod = 'POST';
+
+    if (!response.ok) {
+      const getAttempt = await fetchWithTrace({
+        session,
+        stepId,
+        label: 'Protected resource probe (fallback GET)',
+        url: probeUrl,
+        headers: commonHeaders
+      });
+      response = getAttempt.response;
+      responseText = getAttempt.responseText;
+      probeMethod = 'GET';
+    }
+
     session.context.probeResponse = {
       status: response.status,
       bodyText: responseText,
@@ -1105,7 +1146,7 @@ async function stepResourceProbe(session: OAuthDebuggerSession) {
         severity: 'warning',
         code: 'probe_not_ok',
         title: 'Protected probe returned non-success',
-        detail: `Protected probe returned HTTP ${response.status}.`,
+        detail: `Protected probe (${probeMethod}) returned HTTP ${response.status}.`,
         recommendation:
           'Verify audience/resource, scopes, and token issuer expectations on the MCP server.'
       });
@@ -1115,10 +1156,10 @@ async function stepResourceProbe(session: OAuthDebuggerSession) {
         severity: 'info',
         code: 'probe_ok',
         title: 'Protected probe succeeded',
-        detail: 'The bearer token was accepted by the probe endpoint.'
+        detail: `The bearer token was accepted by the probe endpoint via ${probeMethod}.`
       });
     }
-    markStepCompleted(session, stepId, `Probe HTTP ${response.status}`);
+    markStepCompleted(session, stepId, `Probe (${probeMethod}) HTTP ${response.status}`);
   } catch (error: unknown) {
     addValidation(session, {
       stepId,
