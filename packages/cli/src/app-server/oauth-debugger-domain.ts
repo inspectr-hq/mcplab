@@ -947,7 +947,9 @@ function stepValidateCallback(session: OAuthDebuggerSession) {
     });
     const firstLine = `Authorization error: ${cb.error}`;
     const secondLine = cb.errorDescription ? `Description: ${cb.errorDescription}` : undefined;
-    throw new Error([firstLine, secondLine].filter((line): line is string => Boolean(line)).join('\n'));
+    throw new Error(
+      [firstLine, secondLine].filter((line): line is string => Boolean(line)).join('\n')
+    );
   }
   if (!cb.code) {
     addValidation(session, {

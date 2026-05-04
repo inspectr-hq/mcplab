@@ -66,9 +66,7 @@ function renderOAuthCallbackPage(result?: {
   const messageHtml = hasError
     ? escapeHtml(message)
     : `${escapeHtml('OAuth callback captured by MCPLab.')}`;
-  const supportingText = hasError
-    ? 'Review the failure and try again.'
-    : '';
+  const supportingText = hasError ? 'Review the failure and try again.' : '';
   const detailLines = hasError
     ? [
         result?.error ? `error: ${result.error}` : undefined,
