@@ -30,6 +30,9 @@ const STEP_LABELS: Array<{ id: ViewStep; label: string }> = [
   { id: 'run', label: 'Run / Inspect Flow' },
   { id: 'report', label: 'Report / Export' }
 ];
+const STEP_ID_RESOLVE_TARGET_METADATA = 'resolve_target_metadata';
+const STEP_ID_TOKEN_EXCHANGE = 'token_exchange';
+const STEP_ID_RESOURCE_PROBE = 'resource_probe';
 
 function InfoTip({ text }: { text: string }) {
   return (
@@ -58,7 +61,7 @@ function formatJsonForDisplay(bodyText?: string): string {
   try {
     return JSON.stringify(JSON.parse(bodyText), null, 2);
   } catch {
-    return bodyText;
+    return `Non-JSON response body:\n${bodyText}`;
   }
 }
 
@@ -969,10 +972,13 @@ export default function OAuthDebuggerPage() {
               <div className="space-y-2">
                 {session?.stepStates.map((s) => {
                   const stepNumber = stepNumberById.get(s.id);
-                  const normalizedOutcomeSummary =
-                    s.outcomeSummary && !s.outcomeSummary.includes('\n')
-                      ? s.outcomeSummary.replace(' Description:', '\nDescription:')
-                      : s.outcomeSummary;
+                  const captures = stepNetwork.get(s.id);
+                  const isProbeStep = s.id === STEP_ID_TOKEN_EXCHANGE || s.id === STEP_ID_RESOURCE_PROBE;
+                  const hasCapturedExchanges = Boolean(
+                    captures && (captures.requests.length > 0 || captures.responses.length > 0)
+                  );
+                  const showCapturedExchangeDetails =
+                    isProbeStep && s.status !== 'pending' && hasCapturedExchanges;
                   return (
                   <div key={s.id} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -1004,12 +1010,13 @@ export default function OAuthDebuggerPage() {
                         {s.status}
                       </Badge>
                     </div>
-                    {normalizedOutcomeSummary && (
+                    {/* outcomeSummary now preserves backend-provided newlines directly. */}
+                    {s.outcomeSummary && (
                       <p className="mt-2 text-xs text-muted-foreground break-all whitespace-pre-line">
-                        {normalizedOutcomeSummary}
+                        {s.outcomeSummary}
                       </p>
                     )}
-                    {s.id === 'resolve_target_metadata' && (
+                    {s.id === STEP_ID_RESOLVE_TARGET_METADATA && (
                       <details className="mt-3 rounded-md border bg-muted/20 p-3">
                         <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                           OAuth Metadata Sources
@@ -1036,54 +1043,43 @@ export default function OAuthDebuggerPage() {
                         </div>
                       </details>
                     )}
-                    {(s.id === 'token_exchange' || s.id === 'resource_probe') && (
-                      (() => {
-                        const captures = stepNetwork.get(s.id);
-                        const hasCapturedExchanges = Boolean(
-                          captures && (captures.requests.length > 0 || captures.responses.length > 0)
-                        );
-                        if (s.status === 'pending' || !hasCapturedExchanges) return null;
-                        return (
+                    {showCapturedExchangeDetails && captures && (
                       <details className="mt-3 rounded-md border bg-muted/20 p-3">
                         <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
                           Captured exchange details
                         </summary>
                         <div className="mt-3 space-y-3">
-                          {(() => {
-                            const captures = stepNetwork.get(s.id)!;
-                            const count = Math.max(captures.requests.length, captures.responses.length);
-                            return Array.from({ length: count }).map((_, index) => {
-                              const request = captures.requests[index];
-                              const response = captures.responses[index];
-                              return (
-                                <div key={`${s.id}-exchange-${index}`} className="rounded-md border bg-background p-2">
-                                  <div className="text-xs font-medium">
-                                    {request?.label ?? response?.label ?? `Exchange ${index + 1}`}
-                                  </div>
-                                  <p className="mt-1 text-xs text-muted-foreground break-all">
-                                    {request?.method ? `${request.method} ` : ''}{request?.url ?? response?.url ?? '-'}
-                                  </p>
-                                  {typeof response?.status === 'number' && (
-                                    <p className="mt-1 text-xs text-muted-foreground">HTTP {response.status}</p>
-                                  )}
-                                  {request?.bodyText && (
-                                    <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
-                                      {request.bodyText}
-                                    </pre>
-                                  )}
-                                  {response?.bodyText && (
-                                    <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
-                                      {formatJsonForDisplay(response.bodyText)}
-                                    </pre>
-                                  )}
+                          {Array.from({
+                            length: Math.max(captures.requests.length, captures.responses.length)
+                          }).map((_, index) => {
+                            const request = captures.requests[index];
+                            const response = captures.responses[index];
+                            return (
+                              <div key={`${s.id}-exchange-${index}`} className="rounded-md border bg-background p-2">
+                                <div className="text-xs font-medium">
+                                  {request?.label ?? response?.label ?? `Exchange ${index + 1}`}
                                 </div>
-                              );
-                            });
-                          })()}
+                                <p className="mt-1 text-xs text-muted-foreground break-all">
+                                  {request?.method ? `${request.method} ` : ''}{request?.url ?? response?.url ?? '-'}
+                                </p>
+                                {typeof response?.status === 'number' && (
+                                  <p className="mt-1 text-xs text-muted-foreground">HTTP {response.status}</p>
+                                )}
+                                {request?.bodyText && (
+                                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
+                                    {request.bodyText}
+                                  </pre>
+                                )}
+                                {response?.bodyText && (
+                                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+                                    {formatJsonForDisplay(response.bodyText)}
+                                  </pre>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </details>
-                        );
-                      })()
                     )}
                   </div>
                 )}) || (

@@ -974,6 +974,18 @@ function stepValidateCallback(session: OAuthDebuggerSession) {
     });
     throw new Error('State mismatch');
   }
+  const expectedIssuer = session.context.authServerMetadata?.issuer;
+  if (cb.issuer && expectedIssuer && cb.issuer !== expectedIssuer) {
+    addValidation(session, {
+      stepId,
+      severity: 'warning',
+      code: 'issuer_mismatch',
+      title: 'Issuer mismatch in authorization response',
+      detail: `Expected issuer '${expectedIssuer}' but callback contained iss='${cb.issuer}'.`,
+      recommendation:
+        'Verify authorization server configuration and callback routing. The callback may not belong to this issuer context.'
+    });
+  }
   addValidation(session, {
     stepId,
     severity: 'info',

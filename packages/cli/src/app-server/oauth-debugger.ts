@@ -46,11 +46,18 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-const faviconSvg = readFileSync(
-  new URL('../../../app/public/favicon.svg', import.meta.url),
-  'utf8'
-);
-const faviconDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(faviconSvg)}`;
+const fallbackFaviconHref = 'https://mcplab.inspectr.dev/favicon.svg';
+const faviconHref = (() => {
+  try {
+    const faviconSvg = readFileSync(
+      new URL('../../../app/public/favicon.svg', import.meta.url),
+      'utf8'
+    );
+    return `data:image/svg+xml;utf8,${encodeURIComponent(faviconSvg)}`;
+  } catch {
+    return fallbackFaviconHref;
+  }
+})();
 
 function renderOAuthCallbackPage(result?: {
   rawUrl?: string;
@@ -62,10 +69,8 @@ function renderOAuthCallbackPage(result?: {
   const hasError = Boolean(result?.error);
   const message = hasError
     ? 'Authorization server returned an error.'
-    : 'OAuth callback captured by MCPLab. You can return to the app and continue inspecting the flow.';
-  const messageHtml = hasError
-    ? escapeHtml(message)
-    : `${escapeHtml('OAuth callback captured by MCPLab.')}`;
+    : 'OAuth callback captured by MCPLab.';
+  const messageHtml = escapeHtml(message);
   const supportingText = hasError ? 'Review the failure and try again.' : '';
   const detailLines = hasError
     ? [
@@ -83,7 +88,7 @@ function renderOAuthCallbackPage(result?: {
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="${faviconDataUri}" />
+    <link rel="icon" type="image/svg+xml" href="${faviconHref}" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${pageTitle}</title>
     <style>
@@ -229,7 +234,7 @@ function renderOAuthCallbackPage(result?: {
         <div class="card">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true">
-              <img src="${faviconDataUri}" alt="" />
+              <img src="${faviconHref}" alt="" />
             </div>
             <div class="brand-copy">
               <strong>MCPLab</strong>
