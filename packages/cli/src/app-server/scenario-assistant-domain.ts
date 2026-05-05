@@ -407,8 +407,8 @@ function collapseOffByOneCountGuards(
   return result;
 }
 
-function normalizeIntentValue(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+function normalizeIntentValue(value: string | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function positiveLiteralRank(type: string): number {
