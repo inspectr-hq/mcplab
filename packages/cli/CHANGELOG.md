@@ -1,5 +1,20 @@
 # @inspectr/mcplab
 
+## 1.14.0
+
+### Minor Changes
+
+- feat: Improve OAuth callback message
+- fix: Extend debug info for OAuth Debug
+- fix: Improve MCP title and annotation handling
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.11.0
+  - @inspectr/mcplab-mcp-server@1.3.1
+  - @inspectr/mcplab-reporting@1.1.11
+
 ## 1.13.0
 
 ### Minor Changes
