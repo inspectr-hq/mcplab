@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 1.14.1
+
+### Patch Changes
+
+- fix: Skip writing empty YAML configurations
+- fix: Handle undefined intent values safely
+
 ## 1.14.0
 
 ### Minor Changes
