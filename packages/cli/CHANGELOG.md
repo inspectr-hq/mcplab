@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.14.2
+
+### Patch Changes
+
+- fix: Keep YAML property hierarchy
+
 ## 1.14.1
 
 ### Patch Changes
