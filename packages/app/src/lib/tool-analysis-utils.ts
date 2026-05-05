@@ -3,7 +3,10 @@ export function isWriteDeleteClassification(classificationReason: string): boole
   return (
     lower.includes('side-effectful prefix') ||
     lower.includes('destructive behavior') ||
-    lower.includes('destructivehint')
+    lower.includes('destructivehint') ||
+    lower.includes('non-read-only behavior') ||
+    lower.includes('readonlyhint: false') ||
+    lower.includes('additive behavior')
   );
 }
 

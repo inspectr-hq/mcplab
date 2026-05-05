@@ -34,7 +34,7 @@ import {
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
 import type { AppRouteDeps, RunQueueState } from './app-context.js';
-import { asJson, asText, parseBody } from './http.js';
+import { asHtml, asJson, asText, parseBody } from './http.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
 import { applySettingsOverrides, persistSettingsOverrides } from './settings-store.js';
@@ -214,6 +214,7 @@ export async function startAppServer(options: AppServerOptions) {
   const runQueueState: RunQueueState = { activeJobId: null, queue: [], isAdvancingQueue: false };
   const routeDeps: AppRouteDeps = {
     parseBody,
+    asHtml,
     asJson,
     asText,
     addJobEvent,

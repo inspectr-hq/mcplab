@@ -20,14 +20,30 @@ describe('isWriteDeleteClassification', () => {
     expect(isWriteDeleteClassification('destructiveHint: true')).toBe(true);
   });
 
-  it('returns false for read-like classification', () => {
-    expect(isWriteDeleteClassification("Name starts with read-like prefix 'get'.")).toBe(false);
+  it('returns true for explicit readOnlyHint false reason', () => {
+    expect(
+      isWriteDeleteClassification(
+        "MCP annotations indicate non-read-only behavior ('readOnlyHint: false')."
+      )
+    ).toBe(true);
+  });
+
+  it('returns false for read-only classification', () => {
+    expect(isWriteDeleteClassification("Name starts with read-only prefix 'get'.")).toBe(false);
   });
 
   it('returns false for unknown/other unsafe reason', () => {
     expect(
       isWriteDeleteClassification('Tool name does not match read-only allowlist prefixes.')
     ).toBe(false);
+  });
+
+  it('returns true for additive non-read-only reason', () => {
+    expect(
+      isWriteDeleteClassification(
+        "MCP annotations indicate non-read-only additive behavior ('destructiveHint: false')."
+      )
+    ).toBe(true);
   });
 });
 

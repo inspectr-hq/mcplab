@@ -377,7 +377,7 @@ export interface ToolAnalysisToolReport {
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
   metadataReview?: {
     strengths: string[];
@@ -482,7 +482,7 @@ export interface ToolAnalysisDiscoveredTool {
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
 }
 

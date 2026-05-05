@@ -28,6 +28,24 @@ export type ToolAnalysisRouteDeps = Pick<
   | 'runToolAnalysisJob'
 >;
 
+function normalizeSafetyClassification(value: unknown): unknown {
+  return value === 'read_like' ? 'read_only' : value;
+}
+
+function normalizeToolAnalysisReportSafety<
+  T extends { servers?: Array<{ tools?: Array<{ safetyClassification?: unknown }> }> }
+>(report: T): T {
+  if (!report || !Array.isArray(report.servers)) return report;
+  for (const server of report.servers) {
+    if (!server || !Array.isArray(server.tools)) continue;
+    for (const tool of server.tools) {
+      if (!tool) continue;
+      tool.safetyClassification = normalizeSafetyClassification(tool.safetyClassification);
+    }
+  }
+  return report;
+}
+
 function defaultNewToolAnalysisResultsDir(workspaceRoot: string): string {
   return resolve(workspaceRoot, 'mcplab/results/tool-analysis');
 }
@@ -269,6 +287,7 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 404, { error: 'Tool analysis report not found' });
       return true;
     }
+    if (record?.report) normalizeToolAnalysisReportSafety(record.report);
     asJson(res, 200, record);
     return true;
   }
@@ -336,7 +355,11 @@ export async function handleToolAnalysisRoutes(params: {
       asJson(res, 409, { error: `Job not completed (status=${job.status})` });
       return true;
     }
-    asJson(res, 200, { jobId, report: job.result, savedReportId: job.savedReportId });
+    asJson(res, 200, {
+      jobId,
+      report: normalizeToolAnalysisReportSafety(job.result),
+      savedReportId: job.savedReportId
+    });
     return true;
   }
 
