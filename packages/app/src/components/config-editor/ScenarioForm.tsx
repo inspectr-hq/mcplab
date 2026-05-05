@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from "@/types/eval";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { ScenarioAssistantDialog } from "@/components/config-editor/ScenarioAssistantDialog";
 import { RunConversationPreview } from "@/components/results/RunConversationPreview";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -158,6 +158,12 @@ function ScenarioCard({ scenario, scenarioOrigin, hasMcpServerOverride, index, t
     ReturnType<typeof source.runScenarioPreview>
   > | null>(null);
   const [expanded, setExpanded] = useState(!readOnly);
+  const toggleFromHeaderClick = (event: MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest("button, a, input, select, textarea, [role='button']")) return;
+    setExpanded((prev) => !prev);
+  };
 
   const addRule = () => {
     if (
@@ -395,7 +401,10 @@ function ScenarioCard({ scenario, scenarioOrigin, hasMcpServerOverride, index, t
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded}>
       <Card className={readOnly ? "rounded-md border shadow-none" : "border-dashed"}>
-        <CardHeader className={readOnly ? "px-3 py-3 flex-row items-center justify-between space-y-0" : "pb-3 flex-row items-center justify-between space-y-0"}>
+        <CardHeader
+          className={`${readOnly ? "px-3 py-3" : "pb-3"} flex-row items-center justify-between space-y-0 cursor-pointer`}
+          onClick={toggleFromHeaderClick}
+        >
           <div className="flex min-w-0 items-center gap-2">
             {!readOnly && (
               <CollapsibleTrigger asChild>
