@@ -114,6 +114,53 @@ function toCoreResponseAssertion(
   return null;
 }
 
+function buildCoreEvalBlock(evalRules: EvalRule[]):
+  | {
+      tool_constraints?: {
+        required_tools?: string[];
+        forbidden_tools?: string[];
+      };
+      response_assertions?: Array<
+        | { type: 'regex'; pattern: string }
+        | { type: 'contains'; value: string }
+        | { type: 'not_contains'; value: string }
+        | { type: 'starts_with'; value: string }
+        | { type: 'ends_with'; value: string }
+        | { type: 'equals'; value: string }
+        | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
+        | { type: 'jsonpath_exists'; path: string }
+        | { type: 'jsonpath_not_exists'; path: string }
+      >;
+    }
+  | undefined {
+  const required_tools = evalRules
+    .filter((rule) => rule.type === 'required_tool')
+    .map((rule) => rule.value)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const forbidden_tools = evalRules
+    .filter((rule) => rule.type === 'forbidden_tool')
+    .map((rule) => rule.value)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const response_assertions = evalRules
+    .map((rule) => toCoreResponseAssertion(rule))
+    .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
+
+  const tool_constraints =
+    required_tools.length > 0 || forbidden_tools.length > 0
+      ? {
+          ...(required_tools.length > 0 ? { required_tools } : {}),
+          ...(forbidden_tools.length > 0 ? { forbidden_tools } : {})
+        }
+      : undefined;
+
+  if (!tool_constraints && response_assertions.length === 0) return undefined;
+
+  return {
+    ...(tool_constraints ? { tool_constraints } : {}),
+    ...(response_assertions.length > 0 ? { response_assertions } : {})
+  };
+}
+
 function toUiServerConfigFromMcpEntry(
   entry: Record<string, unknown>
 ): { id: string; server: EvalConfig['servers'][number] } | null {
@@ -555,17 +602,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   });
 
   const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
-    const required_tools = scenario.evalRules
-      .filter((rule) => rule.type === 'required_tool')
-      .map((rule) => rule.value)
-      .filter((value): value is string => typeof value === 'string' && value.length > 0);
-    const forbidden_tools = scenario.evalRules
-      .filter((rule) => rule.type === 'forbidden_tool')
-      .map((rule) => rule.value)
-      .filter((value): value is string => typeof value === 'string' && value.length > 0);
-    const response_assertions = scenario.evalRules
-      .map((rule) => toCoreResponseAssertion(rule))
-      .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
+    const evalBlock = buildCoreEvalBlock(scenario.evalRules);
+    const extract =
+      scenario.extractRules.length > 0
+        ? scenario.extractRules.map((rule) => ({
+            name: rule.name,
+            from: 'final_text' as const,
+            regex: rule.pattern
+          }))
+        : undefined;
 
     return {
       id: scenario.id,
@@ -589,18 +634,8 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
             }
           }
         : {}),
-      eval: {
-        tool_constraints: {
-          required_tools,
-          forbidden_tools
-        },
-        response_assertions
-      },
-      extract: scenario.extractRules.map((rule) => ({
-        name: rule.name,
-        from: 'final_text' as const,
-        regex: rule.pattern
-      }))
+      eval: evalBlock,
+      extract
     };
   };
 
@@ -736,6 +771,7 @@ export function toCoreLibraries(
     servers,
     agents,
     scenarios: input.scenarios.map((scenario) => ({
+      eval: buildCoreEvalBlock(scenario.evalRules),
       id: scenario.id,
       name: scenario.name || undefined,
       mcp_servers:
@@ -749,26 +785,14 @@ export function toCoreLibraries(
             last_updated_at: scenario.snapshotEval.lastUpdatedAt
           }
         : undefined,
-      eval: {
-        tool_constraints: {
-          required_tools: scenario.evalRules
-            .filter((rule) => rule.type === 'required_tool')
-            .map((rule) => rule.value)
-            .filter((value): value is string => typeof value === 'string' && value.length > 0),
-          forbidden_tools: scenario.evalRules
-            .filter((rule) => rule.type === 'forbidden_tool')
-            .map((rule) => rule.value)
-            .filter((value): value is string => typeof value === 'string' && value.length > 0)
-        },
-        response_assertions: scenario.evalRules
-          .map((rule) => toCoreResponseAssertion(rule))
-          .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule))
-      },
-      extract: scenario.extractRules.map((rule) => ({
-        name: rule.name,
-        from: 'final_text' as const,
-        regex: rule.pattern
-      }))
+      extract:
+        scenario.extractRules.length > 0
+          ? scenario.extractRules.map((rule) => ({
+              name: rule.name,
+              from: 'final_text' as const,
+              regex: rule.pattern
+            }))
+          : undefined
     }))
   };
 }

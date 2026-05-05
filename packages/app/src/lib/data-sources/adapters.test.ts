@@ -1300,6 +1300,60 @@ describe('config adapters round-trip', () => {
     ]);
   });
 
+  it('omits empty eval and extract blocks in lean serialization', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-lean-empty',
+      name: 'lean-empty',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-empty',
+          name: 'Empty',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [],
+          extractRules: []
+        }
+      ]
+    });
+
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find((item) => item['id'] === 'scn-empty');
+    expect(scenario?.eval).toBeUndefined();
+    expect(scenario?.extract).toBeUndefined();
+  });
+
+  it('emits only populated tool_constraints keys and omits empty response_assertions', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-lean-tools',
+      name: 'lean-tools',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-tools',
+          name: 'Tools',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [{ type: 'required_tool', value: 'get_tag_data' }],
+          extractRules: []
+        }
+      ]
+    });
+
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find((item) => item['id'] === 'scn-tools');
+    expect(scenario?.eval).toEqual({
+      tool_constraints: {
+        required_tools: ['get_tag_data']
+      }
+    });
+    expect(scenario?.extract).toBeUndefined();
+  });
+
   it('throws when loading unsupported response assertion types from core config', () => {
     const sourceRecord: WorkspaceConfigRecord = {
       id: 'cfg-unknown-assertion',
