@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { fromCoreConfigYaml, fromCoreResultsJson, toCoreConfigYaml } from './adapters';
+import {
+  fromCoreConfigYaml,
+  fromCoreResultsJson,
+  toCoreConfigYaml,
+  toCoreLibraries
+} from './adapters';
 import type { CoreResultsJson, ScenarioRunTraceRecord, WorkspaceConfigRecord } from './types';
 import type { EvalConfig } from '@/types/eval';
 
@@ -1320,7 +1325,9 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find((item) => item['id'] === 'scn-empty');
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-empty'
+    );
     expect(scenario?.eval).toBeUndefined();
     expect(scenario?.extract).toBeUndefined();
   });
@@ -1345,13 +1352,118 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find((item) => item['id'] === 'scn-tools');
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-tools'
+    );
     expect(scenario?.eval).toEqual({
       tool_constraints: {
         required_tools: ['get_tag_data']
       }
     });
     expect(scenario?.extract).toBeUndefined();
+  });
+
+  it('serializes scenario and eval keys in deterministic order', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-order',
+      name: 'order',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-order',
+          name: 'Order',
+          serverIds: ['srv-a'],
+          prompt: 'test',
+          snapshotEval: {
+            enabled: true
+          },
+          evalRules: [
+            { type: 'required_tool', value: 'get_tag_data' },
+            { type: 'forbidden_tool', value: 'delete_all' },
+            { type: 'response_contains', value: 'ok' }
+          ],
+          extractRules: [{ name: 'count', pattern: '(\\d+)' }]
+        }
+      ]
+    } as EvalConfig);
+
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-order'
+    );
+    expect(scenario).toBeTruthy();
+    expect(Object.keys(scenario!)).toEqual([
+      'id',
+      'name',
+      'mcp_servers',
+      'prompt',
+      'snapshot_eval',
+      'eval',
+      'extract'
+    ]);
+
+    const evalBlock = scenario!.eval as AnyRecord;
+    expect(Object.keys(evalBlock)).toEqual(['tool_constraints', 'response_assertions']);
+
+    const toolConstraints = evalBlock.tool_constraints as AnyRecord;
+    expect(Object.keys(toolConstraints)).toEqual(['required_tools', 'forbidden_tools']);
+
+    const serializedScenario = JSON.stringify(scenario);
+    const orderedKeys = [
+      '"id":',
+      '"name":',
+      '"mcp_servers":',
+      '"prompt":',
+      '"snapshot_eval":',
+      '"eval":',
+      '"extract":'
+    ];
+    const positions = orderedKeys.map((key) => serializedScenario.indexOf(key));
+    expect(positions.every((pos) => pos >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+
+    const serializedEval = JSON.stringify(evalBlock);
+    const evalKeyPositions = ['"tool_constraints":', '"response_assertions":'].map((key) =>
+      serializedEval.indexOf(key)
+    );
+    expect(evalKeyPositions.every((pos) => pos >= 0)).toBe(true);
+    expect([...evalKeyPositions].sort((a, b) => a - b)).toEqual(evalKeyPositions);
+
+    const serializedToolConstraints = JSON.stringify(toolConstraints);
+    const toolConstraintPositions = ['"required_tools":', '"forbidden_tools":'].map((key) =>
+      serializedToolConstraints.indexOf(key)
+    );
+    expect(toolConstraintPositions.every((pos) => pos >= 0)).toBe(true);
+    expect([...toolConstraintPositions].sort((a, b) => a - b)).toEqual(toolConstraintPositions);
+  });
+
+  it('toCoreLibraries serializes non-empty extractRules', () => {
+    const libraries = toCoreLibraries({
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-lib-extract',
+          name: 'Library Extract',
+          serverIds: [],
+          prompt: 'extract values',
+          evalRules: [],
+          extractRules: [
+            { name: 'avg', pattern: '(average|avg|mean)' },
+            { name: 'count', pattern: '(\\d+)' }
+          ]
+        }
+      ]
+    });
+
+    const scenario = libraries.scenarios.find((item) => item.id === 'scn-lib-extract');
+    expect(scenario).toBeTruthy();
+    expect(scenario?.extract).toEqual([
+      { name: 'avg', from: 'final_text', regex: '(average|avg|mean)' },
+      { name: 'count', from: 'final_text', regex: '(\\d+)' }
+    ]);
   });
 
   it('throws when loading unsupported response assertion types from core config', () => {

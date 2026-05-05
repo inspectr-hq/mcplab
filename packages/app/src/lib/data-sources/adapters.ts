@@ -161,6 +161,49 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
   };
 }
 
+function buildCoreExtractBlock(extractRules: EvalConfig['scenarios'][number]['extractRules']):
+  | Array<{
+      name: string;
+      from: 'final_text';
+      regex: string;
+    }>
+  | undefined {
+  if (extractRules.length === 0) return undefined;
+  return extractRules.map((rule) => ({
+    name: rule.name,
+    from: 'final_text' as const,
+    regex: rule.pattern
+  }));
+}
+
+function buildCoreScenarioEntry(
+  scenario: EvalConfig['scenarios'][number],
+  mcpServers:
+    | Array<{ ref: string } | NonNullable<CoreSourceEvalConfig['servers']>[number]>
+    | undefined
+): NonNullable<CoreSourceEvalConfig['scenarios']>[number] {
+  const snapshotEval = scenario.snapshotEval
+    ? {
+        enabled: scenario.snapshotEval.enabled,
+        baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
+        baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
+        last_updated_at: scenario.snapshotEval.lastUpdatedAt
+      }
+    : undefined;
+  const evalBlock = buildCoreEvalBlock(scenario.evalRules);
+  const extract = buildCoreExtractBlock(scenario.extractRules);
+
+  return {
+    id: scenario.id,
+    name: scenario.name || undefined,
+    mcp_servers: mcpServers,
+    prompt: scenario.prompt,
+    snapshot_eval: snapshotEval,
+    eval: evalBlock,
+    extract
+  };
+}
+
 function toUiServerConfigFromMcpEntry(
   entry: Record<string, unknown>
 ): { id: string; server: EvalConfig['servers'][number] } | null {
@@ -602,41 +645,16 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   });
 
   const mapInlineScenario = (scenario: EvalConfig['scenarios'][number]) => {
-    const evalBlock = buildCoreEvalBlock(scenario.evalRules);
-    const extract =
-      scenario.extractRules.length > 0
-        ? scenario.extractRules.map((rule) => ({
-            name: rule.name,
-            from: 'final_text' as const,
-            regex: rule.pattern
-          }))
+    const mcpServers =
+      scenario.serverIds.length > 0
+        ? scenario.serverIds.map((id) => {
+            const resolvedId = serverNameById.get(id) ?? id;
+            const inline = inlineServerById.get(resolvedId);
+            return inline ?? { ref: resolvedId };
+          })
         : undefined;
 
-    return {
-      id: scenario.id,
-      name: scenario.name || undefined,
-      mcp_servers:
-        scenario.serverIds.length > 0
-          ? scenario.serverIds.map((id) => {
-              const resolvedId = serverNameById.get(id) ?? id;
-              const inline = inlineServerById.get(resolvedId);
-              return inline ?? { ref: resolvedId };
-            })
-          : undefined,
-      prompt: scenario.prompt,
-      ...(scenario.snapshotEval
-        ? {
-            snapshot_eval: {
-              enabled: scenario.snapshotEval.enabled,
-              baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
-              baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
-              last_updated_at: scenario.snapshotEval.lastUpdatedAt
-            }
-          }
-        : {}),
-      eval: evalBlock,
-      extract
-    };
+    return buildCoreScenarioEntry(scenario, mcpServers);
   };
 
   const scenarios = (
@@ -770,30 +788,12 @@ export function toCoreLibraries(
   return {
     servers,
     agents,
-    scenarios: input.scenarios.map((scenario) => ({
-      eval: buildCoreEvalBlock(scenario.evalRules),
-      id: scenario.id,
-      name: scenario.name || undefined,
-      mcp_servers:
-        scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined,
-      prompt: scenario.prompt,
-      snapshot_eval: scenario.snapshotEval
-        ? {
-            enabled: scenario.snapshotEval.enabled,
-            baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
-            baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
-            last_updated_at: scenario.snapshotEval.lastUpdatedAt
-          }
-        : undefined,
-      extract:
-        scenario.extractRules.length > 0
-          ? scenario.extractRules.map((rule) => ({
-              name: rule.name,
-              from: 'final_text' as const,
-              regex: rule.pattern
-            }))
-          : undefined
-    }))
+    scenarios: input.scenarios.map((scenario) =>
+      buildCoreScenarioEntry(
+        scenario,
+        scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined
+      )
+    )
   };
 }
 
