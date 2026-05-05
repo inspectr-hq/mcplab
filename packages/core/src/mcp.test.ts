@@ -84,9 +84,30 @@ describe('normalizeListedTool', () => {
   it('maps a valid annotations object', () => {
     const normalized = normalizeListedTool({
       name: 'get_data',
-      annotations: { readOnlyHint: true, destructiveHint: false }
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true }
     });
-    expect(normalized.annotations).toEqual({ readOnlyHint: true, destructiveHint: false });
+    expect(normalized.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true
+    });
+  });
+
+  it('uses annotations.title as fallback when top-level title is missing', () => {
+    const normalized = normalizeListedTool({
+      name: 'create_rule',
+      annotations: { title: 'Create Rule' }
+    });
+    expect(normalized.title).toBe('Create Rule');
+  });
+
+  it('prefers top-level title over annotations.title', () => {
+    const normalized = normalizeListedTool({
+      name: 'create_rule',
+      title: 'Top Level',
+      annotations: { title: 'Annotation Level' }
+    });
+    expect(normalized.title).toBe('Top Level');
   });
 
   it('treats array annotations as absent — array passes typeof object but is not a valid annotations object', () => {

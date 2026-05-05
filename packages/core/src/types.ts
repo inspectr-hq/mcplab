@@ -223,9 +223,11 @@ export interface ToolDef {
   inputSchema?: unknown;
   outputSchema?: unknown;
   annotations?: {
+    title?: string;
     readOnlyHint?: boolean;
     idempotentHint?: boolean;
     destructiveHint?: boolean;
+    openWorldHint?: boolean;
     [key: string]: unknown;
   };
 }

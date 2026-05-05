@@ -134,7 +134,7 @@ const ToolAnalysisPage = () => {
         description?: string;
         inputSchema?: unknown;
         outputSchema?: unknown;
-        safetyClassification: "read_like" | "unsafe_or_unknown";
+        safetyClassification: "read_only" | "unsafe_or_unknown";
         classificationReason: string;
       }>;
     }[]
@@ -688,13 +688,13 @@ const ToolAnalysisPage = () => {
                         {server.tools.map((tool) => {
                           const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
                           const safetyLabel =
-                            tool.safetyClassification === "read_like"
-                              ? "read-like"
+                            tool.safetyClassification === "read_only"
+                              ? "read-only"
                               : isWriteDelete
                                 ? "write/delete"
                                 : "unsafe/unknown";
                           const safetyVariantClass =
-                            tool.safetyClassification === "read_like"
+                            tool.safetyClassification === "read_only"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                               : isWriteDelete
                                 ? "border-amber-300 bg-amber-50 text-amber-800"
@@ -760,7 +760,7 @@ const ToolAnalysisPage = () => {
               <Checkbox checked={deeperAnalysis} onCheckedChange={(v) => setDeeperAnalysis(Boolean(v))} />
               <span className="inline-flex items-center gap-1.5">
                 Deeper analysis
-                <ModeInfo text="Runs sample MCP tool calls automatically for read-like tools only (based on the safety allowlist)." />
+                <ModeInfo text="Runs sample MCP tool calls automatically for read-only tools only (based on the safety allowlist)." />
               </span>
             </label>
             <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">

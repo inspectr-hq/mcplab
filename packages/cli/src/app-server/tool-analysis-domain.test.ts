@@ -140,21 +140,36 @@ describe('tool-analysis payload builders', () => {
 });
 
 describe('classifyToolSafety', () => {
+  it('prioritizes destructiveHint true over readOnlyHint true', () => {
+    const result = classifyToolSafety('delete_data', undefined, {
+      readOnlyHint: true,
+      destructiveHint: true
+    });
+    expect(result.safetyClassification).toBe('unsafe_or_unknown');
+    expect(result.classificationReason).toContain('destructiveHint');
+  });
+
   it('classifies destructiveHint annotation as unsafe_or_unknown, overriding read prefix', () => {
     const result = classifyToolSafety('get_data', undefined, { destructiveHint: true });
     expect(result.safetyClassification).toBe('unsafe_or_unknown');
     expect(result.classificationReason).toContain('destructiveHint');
   });
 
-  it('classifies readOnlyHint annotation as read_like, overriding delete prefix', () => {
+  it('classifies readOnlyHint annotation as read_only, overriding delete prefix', () => {
     const result = classifyToolSafety('delete_data', undefined, { readOnlyHint: true });
-    expect(result.safetyClassification).toBe('read_like');
+    expect(result.safetyClassification).toBe('read_only');
     expect(result.classificationReason).toContain('readOnlyHint');
   });
 
   it('falls back to prefix matching when annotations absent', () => {
     expect(classifyToolSafety('delete_record').safetyClassification).toBe('unsafe_or_unknown');
-    expect(classifyToolSafety('get_user').safetyClassification).toBe('read_like');
+    expect(classifyToolSafety('get_user').safetyClassification).toBe('read_only');
+  });
+
+  it('classifies destructiveHint false as non-read-only additive behavior', () => {
+    const result = classifyToolSafety('create_note', undefined, { destructiveHint: false });
+    expect(result.safetyClassification).toBe('unsafe_or_unknown');
+    expect(result.classificationReason).toContain('additive behavior');
   });
 });
 

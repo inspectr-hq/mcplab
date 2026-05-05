@@ -51,7 +51,7 @@ interface ToolAnalysisToolReport {
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
   metadataReview?: {
     strengths: string[];
@@ -129,7 +129,7 @@ interface ToolAnalysisDiscoveredTool {
   description?: string;
   inputSchema?: unknown;
   outputSchema?: unknown;
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
 }
 
@@ -147,7 +147,7 @@ export interface ToolAnalysisJob {
 interface ToolAnalysisToolContext {
   serverName: string;
   tool: ToolDef;
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
 }
 
@@ -258,7 +258,7 @@ export function classifyToolSafety(
   inputSchema?: unknown,
   annotations?: ToolDef['annotations']
 ): {
-  safetyClassification: 'read_like' | 'unsafe_or_unknown';
+  safetyClassification: 'read_only' | 'unsafe_or_unknown';
   classificationReason: string;
 } {
   const hasDestructiveHint = annotations?.destructiveHint === true;
@@ -273,15 +273,32 @@ export function classifyToolSafety(
   }
   if (hasReadOnlyHint) {
     return {
-      safetyClassification: 'read_like',
+      safetyClassification: 'read_only',
       classificationReason: "MCP annotations indicate read-only behavior ('readOnlyHint: true')."
     };
   }
+
+  const hasExplicitNonDestructiveHint = annotations?.destructiveHint === false;
   if (hasExplicitReadOnlyFalse) {
+    if (hasExplicitNonDestructiveHint) {
+      return {
+        safetyClassification: 'unsafe_or_unknown',
+        classificationReason:
+          "MCP annotations indicate non-read-only additive behavior ('readOnlyHint: false', 'destructiveHint: false')."
+      };
+    }
     return {
       safetyClassification: 'unsafe_or_unknown',
       classificationReason:
         "MCP annotations indicate non-read-only behavior ('readOnlyHint: false')."
+    };
+  }
+
+  if (hasExplicitNonDestructiveHint) {
+    return {
+      safetyClassification: 'unsafe_or_unknown',
+      classificationReason:
+        "MCP annotations indicate non-read-only additive behavior ('destructiveHint: false')."
     };
   }
 
@@ -305,8 +322,8 @@ export function classifyToolSafety(
   }
   if (read) {
     return {
-      safetyClassification: 'read_like',
-      classificationReason: `Name starts with read-like prefix '${read}'.${schemaHint}`.trim()
+      safetyClassification: 'read_only',
+      classificationReason: `Name starts with read-only prefix '${read}'.${schemaHint}`.trim()
     };
   }
   return {
@@ -838,7 +855,7 @@ export async function runToolAnalysisJob(params: {
         if (modes.deeperAnalysis) {
           const canAutoRun =
             deeper.autoRunPolicy !== 'read_only_allowlist' ||
-            toolCtx.safetyClassification === 'read_like';
+            toolCtx.safetyClassification === 'read_only';
           if (!canAutoRun) {
             baseReport.deeperAnalysis = {
               attempted: false,

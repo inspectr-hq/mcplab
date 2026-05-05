@@ -36,16 +36,24 @@ export interface McpServerImplementation {
 }
 
 export function normalizeListedTool(tool: any): ToolDef {
+  const annotations =
+    tool.annotations && typeof tool.annotations === 'object' && !Array.isArray(tool.annotations)
+      ? (tool.annotations as ToolDef['annotations'])
+      : undefined;
+
+  const title =
+    typeof tool.title === 'string'
+      ? tool.title
+      : typeof annotations?.title === 'string'
+      ? annotations.title
+      : undefined;
   return {
     name: tool.name,
-    title: typeof tool.title === 'string' ? tool.title : undefined,
+    title: title,
     description: tool.description,
     inputSchema: tool.inputSchema ?? tool.input_schema ?? tool.input,
     outputSchema: tool.outputSchema ?? tool.output_schema,
-    annotations:
-      tool.annotations && typeof tool.annotations === 'object' && !Array.isArray(tool.annotations)
-        ? (tool.annotations as ToolDef['annotations'])
-        : undefined
+    annotations
   };
 }
 

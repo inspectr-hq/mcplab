@@ -550,13 +550,13 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                     const toolDisplayName = tool.publicToolName.split("::").pop() ?? tool.publicToolName;
                     const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
                     const safetyLabel =
-                      tool.safetyClassification === "read_like"
-                        ? "read-like"
+                      tool.safetyClassification === "read_only"
+                        ? "read-only"
                         : isWriteDelete
                           ? "write/delete"
                           : "unsafe/unknown";
                     const safetyVariantClass =
-                      tool.safetyClassification === "read_like"
+                      tool.safetyClassification === "read_only"
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                         : isWriteDelete
                           ? "border-amber-300 bg-amber-50 text-amber-800"

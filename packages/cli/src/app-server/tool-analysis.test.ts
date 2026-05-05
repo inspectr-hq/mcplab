@@ -46,7 +46,7 @@ describe('handleToolAnalysisRoutes', () => {
                   required: ['name']
                 }
               },
-              safetyClassification: 'read_like',
+              safetyClassification: 'read_only',
               classificationReason: 'read prefix'
             }
           ]

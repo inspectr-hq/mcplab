@@ -37,7 +37,7 @@ const report: ToolAnalysisReport = {
             properties: { name: { type: 'string' }, age: { type: 'number' } },
             required: ['name']
           },
-          safetyClassification: 'read_like',
+          safetyClassification: 'read_only',
           classificationReason: 'read prefix',
           metadataReview: {
             strengths: [],
