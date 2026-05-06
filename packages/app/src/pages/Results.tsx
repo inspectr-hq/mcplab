@@ -15,9 +15,13 @@ import {
   Wrench,
   BarChart3,
   Sparkles,
+  CalendarRange,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -49,6 +53,54 @@ import { formatAssistantToolName } from "@/lib/assistant-tool-name";
 import { buildRunScopeSummary, type RunScopeSummary } from "@/lib/run-scope-summary";
 import type { EvalResult } from "@/types/eval";
 
+type TimeFilterPreset = "15min" | "1h" | "24h" | "7d" | "30d";
+type TimeFilterMode = "all" | "last" | "custom";
+type TimeFilterQueryState = {
+  mode: TimeFilterMode;
+  preset: TimeFilterPreset;
+  start: string;
+  end: string;
+};
+
+const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
+  { value: "15min", label: "Last 15min", durationMs: 15 * 60 * 1000 },
+  { value: "1h", label: "Last hour", durationMs: 60 * 60 * 1000 },
+  { value: "24h", label: "Last 24 hours", durationMs: 24 * 60 * 60 * 1000 },
+  { value: "7d", label: "Last 7 days", durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { value: "30d", label: "Last 30 days", durationMs: 30 * 24 * 60 * 60 * 1000 },
+];
+
+function parseLocalDateTime(value: string) {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatLocalDateTime(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return "";
+  return parsed.toLocaleString();
+}
+
+function isTimeFilterMode(value: string | null): value is TimeFilterMode {
+  return value === "all" || value === "last" || value === "custom";
+}
+
+function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
+  return value === "15min" || value === "1h" || value === "24h" || value === "7d" || value === "30d";
+}
+
+function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQueryState {
+  const modeParam = searchParams.get("time_filter");
+  const presetParam = searchParams.get("time_preset");
+  return {
+    mode: isTimeFilterMode(modeParam) ? modeParam : "all",
+    preset: isTimeFilterPreset(presetParam) ? presetParam : "15min",
+    start: searchParams.get("time_start") ?? "",
+    end: searchParams.get("time_end") ?? ""
+  };
+}
+
 const RESULT_ASSISTANT_SNIPPETS = [
   {
     label: "Summarize Run Trends",
@@ -77,8 +129,9 @@ const RESULT_ASSISTANT_SNIPPETS = [
 ] as const;
 
 const Results = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { source } = useDataSource();
+  const initialTimeFilter = getTimeFilterQueryState(searchParams);
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
@@ -87,6 +140,11 @@ const Results = () => {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [scenarioFilter, setScenarioFilter] = useState("all");
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
+  const [timeFilterMode, setTimeFilterMode] = useState<TimeFilterMode>(initialTimeFilter.mode);
+  const [timeFilterPreset, setTimeFilterPreset] = useState<TimeFilterPreset>(initialTimeFilter.preset);
+  const [timeFilterStart, setTimeFilterStart] = useState(initialTimeFilter.start);
+  const [timeFilterEnd, setTimeFilterEnd] = useState(initialTimeFilter.end);
+  const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const toggleSort = (next: typeof sortBy) => {
@@ -188,22 +246,89 @@ const Results = () => {
     }
   }, [searchParams, scenarioFilterOptions, results.length]);
 
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (timeFilterMode === "all") {
+      next.delete("time_filter");
+      next.delete("time_preset");
+      next.delete("time_start");
+      next.delete("time_end");
+    } else if (timeFilterMode === "last") {
+      next.set("time_filter", "last");
+      next.set("time_preset", timeFilterPreset);
+      next.delete("time_start");
+      next.delete("time_end");
+    } else {
+      next.set("time_filter", "custom");
+      next.delete("time_preset");
+      if (timeFilterStart.trim()) next.set("time_start", timeFilterStart.trim());
+      else next.delete("time_start");
+      if (timeFilterEnd.trim()) next.set("time_end", timeFilterEnd.trim());
+      else next.delete("time_end");
+    }
+
+    const nextString = next.toString();
+    if (nextString !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
+
   const filteredResults = useMemo(() => {
-    if (scenarioFilter === "all") return results;
-    return results.filter((run) =>
-      run.scenarios.some((scenario) => {
-        const scenarioName = String(scenario.scenarioName ?? "").trim();
-        const scenarioId = String(scenario.scenarioId ?? "").trim();
-        return scenarioName === scenarioFilter || scenarioId === scenarioFilter;
-      })
-    );
-  }, [results, scenarioFilter]);
+    const scenarioFiltered =
+      scenarioFilter === "all"
+        ? results
+        : results.filter((run) =>
+            run.scenarios.some((scenario) => {
+              const scenarioName = String(scenario.scenarioName ?? "").trim();
+              const scenarioId = String(scenario.scenarioId ?? "").trim();
+              return scenarioName === scenarioFilter || scenarioId === scenarioFilter;
+            })
+          );
+
+    if (timeFilterMode === "all") return scenarioFiltered;
+
+    const now = Date.now();
+
+    if (timeFilterMode === "last") {
+      const preset = TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ?? TIME_FILTER_PRESETS[0]!;
+      const minTimestamp = now - preset.durationMs;
+      return scenarioFiltered.filter((run) => {
+        const timestamp = new Date(run.timestamp).getTime();
+        return timestamp >= minTimestamp && timestamp <= now;
+      });
+    }
+
+    const start = parseLocalDateTime(timeFilterStart)?.getTime() ?? null;
+    const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
+    const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
+    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
+
+    return scenarioFiltered.filter((run) => {
+      const timestamp = new Date(run.timestamp).getTime();
+      if (Number.isNaN(timestamp)) return false;
+      if (rangeStart !== null && timestamp < rangeStart) return false;
+      if (rangeEnd !== null && timestamp > rangeEnd) return false;
+      return true;
+    });
+  }, [results, scenarioFilter, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === "all") return "All scenarios";
     const option = scenarioFilterOptions.find((item) => item.value === scenarioFilter || item.label === scenarioFilter);
     return option?.label ?? scenarioFilter;
   }, [scenarioFilter, scenarioFilterOptions]);
+
+  const selectedTimeFilterLabel = useMemo(() => {
+    if (timeFilterMode === "all") return "All time";
+    if (timeFilterMode === "last") {
+      return TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset)?.label ?? "Last range";
+    }
+    const hasStart = Boolean(timeFilterStart.trim());
+    const hasEnd = Boolean(timeFilterEnd.trim());
+    if (!hasStart && !hasEnd) return "Custom range";
+    if (hasStart && hasEnd) return `${formatLocalDateTime(timeFilterStart)} - ${formatLocalDateTime(timeFilterEnd)}`;
+    return hasStart ? `From ${formatLocalDateTime(timeFilterStart)}` : `Until ${formatLocalDateTime(timeFilterEnd)}`;
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const sorted = useMemo(() => {
     const compareNullableNumbers = (left: number | null, right: number | null) => {
@@ -235,6 +360,13 @@ const Results = () => {
   const formatToolTokenTotal = (result: EvalResult) => {
     const total = result.toolTokenUsage?.totalTokens;
     return typeof total === "number" ? total.toLocaleString() : "n/a";
+  };
+
+  const resetTimeFilter = () => {
+    setTimeFilterMode("all");
+    setTimeFilterPreset("15min");
+    setTimeFilterStart("");
+    setTimeFilterEnd("");
   };
 
   const runScopesById = useMemo(() => {
@@ -311,7 +443,7 @@ const Results = () => {
           </h1>
           <p className="text-sm text-muted-foreground">Browse evaluation runs and open detailed results</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
             <PopoverTrigger asChild>
               <Button
@@ -357,6 +489,96 @@ const Results = () => {
                   </CommandGroup>
                 </CommandList>
               </Command>
+            </PopoverContent>
+          </Popover>
+          <Popover open={openTimeFilterPicker} onOpenChange={setOpenTimeFilterPicker}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-expanded={openTimeFilterPicker}
+                className="w-[320px] justify-between font-normal"
+              >
+                <span className="flex min-w-0 items-center gap-2 truncate text-left">
+                  <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{selectedTimeFilterLabel}</span>
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[360px] p-0" align="start">
+              <div className="border-b px-3 py-2">
+                <p className="text-sm font-medium">Date and time filter</p>
+                <p className="text-xs text-muted-foreground">Filter runs by timestamp.</p>
+              </div>
+              <div className="grid gap-1 p-2">
+                <Button
+                  type="button"
+                  variant={timeFilterMode === "all" ? "secondary" : "ghost"}
+                  className="justify-start"
+                  onClick={() => {
+                    resetTimeFilter();
+                    setOpenTimeFilterPicker(false);
+                  }}
+                >
+                  All time
+                </Button>
+                {TIME_FILTER_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.value}
+                    type="button"
+                    variant={timeFilterMode === "last" && timeFilterPreset === preset.value ? "secondary" : "ghost"}
+                    className="justify-start"
+                    onClick={() => {
+                      setTimeFilterMode("last");
+                      setTimeFilterPreset(preset.value);
+                      setOpenTimeFilterPicker(false);
+                    }}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant={timeFilterMode === "custom" ? "secondary" : "ghost"}
+                  className="justify-start"
+                  onClick={() => setTimeFilterMode("custom")}
+                >
+                  Custom date time range
+                </Button>
+              </div>
+              {timeFilterMode === "custom" && (
+                <div className="space-y-3 border-t p-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="results-time-filter-start">Start</Label>
+                    <Input
+                      id="results-time-filter-start"
+                      type="datetime-local"
+                      value={timeFilterStart}
+                      onChange={(event) => setTimeFilterStart(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="results-time-filter-end">End</Label>
+                    <Input
+                      id="results-time-filter-end"
+                      type="datetime-local"
+                      value={timeFilterEnd}
+                      onChange={(event) => setTimeFilterEnd(event.target.value)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <Button type="button" variant="ghost" size="sm" className="px-2" onClick={resetTimeFilter}>
+                      <X className="mr-1.5 h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => setOpenTimeFilterPicker(false)}>
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>

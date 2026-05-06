@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import Results from "./Results";
 import type { EvalResult } from "@/types/eval";
 
@@ -21,12 +21,12 @@ vi.mock("@/contexts/DataSourceContext", () => ({
   })
 }));
 
-function makeRun(id: string, tokenTotal: number | null): EvalResult {
+function makeRun(id: string, tokenTotal: number | null, timestamp = "2026-03-10T10:00:00.000Z"): EvalResult {
   return {
     id,
     configId: `cfg-${id}`,
     configHash: "hash",
-    timestamp: "2026-03-10T10:00:00.000Z",
+    timestamp,
     mcpServerVersions: {},
     scenarios: [
       {
@@ -57,6 +57,10 @@ function makeRun(id: string, tokenTotal: number | null): EvalResult {
 }
 
 describe("Results", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("opens the global MCP Lab Assistant sidebar from the Results header", async () => {
     sourceMock.listResults.mockResolvedValue([makeRun("run-a", 1200)]);
 
@@ -136,6 +140,60 @@ describe("Results", () => {
     await waitFor(() => {
       const runLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/results/run-"));
       expect(runLinks.map((link) => link.textContent)).toEqual(["run-high", "run-low", "run-null"]);
+    });
+  });
+
+  it("filters runs by the Last 15min preset", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(new Date("2026-03-10T10:15:00.000Z").getTime());
+    sourceMock.listResults.mockResolvedValue([
+      makeRun("run-fresh", 1200, "2026-03-10T10:10:00.000Z"),
+      makeRun("run-old", 900, "2026-03-10T09:30:00.000Z")
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={["/results?time_filter=last&time_preset=15min"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("run-fresh");
+    await waitFor(() => {
+      expect(screen.getByText("Last 15min")).toBeInTheDocument();
+      const runLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/results/run-"));
+      expect(runLinks.map((link) => link.textContent)).toEqual(["run-fresh"]);
+    });
+  });
+
+  it("filters runs by a custom date time range", async () => {
+    sourceMock.listResults.mockResolvedValue([
+      makeRun("run-inside", 1200, "2026-03-10T10:10:00.000Z"),
+      makeRun("run-outside", 900, "2026-03-10T09:30:00.000Z")
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={["/results?time_filter=custom&time_start=2026-03-10T11:00&time_end=2026-03-10T11:15"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("run-inside");
+    fireEvent.click(screen.getAllByRole("combobox")[1]!);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Start") as HTMLInputElement).value).toBe("2026-03-10T11:00");
+      expect((screen.getByLabelText("End") as HTMLInputElement).value).toBe("2026-03-10T11:15");
+      const runLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/results/run-"));
+      expect(runLinks.map((link) => link.textContent)).toEqual(["run-inside"]);
     });
   });
 });
