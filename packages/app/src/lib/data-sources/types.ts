@@ -814,13 +814,14 @@ export interface EvalDataSource {
       availableServers: Array<{ name: string; url?: string }>;
       availableAgents: Array<{ name: string; provider: string; model: string }>;
     };
-  }) => Promise<{ sessionId: string; session: ScenarioAssistantSessionView }>;
+  }, signal?: AbortSignal) => Promise<{ sessionId: string; session: ScenarioAssistantSessionView }>;
   getScenarioAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView }>;
   sendScenarioAssistantMessage: (
     sessionId: string,
-    message: string
+    message: string,
+    signal?: AbortSignal
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   approveScenarioAssistantToolCall: (
     sessionId: string,

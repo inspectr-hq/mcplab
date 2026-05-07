@@ -135,14 +135,14 @@ export const workspaceSource: EvalDataSource = {
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },
-  async createResultAssistantSession(params) {
-    return workspaceApiClient.createResultAssistantSession(params);
+  async createResultAssistantSession(params, signal) {
+    return workspaceApiClient.createResultAssistantSession(params, signal);
   },
   async getResultAssistantSession(sessionId) {
     return workspaceApiClient.getResultAssistantSession(sessionId);
   },
-  async sendResultAssistantMessage(sessionId, message) {
-    return workspaceApiClient.sendResultAssistantMessage(sessionId, message);
+  async sendResultAssistantMessage(sessionId, message, signal) {
+    return workspaceApiClient.sendResultAssistantMessage(sessionId, message, signal);
   },
   async approveResultAssistantToolCall(sessionId, callId, argumentsOverride) {
     return workspaceApiClient.approveResultAssistantToolCall(sessionId, callId, argumentsOverride);
@@ -183,14 +183,14 @@ export const workspaceSource: EvalDataSource = {
   async updateWorkspaceSettings(patch) {
     return workspaceApiClient.updateSettings(patch);
   },
-  async createScenarioAssistantSession(params) {
-    return workspaceApiClient.createScenarioAssistantSession(params);
+  async createScenarioAssistantSession(params, signal) {
+    return workspaceApiClient.createScenarioAssistantSession(params, signal);
   },
   async getScenarioAssistantSession(sessionId) {
     return workspaceApiClient.getScenarioAssistantSession(sessionId);
   },
-  async sendScenarioAssistantMessage(sessionId, message) {
-    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message);
+  async sendScenarioAssistantMessage(sessionId, message, signal) {
+    return workspaceApiClient.sendScenarioAssistantMessage(sessionId, message, signal);
   },
   async approveScenarioAssistantToolCall(sessionId, callId) {
     return workspaceApiClient.approveScenarioAssistantToolCall(sessionId, callId);

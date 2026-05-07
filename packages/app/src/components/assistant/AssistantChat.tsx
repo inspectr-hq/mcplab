@@ -6,6 +6,7 @@ import {
   Plus,
   RectangleEllipsis,
   Send,
+  Square,
   User,
   Wrench
 } from 'lucide-react';
@@ -295,6 +296,7 @@ export function AssistantComposer({
   input,
   onInputChange,
   onSend,
+  onCancel,
   inputPlaceholder,
   snippets,
   snippetsLabel,
@@ -307,6 +309,7 @@ export function AssistantComposer({
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   inputPlaceholder: string;
   snippets: readonly AssistantSnippet[];
   snippetsLabel: string;
@@ -343,17 +346,44 @@ export function AssistantComposer({
           disabled={controlsDisabled}
           contentClassName={snippetContentClassName}
         />
-        <Button
-          type="button"
-          size="icon"
-          className="h-8 w-8 shrink-0 rounded-full"
-          onClick={onSend}
-          disabled={controlsDisabled || !input.trim()}
-          aria-label="Send assistant message"
-          title="Send assistant message"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
+        {loading && onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"
+            onClick={onCancel}
+            aria-label="Cancel assistant message"
+            title="Cancel assistant message"
+          >
+            <span className="pointer-events-none absolute inset-[2px] rounded-full border border-primary/20 border-t-primary/70 motion-reduce:animate-none animate-[spin_2.2s_linear_infinite]" />
+            <span className="pointer-events-none absolute inset-[4px] rounded-full border border-primary/10 motion-reduce:animate-none animate-pulse" />
+            <Square className="relative z-10 h-4 w-4" />
+          </Button>
+        ) : loading ? (
+          <Button
+            type="button"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full"
+            disabled
+            aria-label="Assistant is loading"
+            title="Assistant is loading"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full pr-0.5"
+            onClick={onSend}
+            disabled={controlsDisabled || !input.trim()}
+            aria-label="Send assistant message"
+            title="Send assistant message"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { isAbortError } from '@/lib/abort';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from '@/types/eval';
 import type {
@@ -101,13 +102,29 @@ export function ScenarioAssistantDialog({
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [turnCancelable, setTurnCancelable] = useState(false);
   const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const initialMessageSentRef = useRef<string | null>(null);
+  const assistantTurnRef = useRef<{
+    id: number;
+    controller: AbortController;
+    prompt: string;
+  } | null>(null);
+  const assistantTurnCounterRef = useRef(0);
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
   const resolvedAssistantAgentName = defaultAssistantAgentName || agents[0]?.id || '';
+
+  const abortActiveAssistantTurn = useCallback(() => {
+    const activeTurn = assistantTurnRef.current;
+    if (!activeTurn) return;
+    activeTurn.controller.abort();
+    // Don't null assistantTurnRef here — the finally block in sendMessage
+    // guards on the turn ID to perform cleanup, and nulling the ref would
+    // cause that guard to fail, bypassing setLoading(false).
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -166,6 +183,7 @@ export function ScenarioAssistantDialog({
       if (cancelled) return;
       setSessionId(resp.sessionId);
       syncScenarioAssistantSession(resp.session);
+      setLoading(false);
     };
     void bootstrap()
       .catch((error: unknown) => {
@@ -196,6 +214,7 @@ export function ScenarioAssistantDialog({
   ]);
 
   const resetLocalSessionState = () => {
+    abortActiveAssistantTurn();
     setSessionId(null);
     setSession(null);
     setInput('');
@@ -212,6 +231,15 @@ export function ScenarioAssistantDialog({
     });
   }, []);
 
+  const cancelAssistantTurn = useCallback(() => {
+    const activeTurn = assistantTurnRef.current;
+    if (!activeTurn) return;
+    abortActiveAssistantTurn();
+    setInput(activeTurn.prompt);
+    setLoading(false);
+    setTurnCancelable(false);
+  }, [abortActiveAssistantTurn]);
+
   const closeScenarioAssistantSession = (id: string) => {
     resetLocalSessionState();
     void source.closeScenarioAssistantSession(id).catch(() => {});
@@ -226,11 +254,12 @@ export function ScenarioAssistantDialog({
 
   useEffect(() => {
     return () => {
+      abortActiveAssistantTurn();
       if (sessionId) {
         void source.closeScenarioAssistantSession(sessionId).catch(() => {});
       }
     };
-  }, [sessionId, source]);
+  }, [abortActiveAssistantTurn, sessionId, source]);
 
   useEffect(() => {
     if (!open) return;
@@ -267,6 +296,8 @@ export function ScenarioAssistantDialog({
     if (!sessionId) return;
     const trimmed = message.trim();
     if (!trimmed) return;
+    const turnId = ++assistantTurnCounterRef.current;
+    const controller = new AbortController();
     const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMessage: ScenarioAssistantSessionView['messages'][number] = {
       id: optimisticMessageId,
@@ -274,6 +305,8 @@ export function ScenarioAssistantDialog({
       text: trimmed,
       createdAt: new Date().toISOString()
     };
+    assistantTurnRef.current = { id: turnId, controller, prompt: trimmed };
+    setTurnCancelable(true);
     setSession((prev) =>
       prev
         ? {
@@ -285,9 +318,12 @@ export function ScenarioAssistantDialog({
     setInput('');
     setLoading(true);
     try {
-      const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed);
+      const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed, controller.signal);
+      if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
       syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
+      if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+        return;
       setSession((prev) =>
         prev
           ? {
@@ -303,7 +339,13 @@ export function ScenarioAssistantDialog({
         variant: 'destructive'
       });
     } finally {
-      setLoading(false);
+      // cancelAssistantTurn() clears the ref synchronously, so only the active turn
+      // should reset loading state here.
+      if (assistantTurnRef.current?.id === turnId) {
+        assistantTurnRef.current = null;
+        setLoading(false);
+        setTurnCancelable(false);
+      }
     }
   };
 
@@ -724,6 +766,7 @@ export function ScenarioAssistantDialog({
                 input={input}
                 onInputChange={setInput}
                 onSend={() => void sendMessage(input)}
+                onCancel={sessionId && turnCancelable ? cancelAssistantTurn : undefined}
                 inputPlaceholder="Get assistance with creating or refining this scenario ..."
                 snippets={SCENARIO_ASSISTANT_SNIPPETS}
                 snippetsLabel="Scenario Assistant Snippets"

@@ -6,6 +6,7 @@ type FetchResponse = {
   status: number;
   ok: boolean;
   text: () => Promise<string>;
+  json: () => Promise<unknown>;
 };
 
 class MockEventSource {
@@ -61,7 +62,8 @@ describe('workspaceApiClient SSE subscriptions', () => {
       async (): Promise<FetchResponse> => ({
         status: 404,
         ok: false,
-        text: async () => 'not found'
+        text: async () => 'not found',
+        json: async () => ({})
       })
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -84,5 +86,52 @@ describe('workspaceApiClient SSE subscriptions', () => {
     );
 
     unsubscribe();
+  });
+});
+
+describe('workspaceApiClient assistant request cancellation', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('forwards AbortSignal to assistant turn requests', async () => {
+    const fetchMock = vi.fn(
+      async (): Promise<FetchResponse> => ({
+        status: 200,
+        ok: true,
+        text: async () => '',
+        json: async () => ({
+          sessionId: 'ras-1',
+          session: {
+            id: 'ras-1',
+            scope: 'run',
+            runId: 'run-1',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            selectedAssistantAgentName: 'assistant-1',
+            model: 'gpt-4o-mini',
+            provider: 'openai',
+            messages: [],
+            pendingToolCalls: []
+          }
+        })
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const controller = new AbortController();
+    await workspaceApiClient.createResultAssistantSession(
+      { runId: 'run-1', scope: 'run' },
+      controller.signal
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/result-assistant/sessions',
+      expect.objectContaining({
+        method: 'POST',
+        signal: controller.signal
+      })
+    );
   });
 });

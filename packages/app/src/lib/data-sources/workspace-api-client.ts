@@ -232,22 +232,27 @@ export const workspaceApiClient = {
         })
       }
     ),
-  createResultAssistantSession: (params: { runId?: string; scope?: 'run' | 'all_runs' }) =>
+  createResultAssistantSession: (
+    params: { runId?: string; scope?: 'run' | 'all_runs' },
+    signal?: AbortSignal
+  ) =>
     request<{ sessionId: string; session: ResultAssistantSessionView }>(
       '/api/result-assistant/sessions',
       {
         method: 'POST',
-        body: JSON.stringify(params)
+        body: JSON.stringify(params),
+        signal
       }
     ),
   getResultAssistantSession: (sessionId: string) =>
     request<{ session: ResultAssistantSessionView }>(`/api/result-assistant/sessions/${sessionId}`),
-  sendResultAssistantMessage: (sessionId: string, message: string) =>
+  sendResultAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
     request<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>(
       `/api/result-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message }),
+        signal
       }
     ),
   approveResultAssistantToolCall: (
@@ -349,24 +354,26 @@ export const workspaceApiClient = {
     scenarioId: string;
     selectedAssistantAgentName: string;
     context: unknown;
-  }) =>
+  }, signal?: AbortSignal) =>
     request<{ sessionId: string; session: ScenarioAssistantSessionView }>(
       '/api/scenario-assistant/sessions',
       {
         method: 'POST',
-        body: JSON.stringify(params)
+        body: JSON.stringify(params),
+        signal
       }
     ),
   getScenarioAssistantSession: (sessionId: string) =>
     request<{ session: ScenarioAssistantSessionView }>(
       `/api/scenario-assistant/sessions/${sessionId}`
     ),
-  sendScenarioAssistantMessage: (sessionId: string, message: string) =>
+  sendScenarioAssistantMessage: (sessionId: string, message: string, signal?: AbortSignal) =>
     request<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>(
       `/api/scenario-assistant/sessions/${sessionId}/messages`,
       {
         method: 'POST',
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message }),
+        signal
       }
     ),
   approveScenarioAssistantToolCall: (sessionId: string, callId: string) =>

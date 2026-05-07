@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ServerConfig, ToolDef } from './types.js';
+import { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 
 export interface McpToolInfo {
   name: string;
@@ -13,6 +14,7 @@ export interface McpToolInfo {
 
 export interface McpCallToolOptions {
   requestHeaders?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 export interface McpConnectAllOptions {
@@ -137,7 +139,7 @@ export class McpClientManager {
     let lastError: any;
     for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
       try {
-        const result: any = await client.listTools();
+        const result: any = await client.listTools(undefined, signal ? { signal } : undefined);
         const tools = Array.isArray(result?.tools)
           ? result.tools
           : Array.isArray(result)
@@ -169,15 +171,23 @@ export class McpClientManager {
     const callHeaders = options?.requestHeaders;
     const client =
       callHeaders && Object.keys(callHeaders).length > 0
-        ? await this.getOrCreateScopedClient(serverName, callHeaders)
+        ? await this.getOrCreateScopedClient(serverName, callHeaders, options?.signal)
         : this.getClient(serverName);
+    throwIfAborted(options?.signal);
     try {
-      const result = await client.callTool({
-        name: tool,
-        arguments: args as any
-      });
+      const result = await client.callTool(
+        {
+          name: tool,
+          arguments: args as any
+        },
+        undefined,
+        options?.signal ? { signal: options.signal } : undefined
+      );
       return result;
     } catch (err: any) {
+      if (options?.signal?.aborted || isAbortError(err)) {
+        throw err;
+      }
       throw new Error(
         formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err)
       );
@@ -227,7 +237,8 @@ export class McpClientManager {
   private async connectClient(
     clientName: string,
     server: ServerConfig,
-    headers: Record<string, string>
+    headers: Record<string, string>,
+    signal?: AbortSignal
   ): Promise<Client> {
     const client = new Client({
       name: clientName,
@@ -236,7 +247,7 @@ export class McpClientManager {
     const transport = new StreamableHTTPClientTransport(new URL(server.url), {
       requestInit: { headers }
     });
-    await client.connect(transport);
+    await client.connect(transport, signal ? { signal } : undefined);
     return client;
   }
 
@@ -249,7 +260,7 @@ export class McpClientManager {
     let lastError: any;
     for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
       try {
-        return await this.connectClient(clientName, server, headers);
+        return await this.connectClient(clientName, server, headers, signal);
       } catch (err: any) {
         throwIfAborted(signal);
         lastError = err;
@@ -279,7 +290,8 @@ export class McpClientManager {
 
   private async getOrCreateScopedClient(
     serverName: string,
-    requestHeaders: Record<string, string>
+    requestHeaders: Record<string, string>,
+    signal?: AbortSignal
   ): Promise<Client> {
     const server = this.servers.get(serverName);
     if (!server) {
@@ -299,12 +311,13 @@ export class McpClientManager {
       return existing;
     }
     const inFlight = this.scopedClientConnectPromises.get(key);
-    if (inFlight) return inFlight;
+    if (inFlight) return raceWithAbort(inFlight, signal);
 
     const connectPromise = this.connectClientWithRetry(
       `mcp-eval-${serverName}-scoped`,
       server,
-      headers
+      headers,
+      signal
     )
       .then(async (client) => {
         await this.evictIfNeeded();
@@ -315,7 +328,7 @@ export class McpClientManager {
         this.scopedClientConnectPromises.delete(key);
       });
     this.scopedClientConnectPromises.set(key, connectPromise);
-    return connectPromise;
+    return raceWithAbort(connectPromise, signal);
   }
 
   /**
@@ -561,7 +574,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new Error('Run aborted by user'));
+      reject(createAbortError());
     };
     if (signal) {
       signal.addEventListener('abort', onAbort, { once: true });
@@ -569,8 +582,17 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new Error('Run aborted by user');
+async function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  throwIfAborted(signal);
+  if (!signal) return promise;
+  let abortListener: (() => void) | undefined;
+  const abortPromise = new Promise<never>((_, reject) => {
+    abortListener = () => reject(createAbortError());
+    signal.addEventListener('abort', abortListener, { once: true });
+  });
+  try {
+    return await Promise.race([promise, abortPromise]);
+  } finally {
+    if (abortListener) signal.removeEventListener('abort', abortListener);
   }
 }

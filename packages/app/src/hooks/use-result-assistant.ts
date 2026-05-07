@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { ApiError } from '@/lib/data-sources/workspace-api-client';
+import { isAbortError } from '@/lib/abort';
 import type {
   EvalDataSource,
   ResultAssistantPendingToolCall,
@@ -34,7 +35,14 @@ export function useResultAssistant(params: {
   >([]);
   const [assistantInput, setAssistantInput] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantTurnCancelable, setAssistantTurnCancelable] = useState(false);
   const assistantSessionIdRef = useRef<string | null>(null);
+  const assistantTurnRef = useRef<{
+    id: number;
+    controller: AbortController;
+    prompt: string;
+  } | null>(null);
+  const assistantTurnCounterRef = useRef(0);
   const sourceRef = useRef(source);
   const onSessionSyncRef = useRef(onSessionSync);
   const assistantChatEndRef = useRef<HTMLDivElement | null>(null);
@@ -51,6 +59,15 @@ export function useResultAssistant(params: {
   useEffect(() => {
     onSessionSyncRef.current = onSessionSync;
   }, [onSessionSync]);
+
+  const abortActiveAssistantTurn = useCallback(() => {
+    const activeTurn = assistantTurnRef.current;
+    if (!activeTurn) return;
+    activeTurn.controller.abort();
+    // Don't null assistantTurnRef here — the finally block in askAssistant
+    // guards on the turn ID to perform cleanup, and nulling the ref would
+    // cause that guard to fail, bypassing setAssistantLoading(false).
+  }, []);
 
   const syncResultAssistantSession = useCallback(
     (session: ResultAssistantSessionView, sessionIdOverride?: string) => {
@@ -73,10 +90,21 @@ export function useResultAssistant(params: {
     [syncResultAssistantSession]
   );
 
+  const cancelAssistantTurn = useCallback(() => {
+    const activeTurn = assistantTurnRef.current;
+    if (!activeTurn) return;
+    abortActiveAssistantTurn();
+    setAssistantInput(activeTurn.prompt);
+    setAssistantLoading(false);
+    setAssistantTurnCancelable(false);
+  }, [abortActiveAssistantTurn]);
+
   const askAssistant = useCallback(async () => {
     const question = assistantInput.trim();
     if (!question) return;
     if (scope === 'run' && !runId) return;
+    const turnId = ++assistantTurnCounterRef.current;
+    const controller = new AbortController();
     const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const optimisticMessage = {
       id: optimisticMessageId,
@@ -84,6 +112,8 @@ export function useResultAssistant(params: {
       text: question,
       createdAt: new Date().toISOString()
     };
+    assistantTurnRef.current = { id: turnId, controller, prompt: question };
+    setAssistantTurnCancelable(true);
     setAssistantInput('');
     setAssistantMessages((prev) => [...prev, optimisticMessage]);
     setAssistantLoading(true);
@@ -92,8 +122,9 @@ export function useResultAssistant(params: {
       if (!sessionId) {
         const created =
           scope === 'run' && runId
-            ? await source.createResultAssistantSession({ runId, scope: 'run' })
-            : await source.createResultAssistantSession({ scope: 'all_runs' });
+            ? await source.createResultAssistantSession({ runId, scope: 'run' }, controller.signal)
+            : await source.createResultAssistantSession({ scope: 'all_runs' }, controller.signal);
+        if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         sessionId = created.sessionId || created.session.id;
         syncResultAssistantSession(created.session, sessionId);
         setAssistantMessages((prev) => {
@@ -103,14 +134,22 @@ export function useResultAssistant(params: {
         });
       }
       try {
-        const response = await source.sendResultAssistantMessage(sessionId, question);
+        const response = await source.sendResultAssistantMessage(
+          sessionId,
+          question,
+          controller.signal
+        );
+        if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         await syncAndContinueAssistantTurn(sessionId, response);
       } catch (error: unknown) {
+        if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+          return;
         if (!isSessionNotFoundError(error)) throw error;
         const recreated =
           scope === 'run' && runId
-            ? await source.createResultAssistantSession({ runId, scope: 'run' })
-            : await source.createResultAssistantSession({ scope: 'all_runs' });
+            ? await source.createResultAssistantSession({ runId, scope: 'run' }, controller.signal)
+            : await source.createResultAssistantSession({ scope: 'all_runs' }, controller.signal);
+        if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         const recoveredSessionId = recreated.sessionId || recreated.session.id;
         syncResultAssistantSession(recreated.session, recoveredSessionId);
         setAssistantMessages((prev) => {
@@ -118,10 +157,18 @@ export function useResultAssistant(params: {
           if (!optimisticStillPresent) return recreated.session.messages;
           return [...recreated.session.messages, optimisticMessage];
         });
-        const retry = await source.sendResultAssistantMessage(recoveredSessionId, question);
+        if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
+        const retry = await source.sendResultAssistantMessage(
+          recoveredSessionId,
+          question,
+          controller.signal
+        );
+        if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         await syncAndContinueAssistantTurn(recoveredSessionId, retry);
       }
     } catch (error: unknown) {
+      if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+        return;
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({
         title: 'MCP Lab Assistant error',
@@ -129,7 +176,11 @@ export function useResultAssistant(params: {
         variant: 'destructive'
       });
     } finally {
-      setAssistantLoading(false);
+      if (assistantTurnRef.current?.id === turnId) {
+        assistantTurnRef.current = null;
+        setAssistantLoading(false);
+        setAssistantTurnCancelable(false);
+      }
     }
   }, [
     assistantInput,
@@ -144,6 +195,7 @@ export function useResultAssistant(params: {
   const approveResultAssistantToolCall = useCallback(
     async (callId: string) => {
       if (!assistantSessionId) return;
+      setAssistantTurnCancelable(false);
       setAssistantLoading(true);
       try {
         const response = await source.approveResultAssistantToolCall(assistantSessionId, callId);
@@ -172,6 +224,7 @@ export function useResultAssistant(params: {
   const denyResultAssistantToolCall = useCallback(
     async (callId: string) => {
       if (!assistantSessionId) return;
+      setAssistantTurnCancelable(false);
       setAssistantLoading(true);
       try {
         const response = await source.denyResultAssistantToolCall(assistantSessionId, callId);
@@ -198,6 +251,7 @@ export function useResultAssistant(params: {
   );
 
   const resetAssistantSession = useCallback(() => {
+    abortActiveAssistantTurn();
     const previousSessionId = assistantSessionIdRef.current;
     if (previousSessionId) {
       void source.closeResultAssistantSession(previousSessionId).catch(() => undefined);
@@ -207,7 +261,8 @@ export function useResultAssistant(params: {
     setAssistantMessages([]);
     setAssistantPendingToolCalls([]);
     setAssistantInput('');
-  }, [source]);
+    setAssistantTurnCancelable(false);
+  }, [abortActiveAssistantTurn, source]);
 
   const ensureIntroMessage = useCallback((text: string) => {
     setAssistantMessages((prev) => {
@@ -253,11 +308,12 @@ export function useResultAssistant(params: {
 
   useEffect(() => {
     return () => {
+      abortActiveAssistantTurn();
       const sessionId = assistantSessionIdRef.current;
       if (!sessionId) return;
       void sourceRef.current.closeResultAssistantSession(sessionId).catch(() => undefined);
     };
-  }, []);
+  }, [abortActiveAssistantTurn]);
 
   return {
     assistantSessionId,
@@ -265,6 +321,8 @@ export function useResultAssistant(params: {
     assistantPendingToolCalls,
     assistantInput,
     assistantLoading,
+    assistantTurnCancelable,
+    cancelAssistantTurn,
     assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,

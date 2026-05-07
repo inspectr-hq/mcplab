@@ -243,6 +243,8 @@ const Results = () => {
     assistantPendingToolCalls,
     assistantInput,
     assistantLoading,
+    assistantTurnCancelable,
+    cancelAssistantTurn,
     assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,
@@ -896,6 +898,7 @@ const Results = () => {
             messages={assistantMessages}
             pendingToolCalls={assistantPendingToolCalls}
             loading={assistantLoading}
+            onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
             input={assistantInput}
             onInputChange={setAssistantInput}
             onSend={() => void askAssistant()}

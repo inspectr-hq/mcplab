@@ -7,7 +7,9 @@ import {
   formatAssistantToolName,
   newAssistantEntityId,
   touchSession,
-  truncateJson
+  throwIfAborted,
+  truncateJson,
+  withTimeout
 } from './assistant-common.js';
 import type { AssistantSseEvent } from './assistant-events.js';
 import { endAssistantSseClients } from './assistant-events.js';
@@ -138,7 +140,10 @@ export async function preloadResultAssistantTools(
   }
 }
 
-export async function continueResultAssistantTurn(session: ResultAssistantSession): Promise<{
+export async function continueResultAssistantTurn(
+  session: ResultAssistantSession,
+  signal?: AbortSignal
+): Promise<{
   session: ReturnType<typeof resultAssistantSessionView>;
   response: {
     type: 'assistant_message' | 'tool_call_request';
@@ -150,7 +155,8 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
   if (pendingCount > RESULT_ASSISTANT_MAX_PENDING_TOOL_CALLS) {
     throw new Error('Result Assistant exceeded maximum pending tool calls for this turn');
   }
-  const modelOutput = await resultAssistantChatModel(session);
+  const modelOutput = await resultAssistantChatModel(session, signal);
+  throwIfAborted(signal);
   if (modelOutput.type === 'tool_call_request') {
     const requested = modelOutput.toolCall!;
     const mapping = session.toolPublicMap.get(requested.name);
@@ -173,6 +179,7 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
     const toolRequestText = `I need to call '${formatAssistantToolName(
       pending.publicToolName
     )}' to help with this request.`;
+    throwIfAborted(signal);
     session.pendingToolCalls.push(pending);
     session.chatMessages.push({
       id: newAssistantEntityId('msg'),
@@ -212,26 +219,19 @@ export async function continueResultAssistantTurn(session: ResultAssistantSessio
 
 export async function executeResultAssistantToolCall(
   session: ResultAssistantSession,
-  pending: ResultAssistantPendingToolCall
+  pending: ResultAssistantPendingToolCall,
+  signal?: AbortSignal
 ): Promise<unknown> {
   const timeoutMs = 30_000;
-  let handle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    handle = setTimeout(
-      () => reject(new Error(`Tool call timed out after ${timeoutMs}ms`)),
-      timeoutMs
-    );
-  });
-  try {
-    return await Promise.race([
-      session.mcp.callTool(pending.server, pending.tool, pending.arguments).finally(() => {
-        if (handle) clearTimeout(handle);
+  return withTimeout(
+    () =>
+      session.mcp.callTool(pending.server, pending.tool, pending.arguments, {
+        signal
       }),
-      timeout
-    ]);
-  } finally {
-    if (handle) clearTimeout(handle);
-  }
+    timeoutMs,
+    `Tool call timed out after ${timeoutMs}ms`,
+    signal
+  );
 }
 
 export function summarizeToolResultForResultAssistant(result: unknown): string {
@@ -298,13 +298,15 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
 }
 
 async function resultAssistantChatModel(
-  session: ResultAssistantSession
+  session: ResultAssistantSession,
+  signal?: AbortSignal
 ): Promise<ParsedModelOutput> {
   const response = await chatWithAgent({
     agent: session.agentConfig,
     messages: session.llmMessages,
     tools: session.tools,
-    system: resultAssistantSystemPrompt(session)
+    system: resultAssistantSystemPrompt(session),
+    signal
   });
   if (response.tool_calls && response.tool_calls.length > 0) {
     const [first] = response.tool_calls;

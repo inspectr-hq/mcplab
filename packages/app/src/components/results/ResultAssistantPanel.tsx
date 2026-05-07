@@ -39,6 +39,7 @@ export function ResultAssistantPanel({
   input,
   onInputChange,
   onSend,
+  onCancel,
   inputPlaceholder,
   snippets,
   snippetsLabel = 'Result Assistant Snippets',
@@ -63,6 +64,7 @@ export function ResultAssistantPanel({
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   inputPlaceholder: string;
   snippets: readonly ResultAssistantSnippet[];
   snippetsLabel?: string;
@@ -177,6 +179,7 @@ export function ResultAssistantPanel({
             input={input}
             onInputChange={onInputChange}
             onSend={onSend}
+            onCancel={onCancel}
             inputPlaceholder={inputPlaceholder}
             snippets={snippets}
             snippetsLabel={snippetsLabel}
