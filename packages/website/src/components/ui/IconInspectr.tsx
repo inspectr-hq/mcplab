@@ -1,5 +1,5 @@
 import React from 'react';
-import { useId } from "react";
+import { useId } from 'react';
 
 interface IconInspectrProps {
   width?: number;
@@ -12,11 +12,11 @@ interface IconInspectrProps {
 export default function IconInspectr({
   width = 24,
   height = 24,
-  from = "#f97316",
-  to = "#fb923c",
-  className,
+  from = '#f97316',
+  to = '#fb923c',
+  className
 }: IconInspectrProps) {
-  const gradId = `grad-${useId().replace(/:/g, "")}`;
+  const gradId = `grad-${useId().replace(/:/g, '')}`;
 
   return (
     <svg

@@ -1,12 +1,12 @@
-import type { LucideIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import type { LucideIcon } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   icon: LucideIcon;
-  trend?: "up" | "down" | "neutral";
+  trend?: 'up' | 'down' | 'neutral';
 }
 
 export function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) {
@@ -15,12 +15,22 @@ export function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCard
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {title}
+            </p>
             <p className="text-2xl font-bold">{value}</p>
             {subtitle && (
-              <p className={`text-xs ${trend === "up" ? "text-success" : trend === "down" ? "text-destructive" : "text-muted-foreground"}`}>
-                {trend === "up" && "↑ "}
-                {trend === "down" && "↓ "}
+              <p
+                className={`text-xs ${
+                  trend === 'up'
+                    ? 'text-success'
+                    : trend === 'down'
+                    ? 'text-destructive'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                {trend === 'up' && '↑ '}
+                {trend === 'down' && '↓ '}
                 {subtitle}
               </p>
             )}

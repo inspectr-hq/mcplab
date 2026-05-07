@@ -1,13 +1,19 @@
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,13 +23,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog";
-import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2, FileCode } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Scenario } from "@/types/eval";
+} from '@/components/ui/alert-dialog';
+import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2, FileCode } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Scenario } from '@/types/eval';
 
-const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 
 const ManageTestCases = () => {
   const { testCaseId } = useParams<{ testCaseId?: string }>();
@@ -31,15 +37,19 @@ const ManageTestCases = () => {
   const navigate = useNavigate();
   const { source } = useDataSource();
   const { scenarios, setScenarios, agents, servers, reload, loading } = useLibraries();
-  const [query, setQuery] = useState("");
-  const [serverFilter, setServerFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<"name" | "id" | "servers" | "evalRules" | "extractRules">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>("");
+  const [query, setQuery] = useState('');
+  const [serverFilter, setServerFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'id' | 'servers' | 'evalRules' | 'extractRules'>(
+    'name'
+  );
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
   const [draftScenario, setDraftScenario] = useState<Scenario | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "dirty" | "saving" | "saved" | "error">("idle");
-  const [saveError, setSaveError] = useState<string>("");
-  const [assistantHandoffPrompt, setAssistantHandoffPrompt] = useState<string>("");
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
+  const [saveError, setSaveError] = useState<string>('');
+  const [assistantHandoffPrompt, setAssistantHandoffPrompt] = useState<string>('');
   const [assistantHandoffNonce, setAssistantHandoffNonce] = useState<number>(0);
   const [scenarioPendingDelete, setScenarioPendingDelete] = useState<Scenario | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -71,23 +81,23 @@ const ManageTestCases = () => {
     saveInFlightRef.current = true;
     saveQueuedRef.current = false;
     const seq = ++saveSeqRef.current;
-    setSaveStatus("saving");
-    setSaveError("");
+    setSaveStatus('saving');
+    setSaveError('');
     try {
       await persistSingleScenario(nextScenario);
       if (seq === saveSeqRef.current) {
-        setSaveStatus("saved");
+        setSaveStatus('saved');
       }
     } catch (error: unknown) {
-      const message = (error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
       if (seq === saveSeqRef.current) {
-        setSaveStatus("error");
+        setSaveStatus('error');
         setSaveError(message);
       }
       toast({
-        title: "Could not save scenario",
+        title: 'Could not save scenario',
         description: message,
-        variant: "destructive"
+        variant: 'destructive'
       });
     } finally {
       saveInFlightRef.current = false;
@@ -100,8 +110,8 @@ const ManageTestCases = () => {
 
   const scheduleScenarioSave = (nextScenario: Scenario) => {
     latestDraftRef.current = nextScenario;
-    setSaveStatus("dirty");
-    setSaveError("");
+    setSaveStatus('dirty');
+    setSaveError('');
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
     }
@@ -121,24 +131,25 @@ const ManageTestCases = () => {
     }
     const nextScenario: Scenario = {
       id: nextId,
-      name: "",
+      name: '',
       serverIds: [],
-      prompt: "",
+      prompt: '',
       evalRules: [],
       extractRules: []
     };
     await setScenarios([...scenarios, nextScenario]);
     navigate(`/libraries/test-cases/${encodeURIComponent(nextId)}`);
-    toast({ title: "Test case created", description: `Opened ${nextId} for editing.` });
+    toast({ title: 'Test case created', description: `Opened ${nextId} for editing.` });
   };
 
   const buildUniqueScenarioId = (base: string) => {
-    const normalized = (base || `scn-${Date.now()}`)
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9_-]/g, "")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || `scn-${Date.now()}`;
+    const normalized =
+      (base || `scn-${Date.now()}`)
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || `scn-${Date.now()}`;
     let nextId = normalized;
     let suffix = 1;
     while (scenarios.some((scenario) => scenario.id === nextId)) {
@@ -153,10 +164,10 @@ const ManageTestCases = () => {
     const duplicate: Scenario = {
       ...structuredClone(scenarioToDuplicate),
       id: duplicateId,
-      name: scenarioToDuplicate.name ? `${scenarioToDuplicate.name} (Copy)` : "",
+      name: scenarioToDuplicate.name ? `${scenarioToDuplicate.name} (Copy)` : ''
     };
     await setScenarios([...scenarios, duplicate]);
-    toast({ title: "Test case duplicated", description: `Created ${duplicate.id}.` });
+    toast({ title: 'Test case duplicated', description: `Created ${duplicate.id}.` });
     if (navigateToCopy) {
       navigate(`/libraries/test-cases/${encodeURIComponent(duplicate.id)}`);
     }
@@ -169,13 +180,13 @@ const ManageTestCases = () => {
     }
     const next = scenarios.filter((scenario) => scenario.id !== scenarioToDelete.id);
     await setScenarios(next);
-    toast({ title: "Test case deleted", description: `${scenarioToDelete.id} was removed.` });
+    toast({ title: 'Test case deleted', description: `${scenarioToDelete.id} was removed.` });
     if (selectedScenario?.id === scenarioToDelete.id) {
       setDraftScenario(null);
       latestDraftRef.current = null;
-      setSaveStatus("idle");
-      setSaveError("");
-      navigate("/libraries/test-cases");
+      setSaveStatus('idle');
+      setSaveError('');
+      navigate('/libraries/test-cases');
     }
   };
 
@@ -192,17 +203,17 @@ const ManageTestCases = () => {
       for (const name of scenarioServerNames(scenario.serverIds)) allNames.add(name);
     }
     return Array.from(allNames).sort((a, b) => a.localeCompare(b));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarios, servers]);
 
   const filteredScenarios = useMemo(() => {
     const q = query.trim().toLowerCase();
     const next = scenarios.filter((scenario) => {
-      const name = (scenario.name || "").toLowerCase();
+      const name = (scenario.name || '').toLowerCase();
       const id = scenario.id.toLowerCase();
-      const prompt = (scenario.prompt || "").toLowerCase();
+      const prompt = (scenario.prompt || '').toLowerCase();
       const serverNames = scenarioServerNames(scenario.serverIds);
-      if (serverFilter !== "all" && !serverNames.includes(serverFilter)) return false;
+      if (serverFilter !== 'all' && !serverNames.includes(serverFilter)) return false;
       if (!q) return true;
       return (
         name.includes(q) ||
@@ -216,28 +227,28 @@ const ManageTestCases = () => {
       const bServers = scenarioServerNames(b.serverIds);
       let cmp = 0;
       switch (sortBy) {
-        case "id":
+        case 'id':
           cmp = a.id.localeCompare(b.id);
           break;
-        case "servers":
+        case 'servers':
           cmp = aServers.length - bServers.length;
           break;
-        case "evalRules":
+        case 'evalRules':
           cmp = a.evalRules.length - b.evalRules.length;
           break;
-        case "extractRules":
+        case 'extractRules':
           cmp = a.extractRules.length - b.extractRules.length;
           break;
-        case "name":
+        case 'name':
         default:
           cmp = (a.name || a.id).localeCompare(b.name || b.id);
           break;
       }
       if (cmp === 0) cmp = a.id.localeCompare(b.id);
-      return sortDir === "asc" ? cmp : -cmp;
+      return sortDir === 'asc' ? cmp : -cmp;
     });
     return next;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarios, query, serverFilter, sortBy, sortDir, servers]);
 
   useEffect(() => {
@@ -246,11 +257,11 @@ const ManageTestCases = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setScenarioAssistantAgentName(settings.scenarioAssistantAgentName ?? "");
+        setScenarioAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
       })
       .catch(() => {
         if (!active) return;
-        setScenarioAssistantAgentName("");
+        setScenarioAssistantAgentName('');
       });
     return () => {
       active = false;
@@ -259,7 +270,7 @@ const ManageTestCases = () => {
 
   useEffect(() => {
     if (!selectedScenarioId) return;
-    if (searchParams.get("assistantHandoff") !== "1") return;
+    if (searchParams.get('assistantHandoff') !== '1') return;
     try {
       const raw = window.sessionStorage.getItem(RESULT_ASSISTANT_HANDOFF_STORAGE_KEY);
       if (!raw) return;
@@ -272,11 +283,11 @@ const ManageTestCases = () => {
       setAssistantHandoffNonce(Date.now());
       window.sessionStorage.removeItem(RESULT_ASSISTANT_HANDOFF_STORAGE_KEY);
       const next = new URLSearchParams(searchParams);
-      next.delete("assistantHandoff");
+      next.delete('assistantHandoff');
       setSearchParams(next, { replace: true });
       toast({
-        title: "Suggestion sent to Scenario Assistant",
-        description: "Review the suggestion and apply changes in the scenario editor."
+        title: 'Suggestion sent to Scenario Assistant',
+        description: 'Review the suggestion and apply changes in the scenario editor.'
       });
     } catch {
       // Ignore malformed handoff payloads.
@@ -287,13 +298,13 @@ const ManageTestCases = () => {
     if (selectedScenario) {
       setDraftScenario(structuredClone(selectedScenario));
       latestDraftRef.current = structuredClone(selectedScenario);
-      setSaveStatus("idle");
-      setSaveError("");
+      setSaveStatus('idle');
+      setSaveError('');
     } else {
       setDraftScenario(null);
       latestDraftRef.current = null;
-      setSaveStatus("idle");
-      setSaveError("");
+      setSaveStatus('idle');
+      setSaveError('');
     }
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
@@ -311,8 +322,7 @@ const ManageTestCases = () => {
     };
   }, []);
 
-  const effectiveAssistantAgentName =
-    scenarioAssistantAgentName || agents[0]?.name || "";
+  const effectiveAssistantAgentName = scenarioAssistantAgentName || agents[0]?.name || '';
 
   return (
     <div className="space-y-6">
@@ -328,12 +338,23 @@ const ManageTestCases = () => {
         </div>
         <div className="flex items-center gap-2">
           {selectedScenario && (
-            <Button type="button" size="sm" variant="outline" onClick={() => navigate("/libraries/test-cases")}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => navigate('/libraries/test-cases')}
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Overview
             </Button>
           )}
-          <Button type="button" size="sm" variant="outline" onClick={() => void reload()} disabled={loading}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void reload()}
+            disabled={loading}
+          >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -349,146 +370,173 @@ const ManageTestCases = () => {
       {!selectedScenario && (
         <>
           <div className="grid gap-3 rounded-md border bg-muted/30 p-3 md:grid-cols-[1.6fr_1fr_1fr_auto]">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Search</Label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search by name, id, prompt, server..."
-                    className="h-8 pl-8 text-xs"
-                  />
-                </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Search</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by name, id, prompt, server..."
+                  className="h-8 pl-8 text-xs"
+                />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Server Filter</Label>
-                <Select value={serverFilter} onValueChange={setServerFilter}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All servers</SelectItem>
-                    {serverFilterOptions.map((serverName) => (
-                      <SelectItem key={serverName} value={serverName}>
-                        {serverName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Sort By</Label>
-                <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="id">ID</SelectItem>
-                    <SelectItem value="servers"># Servers</SelectItem>
-                    <SelectItem value="evalRules"># Eval Rules</SelectItem>
-                    <SelectItem value="extractRules"># Extract Rules</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Direction</Label>
-                <Select value={sortDir} onValueChange={(value) => setSortDir(value as "asc" | "desc")}>
-                  <SelectTrigger className="h-8 w-28 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">Ascending</SelectItem>
-                    <SelectItem value="desc">Descending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Server Filter</Label>
+              <Select value={serverFilter} onValueChange={setServerFilter}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All servers</SelectItem>
+                  {serverFilterOptions.map((serverName) => (
+                    <SelectItem key={serverName} value={serverName}>
+                      {serverName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Sort By</Label>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="id">ID</SelectItem>
+                  <SelectItem value="servers"># Servers</SelectItem>
+                  <SelectItem value="evalRules"># Eval Rules</SelectItem>
+                  <SelectItem value="extractRules"># Extract Rules</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Direction</Label>
+              <Select
+                value={sortDir}
+                onValueChange={(value) => setSortDir(value as 'asc' | 'desc')}
+              >
+                <SelectTrigger className="h-8 w-28 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">Ascending</SelectItem>
+                  <SelectItem value="desc">Descending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Card>
-          <CardContent className="space-y-3 pt-6">
-            <div className="text-xs text-muted-foreground">
-              Showing {filteredScenarios.length} of {scenarios.length} test case{scenarios.length !== 1 ? "s" : ""}.
-            </div>
-            {selectedScenarioId && !selectedScenario && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Test case <code className="font-mono">{selectedScenarioId}</code> was not found.
+            <CardContent className="space-y-3 pt-6">
+              <div className="text-xs text-muted-foreground">
+                Showing {filteredScenarios.length} of {scenarios.length} test case
+                {scenarios.length !== 1 ? 's' : ''}.
               </div>
-            )}
-            {scenarios.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No library test cases yet.</p>
-            ) : filteredScenarios.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No test cases match the current filters.</p>
-            ) : (
-              <div className="grid gap-3">
-                {filteredScenarios.map((scenario) => {
-                  const isSelected = selectedScenarioId === scenario.id;
-                  const href = `/libraries/test-cases/${encodeURIComponent(scenario.id)}`;
-                  const serverNames = scenarioServerNames(scenario.serverIds);
-                  return (
-                    <div
-                      key={scenario.id}
-                      className={`rounded-lg border p-3 ${isSelected ? "border-primary bg-primary/5" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Link to={href} className="font-medium truncate hover:underline">
-                              {scenario.name || scenario.id}
-                            </Link>
-                            <Badge variant="outline" className="font-mono text-[10px]">{scenario.id}</Badge>
-                            {isSelected && <Badge>Selected</Badge>}
-                          </div>
-                          <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                            <span>{serverNames.length} server{serverNames.length !== 1 ? "s" : ""}</span>
-                            <span>{scenario.evalRules.length} eval rule{scenario.evalRules.length !== 1 ? "s" : ""}</span>
-                            <span>{scenario.extractRules.length} extract rule{scenario.extractRules.length !== 1 ? "s" : ""}</span>
-                          </div>
-                          {serverNames.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {serverNames.map((serverName) => (
-                                <Badge key={`${scenario.id}-${serverName}`} variant="secondary" className="text-[10px]">
-                                  {serverName}
-                                </Badge>
-                              ))}
+              {selectedScenarioId && !selectedScenario && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Test case <code className="font-mono">{selectedScenarioId}</code> was not found.
+                </div>
+              )}
+              {scenarios.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No library test cases yet.</p>
+              ) : filteredScenarios.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No test cases match the current filters.
+                </p>
+              ) : (
+                <div className="grid gap-3">
+                  {filteredScenarios.map((scenario) => {
+                    const isSelected = selectedScenarioId === scenario.id;
+                    const href = `/libraries/test-cases/${encodeURIComponent(scenario.id)}`;
+                    const serverNames = scenarioServerNames(scenario.serverIds);
+                    return (
+                      <div
+                        key={scenario.id}
+                        className={`rounded-lg border p-3 ${
+                          isSelected ? 'border-primary bg-primary/5' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Link to={href} className="font-medium truncate hover:underline">
+                                {scenario.name || scenario.id}
+                              </Link>
+                              <Badge variant="outline" className="font-mono text-[10px]">
+                                {scenario.id}
+                              </Badge>
+                              {isSelected && <Badge>Selected</Badge>}
                             </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => setScenarioPendingDelete(scenario)}
-                          >
-                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                            Delete
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void handleDuplicateScenario(scenario)}
-                          >
-                            <Copy className="mr-1.5 h-3.5 w-3.5" />
-                            Duplicate
-                          </Button>
-                          <Button type="button" size="sm" variant={isSelected ? "default" : "outline"} asChild>
-                            <Link to={href}>
-                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                              Edit
-                            </Link>
-                          </Button>
+                            <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                              <span>
+                                {serverNames.length} server{serverNames.length !== 1 ? 's' : ''}
+                              </span>
+                              <span>
+                                {scenario.evalRules.length} eval rule
+                                {scenario.evalRules.length !== 1 ? 's' : ''}
+                              </span>
+                              <span>
+                                {scenario.extractRules.length} extract rule
+                                {scenario.extractRules.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {serverNames.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {serverNames.map((serverName) => (
+                                  <Badge
+                                    key={`${scenario.id}-${serverName}`}
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                  >
+                                    {serverName}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setScenarioPendingDelete(scenario)}
+                            >
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleDuplicateScenario(scenario)}
+                            >
+                              <Copy className="mr-1.5 h-3.5 w-3.5" />
+                              Duplicate
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={isSelected ? 'default' : 'outline'}
+                              asChild
+                            >
+                              <Link to={href}>
+                                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                                Edit
+                              </Link>
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -499,35 +547,35 @@ const ManageTestCases = () => {
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-base">
-                    Edit Test Case ·{" "}
+                    Edit Test Case ·{' '}
                     <code className="font-mono text-muted-foreground">{selectedScenario.id}</code>
                   </CardTitle>
                   <Badge
                     variant="outline"
                     className={`text-[10px] ${
-                      saveStatus === "saving"
-                        ? "border-amber-300 text-amber-700"
-                        : saveStatus === "saved"
-                          ? "border-emerald-300 text-emerald-700"
-                          : saveStatus === "error"
-                            ? "border-destructive/40 text-destructive"
-                            : saveStatus === "dirty"
-                              ? "border-sky-300 text-sky-700"
-                              : ""
+                      saveStatus === 'saving'
+                        ? 'border-amber-300 text-amber-700'
+                        : saveStatus === 'saved'
+                        ? 'border-emerald-300 text-emerald-700'
+                        : saveStatus === 'error'
+                        ? 'border-destructive/40 text-destructive'
+                        : saveStatus === 'dirty'
+                        ? 'border-sky-300 text-sky-700'
+                        : ''
                     }`}
                   >
-                    {saveStatus === "saving"
-                      ? "Saving..."
-                      : saveStatus === "saved"
-                        ? "Saved"
-                        : saveStatus === "error"
-                          ? "Save failed"
-                          : saveStatus === "dirty"
-                            ? "Unsaved changes"
-                            : "Ready"}
+                    {saveStatus === 'saving'
+                      ? 'Saving...'
+                      : saveStatus === 'saved'
+                      ? 'Saved'
+                      : saveStatus === 'error'
+                      ? 'Save failed'
+                      : saveStatus === 'dirty'
+                      ? 'Unsaved changes'
+                      : 'Ready'}
                   </Badge>
                 </div>
-                {saveStatus === "error" && saveError && (
+                {saveStatus === 'error' && saveError && (
                   <div className="text-[11px] text-destructive">{saveError}</div>
                 )}
               </div>
@@ -582,16 +630,19 @@ const ManageTestCases = () => {
         </Card>
       ) : null}
 
-      <AlertDialog open={Boolean(scenarioPendingDelete)} onOpenChange={(open) => !open && setScenarioPendingDelete(null)}>
+      <AlertDialog
+        open={Boolean(scenarioPendingDelete)}
+        onOpenChange={(open) => !open && setScenarioPendingDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete test case?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove{" "}
+              This will permanently remove{' '}
               <span className="font-medium">
                 {scenarioPendingDelete?.name || scenarioPendingDelete?.id}
-              </span>
-              {" "}from the library. This action cannot be undone.
+              </span>{' '}
+              from the library. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

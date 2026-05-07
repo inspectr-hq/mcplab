@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
-import type { EvalConfig } from "@/types/eval";
-import { useDataSource } from "@/contexts/DataSourceContext";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import type { EvalConfig } from '@/types/eval';
+import { useDataSource } from '@/contexts/DataSourceContext';
 
 interface ConfigContextValue {
   configs: EvalConfig[];
@@ -42,7 +42,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setConfigs((prev) => [...prev, created]);
       return created;
     },
-    [source],
+    [source]
   );
 
   const updateConfig = useCallback(
@@ -51,7 +51,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setConfigs((prev) => prev.map((item) => (item.id === id ? updated : item)));
       return updated;
     },
-    [source],
+    [source]
   );
 
   const deleteConfig = useCallback(
@@ -59,26 +59,40 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       await source.deleteConfig(id);
       setConfigs((prev) => prev.filter((item) => item.id !== id));
     },
-    [source],
+    [source]
   );
 
-  const cloneConfig = useCallback(async (id: string) => {
-    const original = configs.find((c) => c.id === id);
-    if (!original) throw new Error("Config not found");
-    const cloned: EvalConfig = {
-      ...structuredClone(original),
-      id: `cfg-${Date.now()}`,
-      name: `${original.name} (Copy)`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const created = await source.createConfig(cloned);
-    setConfigs((prev) => [...prev, created]);
-    return created;
-  }, [configs, source]);
+  const cloneConfig = useCallback(
+    async (id: string) => {
+      const original = configs.find((c) => c.id === id);
+      if (!original) throw new Error('Config not found');
+      const cloned: EvalConfig = {
+        ...structuredClone(original),
+        id: `cfg-${Date.now()}`,
+        name: `${original.name} (Copy)`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      const created = await source.createConfig(cloned);
+      setConfigs((prev) => [...prev, created]);
+      return created;
+    },
+    [configs, source]
+  );
 
   return (
-    <ConfigContext.Provider value={{ configs, loading, getConfig, addConfig, updateConfig, deleteConfig, cloneConfig, reload }}>
+    <ConfigContext.Provider
+      value={{
+        configs,
+        loading,
+        getConfig,
+        addConfig,
+        updateConfig,
+        deleteConfig,
+        cloneConfig,
+        reload
+      }}
+    >
       {children}
     </ConfigContext.Provider>
   );
@@ -86,6 +100,6 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
 export function useConfigs() {
   const ctx = useContext(ConfigContext);
-  if (!ctx) throw new Error("useConfigs must be used within ConfigProvider");
+  if (!ctx) throw new Error('useConfigs must be used within ConfigProvider');
   return ctx;
 }

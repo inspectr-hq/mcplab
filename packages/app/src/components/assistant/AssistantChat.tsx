@@ -64,7 +64,12 @@ export function AssistantMessageRow({
     const trimmed = String(message.text ?? '').trim();
     if (/^(Approved|Denied) tool call\b/i.test(trimmed)) return null;
     return (
-      <div className={cn('rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm', className)}>
+      <div
+        className={cn(
+          'rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm',
+          className
+        )}
+      >
         <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
           <Wrench className="h-3.5 w-3.5" />
           Tool
@@ -93,7 +98,12 @@ export function AssistantMessageRow({
   const isUser = role === 'user';
   const Icon = isUser ? User : Bot;
   return (
-    <div className={cn(`flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`, className)}>
+    <div
+      className={cn(
+        `flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`,
+        className
+      )}
+    >
       {!isUser && (
         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
           <Icon className="h-3 w-3" />
@@ -148,7 +158,10 @@ export function AssistantToolCallCard({
   return (
     <details
       open={defaultOpen ?? isPending}
-      className={cn('group overflow-hidden rounded-md border border-border/60 bg-background', className)}
+      className={cn(
+        'group overflow-hidden rounded-md border border-border/60 bg-background',
+        className
+      )}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
         <div className="min-w-0 flex-1">
@@ -160,13 +173,19 @@ export function AssistantToolCallCard({
                 isPending
                   ? 'bg-amber-100 text-amber-900'
                   : call.status === 'error'
-                    ? 'bg-red-100 text-red-900'
-                    : call.status === 'denied'
-                      ? 'bg-gray-100 text-gray-700'
-                      : 'bg-muted text-muted-foreground'
+                  ? 'bg-red-100 text-red-900'
+                  : call.status === 'denied'
+                  ? 'bg-gray-100 text-gray-700'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
-              {isPending ? 'Needs approval' : call.status === 'error' ? 'Error' : call.status === 'denied' ? 'Denied' : 'Approved'}
+              {isPending
+                ? 'Needs approval'
+                : call.status === 'error'
+                ? 'Error'
+                : call.status === 'denied'
+                ? 'Denied'
+                : 'Approved'}
             </span>
           </div>
         </div>
@@ -261,7 +280,9 @@ export function AssistantSnippetMenu({
           >
             <div className="space-y-0.5">
               <div className="text-xs font-medium leading-tight">{snippet.label}</div>
-              <div className="text-[11px] leading-snug text-muted-foreground">{snippet.description}</div>
+              <div className="text-[11px] leading-snug text-muted-foreground">
+                {snippet.description}
+              </div>
             </div>
           </DropdownMenuItem>
         ))}

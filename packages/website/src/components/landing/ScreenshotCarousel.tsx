@@ -1,10 +1,10 @@
 import React from 'react';
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
-import type { CarouselApi } from "@/components/ui/carousel";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
+import type { CarouselApi } from '@/components/ui/carousel';
 
 const AUTOPLAY_INTERVAL = 4000;
 
@@ -21,15 +21,19 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
   useEffect(() => {
     if (!api) return;
     const update = () => setCurrent(api.selectedScrollSnap());
-    api.on("select", update);
+    api.on('select', update);
     update();
-    return () => { api.off("select", update); };
+    return () => {
+      api.off('select', update);
+    };
   }, [api]);
 
   useEffect(() => {
     if (!api || paused) return;
     intervalRef.current = setInterval(() => api.scrollNext(), AUTOPLAY_INTERVAL);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [api, paused]);
 
   const scrollTo = useCallback((i: number) => api?.scrollTo(i), [api]);
@@ -58,7 +62,7 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
-        <Carousel setApi={setApi} opts={{ loop: true, align: "center" }} className="w-full">
+        <Carousel setApi={setApi} opts={{ loop: true, align: 'center' }} className="w-full">
           <CarouselContent>
             {slides.map((slide, index) => (
               <CarouselItem key={slide.src}>
@@ -119,7 +123,7 @@ const ScreenshotCarousel = ({ slides }: { slides: Slide[] }) => {
             onClick={() => scrollTo(i)}
             aria-label={`Go to ${slide.label}`}
             className={`h-1.5 rounded-full transition-all duration-300 ${
-              i === current ? "w-6 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground"
+              i === current ? 'w-6 bg-primary' : 'w-1.5 bg-border hover:bg-muted-foreground'
             }`}
           />
         ))}

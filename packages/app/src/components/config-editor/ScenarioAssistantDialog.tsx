@@ -1,41 +1,47 @@
-import { Fragment, useCallback, useEffect, useState, useRef } from "react";
-import { Bot, CheckCircle2, Copy, Loader2, Minimize2, Sparkles, Wrench, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState, useRef } from 'react';
+import { Bot, CheckCircle2, Copy, Loader2, Minimize2, Sparkles, Wrench, X } from 'lucide-react';
 import {
   AssistantComposer,
   AssistantMessageRow,
   AssistantToolCallCard,
   AssistantTypingIndicator
-} from "@/components/assistant/AssistantChat";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
-import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
-import type { AgentConfig, EvalRule, Scenario, ServerConfig } from "@/types/eval";
+} from '@/components/assistant/AssistantChat';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
+import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import type { AgentConfig, EvalRule, Scenario, ServerConfig } from '@/types/eval';
 import type {
   ScenarioAssistantSessionView,
   ScenarioAssistantSuggestionBundle,
   ScenarioAssistantPendingToolCall
-} from "@/lib/data-sources/types";
+} from '@/lib/data-sources/types';
 
 const SCENARIO_ASSISTANT_SNIPPETS = [
   {
-    label: "Suggest Checks",
-    description: "Propose stronger evaluation checks for this scenario.",
+    label: 'Suggest Checks',
+    description: 'Propose stronger evaluation checks for this scenario.',
     prompt:
-      "Review the current checks in this scenario and suggest stronger alternatives. For each suggestion, explain what failure mode it catches that the existing checks miss. Prioritize checks that are deterministic, not sensitive to minor phrasing changes, and that would reliably catch regressions."
+      'Review the current checks in this scenario and suggest stronger alternatives. For each suggestion, explain what failure mode it catches that the existing checks miss. Prioritize checks that are deterministic, not sensitive to minor phrasing changes, and that would reliably catch regressions.'
   },
   {
-    label: "Suggest Value Capture Rules",
-    description: "Recommend extract/value capture rules for key outputs.",
+    label: 'Suggest Value Capture Rules',
+    description: 'Recommend extract/value capture rules for key outputs.',
     prompt:
-      "Analyze the expected tool calls and outputs in this scenario and suggest value capture rules that extract the most meaningful structured data. For each rule, explain which field to capture, why it matters for evaluation, and what a good vs. bad captured value looks like."
+      'Analyze the expected tool calls and outputs in this scenario and suggest value capture rules that extract the most meaningful structured data. For each rule, explain which field to capture, why it matters for evaluation, and what a good vs. bad captured value looks like.'
   },
   {
-    label: "Improve Prompt Determinism",
-    description: "Reduce ambiguity and improve reproducibility.",
+    label: 'Improve Prompt Determinism',
+    description: 'Reduce ambiguity and improve reproducibility.',
     prompt:
       "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
   },
@@ -47,10 +53,10 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
   //     "Assess this scenario for snapshot drift risk. Which parts of the expected output are most likely to change as the underlying model or tool evolves? Explain the root cause for each risk and suggest whether to stabilize via tighter prompting, value capture rules, or more flexible checks."
   // },
   {
-    label: "Generate Scenario Draft",
-    description: "Create a draft scenario from the current context.",
+    label: 'Generate Scenario Draft',
+    description: 'Create a draft scenario from the current context.',
     prompt:
-      "Based on the current tool configuration and context, generate a complete scenario draft. Include a clear prompt, realistic expected tool calls with arguments, meaningful checks that validate the core behavior, and at least one value capture rule. Explain your choices so I can adjust them."
+      'Based on the current tool configuration and context, generate a complete scenario draft. Include a clear prompt, realistic expected tool calls with arguments, meaningful checks that validate the core behavior, and at least one value capture rule. Explain your choices so I can adjust them.'
   }
 ] as const;
 
@@ -64,16 +70,16 @@ interface ScenarioAssistantDialogProps {
   servers: ServerConfig[];
   snapshotEval?: {
     enabled: boolean;
-    mode: "warn" | "fail_on_drift";
+    mode: 'warn' | 'fail_on_drift';
     baselineSnapshotId?: string;
   };
   defaultAssistantAgentName?: string;
   initialUserMessage?: string;
   onApplyPatch: (patch: {
     prompt?: string;
-    evalRules?: Scenario["evalRules"];
-    extractRules?: Scenario["extractRules"];
-    snapshotEval?: Partial<NonNullable<Scenario["snapshotEval"]>>;
+    evalRules?: Scenario['evalRules'];
+    extractRules?: Scenario['extractRules'];
+    snapshotEval?: Partial<NonNullable<Scenario['snapshotEval']>>;
   }) => void;
 }
 
@@ -93,7 +99,7 @@ export function ScenarioAssistantDialog({
   const { source } = useDataSource();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [session, setSession] = useState<ScenarioAssistantSessionView | null>(null);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [appliedSuggestionKeys, setAppliedSuggestionKeys] = useState<Set<string>>(new Set());
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -101,8 +107,7 @@ export function ScenarioAssistantDialog({
   const initialMessageSentRef = useRef<string | null>(null);
   const [preserveSessionOnClose, setPreserveSessionOnClose] = useState(false);
   const preserveSessionOnCloseRef = useRef(false);
-  const resolvedAssistantAgentName =
-    defaultAssistantAgentName || agents[0]?.id || "";
+  const resolvedAssistantAgentName = defaultAssistantAgentName || agents[0]?.id || '';
 
   useEffect(() => {
     if (!open) return;
@@ -114,7 +119,7 @@ export function ScenarioAssistantDialog({
         new Set(
           scenario.serverIds.filter((serverId) => {
             const server = servers.find((entry) => entry.id === serverId);
-            return server?.authType === "oauth2";
+            return server?.authType === 'oauth2';
           })
         )
       );
@@ -147,7 +152,10 @@ export function ScenarioAssistantDialog({
                 }
               : undefined
           },
-          availableServers: servers.map((server) => ({ name: server.name || server.id, url: server.url })),
+          availableServers: servers.map((server) => ({
+            name: server.name || server.id,
+            url: server.url
+          })),
           availableAgents: agents.map((agent) => ({
             name: agent.name || agent.id,
             provider: agent.provider,
@@ -163,9 +171,9 @@ export function ScenarioAssistantDialog({
       .catch((error: unknown) => {
         if (cancelled) return;
         toast({
-          title: "Could not start Scenario Assistant",
-          description: (error instanceof Error ? error.message : String(error)),
-          variant: "destructive"
+          title: 'Could not start Scenario Assistant',
+          description: error instanceof Error ? error.message : String(error),
+          variant: 'destructive'
         });
       })
       .finally(() => {
@@ -190,7 +198,7 @@ export function ScenarioAssistantDialog({
   const resetLocalSessionState = () => {
     setSessionId(null);
     setSession(null);
-    setInput("");
+    setInput('');
     setAppliedSuggestionKeys(new Set());
     initialMessageSentRef.current = null;
   };
@@ -233,7 +241,7 @@ export function ScenarioAssistantDialog({
       preserveSessionOnCloseRef.current = false;
     }
     const timeout = window.setTimeout(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }, 0);
     return () => window.clearTimeout(timeout);
   }, [
@@ -247,7 +255,7 @@ export function ScenarioAssistantDialog({
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    el.style.height = "0px";
+    el.style.height = '0px';
     const next = Math.min(el.scrollHeight, 160);
     el.style.height = `${Math.max(40, next)}px`;
   }, [input, open]);
@@ -260,9 +268,9 @@ export function ScenarioAssistantDialog({
     const trimmed = message.trim();
     if (!trimmed) return;
     const optimisticMessageId = `msg-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const optimisticMessage: ScenarioAssistantSessionView["messages"][number] = {
+    const optimisticMessage: ScenarioAssistantSessionView['messages'][number] = {
       id: optimisticMessageId,
-      role: "user",
+      role: 'user',
       text: trimmed,
       createdAt: new Date().toISOString()
     };
@@ -274,7 +282,7 @@ export function ScenarioAssistantDialog({
           }
         : prev
     );
-    setInput("");
+    setInput('');
     setLoading(true);
     try {
       const resp = await source.sendScenarioAssistantMessage(sessionId, trimmed);
@@ -290,9 +298,9 @@ export function ScenarioAssistantDialog({
       );
       setInput((prev) => (prev.trim() ? prev : trimmed));
       toast({
-        title: "Scenario Assistant error",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Scenario Assistant error',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -307,7 +315,7 @@ export function ScenarioAssistantDialog({
   useEffect(() => {
     if (!open || !sessionId || !session) return;
     if (!canUseAssistant || loading) return;
-    const handoffMessage = String(initialUserMessage ?? "").trim();
+    const handoffMessage = String(initialUserMessage ?? '').trim();
     if (!handoffMessage) return;
     if (initialMessageSentRef.current === handoffMessage) return;
     initialMessageSentRef.current = handoffMessage;
@@ -329,9 +337,9 @@ export function ScenarioAssistantDialog({
       syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
-        title: "Tool call failed",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Tool call failed',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -346,9 +354,9 @@ export function ScenarioAssistantDialog({
       syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
-        title: "Could not deny tool call",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not deny tool call',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -363,9 +371,9 @@ export function ScenarioAssistantDialog({
       syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
       toast({
-        title: "Could not approve all tool calls",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not approve all tool calls',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -375,26 +383,26 @@ export function ScenarioAssistantDialog({
   const applySuggestions = (
     messageId: string | undefined,
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
-    key: "prompt" | "evalRules" | "extractRules" | "snapshotEval"
+    key: 'prompt' | 'evalRules' | 'extractRules' | 'snapshotEval'
   ) => {
     if (!suggestions) return;
-    if (key === "prompt" && suggestions.prompt) {
+    if (key === 'prompt' && suggestions.prompt) {
       onApplyPatch({ prompt: suggestions.prompt.replacement });
     }
-    if (key === "evalRules" && suggestions.evalRules) {
+    if (key === 'evalRules' && suggestions.evalRules) {
       onApplyPatch({
         evalRules: suggestions.evalRules.replacement as Array<{
-          type: EvalRule["type"];
+          type: EvalRule['type'];
           value?: string;
           path?: string;
           equals?: string | number | boolean;
         }>
       });
     }
-    if (key === "extractRules" && suggestions.extractRules) {
+    if (key === 'extractRules' && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });
     }
-    if (key === "snapshotEval" && suggestions.snapshotEval) {
+    if (key === 'snapshotEval' && suggestions.snapshotEval) {
       onApplyPatch({
         snapshotEval: {
           enabled: suggestions.snapshotEval.patch.enabled,
@@ -407,12 +415,12 @@ export function ScenarioAssistantDialog({
       setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
     }
     const labelByKey: Record<typeof key, string> = {
-      prompt: "Prompt",
-      evalRules: "Checks",
-      extractRules: "Value Capture Rules",
-      snapshotEval: "Snapshot Settings",
+      prompt: 'Prompt',
+      evalRules: 'Checks',
+      extractRules: 'Value Capture Rules',
+      snapshotEval: 'Snapshot Settings'
     };
-    toast({ title: "Applied suggestion", description: `Updated ${labelByKey[key]}` });
+    toast({ title: 'Applied suggestion', description: `Updated ${labelByKey[key]}` });
   };
 
   const blurActiveElement = () => {
@@ -453,7 +461,7 @@ export function ScenarioAssistantDialog({
             <p className="text-sm font-medium">Scenario Assistant (session active)</p>
             <p className="truncate text-xs text-muted-foreground">
               Resume conversation for <span className="font-mono">{scenario.id}</span>
-              {session ? ` · ${session.messages.length} messages` : ""}
+              {session ? ` · ${session.messages.length} messages` : ''}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -476,45 +484,47 @@ export function ScenarioAssistantDialog({
         </div>
       )}
       <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
-        {sessionId && (
-          <button
-            type="button"
-            className="absolute right-12 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            onClick={handleMinimize}
-            aria-label="Minimize assistant"
-            title="Minimize assistant"
-          >
-            <Minimize2 className="h-4 w-4" />
-            <span className="sr-only">Minimize</span>
-          </button>
-        )}
-        <DialogHeader className="pr-20">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                Scenario Assistant
-              </DialogTitle>
-              <DialogDescription>
-                LLM-guided scenario authoring with MCP tool introspection and per-tool-call approval.
-              </DialogDescription>
+        <DialogContent className="max-w-6xl h-[85vh] flex flex-col">
+          {sessionId && (
+            <button
+              type="button"
+              className="absolute right-12 top-4 z-10 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              onClick={handleMinimize}
+              aria-label="Minimize assistant"
+              title="Minimize assistant"
+            >
+              <Minimize2 className="h-4 w-4" />
+              <span className="sr-only">Minimize</span>
+            </button>
+          )}
+          <DialogHeader className="pr-20">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Scenario Assistant
+                </DialogTitle>
+                <DialogDescription>
+                  LLM-guided scenario authoring with MCP tool introspection and per-tool-call
+                  approval.
+                </DialogDescription>
+              </div>
             </div>
-          </div>
-        </DialogHeader>
+          </DialogHeader>
 
-        {!canUseAssistant ? (
-          <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            Scenario Assistant requires a configured assistant agent and at least one selected server on the scenario.
-          </div>
-        ) : (
-          <div className="min-h-0 flex flex-1 flex-col gap-3">
+          {!canUseAssistant ? (
+            <div className="rounded-md border p-3 text-sm text-muted-foreground">
+              Scenario Assistant requires a configured assistant agent and at least one selected
+              server on the scenario.
+            </div>
+          ) : (
+            <div className="min-h-0 flex flex-1 flex-col gap-3">
               <div className="grid gap-3 sm:grid-cols-1">
                 <div className="space-y-1.5">
                   <Label className="text-xs">MCP Context</Label>
                   <div className="h-8 rounded-md border px-2 text-xs flex items-center gap-2">
                     <Wrench className="h-3.5 w-3.5" />
-                    {session ? `Loaded ${session.toolsLoaded} tools` : "Preparing..."}
+                    {session ? `Loaded ${session.toolsLoaded} tools` : 'Preparing...'}
                   </div>
                 </div>
               </div>
@@ -522,22 +532,35 @@ export function ScenarioAssistantDialog({
               <ScrollArea className="min-h-0 flex-1 rounded-md border p-3">
                 <div className="space-y-3">
                   {session?.warnings?.map((warning, index) => (
-                    <div key={`${warning}-${index}`} className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    <div
+                      key={`${warning}-${index}`}
+                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                    >
                       {warning}
                     </div>
                   ))}
                   {session?.messages.map((message) => (
                     <Fragment key={message.id}>
                       {(() => {
-                        const toolCallIds = message.pendingToolCallIds ?? (message.pendingToolCallId ? [message.pendingToolCallId] : []);
+                        const toolCallIds =
+                          message.pendingToolCallIds ??
+                          (message.pendingToolCallId ? [message.pendingToolCallId] : []);
                         const linkedPendingToolCalls = toolCallIds
-                          .map((id) => (session?.pendingToolCalls ?? []).find((call) => call.id === id))
-                          .filter((call): call is ScenarioAssistantPendingToolCall => Boolean(call));
+                          .map((id) =>
+                            (session?.pendingToolCalls ?? []).find((call) => call.id === id)
+                          )
+                          .filter((call): call is ScenarioAssistantPendingToolCall =>
+                            Boolean(call)
+                          );
                         const allToolCalls = toolCallIds
-                          .map((id) => session.pendingToolCalls.find((c) => c.id === id) ?? session.pendingToolCalls.find((c) => c.id === id))
+                          .map(
+                            (id) =>
+                              session.pendingToolCalls.find((c) => c.id === id) ??
+                              session.pendingToolCalls.find((c) => c.id === id)
+                          )
                           .filter(Boolean) as ScenarioAssistantPendingToolCall[];
                         const isAssistantToolRequest =
-                          message.role === "assistant" && toolCallIds.length > 0;
+                          message.role === 'assistant' && toolCallIds.length > 0;
                         if (!isAssistantToolRequest) {
                           return (
                             <div className="space-y-2">
@@ -595,53 +618,73 @@ export function ScenarioAssistantDialog({
                               rationale={message.suggestions.prompt.rationale}
                               preview={message.suggestions.prompt.replacement}
                               applied={appliedSuggestionKeys.has(`${message.id}:prompt`)}
-                              onApply={() => applySuggestions(message.id, message.suggestions, "prompt")}
+                              onApply={() =>
+                                applySuggestions(message.id, message.suggestions, 'prompt')
+                              }
                             />
                           )}
                           {message.suggestions.evalRules && (
                             <SuggestionCard
                               title="Checks"
                               rationale={message.suggestions.evalRules.rationale}
-                              preview={JSON.stringify(message.suggestions.evalRules.replacement, null, 2)}
+                              preview={JSON.stringify(
+                                message.suggestions.evalRules.replacement,
+                                null,
+                                2
+                              )}
                               applied={appliedSuggestionKeys.has(`${message.id}:evalRules`)}
-                              onApply={() => applySuggestions(message.id, message.suggestions, "evalRules")}
+                              onApply={() =>
+                                applySuggestions(message.id, message.suggestions, 'evalRules')
+                              }
                             />
                           )}
                           {message.suggestions.extractRules && (
                             <SuggestionCard
                               title="Value Capture Rules"
                               rationale={message.suggestions.extractRules.rationale}
-                              preview={JSON.stringify(message.suggestions.extractRules.replacement, null, 2)}
+                              preview={JSON.stringify(
+                                message.suggestions.extractRules.replacement,
+                                null,
+                                2
+                              )}
                               applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
-                              onApply={() => applySuggestions(message.id, message.suggestions, "extractRules")}
+                              onApply={() =>
+                                applySuggestions(message.id, message.suggestions, 'extractRules')
+                              }
                             />
                           )}
                           {message.suggestions.snapshotEval && (
                             <SuggestionCard
                               title="Snapshot Settings"
                               rationale={message.suggestions.snapshotEval.rationale}
-                              preview={JSON.stringify(message.suggestions.snapshotEval.patch, null, 2)}
+                              preview={JSON.stringify(
+                                message.suggestions.snapshotEval.patch,
+                                null,
+                                2
+                              )}
                               applied={appliedSuggestionKeys.has(`${message.id}:snapshotEval`)}
-                              onApply={() => applySuggestions(message.id, message.suggestions, "snapshotEval")}
+                              onApply={() =>
+                                applySuggestions(message.id, message.suggestions, 'snapshotEval')
+                              }
                             />
                           )}
                           {(() => {
                             const rawNotes = message.suggestions?.notes;
                             const notes = Array.isArray(rawNotes)
                               ? rawNotes
-                              : typeof rawNotes === "string"
-                                ? [rawNotes]
-                                : [];
+                              : typeof rawNotes === 'string'
+                              ? [rawNotes]
+                              : [];
                             if (notes.length === 0) return null;
                             return (
-                            <div className="space-y-2 rounded-md border p-3">
-                              <h5 className="text-sm font-medium">Notes</h5>
-                              <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
-                                {notes.map((note, index) => (
-                                  <li key={`${message.id}-note-${index}`}>{note}</li>
-                                ))}
-                              </ul>
-                            </div>
+                              <div className="space-y-2 rounded-md border p-3">
+                                <h5 className="text-sm font-medium">Notes</h5>
+                                <ul className="space-y-1 text-xs text-muted-foreground list-disc pl-4">
+                                  {notes.map((note, index) => (
+                                    <li key={`${message.id}-note-${index}`}>{note}</li>
+                                  ))}
+                                </ul>
+                              </div>
                             );
                           })()}
                         </div>
@@ -649,16 +692,23 @@ export function ScenarioAssistantDialog({
                     </Fragment>
                   ))}
                   {(session?.pendingToolCalls ?? [])
-                    .filter((call) => !(session?.messages ?? []).some((m) => m.pendingToolCallId === call.id || m.pendingToolCallIds?.includes(call.id)))
+                    .filter(
+                      (call) =>
+                        !(session?.messages ?? []).some(
+                          (m) =>
+                            m.pendingToolCallId === call.id ||
+                            m.pendingToolCallIds?.includes(call.id)
+                        )
+                    )
                     .map((call) => (
-                    <AssistantToolCallCard
-                      key={call.id}
-                      call={call}
-                      loading={loading}
-                      onApprove={(callId) => void handleApprove(callId)}
-                      onDeny={(callId) => void handleDeny(callId)}
-                    />
-                  ))}
+                      <AssistantToolCallCard
+                        key={call.id}
+                        call={call}
+                        loading={loading}
+                        onApprove={(callId) => void handleApprove(callId)}
+                        onDeny={(callId) => void handleDeny(callId)}
+                      />
+                    ))}
                   {!session && loading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -683,9 +733,9 @@ export function ScenarioAssistantDialog({
                 inputRef={inputRef}
                 snippetContentClassName="w-[320px]"
               />
-          </div>
-        )}
-      </DialogContent>
+            </div>
+          )}
+        </DialogContent>
       </Dialog>
     </>
   );
@@ -705,22 +755,34 @@ function SuggestionCard({
   onApply: () => void;
 }) {
   return (
-    <div className={`space-y-2 rounded-md border p-3 ${applied ? "border-emerald-300 bg-emerald-50/40" : ""}`}>
+    <div
+      className={`space-y-2 rounded-md border p-3 ${
+        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <h5 className="text-sm font-medium">{title}</h5>
-        <Button type="button" size="sm" variant={applied ? "secondary" : "outline"} onClick={onApply} disabled={applied}>
+        <Button
+          type="button"
+          size="sm"
+          variant={applied ? 'secondary' : 'outline'}
+          onClick={onApply}
+          disabled={applied}
+        >
           {applied ? (
             <>
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
               Applied
             </>
           ) : (
-            "Apply"
+            'Apply'
           )}
         </Button>
       </div>
       {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
-      <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">{preview}</pre>
+      <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
+        {preview}
+      </pre>
     </div>
   );
 }
@@ -728,34 +790,36 @@ function SuggestionCard({
 function ScenarioAssistantMessageRow({
   message
 }: {
-  message: ScenarioAssistantSessionView["messages"][number];
+  message: ScenarioAssistantSessionView['messages'][number];
 }) {
   const copyMessageText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast({ title: "Copied" });
+      toast({ title: 'Copied' });
     } catch (error: unknown) {
       toast({
-        title: "Could not copy",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not copy',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     }
   };
 
-  const showCopyButton = message.role === "user" || message.role === "assistant";
-  const isUser = message.role === "user";
+  const showCopyButton = message.role === 'user' || message.role === 'assistant';
+  const isUser = message.role === 'user';
   return (
     <AssistantMessageRow
       message={message}
-      assistantLabel={message.role === "assistant" ? "Assistant" : undefined}
+      assistantLabel={message.role === 'assistant' ? 'Assistant' : undefined}
       renderActions={
         showCopyButton ? (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className={`absolute bottom-1 h-6 w-6 text-muted-foreground ${isUser ? "-left-8" : "-right-8"}`}
+            className={`absolute bottom-1 h-6 w-6 text-muted-foreground ${
+              isUser ? '-left-8' : '-right-8'
+            }`}
             onClick={() => void copyMessageText(message.text)}
             aria-label="Copy message"
             title="Copy message"

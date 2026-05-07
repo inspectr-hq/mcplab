@@ -6,7 +6,7 @@ import {
   CommandGroup,
   CommandInput,
   CommandItem,
-  CommandList,
+  CommandList
 } from '@/components/ui/command';
 import { FileText } from 'lucide-react';
 import type { DocNavItem } from '@/data/docs';
@@ -37,21 +37,21 @@ const DocsSearch = ({ open, onOpenChange, pages }: DocsSearchProps) => {
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder='Search docs…' />
+      <CommandInput placeholder="Search docs…" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading='Documentation'>
+        <CommandGroup heading="Documentation">
           {pages.map((page) => (
             <CommandItem
               key={page.href}
               value={`${page.label} ${page.description} ${(page.keywords ?? []).join(' ')}`}
               onSelect={() => handleSelect(page.href)}
-              className='flex items-start gap-3 py-3 cursor-pointer'
+              className="flex items-start gap-3 py-3 cursor-pointer"
             >
-              <FileText className='mt-0.5 h-4 w-4 shrink-0 text-muted-foreground' />
-              <div className='flex flex-col'>
-                <span className='text-sm font-medium'>{page.label}</span>
-                <span className='text-xs text-muted-foreground'>{page.description}</span>
+              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">{page.label}</span>
+                <span className="text-xs text-muted-foreground">{page.description}</span>
               </div>
             </CommandItem>
           ))}

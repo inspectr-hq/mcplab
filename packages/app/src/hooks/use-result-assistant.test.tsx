@@ -9,7 +9,9 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: (...args: unknown[]) => mockToast(...args)
 }));
 
-function makeSession(overrides: Partial<ResultAssistantSessionView> = {}): ResultAssistantSessionView {
+function makeSession(
+  overrides: Partial<ResultAssistantSessionView> = {}
+): ResultAssistantSessionView {
   return {
     id: 'ras-1',
     scope: 'run',
@@ -58,12 +60,12 @@ describe('useResultAssistant SSE updates', () => {
       closeResultAssistantSession: vi.fn().mockResolvedValue(undefined),
       approveResultAssistantToolCall: vi.fn(),
       denyResultAssistantToolCall: vi.fn(),
-      subscribeResultAssistantSessionEvents: vi.fn().mockImplementation(
-        (_sessionId: string, onEvent: typeof onResultEvent) => {
+      subscribeResultAssistantSessionEvents: vi
+        .fn()
+        .mockImplementation((_sessionId: string, onEvent: typeof onResultEvent) => {
           onResultEvent = onEvent;
           return () => undefined;
-        }
-      )
+        })
     } as unknown as EvalDataSource;
 
     const { result } = renderHook(() =>

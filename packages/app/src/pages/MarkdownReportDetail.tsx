@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { MarkdownContent } from "@/components/MarkdownContent";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
-import type { MarkdownReportContent } from "@/lib/data-sources/types";
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { MarkdownContent } from '@/components/MarkdownContent';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
+import type { MarkdownReportContent } from '@/lib/data-sources/types';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,7 +16,9 @@ function formatBytes(bytes: number): string {
 }
 
 function detectRunId(report: MarkdownReportContent): string | null {
-  const pathMatch = report.relativePath.match(/(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i);
+  const pathMatch = report.relativePath.match(
+    /(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i
+  );
   if (pathMatch?.[1]) return pathMatch[1];
   const contentMatch =
     report.content.match(/(?:^|\n)\s*\*\*Run:\*\*\s*`([^`]+)`/i) ??
@@ -27,7 +29,7 @@ function detectRunId(report: MarkdownReportContent): string | null {
 export default function MarkdownReportDetailPage() {
   const { source } = useDataSource();
   const [searchParams] = useSearchParams();
-  const relativePath = (searchParams.get("path") ?? "").trim();
+  const relativePath = (searchParams.get('path') ?? '').trim();
   const [report, setReport] = useState<MarkdownReportContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -50,15 +52,15 @@ export default function MarkdownReportDetailPage() {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const msg = (error instanceof Error ? error.message : String(error));
-        if (msg.includes("(404)")) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('(404)')) {
           setNotFound(true);
           return;
         }
         toast({
-          title: "Could not load markdown report",
+          title: 'Could not load markdown report',
           description: msg,
-          variant: "destructive",
+          variant: 'destructive'
         });
       })
       .finally(() => {
@@ -145,7 +147,11 @@ export default function MarkdownReportDetailPage() {
               <div className="flex items-center justify-between gap-2">
                 <SheetTitle className="text-base">Result {linkedRunId}</SheetTitle>
                 <Button asChild variant="outline" size="sm">
-                  <Link to={`/results/${encodeURIComponent(linkedRunId)}`} target="_blank" rel="noreferrer">
+                  <Link
+                    to={`/results/${encodeURIComponent(linkedRunId)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Open full page
                   </Link>
                 </Button>

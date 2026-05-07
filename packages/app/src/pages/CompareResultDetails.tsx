@@ -1,32 +1,32 @@
-import { ArrowLeftRight, ExternalLink } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ArrowLeftRight, ExternalLink } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 const resultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
   const params = new URLSearchParams();
-  if (configId) params.set("configId", configId);
-  if (agentId) params.set("agent", agentId);
-  params.set("embed", "1");
+  if (configId) params.set('configId', configId);
+  if (agentId) params.set('agent', agentId);
+  params.set('embed', '1');
   return `/results/${encodeURIComponent(runId)}?${params.toString()}`;
 };
 
 const openResultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
   const params = new URLSearchParams();
-  if (configId) params.set("configId", configId);
-  if (agentId) params.set("agent", agentId);
+  if (configId) params.set('configId', configId);
+  if (agentId) params.set('agent', agentId);
   const query = params.toString();
-  return `/results/${encodeURIComponent(runId)}${query ? `?${query}` : ""}`;
+  return `/results/${encodeURIComponent(runId)}${query ? `?${query}` : ''}`;
 };
 
 const CompareResultDetails = () => {
   const [searchParams] = useSearchParams();
-  const left = searchParams.get("left") ?? "";
-  const right = searchParams.get("right") ?? "";
-  const leftConfig = searchParams.get("leftConfig");
-  const rightConfig = searchParams.get("rightConfig");
-  const leftAgent = searchParams.get("leftAgent");
-  const rightAgent = searchParams.get("rightAgent");
+  const left = searchParams.get('left') ?? '';
+  const right = searchParams.get('right') ?? '';
+  const leftConfig = searchParams.get('leftConfig');
+  const rightConfig = searchParams.get('rightConfig');
+  const leftAgent = searchParams.get('leftAgent');
+  const rightAgent = searchParams.get('rightAgent');
 
   const leftLabel = leftAgent ? `${left} · ${leftAgent}` : left;
   const rightLabel = rightAgent ? `${right} · ${rightAgent}` : right;
@@ -56,8 +56,8 @@ const CompareResultDetails = () => {
           <h1 className="text-2xl font-bold">Full Result Compare</h1>
           <p className="text-sm text-muted-foreground">
             {leftAgent || rightAgent
-              ? "Side-by-side Result Detail views for deep inspection, filtered by selected agents."
-              : "Side-by-side Result Detail views for deep inspection."}
+              ? 'Side-by-side Result Detail views for deep inspection, filtered by selected agents.'
+              : 'Side-by-side Result Detail views for deep inspection.'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -74,7 +74,11 @@ const CompareResultDetails = () => {
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href={openResultUrl(right, rightConfig, rightAgent)} target="_blank" rel="noreferrer">
+            <a
+              href={openResultUrl(right, rightConfig, rightAgent)}
+              target="_blank"
+              rel="noreferrer"
+            >
               Open Right
               <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
             </a>

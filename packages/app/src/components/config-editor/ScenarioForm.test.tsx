@@ -1,98 +1,100 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ScenarioForm } from "./ScenarioForm";
-import type { Scenario, AgentConfig, ServerConfig } from "@/types/eval";
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ScenarioForm } from './ScenarioForm';
+import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
 
 const mockSource = {
   discoverToolsForAnalysis: vi.fn().mockResolvedValue({ servers: [] }),
-  runScenarioPreview: vi.fn(),
+  runScenarioPreview: vi.fn()
 };
 const mockEnsureOAuthForServers = vi.fn();
 
-vi.mock("@/contexts/DataSourceContext", () => ({
+vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
-    source: mockSource,
-  }),
+    source: mockSource
+  })
 }));
 
-vi.mock("@/lib/oauth-session-utils", () => ({
-  ensureOAuthForServers: (...args: unknown[]) => mockEnsureOAuthForServers(...args),
+vi.mock('@/lib/oauth-session-utils', () => ({
+  ensureOAuthForServers: (...args: unknown[]) => mockEnsureOAuthForServers(...args)
 }));
 
-vi.mock("@/components/config-editor/ScenarioAssistantDialog", () => ({
-  ScenarioAssistantDialog: () => null,
+vi.mock('@/components/config-editor/ScenarioAssistantDialog', () => ({
+  ScenarioAssistantDialog: () => null
 }));
 
 function baseScenario(): Scenario {
   return {
-    id: "scn-1",
-    name: "Scenario 1",
+    id: 'scn-1',
+    name: 'Scenario 1',
     serverIds: [],
-    prompt: "test prompt",
+    prompt: 'test prompt',
     evalRules: [],
-    extractRules: [],
+    extractRules: []
   };
 }
 
-describe("ScenarioForm checks editor", () => {
+describe('ScenarioForm checks editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [] });
     mockSource.runScenarioPreview.mockResolvedValue({
-      runId: "preview-1",
-      scenarioId: "scn-1",
-      agentName: "agent-1",
+      runId: 'preview-1',
+      scenarioId: 'scn-1',
+      agentName: 'agent-1',
       run: {
         runIndex: 0,
         passed: true,
         toolCalls: [],
-        finalAnswer: "ok",
+        finalAnswer: 'ok',
         conversation: [],
         duration: 10,
         extractedValues: {},
-        failureReasons: [],
-      },
+        failureReasons: []
+      }
     });
     mockEnsureOAuthForServers.mockResolvedValue(undefined);
   });
 
-  it("loads tools after ensuring OAuth for oauth2 servers", async () => {
+  it('loads tools after ensuring OAuth for oauth2 servers', async () => {
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [{ tools: [] }] });
 
     const onChange = vi.fn();
     render(
       <ScenarioForm
-        scenarios={[{ ...baseScenario(), serverIds: ["oauth-server"] }]}
+        scenarios={[{ ...baseScenario(), serverIds: ['oauth-server'] }]}
         agents={[] as AgentConfig[]}
-        servers={[
-          {
-            id: "oauth-server",
-            name: "OAuth Server",
-            transport: "streamable-http",
-            url: "https://example.com/mcp",
-            authType: "oauth2",
-          },
-        ] as ServerConfig[]}
+        servers={
+          [
+            {
+              id: 'oauth-server',
+              name: 'OAuth Server',
+              transport: 'streamable-http',
+              url: 'https://example.com/mcp',
+              authType: 'oauth2'
+            }
+          ] as ServerConfig[]
+        }
         onChange={onChange}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Load tools" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load tools' }));
 
     await waitFor(() =>
       expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
-        serverNames: ["oauth-server"],
-        source: mockSource,
+        serverNames: ['oauth-server'],
+        source: mockSource
       })
     );
     await waitFor(() =>
       expect(mockSource.discoverToolsForAnalysis).toHaveBeenCalledWith({
-        serverNames: ["oauth-server"],
+        serverNames: ['oauth-server']
       })
     );
   });
 
-  it("adds response_equals checks with literal value", async () => {
+  it('adds response_equals checks with literal value', async () => {
     const onChange = vi.fn();
 
     render(
@@ -101,22 +103,22 @@ describe("ScenarioForm checks editor", () => {
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
         onChange={onChange}
-      />,
+      />
     );
 
-    fireEvent.click(screen.getAllByRole("combobox")[1]);
-    fireEvent.click(screen.getByText("Text equals"));
-    fireEvent.change(screen.getByPlaceholderText("Value"), {
-      target: { value: "success" },
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Text equals'));
+    fireEvent.change(screen.getByPlaceholderText('Value'), {
+      target: { value: 'success' }
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
-    expect(updated[0]?.evalRules).toEqual([{ type: "response_equals", value: "success" }]);
+    expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
   });
 
-  it("adds response_jsonpath checks with optional equals", async () => {
+  it('adds response_jsonpath checks with optional equals', async () => {
     const onChange = vi.fn();
 
     render(
@@ -125,59 +127,63 @@ describe("ScenarioForm checks editor", () => {
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
         onChange={onChange}
-      />,
+      />
     );
 
-    fireEvent.click(screen.getAllByRole("combobox")[1]);
-    fireEvent.click(screen.getByText("JSONPath (optional equals)"));
-    fireEvent.change(screen.getByPlaceholderText("JSONPath (e.g. $.status)"), {
-      target: { value: "$.status" },
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('JSONPath (optional equals)'));
+    fireEvent.change(screen.getByPlaceholderText('JSONPath (e.g. $.status)'), {
+      target: { value: '$.status' }
     });
-    fireEvent.change(screen.getByPlaceholderText("Equals (optional)"), {
-      target: { value: "active" },
+    fireEvent.change(screen.getByPlaceholderText('Equals (optional)'), {
+      target: { value: 'active' }
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules).toEqual([
-      { type: "response_jsonpath", path: "$.status", equals: "active" },
+      { type: 'response_jsonpath', path: '$.status', equals: 'active' }
     ]);
   });
 
-  it("ensures OAuth before running prompt preview", async () => {
+  it('ensures OAuth before running prompt preview', async () => {
     render(
       <ScenarioForm
-        scenarios={[{ ...baseScenario(), serverIds: ["oauth-server"] }]}
-        agents={[
-          {
-            id: "agent-1",
-            name: "Agent 1",
-            provider: "openai",
-            model: "gpt-4o-mini",
-            temperature: 0,
-            maxTokens: 1024,
-          },
-        ] as AgentConfig[]}
-        servers={[
-          {
-            id: "oauth-server",
-            name: "OAuth Server",
-            transport: "streamable-http",
-            url: "https://example.com/mcp",
-            authType: "oauth2",
-          },
-        ] as ServerConfig[]}
+        scenarios={[{ ...baseScenario(), serverIds: ['oauth-server'] }]}
+        agents={
+          [
+            {
+              id: 'agent-1',
+              name: 'Agent 1',
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              temperature: 0,
+              maxTokens: 1024
+            }
+          ] as AgentConfig[]
+        }
+        servers={
+          [
+            {
+              id: 'oauth-server',
+              name: 'OAuth Server',
+              transport: 'streamable-http',
+              url: 'https://example.com/mcp',
+              authType: 'oauth2'
+            }
+          ] as ServerConfig[]
+        }
         onChange={vi.fn()}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Run Prompt" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run Prompt' }));
 
     await waitFor(() =>
       expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
-        serverNames: ["oauth-server"],
-        source: mockSource,
+        serverNames: ['oauth-server'],
+        source: mockSource
       })
     );
     await waitFor(() => expect(mockSource.runScenarioPreview).toHaveBeenCalled());

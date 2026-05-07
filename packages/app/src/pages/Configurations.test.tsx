@@ -1,39 +1,39 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import Configurations from "./Configurations";
-import type { EvalConfig } from "@/types/eval";
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import Configurations from './Configurations';
+import type { EvalConfig } from '@/types/eval';
 
 const { configsRef, reloadMock, sourceMock, toastMock } = vi.hoisted(() => ({
   configsRef: { value: [] as EvalConfig[] },
   reloadMock: vi.fn(),
   sourceMock: {
-    startRun: vi.fn().mockResolvedValue({ jobId: "job-1" }),
+    startRun: vi.fn().mockResolvedValue({ jobId: 'job-1' })
   },
-  toastMock: vi.fn(),
+  toastMock: vi.fn()
 }));
 
-vi.mock("@/contexts/ConfigContext", () => ({
+vi.mock('@/contexts/ConfigContext', () => ({
   useConfigs: () => ({
     configs: configsRef.value,
     deleteConfig: vi.fn(),
     cloneConfig: vi.fn(),
     loading: false,
-    reload: reloadMock,
-  }),
+    reload: reloadMock
+  })
 }));
 
-vi.mock("@/hooks/use-toast", () => ({
-  toast: (...args: unknown[]) => toastMock(...args),
+vi.mock('@/hooks/use-toast', () => ({
+  toast: (...args: unknown[]) => toastMock(...args)
 }));
 
-vi.mock("@/contexts/DataSourceContext", () => ({
+vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
-    source: sourceMock,
-  }),
+    source: sourceMock
+  })
 }));
 
-describe("Configurations suites", () => {
+describe('Configurations suites', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
     reloadMock.mockClear();
@@ -41,119 +41,131 @@ describe("Configurations suites", () => {
     toastMock.mockClear();
     configsRef.value = [
       {
-        id: "cfg-1",
-        name: "Root Config",
-        suitePath: "",
-        relativePath: "root.yaml",
-        sourcePath: "/path/root.yaml",
+        id: 'cfg-1',
+        name: 'Root Config',
+        suitePath: '',
+        relativePath: 'root.yaml',
+        sourcePath: '/path/root.yaml',
         agents: [],
         scenarios: [],
-        createdAt: "2026-04-23T08:00:00.000Z",
-        updatedAt: "2026-04-23T08:00:00.000Z",
+        createdAt: '2026-04-23T08:00:00.000Z',
+        updatedAt: '2026-04-23T08:00:00.000Z'
       },
       {
-        id: "cfg-2",
-        name: "Tag Search",
-        suitePath: "trendminer/tags",
-        relativePath: "trendminer/tags/tag-search.yaml",
-        sourcePath: "/path/trendminer/tags/tag-search.yaml",
+        id: 'cfg-2',
+        name: 'Tag Search',
+        suitePath: 'trendminer/tags',
+        relativePath: 'trendminer/tags/tag-search.yaml',
+        sourcePath: '/path/trendminer/tags/tag-search.yaml',
         agents: [],
         scenarios: [],
-        createdAt: "2026-04-23T08:00:00.000Z",
-        updatedAt: "2026-04-23T08:00:00.000Z",
+        createdAt: '2026-04-23T08:00:00.000Z',
+        updatedAt: '2026-04-23T08:00:00.000Z'
       },
       {
-        id: "cfg-3",
-        name: "Alert Check",
-        suitePath: "trendminer/alerts",
-        relativePath: "trendminer/alerts/alert-check.yaml",
-        sourcePath: "/path/trendminer/alerts/alert-check.yaml",
+        id: 'cfg-3',
+        name: 'Alert Check',
+        suitePath: 'trendminer/alerts',
+        relativePath: 'trendminer/alerts/alert-check.yaml',
+        sourcePath: '/path/trendminer/alerts/alert-check.yaml',
         agents: [],
         scenarios: [],
-        createdAt: "2026-04-23T08:00:00.000Z",
-        updatedAt: "2026-04-23T08:00:00.000Z",
-      },
+        createdAt: '2026-04-23T08:00:00.000Z',
+        updatedAt: '2026-04-23T08:00:00.000Z'
+      }
     ];
   });
 
-  it("renders grouped suite headers including root bucket", async () => {
+  it('renders grouped suite headers including root bucket', async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
-    expect(screen.getAllByText("(root)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("trendminer/tags").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("trendminer/alerts").length).toBeGreaterThan(0);
+    expect(screen.getAllByText('(root)').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('trendminer/tags').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('trendminer/alerts').length).toBeGreaterThan(0);
   });
 
-  it("filters configs by suite selection", async () => {
+  it('filters configs by suite selection', async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(screen.getByRole('combobox'));
     const option = Array.from(document.querySelectorAll('[role="option"]')).find(
-      (node) => node.textContent?.trim() === "trendminer/tags"
+      (node) => node.textContent?.trim() === 'trendminer/tags'
     ) as HTMLElement | undefined;
     expect(option).toBeDefined();
     fireEvent.click(option!);
 
-    expect(screen.getByText("Tag Search")).toBeInTheDocument();
-    expect(screen.queryByText("Root Config")).not.toBeInTheDocument();
-    expect(screen.queryByText("Alert Check")).not.toBeInTheDocument();
+    expect(screen.getByText('Tag Search')).toBeInTheDocument();
+    expect(screen.queryByText('Root Config')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alert Check')).not.toBeInTheDocument();
   });
 
-  it("filters configs by parent suite including nested sublevels", async () => {
+  it('filters configs by parent suite including nested sublevels', async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(screen.getByRole('combobox'));
     const option = Array.from(document.querySelectorAll('[role="option"]')).find(
-      (node) => node.textContent?.trim() === "trendminer"
+      (node) => node.textContent?.trim() === 'trendminer'
     ) as HTMLElement | undefined;
     expect(option).toBeDefined();
     fireEvent.click(option!);
 
-    expect(screen.getByText("Tag Search")).toBeInTheDocument();
-    expect(screen.getByText("Alert Check")).toBeInTheDocument();
-    expect(screen.queryByText("Root Config")).not.toBeInTheDocument();
+    expect(screen.getByText('Tag Search')).toBeInTheDocument();
+    expect(screen.getByText('Alert Check')).toBeInTheDocument();
+    expect(screen.queryByText('Root Config')).not.toBeInTheDocument();
   });
 
-  it("queues all configs in a suite when Run Suite is clicked", async () => {
+  it('queues all configs in a suite when Run Suite is clicked', async () => {
     render(
-      <MemoryRouter initialEntries={["/mcp-evaluations"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => expect(reloadMock).toHaveBeenCalled());
-    const suiteHeader = screen.getByLabelText("Collapse suite trendminer/tags").closest("tr");
+    const suiteHeader = screen.getByLabelText('Collapse suite trendminer/tags').closest('tr');
     expect(suiteHeader).toBeTruthy();
-    fireEvent.click(within(suiteHeader as HTMLElement).getByRole("button", { name: "Run Suite" }));
+    fireEvent.click(within(suiteHeader as HTMLElement).getByRole('button', { name: 'Run Suite' }));
 
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith({
-      configPath: "/path/trendminer/tags/tag-search.yaml",
+      configPath: '/path/trendminer/tags/tag-search.yaml',
       runsPerScenario: 1,
-      applySnapshotEval: true,
+      applySnapshotEval: true
     });
   });
 });

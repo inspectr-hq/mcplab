@@ -1,22 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { RefreshCw, Settings as SettingsIcon } from "lucide-react";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Settings as SettingsIcon } from 'lucide-react';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
 
 const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingAssistantAgent, setSavingAssistantAgent] = useState(false);
-  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>("");
+  const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
 
   const effectiveAssistantAgentName = useMemo(
-    () => scenarioAssistantAgentName || agents[0]?.name || "",
+    () => scenarioAssistantAgentName || agents[0]?.name || '',
     [scenarioAssistantAgentName, agents]
   );
 
@@ -24,13 +30,13 @@ const SettingsPage = () => {
     setLoadingSettings(true);
     try {
       const settings = await source.getWorkspaceSettings();
-      setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? "");
+      setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
     } catch (error: unknown) {
-      setScenarioAssistantAgentName("");
+      setScenarioAssistantAgentName('');
       toast({
-        title: "Could not load settings",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not load settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoadingSettings(false);
@@ -49,16 +55,16 @@ const SettingsPage = () => {
         scenarioAssistantAgentName: nextAgentName || undefined
       });
       toast({
-        title: "Settings updated",
+        title: 'Settings updated',
         description: nextAgentName
           ? `Default assistant agent set to ${nextAgentName}.`
-          : "Default assistant agent cleared (will use first available agent by default)."
+          : 'Default assistant agent cleared (will use first available agent by default).'
       });
     } catch (error: unknown) {
       toast({
-        title: "Could not save settings",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not save settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setSavingAssistantAgent(false);
@@ -97,16 +103,17 @@ const SettingsPage = () => {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Assistant Defaults</CardTitle>
           <CardDescription>
-            Default assistant agent used across assistant flows. If unset, MCP Lab uses the first available agent automatically.
+            Default assistant agent used across assistant flows. If unset, MCP Lab uses the first
+            available agent automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
           <div className="space-y-1.5">
             <Label className="text-xs">Default Assistant Agent</Label>
             <Select
-              value={effectiveAssistantAgentName || "__none__"}
+              value={effectiveAssistantAgentName || '__none__'}
               onValueChange={(value) =>
-                void saveAssistantAgentSetting(value === "__none__" ? "" : value)
+                void saveAssistantAgentSetting(value === '__none__' ? '' : value)
               }
               disabled={savingAssistantAgent}
             >
@@ -117,21 +124,19 @@ const SettingsPage = () => {
                 <SelectItem value="__none__">None (use first agent)</SelectItem>
                 {agents.map((agent) => (
                   <SelectItem key={agent.id} value={agent.id}>
-                    {(agent.name || agent.id)} · {agent.model}
+                    {agent.name || agent.id} · {agent.model}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Applies to the assistant flows that use the workspace default. MCP Evaluation editors can still override the assistant agent from their evaluation context.
+              Applies to the assistant flows that use the workspace default. MCP Evaluation editors
+              can still override the assistant agent from their evaluation context.
             </p>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Saved in workspace settings
-          </div>
+          <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
         </CardContent>
       </Card>
-
     </div>
   );
 };

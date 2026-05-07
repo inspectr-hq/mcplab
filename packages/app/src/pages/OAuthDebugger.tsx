@@ -1,12 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Copy, Download, ExternalLink, Info, Loader2, Play, RefreshCw, Square } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Download,
+  ExternalLink,
+  Info,
+  Loader2,
+  Play,
+  RefreshCw,
+  Square
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -38,7 +55,11 @@ function InfoTip({ text }: { text: string }) {
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger type="button" className="inline-flex shrink-0 items-center" onClick={(e) => e.preventDefault()}>
+        <TooltipTrigger
+          type="button"
+          className="inline-flex shrink-0 items-center"
+          onClick={(e) => e.preventDefault()}
+        >
           <Info className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground" />
         </TooltipTrigger>
         <TooltipContent className="max-w-xs text-xs leading-relaxed">{text}</TooltipContent>
@@ -76,7 +97,9 @@ function toMarkdownClient(session: OAuthDebuggerSessionView, events: OAuthDebugg
   lines.push('');
   lines.push('## Steps');
   for (const step of session.stepStates) {
-    lines.push(`- ${step.title}: ${step.status}${step.outcomeSummary ? ` — ${step.outcomeSummary}` : ''}`);
+    lines.push(
+      `- ${step.title}: ${step.status}${step.outcomeSummary ? ` — ${step.outcomeSummary}` : ''}`
+    );
   }
   lines.push('');
   lines.push('## Validation Findings');
@@ -93,7 +116,9 @@ function toMarkdownClient(session: OAuthDebuggerSessionView, events: OAuthDebugg
   lines.push('## Event Log');
   for (const event of events) {
     const msg =
-      typeof event.payload.message === 'string' ? event.payload.message : JSON.stringify(event.payload);
+      typeof event.payload.message === 'string'
+        ? event.payload.message
+        : JSON.stringify(event.payload);
     lines.push(`- ${new Date(event.ts).toLocaleTimeString()} [${event.type}] ${msg}`);
   }
   return `${lines.join('\n')}\n`;
@@ -105,7 +130,8 @@ export default function OAuthDebuggerPage() {
 
   const [viewStep, setViewStep] = useState<ViewStep>('configure');
   const [selectedServerId, setSelectedServerId] = useState('');
-  const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>('pre_registered');
+  const [registrationMethod, setRegistrationMethod] =
+    useState<RegistrationMethod>('pre_registered');
   const [redirectMode, setRedirectMode] = useState<'local_callback' | 'manual'>('local_callback');
   const [showSensitiveValues, setShowSensitiveValues] = useState(true);
   const [autoOpenBrowser, setAutoOpenBrowser] = useState(true);
@@ -138,7 +164,9 @@ export default function OAuthDebuggerPage() {
   const eventsEndRef = useRef<HTMLDivElement | null>(null);
   const browserOpenedRef = useRef(false);
   const autoOpenBrowserRef = useRef(autoOpenBrowser);
-  useEffect(() => { autoOpenBrowserRef.current = autoOpenBrowser; }, [autoOpenBrowser]);
+  useEffect(() => {
+    autoOpenBrowserRef.current = autoOpenBrowser;
+  }, [autoOpenBrowser]);
 
   useEffect(() => {
     return () => {
@@ -188,7 +216,9 @@ export default function OAuthDebuggerPage() {
 
   const progressModel = useMemo(() => {
     const total = session?.stepStates.length ?? 0;
-    const completed = session?.stepStates.filter((s) => s.status === 'completed' || s.status === 'skipped').length ?? 0;
+    const completed =
+      session?.stepStates.filter((s) => s.status === 'completed' || s.status === 'skipped')
+        .length ?? 0;
     const failed = session?.stepStates.filter((s) => s.status === 'failed').length ?? 0;
     const percent = total > 0 ? Math.round(((completed + failed) / total) * 100) : 0;
     return { total, completed, failed, percent };
@@ -207,7 +237,8 @@ export default function OAuthDebuggerPage() {
       response?: OAuthDebuggerSessionView['network'][number];
     }> = [];
 
-    const requestKey = (e: OAuthDebuggerSessionView['network'][number]) => `${e.stepId}::${e.label}::${e.url}`;
+    const requestKey = (e: OAuthDebuggerSessionView['network'][number]) =>
+      `${e.stepId}::${e.label}::${e.url}`;
 
     for (const exchange of exchanges) {
       if (exchange.phase === 'request') {
@@ -255,14 +286,19 @@ export default function OAuthDebuggerPage() {
 
     return grouped.filter((group) => {
       if (inspectorStepFilter !== 'all' && group.stepId !== inspectorStepFilter) return false;
-      if (inspectorStatusFilter === 'error') return typeof group.response?.status === 'number' && group.response.status >= 400;
-      if (inspectorStatusFilter === 'ok') return typeof group.response?.status === 'number' && group.response.status < 400;
+      if (inspectorStatusFilter === 'error')
+        return typeof group.response?.status === 'number' && group.response.status >= 400;
+      if (inspectorStatusFilter === 'ok')
+        return typeof group.response?.status === 'number' && group.response.status < 400;
       return true;
     });
   }, [session?.network, inspectorStepFilter, inspectorStatusFilter]);
 
   const canGoRun = Boolean(sessionId);
-  const canGoReport = Boolean(session && (session.status === 'completed' || session.status === 'error' || session.status === 'stopped'));
+  const canGoReport = Boolean(
+    session &&
+      (session.status === 'completed' || session.status === 'error' || session.status === 'stopped')
+  );
   const stepNumberById = useMemo(() => {
     const mapping = new Map<string, number>();
     (session?.stepStates ?? []).forEach((stepItem, index) => {
@@ -272,7 +308,9 @@ export default function OAuthDebuggerPage() {
   }, [session?.stepStates]);
 
   const metadataSources = useMemo(() => {
-    const responseExchanges = (session?.network ?? []).filter((exchange) => exchange.phase === 'response');
+    const responseExchanges = (session?.network ?? []).filter(
+      (exchange) => exchange.phase === 'response'
+    );
     return {
       resourceMetadata: responseExchanges.find(
         (exchange) => exchange.label === 'Protected Resource Metadata'
@@ -336,14 +374,20 @@ export default function OAuthDebuggerPage() {
             ? {
                 clientId: clientId.trim(),
                 clientSecret: clientSecret.trim() || undefined,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod:
+                  tokenEndpointAuthMethod === '__default__'
+                    ? undefined
+                    : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         dcr:
           registrationMethod === 'dcr'
             ? {
                 metadata: dcrMetadata,
-                tokenEndpointAuthMethod: tokenEndpointAuthMethod === '__default__' ? undefined : tokenEndpointAuthMethod || undefined
+                tokenEndpointAuthMethod:
+                  tokenEndpointAuthMethod === '__default__'
+                    ? undefined
+                    : tokenEndpointAuthMethod || undefined
               }
             : undefined,
         cimd:
@@ -374,21 +418,27 @@ export default function OAuthDebuggerPage() {
     unsubscribeRef.current?.();
     unsubscribeRef.current = source.subscribeOAuthDebuggerSession(id, (event) => {
       setEvents((prev) => [...prev, event]);
-      const terminal = event.type === 'completed' || event.type === 'error' || event.type === 'stopped';
+      const terminal =
+        event.type === 'completed' || event.type === 'error' || event.type === 'stopped';
       if (terminal) {
         setRunning(false);
       }
-      void source.getOAuthDebuggerSession(id).then((response) => {
-        setSession(response.session);
-        if (response.session.uiHints.authorizationUrl) {
-          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${id}/authorize`);
-        }
-        if (response.session.status === 'completed') {
-          setViewStep('report');
-        }
-      }).catch(() => {
-        // ignore race while session expires/tears down
-      });
+      void source
+        .getOAuthDebuggerSession(id)
+        .then((response) => {
+          setSession(response.session);
+          if (response.session.uiHints.authorizationUrl) {
+            openAuthBrowser(
+              `${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${id}/authorize`
+            );
+          }
+          if (response.session.status === 'completed') {
+            setViewStep('report');
+          }
+        })
+        .catch(() => {
+          // ignore race while session expires/tears down
+        });
     });
   };
 
@@ -412,16 +462,21 @@ export default function OAuthDebuggerPage() {
       const started = await source.startOAuthDebuggerSession(created.sessionId);
       setSession(started.session);
       setRunning(true);
-      if (started.session.status === 'waiting_for_user' || started.session.status === 'waiting_for_browser_callback') {
+      if (
+        started.session.status === 'waiting_for_user' ||
+        started.session.status === 'waiting_for_browser_callback'
+      ) {
         setRunning(false);
         if (started.session.uiHints.authorizationUrl) {
-          openAuthBrowser(`${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${created.sessionId}/authorize`);
+          openAuthBrowser(
+            `${oauthDebuggerApiBase()}/api/oauth-debugger/sessions/${created.sessionId}/authorize`
+          );
         }
       }
     } catch (error: unknown) {
       toast({
         title: 'Could not start OAuth Debugger session',
-        description: (error instanceof Error ? error.message : String(error)),
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
@@ -449,7 +504,7 @@ export default function OAuthDebuggerPage() {
     } catch (error: unknown) {
       toast({
         title: 'Could not submit callback',
-        description: (error instanceof Error ? error.message : String(error)),
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
@@ -475,7 +530,7 @@ export default function OAuthDebuggerPage() {
     } catch (error: unknown) {
       toast({
         title: 'Could not stop session',
-        description: (error instanceof Error ? error.message : String(error)),
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
@@ -533,7 +588,7 @@ export default function OAuthDebuggerPage() {
       }
       toast({
         title: 'Export failed',
-        description: (error instanceof Error ? error.message : String(error)),
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     }
@@ -555,14 +610,17 @@ export default function OAuthDebuggerPage() {
         <div>
           <h1 className="text-2xl font-bold">OAuth Debugger</h1>
           <p className="text-sm text-muted-foreground">
-            Step-by-step OAuth flow debugging for MCP servers (latest MCP authorization draft profile).
+            Step-by-step OAuth flow debugging for MCP servers (latest MCP authorization draft
+            profile).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {STEP_LABELS.map((step) => {
             const active = viewStep === step.id;
             const allowed =
-              step.id === 'configure' || (step.id === 'run' && canGoRun) || (step.id === 'report' && canGoReport);
+              step.id === 'configure' ||
+              (step.id === 'run' && canGoRun) ||
+              (step.id === 'report' && canGoReport);
             return (
               <button
                 key={step.id}
@@ -571,7 +629,10 @@ export default function OAuthDebuggerPage() {
                 disabled={!allowed}
                 className="rounded-full"
               >
-                <Badge variant={active ? 'default' : 'outline'} className={!allowed ? 'opacity-50' : ''}>
+                <Badge
+                  variant={active ? 'default' : 'outline'}
+                  className={!allowed ? 'opacity-50' : ''}
+                >
                   {step.label}
                 </Badge>
               </button>
@@ -587,9 +648,17 @@ export default function OAuthDebuggerPage() {
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <CardTitle className="text-base">Target MCP Server</CardTitle>
-                  <CardDescription>Select one MCP server from Libraries and optionally override endpoints.</CardDescription>
+                  <CardDescription>
+                    Select one MCP server from Libraries and optionally override endpoints.
+                  </CardDescription>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => void reloadLibraries()} disabled={librariesLoading}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reloadLibraries()}
+                  disabled={librariesLoading}
+                >
                   <RefreshCw className={`mr-2 h-4 w-4 ${librariesLoading ? 'animate-spin' : ''}`} />
                   Refresh Servers
                 </Button>
@@ -599,7 +668,9 @@ export default function OAuthDebuggerPage() {
               <div className="max-w-xl space-y-2">
                 <Label>MCP Server</Label>
                 <Select value={selectedServerId} onValueChange={setSelectedServerId}>
-                  <SelectTrigger><SelectValue placeholder="Select an MCP server" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an MCP server" />
+                  </SelectTrigger>
                   <SelectContent>
                     {oauthServers.map((server) => (
                       <SelectItem key={server.id} value={server.id}>
@@ -619,29 +690,44 @@ export default function OAuthDebuggerPage() {
                 )}
                 {selectedServer && (
                   <p className="text-xs text-muted-foreground">
-                    {selectedServer.transport} · {selectedServer.url || selectedServer.command || 'No URL/command'}
+                    {selectedServer.transport} ·{' '}
+                    {selectedServer.url || selectedServer.command || 'No URL/command'}
                     {' · '}
                     <span className="text-primary">
-                      {selectedServer.oauthMode === 'dcr' ? 'DCR' : 'pre-registered'} fields pre-filled
+                      {selectedServer.oauthMode === 'dcr' ? 'DCR' : 'pre-registered'} fields
+                      pre-filled
                     </span>
                   </p>
                 )}
               </div>
-
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Client Registration Method</CardTitle>
-              <CardDescription>How your OAuth client is identified with the authorization server.</CardDescription>
+              <CardDescription>
+                How your OAuth client is identified with the authorization server.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid gap-2 md:grid-cols-3">
                 {[
-                  { id: 'pre_registered', label: 'Pre-registered client', hint: 'You already have a client_id issued by the authorization server.' },
-                  { id: 'dcr', label: 'Dynamic Client Registration', hint: 'The server issues a client_id automatically at the start of the flow (RFC 7591).' },
-                  { id: 'cimd', label: 'Client ID Metadata Document', hint: 'The client identifies itself via a hosted JSON metadata document at a public URL (RFC 9728).' }
+                  {
+                    id: 'pre_registered',
+                    label: 'Pre-registered client',
+                    hint: 'You already have a client_id issued by the authorization server.'
+                  },
+                  {
+                    id: 'dcr',
+                    label: 'Dynamic Client Registration',
+                    hint: 'The server issues a client_id automatically at the start of the flow (RFC 7591).'
+                  },
+                  {
+                    id: 'cimd',
+                    label: 'Client ID Metadata Document',
+                    hint: 'The client identifies itself via a hosted JSON metadata document at a public URL (RFC 9728).'
+                  }
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -650,7 +736,11 @@ export default function OAuthDebuggerPage() {
                     className="rounded-md border p-3 text-left"
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
+                      <div
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          registrationMethod === option.id ? 'bg-primary' : 'bg-muted-foreground/30'
+                        }`}
+                      />
                       <span className="text-sm font-medium">{option.label}</span>
                     </div>
                     <p className="mt-1 pl-5 text-xs text-muted-foreground">{option.hint}</p>
@@ -664,8 +754,13 @@ export default function OAuthDebuggerPage() {
                     Redirect mode
                     <InfoTip text="Local callback (recommended): MCP Lab automatically captures the redirect after you log in — no copy-pasting needed. Manual: you complete the browser login and then paste the final redirect URL back here." />
                   </Label>
-                  <Select value={redirectMode} onValueChange={(v) => setRedirectMode(v as 'local_callback' | 'manual')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select
+                    value={redirectMode}
+                    onValueChange={(v) => setRedirectMode(v as 'local_callback' | 'manual')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="local_callback">Local callback (recommended)</SelectItem>
                       <SelectItem value="manual">Manual paste redirect URL</SelectItem>
@@ -688,7 +783,12 @@ export default function OAuthDebuggerPage() {
                       client_secret
                       <InfoTip text="Leave empty for public clients (e.g. SPAs or mobile apps). Required for confidential clients that authenticate with the token endpoint." />
                     </Label>
-                    <Input value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} type="password" placeholder="optional" />
+                    <Input
+                      value={clientSecret}
+                      onChange={(e) => setClientSecret(e.target.value)}
+                      type="password"
+                      placeholder="optional"
+                    />
                   </div>
                 </div>
               )}
@@ -699,7 +799,11 @@ export default function OAuthDebuggerPage() {
                     CIMD URL
                     <InfoTip text="A publicly reachable URL hosting a JSON document that describes this client. The authorization server fetches it to identify the client." />
                   </Label>
-                  <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
+                  <Input
+                    value={cimdUrl}
+                    onChange={(e) => setCimdUrl(e.target.value)}
+                    placeholder="https://.../client-metadata.json"
+                  />
                 </div>
               )}
             </CardContent>
@@ -713,8 +817,15 @@ export default function OAuthDebuggerPage() {
             <CardContent className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Scopes</Label>
-                <Input value={scopesText} onChange={(e) => setScopesText(e.target.value)} placeholder="openid profile email" />
-                <p className="text-xs text-muted-foreground">Space or comma separated. Leave empty to use scopes auto-discovered from the server metadata.</p>
+                <Input
+                  value={scopesText}
+                  onChange={(e) => setScopesText(e.target.value)}
+                  placeholder="openid profile email"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Space or comma separated. Leave empty to use scopes auto-discovered from the
+                  server metadata.
+                </p>
               </div>
               <div className="flex items-center gap-2 md:col-span-2">
                 <Checkbox checked={usePkce} onCheckedChange={(v) => setUsePkce(Boolean(v))} />
@@ -724,7 +835,10 @@ export default function OAuthDebuggerPage() {
                 </Label>
               </div>
               <div className="flex items-center gap-2 md:col-span-2">
-                <Checkbox checked={autoOpenBrowser} onCheckedChange={(v) => setAutoOpenBrowser(Boolean(v))} />
+                <Checkbox
+                  checked={autoOpenBrowser}
+                  onCheckedChange={(v) => setAutoOpenBrowser(Boolean(v))}
+                />
                 <Label>Auto-open browser when authorization URL is ready</Label>
               </div>
             </CardContent>
@@ -739,17 +853,32 @@ export default function OAuthDebuggerPage() {
                     Token endpoint auth method
                     <InfoTip text="How your client authenticates when exchanging the authorization code for a token. Choose 'none' for public clients (no secret). Leave as server default if unsure." />
                   </Label>
-                  <Select value={tokenEndpointAuthMethod} onValueChange={setTokenEndpointAuthMethod}>
-                    <SelectTrigger><SelectValue placeholder="Server default (recommended)" /></SelectTrigger>
+                  <Select
+                    value={tokenEndpointAuthMethod}
+                    onValueChange={setTokenEndpointAuthMethod}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Server default (recommended)" />
+                    </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__default__">Server default (let the server decide)</SelectItem>
-                      <SelectItem value="client_secret_basic">client_secret_basic — credentials in Authorization header</SelectItem>
-                      <SelectItem value="client_secret_post">client_secret_post — credentials in request body</SelectItem>
+                      <SelectItem value="__default__">
+                        Server default (let the server decide)
+                      </SelectItem>
+                      <SelectItem value="client_secret_basic">
+                        client_secret_basic — credentials in Authorization header
+                      </SelectItem>
+                      <SelectItem value="client_secret_post">
+                        client_secret_post — credentials in request body
+                      </SelectItem>
                       <SelectItem value="none">none — public client, no secret</SelectItem>
-                      <SelectItem value="private_key_jwt">private_key_jwt — signed JWT assertion</SelectItem>
+                      <SelectItem value="private_key_jwt">
+                        private_key_jwt — signed JWT assertion
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Use "server default" unless the server requires a specific method.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use "server default" unless the server requires a specific method.
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
@@ -761,7 +890,9 @@ export default function OAuthDebuggerPage() {
                     onChange={(e) => setResource(e.target.value)}
                     placeholder="https://api.example.com"
                   />
-                  <p className="text-xs text-muted-foreground">Optional. Only needed for servers that use resource indicators.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Only needed for servers that use resource indicators.
+                  </p>
                 </div>
               </div>
 
@@ -769,14 +900,20 @@ export default function OAuthDebuggerPage() {
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1">
                     DCR metadata JSON
-                    <InfoTip text={'Extra fields for the dynamic client registration request (RFC 7591), e.g. {"client_name": "My App"}. redirect_uris and grant_types are always added automatically.'} />
+                    <InfoTip
+                      text={
+                        'Extra fields for the dynamic client registration request (RFC 7591), e.g. {"client_name": "My App"}. redirect_uris and grant_types are always added automatically.'
+                      }
+                    />
                   </Label>
                   <Textarea
                     value={dcrMetadataJson}
                     onChange={(e) => setDcrMetadataJson(e.target.value)}
                     className="min-h-32 font-mono text-xs"
                   />
-                  <p className="text-xs text-muted-foreground">Optional extra fields for the registration request body.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Optional extra fields for the registration request body.
+                  </p>
                 </div>
               )}
 
@@ -786,14 +923,19 @@ export default function OAuthDebuggerPage() {
                     Expected client_id
                     <InfoTip text="If you know what client_id the server should assign from the metadata document, enter it here for verification. Leave blank to accept whatever the server returns." />
                   </Label>
-                  <Input value={expectedClientId} onChange={(e) => setExpectedClientId(e.target.value)} placeholder="optional" />
+                  <Input
+                    value={expectedClientId}
+                    onChange={(e) => setExpectedClientId(e.target.value)}
+                    placeholder="optional"
+                  />
                 </div>
               )}
 
               <div className="rounded-md border bg-background p-3">
                 <div className="mb-1 text-sm font-medium">Endpoint overrides</div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Override specific endpoints if auto-discovery fails or you want to test against a specific URL. Leave blank to use what the server advertises.
+                  Override specific endpoints if auto-discovery fails or you want to test against a
+                  specific URL. Leave blank to use what the server advertises.
                 </p>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="space-y-1">
@@ -801,42 +943,66 @@ export default function OAuthDebuggerPage() {
                       Authorization server metadata URL
                       <InfoTip text="The /.well-known/oauth-authorization-server URL. Override if the server uses a non-standard path." />
                     </Label>
-                    <Input value={authorizationServerMetadataUrl} onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)} placeholder="https://.../.well-known/oauth-authorization-server" />
+                    <Input
+                      value={authorizationServerMetadataUrl}
+                      onChange={(e) => setAuthorizationServerMetadataUrl(e.target.value)}
+                      placeholder="https://.../.well-known/oauth-authorization-server"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       Resource server base URL
                       <InfoTip text="The MCP server's base URL used to look up its /.well-known/oauth-protected-resource metadata. Override if the server uses a different base path." />
                     </Label>
-                    <Input value={resourceBaseUrl} onChange={(e) => setResourceBaseUrl(e.target.value)} placeholder="https://resource.example.com" />
+                    <Input
+                      value={resourceBaseUrl}
+                      onChange={(e) => setResourceBaseUrl(e.target.value)}
+                      placeholder="https://resource.example.com"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       Authorization endpoint
                       <InfoTip text="The URL where users are redirected to log in and grant consent. Normally discovered automatically from the server metadata." />
                     </Label>
-                    <Input value={authorizationEndpoint} onChange={(e) => setAuthorizationEndpoint(e.target.value)} placeholder="https://.../authorize" />
+                    <Input
+                      value={authorizationEndpoint}
+                      onChange={(e) => setAuthorizationEndpoint(e.target.value)}
+                      placeholder="https://.../authorize"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       Token endpoint
                       <InfoTip text="The URL your app calls to exchange the authorization code for an access token. Normally discovered automatically." />
                     </Label>
-                    <Input value={tokenEndpoint} onChange={(e) => setTokenEndpoint(e.target.value)} placeholder="https://.../token" />
+                    <Input
+                      value={tokenEndpoint}
+                      onChange={(e) => setTokenEndpoint(e.target.value)}
+                      placeholder="https://.../token"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       Registration endpoint (DCR)
                       <InfoTip text="The URL used to dynamically register a new client (RFC 7591). Only relevant when using DCR. Override if the server doesn't advertise it in its metadata." />
                     </Label>
-                    <Input value={registrationEndpoint} onChange={(e) => setRegistrationEndpoint(e.target.value)} placeholder="https://.../register" />
+                    <Input
+                      value={registrationEndpoint}
+                      onChange={(e) => setRegistrationEndpoint(e.target.value)}
+                      placeholder="https://.../register"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       CIMD URL override
                       <InfoTip text="Override the Client ID Metadata Document URL. Use this if the server doesn't discover it automatically or you want to test with a specific metadata document." />
                     </Label>
-                    <Input value={cimdUrl} onChange={(e) => setCimdUrl(e.target.value)} placeholder="https://.../client-metadata.json" />
+                    <Input
+                      value={cimdUrl}
+                      onChange={(e) => setCimdUrl(e.target.value)}
+                      placeholder="https://.../client-metadata.json"
+                    />
                   </div>
                 </div>
               </div>
@@ -846,10 +1012,14 @@ export default function OAuthDebuggerPage() {
                 <AlertTitle>Secrets display</AlertTitle>
                 <AlertDescription className="space-y-2">
                   <p>
-                    By default, full tokens and secrets are visible in the network inspector and exports — useful for debugging but not for sharing.
+                    By default, full tokens and secrets are visible in the network inspector and
+                    exports — useful for debugging but not for sharing.
                   </p>
                   <div className="flex items-center gap-2">
-                    <Checkbox checked={!showSensitiveValues} onCheckedChange={(v) => setShowSensitiveValues(v === false)} />
+                    <Checkbox
+                      checked={!showSensitiveValues}
+                      onCheckedChange={(v) => setShowSensitiveValues(v === false)}
+                    />
                     <Label>Hide sensitive values in inspector</Label>
                   </div>
                 </AlertDescription>
@@ -869,374 +1039,449 @@ export default function OAuthDebuggerPage() {
       {viewStep === 'run' && (
         <div className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-          <Card className="xl:col-span-1 min-w-0">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base">Progress</CardTitle>
-                  <CardDescription>
-                    Visual OAuth flow guide with live session events and next-step actions.
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {session?.uiHints.authorizationUrl && authorizeLaunchHref && (
-                    <Button asChild type="button" size="sm" variant="outline">
-                      <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Open Authorization URL
-                      </a>
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void restartSession()}
-                    disabled={submitting}
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Restart
-                  </Button>
-                  {sessionId && (
-                    <Button type="button" size="sm" variant="outline" onClick={() => void stopSession()} disabled={stopping || !sessionId}>
-                      {(stopping || running) && stopping && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      <Square className="mr-2 h-4 w-4" />
-                      Stop Debug Session
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{progressModel.completed + progressModel.failed}/{progressModel.total} steps</span>
-                  <span>{progressModel.percent}%</span>
-                </div>
-                <Progress value={progressModel.percent} className="h-2" />
-              </div>
-
-              {session?.status === 'waiting_for_user' && (
-                <Card>
-                  <CardContent className="pt-4 space-y-2">
-                    <div className="text-sm font-medium">Manual callback required</div>
-                    <p className="text-xs text-muted-foreground">
-                      Open the authorization URL, complete authentication, then paste the final redirect URL here.
-                    </p>
-                    <Textarea
-                      value={manualCallbackUrl}
-                      onChange={(e) => setManualCallbackUrl(e.target.value)}
-                      placeholder="Paste the final redirect URL (with code and state)"
-                      className="min-h-24 text-xs font-mono"
-                    />
-                    <div className="flex gap-2">
-                      <Button type="button" size="sm" onClick={() => void submitManualCallback()} disabled={submitting || !manualCallbackUrl.trim()}>
-                        {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Continue
-                      </Button>
-                      {session.uiHints.authorizationUrl && authorizeLaunchHref && (
-                        <Button asChild type="button" size="sm" variant="outline">
-                          <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
-                            Open Authorization URL
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {session?.status === 'waiting_for_browser_callback' && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Waiting for browser callback</AlertTitle>
-                  <AlertDescription className="space-y-1">
-                    <p className="text-xs">
-                      Complete the authorization flow in your browser. MCP Lab is listening for the callback at:
-                    </p>
-                    <p className="text-xs font-mono break-all">{session.uiHints.callbackUrl}</p>
-                    {session.uiHints.authorizationUrl && authorizeLaunchHref && (
-                      <div className="pt-2">
-                        <Button asChild type="button" size="sm" variant="outline">
-                          <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            Open Authorization URL
-                          </a>
-                        </Button>
-                      </div>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="space-y-2">
-                {session?.stepStates.map((s) => {
-                  const stepNumber = stepNumberById.get(s.id);
-                  const captures = stepNetwork.get(s.id);
-                  const isProbeStep = s.id === STEP_ID_TOKEN_EXCHANGE || s.id === STEP_ID_RESOURCE_PROBE;
-                  const hasCapturedExchanges = Boolean(
-                    captures && (captures.requests.length > 0 || captures.responses.length > 0)
-                  );
-                  const showCapturedExchangeDetails =
-                    isProbeStep && s.status !== 'pending' && hasCapturedExchanges;
-                  return (
-                  <div key={s.id} className="rounded-md border p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex items-start gap-2">
-                        <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
-                          {stepNumber}
-                        </div>
-                        <div className="min-w-0">
-                        <div className="text-sm font-medium">{s.title}</div>
-                        <div className="text-xs text-muted-foreground">{s.description}</div>
-                        </div>
-                      </div>
-                      <Badge
-                        variant={
-                          s.status === 'failed'
-                            ? 'destructive'
-                            : s.status === 'completed'
-                              ? 'outline'
-                              : s.status === 'active'
-                                ? 'secondary'
-                                : 'outline'
-                        }
-                        className={
-                          s.status === 'completed'
-                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                            : undefined
-                        }
-                      >
-                        {s.status}
-                      </Badge>
-                    </div>
-                    {/* outcomeSummary now preserves backend-provided newlines directly. */}
-                    {s.outcomeSummary && (
-                      <p className="mt-2 text-xs text-muted-foreground break-all whitespace-pre-line">
-                        {s.outcomeSummary}
-                      </p>
-                    )}
-                    {s.id === STEP_ID_RESOLVE_TARGET_METADATA && (
-                      <details className="mt-3 rounded-md border bg-muted/20 p-3">
-                        <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-                          OAuth Metadata Sources
-                        </summary>
-                        <div className="mt-3 space-y-3">
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium">Resource Metadata</div>
-                            <p className="text-xs text-muted-foreground break-all">
-                              From {metadataSources.resourceMetadata?.url ?? 'not captured'}
-                            </p>
-                            <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                              {formatJsonForDisplay(metadataSources.resourceMetadata?.bodyText)}
-                            </pre>
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium">Authorization Server Metadata</div>
-                            <p className="text-xs text-muted-foreground break-all">
-                              From {metadataSources.authorizationServerMetadata?.url ?? 'not captured'}
-                            </p>
-                            <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                              {formatJsonForDisplay(metadataSources.authorizationServerMetadata?.bodyText)}
-                            </pre>
-                          </div>
-                        </div>
-                      </details>
-                    )}
-                    {showCapturedExchangeDetails && captures && (
-                      <details className="mt-3 rounded-md border bg-muted/20 p-3">
-                        <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
-                          Captured exchange details
-                        </summary>
-                        <div className="mt-3 space-y-3">
-                          {Array.from({
-                            length: Math.max(captures.requests.length, captures.responses.length)
-                          }).map((_, index) => {
-                            const request = captures.requests[index];
-                            const response = captures.responses[index];
-                            return (
-                              <div key={`${s.id}-exchange-${index}`} className="rounded-md border bg-background p-2">
-                                <div className="text-xs font-medium">
-                                  {request?.label ?? response?.label ?? `Exchange ${index + 1}`}
-                                </div>
-                                <p className="mt-1 text-xs text-muted-foreground break-all">
-                                  {request?.method ? `${request.method} ` : ''}{request?.url ?? response?.url ?? '-'}
-                                </p>
-                                {typeof response?.status === 'number' && (
-                                  <p className="mt-1 text-xs text-muted-foreground">HTTP {response.status}</p>
-                                )}
-                                {request?.bodyText && (
-                                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
-                                    {request.bodyText}
-                                  </pre>
-                                )}
-                                {response?.bodyText && (
-                                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
-                                    {formatJsonForDisplay(response.bodyText)}
-                                  </pre>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                )}) || (
-                  <p className="text-sm text-muted-foreground">No steps yet.</p>
-                )}
-              </div>
-
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4 xl:col-span-1 min-w-0">
-            <Card>
+            <Card className="xl:col-span-1 min-w-0">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <CardTitle className="text-base">Inspect</CardTitle>
-                    <CardDescription>Live events and network requests/responses for the OAuth flow.</CardDescription>
+                    <CardTitle className="text-base">Progress</CardTitle>
+                    <CardDescription>
+                      Visual OAuth flow guide with live session events and next-step actions.
+                    </CardDescription>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void exportReport('raw')}
-                    disabled={!sessionId || !session}
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Copy/Export Raw Trace
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {session?.uiHints.authorizationUrl && authorizeLaunchHref && (
+                      <Button asChild type="button" size="sm" variant="outline">
+                        <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Open Authorization URL
+                        </a>
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void restartSession()}
+                      disabled={submitting}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Restart
+                    </Button>
+                    {sessionId && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void stopSession()}
+                        disabled={stopping || !sessionId}
+                      >
+                        {(stopping || running) && stopping && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        <Square className="mr-2 h-4 w-4" />
+                        Stop Debug Session
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Tabs value={networkTab} onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')} className="min-w-0">
-                  <TabsList className="grid grid-cols-2">
-                    <TabsTrigger value="inspector">Network Inspector</TabsTrigger>
-                    <TabsTrigger value="events">Live Debug</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="events" className="mt-3">
-                    <div className="max-h-64 space-y-1 overflow-auto rounded-md border bg-muted/10 p-3 text-xs">
-                      {events.length === 0 ? (
-                        <p className="text-muted-foreground">No events yet.</p>
-                      ) : (
-                        events.map((event, index) => (
-                          <div key={`${event.ts}-${index}`} className="break-all">
-                            <span className="mr-2 font-mono text-muted-foreground">
-                              {new Date(event.ts).toLocaleTimeString()}
-                            </span>
-                            <Badge variant="outline" className="mr-2 text-[10px]">
-                              {event.type}
-                            </Badge>
-                            {typeof event.payload.message === 'string'
-                              ? event.payload.message
-                              : JSON.stringify(event.payload)}
-                          </div>
-                        ))
-                      )}
-                      <div ref={eventsEndRef} />
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="inspector" className="space-y-3 mt-3">
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Filter by step</Label>
-                        <Select value={inspectorStepFilter} onValueChange={setInspectorStepFilter}>
-                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All steps</SelectItem>
-                            {(session?.stepStates ?? []).map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {stepNumberById.get(s.id)}. {s.title}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Filter by status</Label>
-                        <Select value={inspectorStatusFilter} onValueChange={setInspectorStatusFilter}>
-                          <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="ok">Successful responses</SelectItem>
-                            <SelectItem value="error">Error responses</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {progressModel.completed + progressModel.failed}/{progressModel.total} steps
+                    </span>
+                    <span>{progressModel.percent}%</span>
+                  </div>
+                  <Progress value={progressModel.percent} className="h-2" />
+                </div>
 
-                    <div className="max-h-[34rem] min-w-0 space-y-2 overflow-auto">
-                      {filteredNetwork.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No network exchanges captured yet.</p>
-                      ) : (
-                        filteredNetwork.map((exchange) => (
-                          <details key={exchange.key} className="rounded-md border p-3">
-                            <summary className="cursor-pointer list-none">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0 flex items-start gap-2">
-                                  <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
-                                    {stepNumberById.get(exchange.stepId)}
-                                  </div>
-                                  <div className="min-w-0">
-                                  <div className="text-sm font-medium">{exchange.label}</div>
-                                  <div className="text-xs text-muted-foreground break-all">
-                                    {exchange.method ? `${exchange.method} ` : ''}{exchange.url}
-                                  </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline">request</Badge>
-                                  <Badge variant="outline">response</Badge>
-                                  {typeof exchange.response?.status === 'number' && (
-                                    <Badge variant={exchange.response.status >= 400 ? 'destructive' : 'secondary'}>
-                                      {exchange.response.status}
-                                    </Badge>
-                                  )}
-                                </div>
+                {session?.status === 'waiting_for_user' && (
+                  <Card>
+                    <CardContent className="pt-4 space-y-2">
+                      <div className="text-sm font-medium">Manual callback required</div>
+                      <p className="text-xs text-muted-foreground">
+                        Open the authorization URL, complete authentication, then paste the final
+                        redirect URL here.
+                      </p>
+                      <Textarea
+                        value={manualCallbackUrl}
+                        onChange={(e) => setManualCallbackUrl(e.target.value)}
+                        placeholder="Paste the final redirect URL (with code and state)"
+                        className="min-h-24 text-xs font-mono"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void submitManualCallback()}
+                          disabled={submitting || !manualCallbackUrl.trim()}
+                        >
+                          {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Continue
+                        </Button>
+                        {session.uiHints.authorizationUrl && authorizeLaunchHref && (
+                          <Button asChild type="button" size="sm" variant="outline">
+                            <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                              Open Authorization URL
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {session?.status === 'waiting_for_browser_callback' && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Waiting for browser callback</AlertTitle>
+                    <AlertDescription className="space-y-1">
+                      <p className="text-xs">
+                        Complete the authorization flow in your browser. MCP Lab is listening for
+                        the callback at:
+                      </p>
+                      <p className="text-xs font-mono break-all">{session.uiHints.callbackUrl}</p>
+                      {session.uiHints.authorizationUrl && authorizeLaunchHref && (
+                        <div className="pt-2">
+                          <Button asChild type="button" size="sm" variant="outline">
+                            <a href={authorizeLaunchHref} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              Open Authorization URL
+                            </a>
+                          </Button>
+                        </div>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-2">
+                  {session?.stepStates.map((s) => {
+                    const stepNumber = stepNumberById.get(s.id);
+                    const captures = stepNetwork.get(s.id);
+                    const isProbeStep =
+                      s.id === STEP_ID_TOKEN_EXCHANGE || s.id === STEP_ID_RESOURCE_PROBE;
+                    const hasCapturedExchanges = Boolean(
+                      captures && (captures.requests.length > 0 || captures.responses.length > 0)
+                    );
+                    const showCapturedExchangeDetails =
+                      isProbeStep && s.status !== 'pending' && hasCapturedExchanges;
+                    return (
+                      <div key={s.id} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex items-start gap-2">
+                            <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
+                              {stepNumber}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="inline-flex items-center gap-1 text-sm font-medium">
+                                <span>{s.title}</span>
+                                {s.status === 'completed' && (
+                                  <CheckCircle2
+                                    className="h-4 w-4 shrink-0 text-emerald-600"
+                                    aria-hidden="true"
+                                  />
+                                )}
                               </div>
+                              <div className="text-xs text-muted-foreground">{s.description}</div>
+                            </div>
+                          </div>
+                          <Badge
+                            variant={
+                              s.status === 'failed'
+                                ? 'destructive'
+                                : s.status === 'completed'
+                                ? 'outline'
+                                : s.status === 'active'
+                                ? 'secondary'
+                                : 'outline'
+                            }
+                            className={
+                              s.status === 'completed'
+                                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                                : undefined
+                            }
+                          >
+                            {s.status}
+                          </Badge>
+                        </div>
+                        {/* outcomeSummary now preserves backend-provided newlines directly. */}
+                        {s.outcomeSummary && (
+                          <p className="mt-2 text-xs text-muted-foreground break-all whitespace-pre-line">
+                            {s.outcomeSummary}
+                          </p>
+                        )}
+                        {s.id === STEP_ID_RESOLVE_TARGET_METADATA && (
+                          <details className="mt-3 rounded-md border bg-muted/20 p-3">
+                            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                              OAuth Metadata Sources
                             </summary>
                             <div className="mt-3 space-y-3">
-                              <div>
-                                <div className="mb-1 text-xs font-medium">Request Headers</div>
-                                <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.request?.headers ?? {}, null, 2)}</pre>
+                              <div className="space-y-1">
+                                <div className="text-xs font-medium">Resource Metadata</div>
+                                <p className="text-xs text-muted-foreground break-all">
+                                  From {metadataSources.resourceMetadata?.url ?? 'not captured'}
+                                </p>
+                                <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                                  {formatJsonForDisplay(metadataSources.resourceMetadata?.bodyText)}
+                                </pre>
                               </div>
-                              {exchange.request?.bodyText && (
-                                <div>
-                                  <div className="mb-1 text-xs font-medium">Request Body</div>
-                                  <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{exchange.request.bodyText}</pre>
+                              <div className="space-y-1">
+                                <div className="text-xs font-medium">
+                                  Authorization Server Metadata
                                 </div>
-                              )}
-                              <div>
-                                <div className="mb-1 text-xs font-medium">Response Headers</div>
-                                <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{JSON.stringify(exchange.response?.headers ?? {}, null, 2)}</pre>
-                              </div>
-                              {exchange.response?.bodyText && (
-                                <div>
-                                  <div className="mb-1 text-xs font-medium">Response Body</div>
-                                  <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{exchange.response.bodyText}</pre>
-                                </div>
-                              )}
-                              <div className="flex gap-2">
-                                <Button type="button" size="sm" variant="outline" onClick={() => void copyText(JSON.stringify(exchange, null, 2))}>
-                                  <Copy className="mr-2 h-4 w-4" />
-                                  Copy JSON
-                                </Button>
+                                <p className="text-xs text-muted-foreground break-all">
+                                  From{' '}
+                                  {metadataSources.authorizationServerMetadata?.url ??
+                                    'not captured'}
+                                </p>
+                                <pre className="max-h-56 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                                  {formatJsonForDisplay(
+                                    metadataSources.authorizationServerMetadata?.bodyText
+                                  )}
+                                </pre>
                               </div>
                             </div>
                           </details>
-                        ))
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                        )}
+                        {showCapturedExchangeDetails && captures && (
+                          <details className="mt-3 rounded-md border bg-muted/20 p-3">
+                            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                              Captured exchange details
+                            </summary>
+                            <div className="mt-3 space-y-3">
+                              {Array.from({
+                                length: Math.max(
+                                  captures.requests.length,
+                                  captures.responses.length
+                                )
+                              }).map((_, index) => {
+                                const request = captures.requests[index];
+                                const response = captures.responses[index];
+                                return (
+                                  <div
+                                    key={`${s.id}-exchange-${index}`}
+                                    className="rounded-md border bg-background p-2"
+                                  >
+                                    <div className="text-xs font-medium">
+                                      {request?.label ?? response?.label ?? `Exchange ${index + 1}`}
+                                    </div>
+                                    <p className="mt-1 text-xs text-muted-foreground break-all">
+                                      {request?.method ? `${request.method} ` : ''}
+                                      {request?.url ?? response?.url ?? '-'}
+                                    </p>
+                                    {typeof response?.status === 'number' && (
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        HTTP {response.status}
+                                      </p>
+                                    )}
+                                    {request?.bodyText && (
+                                      <pre className="mt-2 max-h-40 overflow-auto rounded bg-muted p-2 text-xs">
+                                        {request.bodyText}
+                                      </pre>
+                                    )}
+                                    {response?.bodyText && (
+                                      <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+                                        {formatJsonForDisplay(response.bodyText)}
+                                      </pre>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    );
+                  }) || <p className="text-sm text-muted-foreground">No steps yet.</p>}
+                </div>
               </CardContent>
             </Card>
 
-          </div>
-          </div>
+            <div className="space-y-4 xl:col-span-1 min-w-0">
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base">Inspect</CardTitle>
+                      <CardDescription>
+                        Live events and network requests/responses for the OAuth flow.
+                      </CardDescription>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void exportReport('raw')}
+                      disabled={!sessionId || !session}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Copy/Export Raw Trace
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Tabs
+                    value={networkTab}
+                    onValueChange={(v) => setNetworkTab(v as 'events' | 'inspector')}
+                    className="min-w-0"
+                  >
+                    <TabsList className="grid grid-cols-2">
+                      <TabsTrigger value="inspector">Network Inspector</TabsTrigger>
+                      <TabsTrigger value="events">Live Debug</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="events" className="mt-3">
+                      <div className="max-h-64 space-y-1 overflow-auto rounded-md border bg-muted/10 p-3 text-xs">
+                        {events.length === 0 ? (
+                          <p className="text-muted-foreground">No events yet.</p>
+                        ) : (
+                          events.map((event, index) => (
+                            <div key={`${event.ts}-${index}`} className="break-all">
+                              <span className="mr-2 font-mono text-muted-foreground">
+                                {new Date(event.ts).toLocaleTimeString()}
+                              </span>
+                              <Badge variant="outline" className="mr-2 text-[10px]">
+                                {event.type}
+                              </Badge>
+                              {typeof event.payload.message === 'string'
+                                ? event.payload.message
+                                : JSON.stringify(event.payload)}
+                            </div>
+                          ))
+                        )}
+                        <div ref={eventsEndRef} />
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="inspector" className="space-y-3 mt-3">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Filter by step</Label>
+                          <Select
+                            value={inspectorStepFilter}
+                            onValueChange={setInspectorStepFilter}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All steps</SelectItem>
+                              {(session?.stepStates ?? []).map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {stepNumberById.get(s.id)}. {s.title}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Filter by status</Label>
+                          <Select
+                            value={inspectorStatusFilter}
+                            onValueChange={setInspectorStatusFilter}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All</SelectItem>
+                              <SelectItem value="ok">Successful responses</SelectItem>
+                              <SelectItem value="error">Error responses</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
 
+                      <div className="max-h-[34rem] min-w-0 space-y-2 overflow-auto">
+                        {filteredNetwork.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No network exchanges captured yet.
+                          </p>
+                        ) : (
+                          filteredNetwork.map((exchange) => (
+                            <details key={exchange.key} className="rounded-md border p-3">
+                              <summary className="cursor-pointer list-none">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0 flex items-start gap-2">
+                                    <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted text-xs font-semibold">
+                                      {stepNumberById.get(exchange.stepId)}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium">{exchange.label}</div>
+                                      <div className="text-xs text-muted-foreground break-all">
+                                        {exchange.method ? `${exchange.method} ` : ''}
+                                        {exchange.url}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline">request</Badge>
+                                    <Badge variant="outline">response</Badge>
+                                    {typeof exchange.response?.status === 'number' && (
+                                      <Badge
+                                        variant={
+                                          exchange.response.status >= 400
+                                            ? 'destructive'
+                                            : 'secondary'
+                                        }
+                                      >
+                                        {exchange.response.status}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </summary>
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <div className="mb-1 text-xs font-medium">Request Headers</div>
+                                  <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
+                                    {JSON.stringify(exchange.request?.headers ?? {}, null, 2)}
+                                  </pre>
+                                </div>
+                                {exchange.request?.bodyText && (
+                                  <div>
+                                    <div className="mb-1 text-xs font-medium">Request Body</div>
+                                    <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
+                                      {exchange.request.bodyText}
+                                    </pre>
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="mb-1 text-xs font-medium">Response Headers</div>
+                                  <pre className="max-h-40 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
+                                    {JSON.stringify(exchange.response?.headers ?? {}, null, 2)}
+                                  </pre>
+                                </div>
+                                {exchange.response?.bodyText && (
+                                  <div>
+                                    <div className="mb-1 text-xs font-medium">Response Body</div>
+                                    <pre className="max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
+                                      {exchange.response.bodyText}
+                                    </pre>
+                                  </div>
+                                )}
+                                <div className="flex gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void copyText(JSON.stringify(exchange, null, 2))}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy JSON
+                                  </Button>
+                                </div>
+                              </div>
+                            </details>
+                          ))
+                        )}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1250,18 +1495,38 @@ export default function OAuthDebuggerPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => setViewStep('configure')}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setViewStep('configure')}
+              >
                 Back to Configure
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => void exportReport('json')}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void exportReport('json')}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Export JSON
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => void exportReport('markdown')}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void exportReport('markdown')}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Export Markdown
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => void exportReport('raw')}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void exportReport('raw')}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 Copy/Export Raw Trace
               </Button>
@@ -1279,10 +1544,30 @@ export default function OAuthDebuggerPage() {
           </Alert>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Status</div><div className="text-lg font-semibold">{session.status}</div></CardContent></Card>
-            <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Requests</div><div className="text-lg font-semibold">{session.networkSummary.requestCount}</div></CardContent></Card>
-            <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Network errors</div><div className="text-lg font-semibold">{session.networkSummary.errorCount}</div></CardContent></Card>
-            <Card><CardContent className="pt-4"><div className="text-xs text-muted-foreground">Validation findings</div><div className="text-lg font-semibold">{session.validations.length}</div></CardContent></Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Status</div>
+                <div className="text-lg font-semibold">{session.status}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Requests</div>
+                <div className="text-lg font-semibold">{session.networkSummary.requestCount}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Network errors</div>
+                <div className="text-lg font-semibold">{session.networkSummary.errorCount}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="text-xs text-muted-foreground">Validation findings</div>
+                <div className="text-lg font-semibold">{session.validations.length}</div>
+              </CardContent>
+            </Card>
           </div>
 
           <Card>
@@ -1290,22 +1575,46 @@ export default function OAuthDebuggerPage() {
               <CardTitle className="text-base">Key values</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-2">
-              <div><Label className="text-xs">Issuer</Label><p className="text-sm break-all">{session.summary?.issuer || '-'}</p></div>
-              <div><Label className="text-xs">Client ID</Label><p className="text-sm break-all">{session.summary?.clientId || '-'}</p></div>
-              <div><Label className="text-xs">Redirect URI</Label><p className="text-sm break-all">{session.summary?.redirectUri || '-'}</p></div>
-              <div><Label className="text-xs">Token endpoint status</Label><p className="text-sm">{session.summary?.tokenEndpointStatus ?? '-'}</p></div>
-              <div><Label className="text-xs">Token type</Label><p className="text-sm">{session.summary?.tokenType || '-'}</p></div>
-              <div><Label className="text-xs">Scopes granted</Label><p className="text-sm break-all">{(session.summary?.grantedScopes ?? []).join(', ') || '-'}</p></div>
+              <div>
+                <Label className="text-xs">Issuer</Label>
+                <p className="text-sm break-all">{session.summary?.issuer || '-'}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Client ID</Label>
+                <p className="text-sm break-all">{session.summary?.clientId || '-'}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Redirect URI</Label>
+                <p className="text-sm break-all">{session.summary?.redirectUri || '-'}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Token endpoint status</Label>
+                <p className="text-sm">{session.summary?.tokenEndpointStatus ?? '-'}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Token type</Label>
+                <p className="text-sm">{session.summary?.tokenType || '-'}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Scopes granted</Label>
+                <p className="text-sm break-all">
+                  {(session.summary?.grantedScopes ?? []).join(', ') || '-'}
+                </p>
+              </div>
               <div>
                 <Label className="text-xs">Token validity</Label>
                 <p className="text-sm">
                   {typeof session.summary?.accessTokenValidForSeconds === 'number'
                     ? `${formatDurationShort(session.summary.accessTokenValidForSeconds)} remaining`
                     : typeof session.summary?.accessTokenExpiresInSeconds === 'number'
-                    ? `${formatDurationShort(session.summary.accessTokenExpiresInSeconds)} from issuance`
+                    ? `${formatDurationShort(
+                        session.summary.accessTokenExpiresInSeconds
+                      )} from issuance`
                     : 'No expiry advertised by token endpoint'}
                   {session.summary?.accessTokenExpiresAt
-                    ? ` (until ${new Date(session.summary.accessTokenExpiresAt).toLocaleTimeString()})`
+                    ? ` (until ${new Date(
+                        session.summary.accessTokenExpiresAt
+                      ).toLocaleTimeString()})`
                     : ''}
                 </p>
                 <p className="text-xs text-muted-foreground">
@@ -1343,7 +1652,10 @@ export default function OAuthDebuggerPage() {
                       Copy token
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Visible because "Hide sensitive values" is off. Use this token with the CLI via <code className="font-mono">--oauth-token</code>.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Visible because "Hide sensitive values" is off. Use this token with the CLI via{' '}
+                    <code className="font-mono">--oauth-token</code>.
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -1368,10 +1680,14 @@ export default function OAuthDebuggerPage() {
                       </div>
                       <Badge variant={severityBadge(v.severity)}>{v.severity}</Badge>
                     </div>
-                    <p className="text-sm"><span className="font-bold">Finding:</span> {v.detail}</p>
+                    <p className="text-sm">
+                      <span className="font-bold">Finding:</span> {v.detail}
+                    </p>
                     {v.recommendation && (
                       <div className="mt-2 rounded-md border px-2.5 py-2 text-xs">
-                        <div className="mb-1 font-medium text-muted-foreground">Suggested improvement</div>
+                        <div className="mb-1 font-medium text-muted-foreground">
+                          Suggested improvement
+                        </div>
                         <p>{v.recommendation}</p>
                       </div>
                     )}
@@ -1380,7 +1696,12 @@ export default function OAuthDebuggerPage() {
                       {v.specReference && (
                         <>
                           {' · '}
-                          <a href={v.specReference} target="_blank" rel="noreferrer" className="text-primary underline">
+                          <a
+                            href={v.specReference}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary underline"
+                          >
                             Spec reference
                           </a>
                         </>
@@ -1391,7 +1712,6 @@ export default function OAuthDebuggerPage() {
               )}
             </CardContent>
           </Card>
-
         </div>
       )}
     </div>
