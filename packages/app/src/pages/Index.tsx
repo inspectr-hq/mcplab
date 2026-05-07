@@ -152,8 +152,8 @@ const Dashboard = () => {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
+                  <TableHead className="text-right">
+                    <button type="button" className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
                       Pass Rate
                       {sortBy === "passRate" ? (
                         sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
@@ -204,7 +204,9 @@ const Dashboard = () => {
                         {new Date(run.timestamp).toLocaleString()}
                       </div>
                     </TableCell>
-                    <TableCell><PassRateBadge rate={run.overallPassRate} /></TableCell>
+                    <TableCell className="text-right">
+                      <PassRateBadge rate={run.overallPassRate} />
+                    </TableCell>
                     <TableCell className="text-right font-mono text-sm">{run.totalScenarios}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{run.avgToolCalls.toFixed(0)}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{formatToolTokenTotal(run)}</TableCell>

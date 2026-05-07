@@ -644,8 +644,8 @@ const Compare = () => {
                       {sortIcon("timestamp")}
                     </button>
                   </TableHead>
-                  <TableHead>
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
+                  <TableHead className="text-right">
+                    <button type="button" className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
                       Pass Rate
                       {sortIcon("passRate")}
                     </button>
@@ -696,7 +696,9 @@ const Compare = () => {
                         {new Date(r.timestamp).toLocaleString()}
                       </div>
                     </TableCell>
-                    <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
+                    <TableCell className="text-right">
+                      <PassRateBadge rate={r.overallPassRate} />
+                    </TableCell>
                     <TableCell className="text-right font-mono text-sm">{r.totalScenarios}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}
@@ -772,8 +774,12 @@ const Compare = () => {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium">Pass Rate</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id}><PassRateBadge rate={r.overallPassRate} /></TableCell>)}
+                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="text-right">
+                        <PassRateBadge rate={r.overallPassRate} />
+                      </TableCell>
+                    ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Total Runs</TableCell>
@@ -810,7 +816,11 @@ const Compare = () => {
                       <TableCell className="font-medium text-sm">{scenarioLabelById.get(sid) ?? sid}</TableCell>
                       {selectedRuns.map((r) => {
                         const sc = r.scenarios.find((s) => s.scenarioId === sid);
-                        return <TableCell key={r.id}>{sc ? <PassRateBadge rate={sc.passRate} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>;
+                        return (
+                          <TableCell key={r.id} className="text-right">
+                            {sc ? <PassRateBadge rate={sc.passRate} /> : <span className="text-xs text-muted-foreground">—</span>}
+                          </TableCell>
+                        );
                       })}
                     </TableRow>
                   ))}
@@ -897,9 +907,9 @@ const Compare = () => {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium">Pass Rate</TableCell>
+                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
                     {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId}>
+                      <TableCell key={summary.agentId} className="text-right">
                         <PassRateBadge rate={summary.passRate} />
                       </TableCell>
                     ))}

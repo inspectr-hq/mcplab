@@ -671,10 +671,10 @@ const Results = () => {
                       {sortIcon("timestamp")}
                     </button>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="text-right">
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
                       onClick={() => toggleSort("passRate")}
                     >
                       Pass Rate
@@ -766,7 +766,7 @@ const Results = () => {
                           {new Date(item.run.timestamp).toLocaleString()}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <PassRateBadge rate={item.run.overallPassRate} />
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">{item.run.totalScenarios}</TableCell>
