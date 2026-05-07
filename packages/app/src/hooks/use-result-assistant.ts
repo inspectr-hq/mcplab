@@ -142,7 +142,11 @@ export function useResultAssistant(params: {
         if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
         await syncAndContinueAssistantTurn(sessionId, response);
       } catch (error: unknown) {
-        if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+        if (
+          isAbortError(error) ||
+          controller.signal.aborted ||
+          assistantTurnRef.current?.id !== turnId
+        )
           return;
         if (!isSessionNotFoundError(error)) throw error;
         const recreated =
@@ -167,7 +171,11 @@ export function useResultAssistant(params: {
         await syncAndContinueAssistantTurn(recoveredSessionId, retry);
       }
     } catch (error: unknown) {
-      if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+      if (
+        isAbortError(error) ||
+        controller.signal.aborted ||
+        assistantTurnRef.current?.id !== turnId
+      )
         return;
       setAssistantMessages((prev) => prev.filter((m) => m.id !== optimisticMessageId));
       toast({

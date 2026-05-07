@@ -322,7 +322,11 @@ export function ScenarioAssistantDialog({
       if (controller.signal.aborted || assistantTurnRef.current?.id !== turnId) return;
       syncScenarioAssistantSession(resp.session);
     } catch (error: unknown) {
-      if (isAbortError(error) || controller.signal.aborted || assistantTurnRef.current?.id !== turnId)
+      if (
+        isAbortError(error) ||
+        controller.signal.aborted ||
+        assistantTurnRef.current?.id !== turnId
+      )
         return;
       setSession((prev) =>
         prev

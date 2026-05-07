@@ -348,13 +348,16 @@ export const workspaceApiClient = {
     request<ProviderModelsResponse>(
       `/api/providers/models?provider=${encodeURIComponent(provider)}`
     ),
-  createScenarioAssistantSession: (params: {
-    configId?: string;
-    configPath?: string;
-    scenarioId: string;
-    selectedAssistantAgentName: string;
-    context: unknown;
-  }, signal?: AbortSignal) =>
+  createScenarioAssistantSession: (
+    params: {
+      configId?: string;
+      configPath?: string;
+      scenarioId: string;
+      selectedAssistantAgentName: string;
+      context: unknown;
+    },
+    signal?: AbortSignal
+  ) =>
     request<{ sessionId: string; session: ScenarioAssistantSessionView }>(
       '/api/scenario-assistant/sessions',
       {

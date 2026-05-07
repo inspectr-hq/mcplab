@@ -129,8 +129,9 @@ describe('useResultAssistant SSE updates', () => {
         sessionId: 'ras-1',
         session: makeSession()
       }),
-      sendResultAssistantMessage: vi.fn().mockImplementation(
-        async (_sessionId: string, _message: string, signal?: AbortSignal) => {
+      sendResultAssistantMessage: vi
+        .fn()
+        .mockImplementation(async (_sessionId: string, _message: string, signal?: AbortSignal) => {
           capturedSignal = signal;
           await new Promise<void>((_resolve, reject) => {
             signal?.addEventListener(
@@ -139,8 +140,7 @@ describe('useResultAssistant SSE updates', () => {
               { once: true }
             );
           });
-        }
-      ),
+        }),
       closeResultAssistantSession: vi.fn().mockResolvedValue(undefined),
       approveResultAssistantToolCall: vi.fn(),
       denyResultAssistantToolCall: vi.fn(),

@@ -341,13 +341,16 @@ class OpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create({
-      model: options.model,
-      messages: messages.map(toOpenAiMessage),
-      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-      temperature: options.temperature,
-      max_tokens: options.max_tokens
-    }, options.signal ? { signal: options.signal } : undefined);
+    const response = await this.client.chat.completions.create(
+      {
+        model: options.model,
+        messages: messages.map(toOpenAiMessage),
+        tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+        temperature: options.temperature,
+        max_tokens: options.max_tokens
+      },
+      options.signal ? { signal: options.signal } : undefined
+    );
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
@@ -485,13 +488,17 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.createWithModelFallback(options.model, {
-      temperature: options.temperature,
-      max_tokens: options.max_tokens ?? 1024,
-      system,
-      messages: anthroMessages,
-      tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
-    }, options.signal);
+    const response = await this.createWithModelFallback(
+      options.model,
+      {
+        temperature: options.temperature,
+        max_tokens: options.max_tokens ?? 1024,
+        system,
+        messages: anthroMessages,
+        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
+      },
+      options.signal
+    );
 
     const toolCalls: ToolCall[] = [];
     let textContent = '';
