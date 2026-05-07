@@ -735,10 +735,13 @@ export interface EvalDataSource {
     outputPath?: string;
     overwrite?: boolean;
   }) => Promise<ResultAssistantApplyReportResponse>;
-  createResultAssistantSession: (params: {
-    runId?: string;
-    scope?: 'run' | 'all_runs';
-  }, signal?: AbortSignal) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
+  createResultAssistantSession: (
+    params: {
+      runId?: string;
+      scope?: 'run' | 'all_runs';
+    },
+    signal?: AbortSignal
+  ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
   getResultAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ResultAssistantSessionView }>;
