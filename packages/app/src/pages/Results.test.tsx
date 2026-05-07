@@ -69,6 +69,21 @@ function formatDayLabel(timestamp: string) {
   });
 }
 
+function toDatetimeLocalValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    '-',
+    pad(date.getMonth() + 1),
+    '-',
+    pad(date.getDate()),
+    'T',
+    pad(date.getHours()),
+    ':',
+    pad(date.getMinutes())
+  ].join('');
+}
+
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -225,15 +240,20 @@ describe('Results', () => {
   });
 
   it('filters runs by a custom date time range', async () => {
+    const insideTimestamp = new Date('2026-03-10T10:10:00.000Z');
+    const start = new Date(insideTimestamp.getTime() - 5 * 60 * 1000);
+    const end = new Date(insideTimestamp.getTime() + 5 * 60 * 1000);
     sourceMock.listResults.mockResolvedValue([
-      makeRun('run-inside', 1200, '2026-03-10T10:10:00.000Z'),
+      makeRun('run-inside', 1200, insideTimestamp.toISOString()),
       makeRun('run-outside', 900, '2026-03-10T09:30:00.000Z')
     ]);
 
     render(
       <MemoryRouter
         initialEntries={[
-          '/results?time_filter=custom&time_start=2026-03-10T11:00&time_end=2026-03-10T11:15'
+          `/results?time_filter=custom&time_start=${toDatetimeLocalValue(
+            start
+          )}&time_end=${toDatetimeLocalValue(end)}`
         ]}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
@@ -247,8 +267,12 @@ describe('Results', () => {
     fireEvent.click(screen.getAllByRole('combobox')[1]!);
 
     await waitFor(() => {
-      expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('2026-03-10T11:00');
-      expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe('2026-03-10T11:15');
+      expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe(
+        toDatetimeLocalValue(start)
+      );
+      expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe(
+        toDatetimeLocalValue(end)
+      );
       const runLinks = screen
         .getAllByRole('link')
         .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
