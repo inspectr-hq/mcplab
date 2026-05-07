@@ -61,6 +61,11 @@ type TimeFilterQueryState = {
   start: string;
   end: string;
 };
+type ResultTableItem =
+  | { type: "day-separator"; dayKey: string; dayLabel: string }
+  | { type: "run"; run: EvalResult };
+
+const RESULTS_TABLE_COLUMN_COUNT = 8;
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
   { value: "15min", label: "Last 15min", durationMs: 15 * 60 * 1000 },
@@ -80,6 +85,26 @@ function formatLocalDateTime(value: string) {
   const parsed = parseLocalDateTime(value);
   if (!parsed) return "";
   return parsed.toLocaleString();
+}
+
+function getLocalDayKey(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return value;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalDayLabel(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return "Unknown day";
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
 }
 
 function isTimeFilterMode(value: string | null): value is TimeFilterMode {
@@ -351,6 +376,26 @@ const Results = () => {
     });
     return next;
   }, [filteredResults, sortBy, sortDir]);
+
+  const sortedWithDaySeparators = useMemo(() => {
+    const items: ResultTableItem[] = [];
+    let currentDayKey: string | null = null;
+
+    for (const run of sorted) {
+      const dayKey = getLocalDayKey(run.timestamp);
+      if (dayKey !== currentDayKey) {
+        items.push({
+          type: "day-separator",
+          dayKey,
+          dayLabel: formatLocalDayLabel(run.timestamp)
+        });
+        currentDayKey = dayKey;
+      }
+      items.push({ type: "run", run });
+    }
+
+    return items;
+  }, [sorted]);
 
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -670,85 +715,99 @@ const Results = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <Link to={`/results/${r.id}`} className="font-mono text-xs text-primary hover:underline">
-                          {r.id}
-                        </Link>
-                        {r.runNote ? (
-                          <div className="text-[11px] text-muted-foreground break-words">Note: {r.runNote}</div>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
-                      {(() => {
-                        const scope = runScopesById.get(r.id) ?? {
-                          scenarioCount: 0,
-                          agentCount: 0,
-                          scopePreview: "n/a",
-                          modelSummary: ""
-                        };
-                        return (
-                          <div className="space-y-0.5">
-                            <div>
-                              Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} ·{" "}
-                              {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
-                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
+                {sortedWithDaySeparators.map((item, index) =>
+                  item.type === "day-separator" ? (
+                    <TableRow key={`day-${item.dayKey}-${index}`} className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={RESULTS_TABLE_COLUMN_COUNT} className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-border/70" />
+                          <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {item.dayLabel}
+                          </span>
+                          <div className="h-px flex-1 bg-border/70" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow key={item.run.id}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Link to={`/results/${item.run.id}`} className="font-mono text-xs text-primary hover:underline">
+                            {item.run.id}
+                          </Link>
+                          {item.run.runNote ? (
+                            <div className="text-[11px] text-muted-foreground break-words">Note: {item.run.runNote}</div>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-[11px] text-muted-foreground">
+                        {(() => {
+                          const scope = runScopesById.get(item.run.id) ?? {
+                            scenarioCount: 0,
+                            agentCount: 0,
+                            scopePreview: "n/a",
+                            modelSummary: ""
+                          };
+                          return (
+                            <div className="space-y-0.5">
+                              <div>
+                                Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} ·{" "}
+                                {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
+                                {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
+                              </div>
+                              <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
-                          </div>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {new Date(r.timestamp).toLocaleString()}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <PassRateBadge rate={r.overallPassRate} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{r.totalScenarios}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{r.avgToolCalls.toFixed(0)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{formatToolTokenTotal(r)}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link to={`/results/${r.id}`}>
-                              <Eye className="mr-2 h-3.5 w-3.5" />
-                              View
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Download className="mr-2 h-3.5 w-3.5" />
-                            Export JSON
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              const active = document.activeElement;
-                              if (active instanceof HTMLElement) active.blur();
-                              setPendingDeleteRunId(r.id);
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(item.run.timestamp).toLocaleString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <PassRateBadge rate={item.run.overallPassRate} />
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{item.run.totalScenarios}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">{item.run.avgToolCalls.toFixed(0)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">{formatToolTokenTotal(item.run)}</TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link to={`/results/${item.run.id}`}>
+                                <Eye className="mr-2 h-3.5 w-3.5" />
+                                View
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <Download className="mr-2 h-3.5 w-3.5" />
+                              Export JSON
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                const active = document.activeElement;
+                                if (active instanceof HTMLElement) active.blur();
+                                setPendingDeleteRunId(item.run.id);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  )
+                )}
               </TableBody>
             </Table>
           </CardContent>

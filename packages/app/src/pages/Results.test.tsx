@@ -56,6 +56,15 @@ function makeRun(id: string, tokenTotal: number | null, timestamp = "2026-03-10T
   };
 }
 
+function formatDayLabel(timestamp: string) {
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
 describe("Results", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -141,6 +150,25 @@ describe("Results", () => {
       const runLinks = screen.getAllByRole("link").filter((link) => link.getAttribute("href")?.startsWith("/results/run-"));
       expect(runLinks.map((link) => link.textContent)).toEqual(["run-high", "run-low", "run-null"]);
     });
+  });
+
+  it("shows day separators between runs from different days", async () => {
+    sourceMock.listResults.mockResolvedValue([
+      makeRun("run-new", 1200, "2026-03-10T10:10:00.000Z"),
+      makeRun("run-old", 900, "2026-03-09T10:10:00.000Z")
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/results"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("run-new");
+    expect(screen.getByText(formatDayLabel("2026-03-10T10:10:00.000Z"))).toBeInTheDocument();
+    expect(screen.getByText(formatDayLabel("2026-03-09T10:10:00.000Z"))).toBeInTheDocument();
   });
 
   it("filters runs by the Last 15min preset", async () => {
