@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.11.1
+
+### Patch Changes
+
+- feat: Cancel running prompt
+
 ## 1.11.0
 
 ### Minor Changes

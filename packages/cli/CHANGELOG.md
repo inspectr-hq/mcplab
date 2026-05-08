@@ -1,5 +1,19 @@
 # @inspectr/mcplab
 
+## 1.14.3
+
+### Patch Changes
+
+- feat: add date time filter for results
+- feat: add day separator for results
+- feat: Cancel running prompt
+- fix: Align pass rate to the right
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.11.1
+  - @inspectr/mcplab-mcp-server@1.3.2
+  - @inspectr/mcplab-reporting@1.1.12
+
 ## 1.14.2
 
 ### Patch Changes
