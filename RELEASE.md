@@ -58,6 +58,12 @@ npm run release
 
 This runs `npm run build` followed by `changeset publish`, which publishes all packages with updated versions to npm.
 
+But sure to push the tags to GitHub first:
+
+```bash
+git push && git push --tags
+```
+
 ### Publish individual packages (alternative)
 
 ```bash
