@@ -1,11 +1,17 @@
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { ServerConfig } from "@/types/eval";
+import { useState } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { ServerConfig } from '@/types/eval';
 
 interface ServerFormProps {
   servers: ServerConfig[];
@@ -18,9 +24,9 @@ interface ServerFormProps {
 
 const emptyServer = (): ServerConfig => ({
   id: `srv-${Date.now()}`,
-  name: "",
-  transport: "stdio",
-  authType: "none",
+  name: '',
+  transport: 'stdio',
+  authType: 'none'
 });
 
 export function ServerForm({
@@ -47,10 +53,10 @@ export function ServerForm({
     onChange(next);
   };
 
-  const setAuthType = (index: number, nextType: ServerConfig["authType"]) => {
+  const setAuthType = (index: number, nextType: ServerConfig['authType']) => {
     const current = servers[index];
     if (!current) return;
-    if (nextType !== "oauth2") {
+    if (nextType !== 'oauth2') {
       setAdvancedOauthOpen((prev) => {
         const next = new Set(prev);
         next.delete(index);
@@ -59,13 +65,11 @@ export function ServerForm({
     }
     update(index, {
       authType: nextType,
-      ...(nextType !== "bearer" && nextType !== "api-key"
-        ? { authValue: undefined }
-        : {}),
-      ...(nextType !== "api-key"
+      ...(nextType !== 'bearer' && nextType !== 'api-key' ? { authValue: undefined } : {}),
+      ...(nextType !== 'api-key'
         ? { apiKeyHeaderName: undefined }
-        : { apiKeyHeaderName: current.apiKeyHeaderName || "X-API-Key" }),
-      ...(nextType !== "oauth2"
+        : { apiKeyHeaderName: current.apiKeyHeaderName || 'X-API-Key' }),
+      ...(nextType !== 'oauth2'
         ? {
             oauthClientId: undefined,
             oauthClientSecret: undefined,
@@ -73,10 +77,10 @@ export function ServerForm({
             oauthScope: undefined,
             oauthMode: undefined,
             oauthAuthorizationUrl: undefined,
-            oauthTokenEndpoint: undefined,
+            oauthTokenEndpoint: undefined
           }
         : {
-            oauthRedirectUrl: current.oauthRedirectUrl || undefined,
+            oauthRedirectUrl: current.oauthRedirectUrl || undefined
           })
     });
   };
@@ -101,7 +105,8 @@ export function ServerForm({
           <h3 className="text-sm font-semibold">Servers</h3>
           {!readOnly && allowAdd && (
             <Button type="button" variant="outline" size="sm" onClick={add}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />Add Server
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add Server
             </Button>
           )}
         </div>
@@ -111,7 +116,13 @@ export function ServerForm({
           <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm font-medium">{srv.name || `Server ${i + 1}`}</CardTitle>
             {!readOnly && allowStructureEdits && (
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => remove(i)}
+              >
                 <Trash2 className="h-3.5 w-3.5 text-destructive" />
               </Button>
             )}
@@ -120,12 +131,23 @@ export function ServerForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Name</Label>
-                <Input value={srv.name} onChange={(e) => update(i, { name: e.target.value })} disabled={readOnly} placeholder="e.g. Filesystem MCP" />
+                <Input
+                  value={srv.name}
+                  onChange={(e) => update(i, { name: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="e.g. Filesystem MCP"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Transport</Label>
-                <Select value={srv.transport} onValueChange={(v) => update(i, { transport: v as ServerConfig["transport"] })} disabled={readOnly}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={srv.transport}
+                  onValueChange={(v) => update(i, { transport: v as ServerConfig['transport'] })}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="stdio">stdio</SelectItem>
                     <SelectItem value="sse">SSE</SelectItem>
@@ -134,28 +156,59 @@ export function ServerForm({
                 </Select>
               </div>
             </div>
-            {srv.transport === "stdio" ? (
+            {srv.transport === 'stdio' ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Command</Label>
-                  <Input value={srv.command || ""} onChange={(e) => update(i, { command: e.target.value })} disabled={readOnly} placeholder="npx" className="font-mono text-xs" />
+                  <Input
+                    value={srv.command || ''}
+                    onChange={(e) => update(i, { command: e.target.value })}
+                    disabled={readOnly}
+                    placeholder="npx"
+                    className="font-mono text-xs"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Args (comma-separated)</Label>
-                  <Input value={(srv.args || []).join(", ")} onChange={(e) => update(i, { args: e.target.value.split(",").map((a) => a.trim()).filter(Boolean) })} disabled={readOnly} placeholder="-y, @mcp/server" className="font-mono text-xs" />
+                  <Input
+                    value={(srv.args || []).join(', ')}
+                    onChange={(e) =>
+                      update(i, {
+                        args: e.target.value
+                          .split(',')
+                          .map((a) => a.trim())
+                          .filter(Boolean)
+                      })
+                    }
+                    disabled={readOnly}
+                    placeholder="-y, @mcp/server"
+                    className="font-mono text-xs"
+                  />
                 </div>
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label className="text-xs">URL</Label>
-                <Input value={srv.url || ""} onChange={(e) => update(i, { url: e.target.value })} disabled={readOnly} placeholder="http://localhost:3001/sse" className="font-mono text-xs" />
+                <Input
+                  value={srv.url || ''}
+                  onChange={(e) => update(i, { url: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="http://localhost:3001/sse"
+                  className="font-mono text-xs"
+                />
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Auth Type</Label>
-                <Select value={srv.authType || "none"} onValueChange={(v) => setAuthType(i, v as ServerConfig["authType"])} disabled={readOnly}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={srv.authType || 'none'}
+                  onValueChange={(v) => setAuthType(i, v as ServerConfig['authType'])}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
                     <SelectItem value="bearer">Bearer Token</SelectItem>
@@ -164,11 +217,11 @@ export function ServerForm({
                   </SelectContent>
                 </Select>
               </div>
-              {srv.authType === "bearer" && (
+              {srv.authType === 'bearer' && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Token</Label>
                   <Input
-                    value={srv.authValue || ""}
+                    value={srv.authValue || ''}
                     onChange={(e) => update(i, { authValue: e.target.value })}
                     disabled={readOnly}
                     placeholder="${DATABRICKS_TOKEN}"
@@ -177,19 +230,20 @@ export function ServerForm({
                 </div>
               )}
             </div>
-            {srv.authType === "bearer" && (
+            {srv.authType === 'bearer' && (
               <p className="text-xs text-muted-foreground -mt-1">
-                Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a token directly.
+                Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an
+                environment variable, or enter a token directly.
               </p>
             )}
-            {srv.authType === "api-key" && (
+            {srv.authType === 'api-key' && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="text-xs font-medium text-muted-foreground">API Key</div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Header Name</Label>
                     <Input
-                      value={srv.apiKeyHeaderName || "X-API-Key"}
+                      value={srv.apiKeyHeaderName || 'X-API-Key'}
                       onChange={(e) => update(i, { apiKeyHeaderName: e.target.value })}
                       disabled={readOnly}
                       placeholder="X-API-Key"
@@ -199,7 +253,7 @@ export function ServerForm({
                   <div className="space-y-1.5">
                     <Label className="text-xs">Value</Label>
                     <Input
-                      value={srv.authValue || ""}
+                      value={srv.authValue || ''}
                       onChange={(e) => update(i, { authValue: e.target.value })}
                       disabled={readOnly}
                       placeholder="${MY_API_KEY}"
@@ -208,11 +262,12 @@ export function ServerForm({
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference an environment variable, or enter a value directly.
+                  Use <code className="rounded bg-muted px-1">{`\${VAR_NAME}`}</code> to reference
+                  an environment variable, or enter a value directly.
                 </p>
               </div>
             )}
-            {srv.authType === "oauth2" && (
+            {srv.authType === 'oauth2' && (
               <div className="space-y-3 rounded-md border p-3">
                 <div className="text-xs font-medium text-muted-foreground">OAuth 2.0 Flow</div>
 
@@ -220,31 +275,39 @@ export function ServerForm({
                 <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant={!srv.oauthMode || srv.oauthMode === "pre_registered" ? "default" : "outline"}
+                    variant={
+                      !srv.oauthMode || srv.oauthMode === 'pre_registered' ? 'default' : 'outline'
+                    }
                     size="sm"
                     disabled={readOnly}
-                    onClick={() => update(i, { oauthMode: "pre_registered" })}
+                    onClick={() => update(i, { oauthMode: 'pre_registered' })}
                   >
                     Pre-registered
                   </Button>
                   <Button
                     type="button"
-                    variant={srv.oauthMode === "dcr" ? "default" : "outline"}
+                    variant={srv.oauthMode === 'dcr' ? 'default' : 'outline'}
                     size="sm"
                     disabled={readOnly}
-                    onClick={() => update(i, { oauthMode: "dcr", oauthClientId: undefined, oauthClientSecret: undefined })}
+                    onClick={() =>
+                      update(i, {
+                        oauthMode: 'dcr',
+                        oauthClientId: undefined,
+                        oauthClientSecret: undefined
+                      })
+                    }
                   >
                     DCR (Dynamic)
                   </Button>
                 </div>
 
                 {/* Client credentials — only for pre_registered */}
-                {(!srv.oauthMode || srv.oauthMode === "pre_registered") && (
+                {(!srv.oauthMode || srv.oauthMode === 'pre_registered') && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Client ID</Label>
                       <Input
-                        value={srv.oauthClientId || ""}
+                        value={srv.oauthClientId || ''}
                         onChange={(e) => update(i, { oauthClientId: e.target.value })}
                         disabled={readOnly}
                         placeholder="your-client-id"
@@ -255,7 +318,7 @@ export function ServerForm({
                       <Label className="text-xs">Client Secret (optional)</Label>
                       <Input
                         type="password"
-                        value={srv.oauthClientSecret || ""}
+                        value={srv.oauthClientSecret || ''}
                         onChange={(e) => update(i, { oauthClientSecret: e.target.value })}
                         disabled={readOnly}
                         placeholder="••••••••"
@@ -269,7 +332,7 @@ export function ServerForm({
                 <div className="space-y-1.5">
                   <Label className="text-xs">Scope (optional, space-separated)</Label>
                   <Input
-                    value={srv.oauthScope || ""}
+                    value={srv.oauthScope || ''}
                     onChange={(e) => update(i, { oauthScope: e.target.value })}
                     disabled={readOnly}
                     placeholder="openid profile mcp"
@@ -285,7 +348,7 @@ export function ServerForm({
                     disabled={readOnly}
                     onClick={() => toggleAdvancedOauth(i)}
                   >
-                    <span>{advancedOauthOpen.has(i) ? "▾" : "▸"}</span>
+                    <span>{advancedOauthOpen.has(i) ? '▾' : '▸'}</span>
                     Advanced — manual endpoint overrides
                   </button>
                   {advancedOauthOpen.has(i) && (
@@ -293,7 +356,7 @@ export function ServerForm({
                       <div className="space-y-1.5">
                         <Label className="text-xs">Authorization URL</Label>
                         <Input
-                          value={srv.oauthAuthorizationUrl || ""}
+                          value={srv.oauthAuthorizationUrl || ''}
                           onChange={(e) =>
                             update(i, { oauthAuthorizationUrl: e.target.value || undefined })
                           }
@@ -305,7 +368,7 @@ export function ServerForm({
                       <div className="space-y-1.5">
                         <Label className="text-xs">Token URL</Label>
                         <Input
-                          value={srv.oauthTokenEndpoint || ""}
+                          value={srv.oauthTokenEndpoint || ''}
                           onChange={(e) =>
                             update(i, { oauthTokenEndpoint: e.target.value || undefined })
                           }
@@ -323,7 +386,9 @@ export function ServerForm({
         </Card>
       ))}
       {servers.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-6">No servers configured. Add one to get started.</p>
+        <p className="text-sm text-muted-foreground text-center py-6">
+          No servers configured. Add one to get started.
+        </p>
       )}
     </div>
   );

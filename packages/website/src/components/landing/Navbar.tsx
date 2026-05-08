@@ -1,9 +1,9 @@
 import React from 'react';
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Menu, X, Github } from "lucide-react";
-import SiteBrand from "@/components/shared/SiteBrand";
-import ThemeToggle from "@/components/landing/ThemeToggle";
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Menu, X, Github } from 'lucide-react';
+import SiteBrand from '@/components/shared/SiteBrand';
+import ThemeToggle from '@/components/landing/ThemeToggle';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -11,15 +11,15 @@ const Navbar = () => {
 
   useEffect(() => {
     const handleScroll = () => setShowBranding(window.scrollY > 220);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const links = [
-    { label: "Features", href: "#features" },
-    { label: "Quick Start", href: "#quickstart" },
-    { label: "Docs", href: "/docs/" },
-    { label: "GitHub", href: "https://github.com/inspectr-hq/mcplab", external: true },
+    { label: 'Features', href: '#features' },
+    { label: 'Quick Start', href: '#quickstart' },
+    { label: 'Docs', href: '/docs/' },
+    { label: 'GitHub', href: 'https://github.com/inspectr-hq/mcplab', external: true }
   ];
 
   return (
@@ -30,15 +30,25 @@ const Navbar = () => {
           <SiteBrand href="#" compact showInspectr={false} />
           <span
             className="text-muted-foreground text-[10px] transition-all duration-300"
-            style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}
-          >by</span>
+            style={{
+              opacity: showBranding ? 1 : 0,
+              transform: showBranding ? 'translateY(0)' : 'translateY(-4px)'
+            }}
+          >
+            by
+          </span>
           <a
             href="https://inspectr.dev"
             target="_blank"
             rel="noopener noreferrer"
             className="link-brand text-[10px] transition-all duration-300"
-            style={{ opacity: showBranding ? 1 : 0, transform: showBranding ? "translateY(0)" : "translateY(-4px)" }}
-          >Inspectr</a>
+            style={{
+              opacity: showBranding ? 1 : 0,
+              transform: showBranding ? 'translateY(0)' : 'translateY(-4px)'
+            }}
+          >
+            Inspectr
+          </a>
         </div>
 
         {/* Desktop links */}
@@ -47,8 +57,8 @@ const Navbar = () => {
             <a
               key={link.label}
               href={link.href}
-              target={link.external ? "_blank" : undefined}
-              rel={link.external ? "noopener noreferrer" : undefined}
+              target={link.external ? '_blank' : undefined}
+              rel={link.external ? 'noopener noreferrer' : undefined}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               {link.label}
@@ -73,8 +83,8 @@ const Navbar = () => {
             <a
               key={link.label}
               href={link.href}
-              target={link.external ? "_blank" : undefined}
-              rel={link.external ? "noopener noreferrer" : undefined}
+              target={link.external ? '_blank' : undefined}
+              rel={link.external ? 'noopener noreferrer' : undefined}
               className="block py-3 text-sm text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
             >

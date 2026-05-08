@@ -1,10 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
-import { GitCompare, ChevronUp, ChevronDown, ChevronsUpDown, ArrowLeftRight, Clock } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEffect, useMemo, useState } from 'react';
+import {
+  GitCompare,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  ArrowLeftRight,
+  Clock
+} from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import {
   Command,
   CommandEmpty,
@@ -12,20 +25,33 @@ import {
   CommandInput,
   CommandItem,
   CommandList
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PassRateBadge } from "@/components/PassRateBadge";
-import { formatProvider } from "@/components/ProviderBadge";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import type { EvalResult, ScenarioResult, ScenarioRun } from "@/types/eval";
-import { toast } from "@/hooks/use-toast";
-import { buildRunScopeSummary, type RunScopeSummary } from "@/lib/run-scope-summary";
+} from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
+import { PassRateBadge } from '@/components/PassRateBadge';
+import { formatProvider } from '@/components/ProviderBadge';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
+import { toast } from '@/hooks/use-toast';
+import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 
-const colors = ["hsl(38, 92%, 50%)", "hsl(200, 80%, 50%)", "hsl(152, 69%, 40%)", "hsl(280, 60%, 50%)", "hsl(0, 72%, 51%)"];
+const colors = [
+  'hsl(38, 92%, 50%)',
+  'hsl(200, 80%, 50%)',
+  'hsl(152, 69%, 40%)',
+  'hsl(280, 60%, 50%)',
+  'hsl(0, 72%, 51%)'
+];
 
-type CompareMode = "runs" | "within-run";
+type CompareMode = 'runs' | 'within-run';
 
 type AgentSummary = {
   agentId: string;
@@ -50,7 +76,9 @@ function isSameStringArray(a: string[], b: string[]): boolean {
   return a.every((value, index) => value === b[index]);
 }
 
-function getRepresentativeScenarioMetadata(scenarios: ScenarioResult[]): Pick<AgentSummary, "provider" | "model"> {
+function getRepresentativeScenarioMetadata(
+  scenarios: ScenarioResult[]
+): Pick<AgentSummary, 'provider' | 'model'> {
   const representativeScenario =
     scenarios.find((scenario) => scenario.provider && scenario.model) ??
     scenarios.find((scenario) => scenario.provider || scenario.model);
@@ -63,21 +91,21 @@ function getRepresentativeScenarioMetadata(scenarios: ScenarioResult[]): Pick<Ag
 const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
-  const mode: CompareMode = searchParams.get("mode") === "within-run" ? "within-run" : "runs";
+  const mode: CompareMode = searchParams.get('mode') === 'within-run' ? 'within-run' : 'runs';
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<"id" | "timestamp" | "passRate" | "scenarios">("timestamp");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [scenarioFilter, setScenarioFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<'id' | 'timestamp' | 'passRate' | 'scenarios'>('timestamp');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [scenarioFilter, setScenarioFilter] = useState('all');
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
 
-  const initialWithinRunId = searchParams.get("runId") ?? "";
-  const initialWithinRunAgents = (searchParams.get("agents") ?? "")
-    .split(",")
+  const initialWithinRunId = searchParams.get('runId') ?? '';
+  const initialWithinRunAgents = (searchParams.get('agents') ?? '')
+    .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  const initialWithinRunScenario = searchParams.get("scenario") ?? "all";
+  const initialWithinRunScenario = searchParams.get('scenario') ?? 'all';
 
   const [withinRunId, setWithinRunId] = useState(initialWithinRunId);
   const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
@@ -90,9 +118,9 @@ const Compare = () => {
       setResults(await source.listResults());
     } catch (error: unknown) {
       toast({
-        title: "Could not load results",
+        title: 'Could not load results',
         description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        variant: 'destructive'
       });
     } finally {
       setRefreshing(false);
@@ -110,9 +138,9 @@ const Compare = () => {
       .catch((error: unknown) => {
         if (!active) return;
         toast({
-          title: "Could not load results",
+          title: 'Could not load results',
           description: error instanceof Error ? error.message : String(error),
-          variant: "destructive"
+          variant: 'destructive'
         });
       })
       .finally(() => {
@@ -125,11 +153,11 @@ const Compare = () => {
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
       return;
     }
     setSortBy(next);
-    setSortDir(next === "timestamp" ? "desc" : "asc");
+    setSortDir(next === 'timestamp' ? 'desc' : 'asc');
   };
 
   const toggle = (id: string) => {
@@ -145,8 +173,8 @@ const Compare = () => {
     const labels = new Set<string>();
     results.forEach((run) => {
       run.scenarios.forEach((scenario) => {
-        const scenarioName = String(scenario.scenarioName ?? "").trim();
-        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const scenarioName = String(scenario.scenarioName ?? '').trim();
+        const scenarioId = String(scenario.scenarioId ?? '').trim();
         const label = scenarioName || scenarioId;
         if (label) labels.add(label);
       });
@@ -155,11 +183,11 @@ const Compare = () => {
   }, [results]);
 
   const filteredResults = useMemo(() => {
-    if (scenarioFilter === "all") return results;
+    if (scenarioFilter === 'all') return results;
     return results.filter((run) =>
       run.scenarios.some((scenario) => {
-        const scenarioName = String(scenario.scenarioName ?? "").trim();
-        const scenarioId = String(scenario.scenarioId ?? "").trim();
+        const scenarioName = String(scenario.scenarioName ?? '').trim();
+        const scenarioId = String(scenario.scenarioId ?? '').trim();
         const label = scenarioName || scenarioId;
         return label === scenarioFilter;
       })
@@ -169,11 +197,12 @@ const Compare = () => {
   const sortedResults = useMemo(() => {
     return [...filteredResults].sort((a, b) => {
       let cmp = 0;
-      if (sortBy === "id") cmp = a.id.localeCompare(b.id);
-      if (sortBy === "timestamp") cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-      if (sortBy === "passRate") cmp = a.overallPassRate - b.overallPassRate;
-      if (sortBy === "scenarios") cmp = a.totalScenarios - b.totalScenarios;
-      return sortDir === "asc" ? cmp : -cmp;
+      if (sortBy === 'id') cmp = a.id.localeCompare(b.id);
+      if (sortBy === 'timestamp')
+        cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (sortBy === 'passRate') cmp = a.overallPassRate - b.overallPassRate;
+      if (sortBy === 'scenarios') cmp = a.totalScenarios - b.totalScenarios;
+      return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [filteredResults, sortBy, sortDir]);
 
@@ -183,7 +212,11 @@ const Compare = () => {
   );
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
-    return sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />;
+    return sortDir === 'asc' ? (
+      <ChevronUp className="h-3.5 w-3.5" />
+    ) : (
+      <ChevronDown className="h-3.5 w-3.5" />
+    );
   };
 
   const runScopesById = useMemo(() => {
@@ -195,7 +228,9 @@ const Compare = () => {
   }, [sortedResults]);
 
   const defaultAgentsForRun = (run: EvalResult): string[] => {
-    const agentIds = Array.from(new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
+    const agentIds = Array.from(
+      new Set(run.scenarios.map((scenario) => scenario.agentId).filter(Boolean))
+    );
     return agentIds.slice(0, Math.min(2, agentIds.length));
   };
 
@@ -203,13 +238,13 @@ const Compare = () => {
     const nextAgents = defaultAgentsForRun(run);
     setWithinRunId(run.id);
     setWithinRunAgentIds(nextAgents);
-    setWithinRunScenarioFilter("all");
+    setWithinRunScenarioFilter('all');
     const next = new URLSearchParams(searchParams);
-    next.set("mode", "within-run");
-    next.set("runId", run.id);
-    if (nextAgents.length > 0) next.set("agents", nextAgents.join(","));
-    else next.delete("agents");
-    next.delete("scenario");
+    next.set('mode', 'within-run');
+    next.set('runId', run.id);
+    if (nextAgents.length > 0) next.set('agents', nextAgents.join(','));
+    else next.delete('agents');
+    next.delete('scenario');
     setSearchParams(next, { replace: true });
   };
 
@@ -222,9 +257,9 @@ const Compare = () => {
     const map = new Map<string, string>();
     for (const run of selectedRuns) {
       for (const scenario of run.scenarios) {
-        const id = String(scenario.scenarioId ?? "").trim();
+        const id = String(scenario.scenarioId ?? '').trim();
         if (!id) continue;
-        const name = String(scenario.scenarioName ?? "").trim();
+        const name = String(scenario.scenarioName ?? '').trim();
         map.set(id, name || id);
       }
     }
@@ -251,27 +286,24 @@ const Compare = () => {
     if (!withinRun) return [];
     const labels = new Set<string>();
     for (const scenario of withinRun.scenarios) {
-      const name = String(scenario.scenarioName ?? "").trim();
-      const id = String(scenario.scenarioId ?? "").trim();
+      const name = String(scenario.scenarioName ?? '').trim();
+      const id = String(scenario.scenarioId ?? '').trim();
       const label = name || id;
       if (label) labels.add(label);
     }
     return Array.from(labels).sort((a, b) => a.localeCompare(b));
   }, [withinRun]);
 
-  const withinRunAgentIdsKey = useMemo(
-    () => withinRunAgentIds.join(","),
-    [withinRunAgentIds]
-  );
+  const withinRunAgentIdsKey = useMemo(() => withinRunAgentIds.join(','), [withinRunAgentIds]);
 
   useEffect(() => {
-    if (mode === "within-run") {
-      const nextRunId = searchParams.get("runId") ?? "";
-      const nextAgents = (searchParams.get("agents") ?? "")
-        .split(",")
+    if (mode === 'within-run') {
+      const nextRunId = searchParams.get('runId') ?? '';
+      const nextAgents = (searchParams.get('agents') ?? '')
+        .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
-      const nextScenario = searchParams.get("scenario") ?? "all";
+      const nextScenario = searchParams.get('scenario') ?? 'all';
       setWithinRunId((prev) => (prev === nextRunId ? prev : nextRunId));
       setWithinRunAgentIds((prev) => (isSameStringArray(prev, nextAgents) ? prev : nextAgents));
       setWithinRunScenarioFilter((prev) => (prev === nextScenario ? prev : nextScenario));
@@ -279,7 +311,7 @@ const Compare = () => {
   }, [mode, searchParams]);
 
   useEffect(() => {
-    if (mode !== "within-run") return;
+    if (mode !== 'within-run') return;
     if (results.length === 0) return;
 
     let nextRunId = withinRunId;
@@ -297,7 +329,7 @@ const Compare = () => {
     })();
     const validAgentSet = new Set(nextAgentOptions);
     let nextAgents = withinRunAgentIdsKey
-      .split(",")
+      .split(',')
       .map((id) => id.trim())
       .filter((id): id is string => Boolean(id))
       .filter((id) => validAgentSet.has(id));
@@ -308,52 +340,60 @@ const Compare = () => {
       if (!nextRun) return new Set<string>();
       const labels = new Set<string>();
       for (const scenario of nextRun.scenarios) {
-        const name = String(scenario.scenarioName ?? "").trim();
-        const id = String(scenario.scenarioId ?? "").trim();
+        const name = String(scenario.scenarioName ?? '').trim();
+        const id = String(scenario.scenarioId ?? '').trim();
         const label = name || id;
         if (label) labels.add(label);
       }
       return new Set(labels);
     })();
     const nextScenarioFilter =
-      withinRunScenarioFilter !== "all" && !nextScenarioOptions.has(withinRunScenarioFilter)
-        ? "all"
+      withinRunScenarioFilter !== 'all' && !nextScenarioOptions.has(withinRunScenarioFilter)
+        ? 'all'
         : withinRunScenarioFilter;
 
     if (nextRunId !== withinRunId) setWithinRunId(nextRunId);
-    if (nextAgents.join(",") !== withinRunAgentIdsKey) setWithinRunAgentIds(nextAgents);
-    if (nextScenarioFilter !== withinRunScenarioFilter) setWithinRunScenarioFilter(nextScenarioFilter);
+    if (nextAgents.join(',') !== withinRunAgentIdsKey) setWithinRunAgentIds(nextAgents);
+    if (nextScenarioFilter !== withinRunScenarioFilter)
+      setWithinRunScenarioFilter(nextScenarioFilter);
   }, [mode, results, withinRunId, withinRunAgentIdsKey, withinRunScenarioFilter]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (mode === "within-run") {
-      next.set("mode", "within-run");
-      if (withinRunId) next.set("runId", withinRunId);
-      else next.delete("runId");
-      if (withinRunAgentIds.length > 0) next.set("agents", withinRunAgentIds.join(","));
-      else next.delete("agents");
-      if (withinRunScenarioFilter !== "all") next.set("scenario", withinRunScenarioFilter);
-      else next.delete("scenario");
+    if (mode === 'within-run') {
+      next.set('mode', 'within-run');
+      if (withinRunId) next.set('runId', withinRunId);
+      else next.delete('runId');
+      if (withinRunAgentIds.length > 0) next.set('agents', withinRunAgentIds.join(','));
+      else next.delete('agents');
+      if (withinRunScenarioFilter !== 'all') next.set('scenario', withinRunScenarioFilter);
+      else next.delete('scenario');
     } else {
-      next.delete("mode");
-      next.delete("runId");
-      next.delete("agents");
-      next.delete("scenario");
+      next.delete('mode');
+      next.delete('runId');
+      next.delete('agents');
+      next.delete('scenario');
     }
     const currentString = searchParams.toString();
     const nextString = next.toString();
     if (currentString !== nextString) {
       setSearchParams(next, { replace: true });
     }
-  }, [mode, withinRunId, withinRunAgentIds, withinRunScenarioFilter, searchParams, setSearchParams]);
+  }, [
+    mode,
+    withinRunId,
+    withinRunAgentIds,
+    withinRunScenarioFilter,
+    searchParams,
+    setSearchParams
+  ]);
 
   const withinRunScenarioRows = useMemo<WithinRunScenarioRow[]>(() => {
     if (!withinRun) return [];
     const scenarioMap = new Map<string, WithinRunScenarioRow>();
     for (const scenario of withinRun.scenarios) {
-      const scenarioId = String(scenario.scenarioId ?? "").trim();
-      const scenarioName = String(scenario.scenarioName ?? "").trim();
+      const scenarioId = String(scenario.scenarioId ?? '').trim();
+      const scenarioName = String(scenario.scenarioName ?? '').trim();
       const displayLabel = scenarioName || scenarioId;
       if (!scenarioId && !displayLabel) continue;
       const key = scenarioId || displayLabel;
@@ -374,7 +414,7 @@ const Compare = () => {
       const right = (b.displayLabel || b.scenarioId).toLowerCase();
       return left.localeCompare(right);
     });
-    if (withinRunScenarioFilter === "all") return rows;
+    if (withinRunScenarioFilter === 'all') return rows;
     return rows.filter((row) => row.displayLabel === withinRunScenarioFilter);
   }, [withinRun, withinRunScenarioFilter]);
 
@@ -391,7 +431,11 @@ const Compare = () => {
     return {
       left,
       right,
-      link: `/compare/results?left=${encodeURIComponent(withinRun.id)}&right=${encodeURIComponent(withinRun.id)}&leftConfig=${encodeURIComponent(withinRun.configId)}&rightConfig=${encodeURIComponent(withinRun.configId)}&leftAgent=${encodeURIComponent(left.id)}&rightAgent=${encodeURIComponent(right.id)}`
+      link: `/compare/results?left=${encodeURIComponent(withinRun.id)}&right=${encodeURIComponent(
+        withinRun.id
+      )}&leftConfig=${encodeURIComponent(withinRun.configId)}&rightConfig=${encodeURIComponent(
+        withinRun.configId
+      )}&leftAgent=${encodeURIComponent(left.id)}&rightAgent=${encodeURIComponent(right.id)}`
     };
   }, [withinRun, selectedWithinRunAgentOptions]);
 
@@ -432,15 +476,15 @@ const Compare = () => {
   const renderRunDetail = (run: ScenarioRun) => (
     <div key={run.runIndex} className="min-w-0 rounded border bg-muted/20 px-2 py-1.5">
       <div className="text-xs">
-        <span className="font-mono">#{run.runIndex + 1}</span>{" "}
-        <span className={run.passed ? "text-emerald-700" : "text-destructive"}>
-          {run.passed ? "PASS" : "FAIL"}
-        </span>{" "}
+        <span className="font-mono">#{run.runIndex + 1}</span>{' '}
+        <span className={run.passed ? 'text-emerald-700' : 'text-destructive'}>
+          {run.passed ? 'PASS' : 'FAIL'}
+        </span>{' '}
         · tools: {run.toolCalls.length} · {run.duration}ms
       </div>
       {!run.passed && run.failureReasons.length > 0 && (
         <div className="mt-1 max-h-16 overflow-y-auto whitespace-pre-wrap break-all pr-1 text-[11px] text-muted-foreground">
-          {run.failureReasons.join("; ")}
+          {run.failureReasons.join('; ')}
         </div>
       )}
     </div>
@@ -455,20 +499,22 @@ const Compare = () => {
             Compare Runs
           </h1>
           <p className="text-sm text-muted-foreground">
-            {mode === "runs" ? "Select 2–5 runs to compare" : "Compare agents side-by-side within one run"}
+            {mode === 'runs'
+              ? 'Select 2–5 runs to compare'
+              : 'Compare agents side-by-side within one run'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {mode === "within-run" && (
+          {mode === 'within-run' && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 const next = new URLSearchParams(searchParams);
-                next.delete("mode");
-                next.delete("runId");
-                next.delete("agents");
-                next.delete("scenario");
+                next.delete('mode');
+                next.delete('runId');
+                next.delete('agents');
+                next.delete('scenario');
                 setSearchParams(next, { replace: true });
               }}
             >
@@ -476,7 +522,7 @@ const Compare = () => {
               Back to Compare
             </Button>
           )}
-          {mode === "runs" && (
+          {mode === 'runs' && (
             <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
               <PopoverTrigger asChild>
                 <Button
@@ -486,7 +532,9 @@ const Compare = () => {
                   aria-expanded={openScenarioFilterPicker}
                   className="w-[260px] justify-between font-normal"
                 >
-                  <span className="truncate text-left">{scenarioFilter === "all" ? "All scenarios" : scenarioFilter}</span>
+                  <span className="truncate text-left">
+                    {scenarioFilter === 'all' ? 'All scenarios' : scenarioFilter}
+                  </span>
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
@@ -499,7 +547,7 @@ const Compare = () => {
                       <CommandItem
                         value="all scenarios"
                         onSelect={() => {
-                          setScenarioFilter("all");
+                          setScenarioFilter('all');
                           setOpenScenarioFilterPicker(false);
                         }}
                       >
@@ -524,12 +572,12 @@ const Compare = () => {
             </Popover>
           )}
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
+            {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
 
-      {mode === "within-run" && (
+      {mode === 'within-run' && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Within One Run Controls</CardTitle>
@@ -553,7 +601,10 @@ const Compare = () => {
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Scenario filter</p>
-                <Popover open={openWithinRunScenarioPicker} onOpenChange={setOpenWithinRunScenarioPicker}>
+                <Popover
+                  open={openWithinRunScenarioPicker}
+                  onOpenChange={setOpenWithinRunScenarioPicker}
+                >
                   <PopoverTrigger asChild>
                     <Button
                       type="button"
@@ -563,12 +614,17 @@ const Compare = () => {
                       className="w-full justify-between font-normal"
                     >
                       <span className="truncate text-left">
-                        {withinRunScenarioFilter === "all" ? "All scenarios" : withinRunScenarioFilter}
+                        {withinRunScenarioFilter === 'all'
+                          ? 'All scenarios'
+                          : withinRunScenarioFilter}
                       </span>
                       <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <PopoverContent
+                    className="w-[var(--radix-popover-trigger-width)] p-0"
+                    align="start"
+                  >
                     <Command>
                       <CommandInput placeholder="Search scenarios..." />
                       <CommandList>
@@ -577,7 +633,7 @@ const Compare = () => {
                           <CommandItem
                             value="all scenarios"
                             onSelect={() => {
-                              setWithinRunScenarioFilter("all");
+                              setWithinRunScenarioFilter('all');
                               setOpenWithinRunScenarioPicker(false);
                             }}
                           >
@@ -607,7 +663,9 @@ const Compare = () => {
               <p className="text-xs font-medium text-muted-foreground">Agents (select 2+)</p>
               <div className="flex flex-wrap gap-3 rounded-md border p-3">
                 {withinRunAgentOptions.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No agents available for selected run.</p>
+                  <p className="text-xs text-muted-foreground">
+                    No agents available for selected run.
+                  </p>
                 )}
                 {withinRunAgentOptions.map((agent) => (
                   <label key={agent.id} className="inline-flex items-center gap-2 text-sm">
@@ -624,43 +682,59 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "runs" && (
+      {mode === 'runs' && (
         <Card>
           <CardContent className="p-0">
             <Table containerClassName="max-h-[36rem] overflow-auto">
               <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
-              <TableRow>
-                <TableHead className="w-10" />
-                <TableHead>
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("id")}>
+                <TableRow>
+                  <TableHead className="w-10" />
+                  <TableHead>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('id')}
+                    >
                       Run ID
-                      {sortIcon("id")}
+                      {sortIcon('id')}
                     </button>
                   </TableHead>
                   <TableHead>Evaluated</TableHead>
                   <TableHead>
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("timestamp")}>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('timestamp')}
+                    >
                       Timestamp
-                      {sortIcon("timestamp")}
+                      {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead>
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("passRate")}>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('passRate')}
+                    >
                       Pass Rate
-                      {sortIcon("passRate")}
+                      {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                <TableHead className="text-right">
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort("scenarios")}>
-                    Scenarios
-                    {sortIcon("scenarios")}
-                  </button>
-                </TableHead>
-                <TableHead className="text-right">Agents</TableHead>
-                <TableHead className="w-[140px] text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('scenarios')}
+                    >
+                      Scenarios
+                      {sortIcon('scenarios')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">Agents</TableHead>
+                  <TableHead className="w-[140px] text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {sortedResults.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>
@@ -676,16 +750,20 @@ const Compare = () => {
                         const scope = runScopesById.get(r.id) ?? {
                           scenarioCount: 0,
                           agentCount: 0,
-                          scopePreview: "n/a",
-                          modelSummary: ""
+                          scopePreview: 'n/a',
+                          modelSummary: ''
                         };
                         return (
                           <div className="space-y-0.5">
                             <div>
-                              Evaluated: {scope.scenarioCount} scenario{scope.scenarioCount === 1 ? "" : "s"} · {scope.agentCount} agent{scope.agentCount === 1 ? "" : "s"}
-                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ""}
+                              Evaluated: {scope.scenarioCount} scenario
+                              {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
+                              {scope.agentCount === 1 ? '' : 's'}
+                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">{scope.scopePreview}</div>
+                            <div className="font-mono text-xs text-foreground/80">
+                              {scope.scopePreview}
+                            </div>
                           </div>
                         );
                       })()}
@@ -696,8 +774,12 @@ const Compare = () => {
                         {new Date(r.timestamp).toLocaleString()}
                       </div>
                     </TableCell>
-                    <TableCell><PassRateBadge rate={r.overallPassRate} /></TableCell>
-                    <TableCell className="text-right font-mono text-sm">{r.totalScenarios}</TableCell>
+                    <TableCell className="text-right">
+                      <PassRateBadge rate={r.overallPassRate} />
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {r.totalScenarios}
+                    </TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {runScopesById.get(r.id)?.agentCount ?? 0}
                     </TableCell>
@@ -723,7 +805,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "runs" && selectedRuns.length < 2 && (
+      {mode === 'runs' && selectedRuns.length < 2 && (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-sm font-medium">No runs selected</p>
@@ -734,7 +816,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "runs" && selectedRuns.length >= 2 && (
+      {mode === 'runs' && selectedRuns.length >= 2 && (
         <>
           {selectedRuns.length === 2 && (
             <Card>
@@ -743,12 +825,19 @@ const Compare = () => {
                   <div>
                     <p className="text-sm font-medium">Need a deeper comparison?</p>
                     <p className="text-xs text-muted-foreground">
-                      Open the two selected runs in a dedicated side-by-side full result compare view.
+                      Open the two selected runs in a dedicated side-by-side full result compare
+                      view.
                     </p>
                   </div>
                   <Button asChild size="sm">
                     <Link
-                      to={`/compare/results?left=${encodeURIComponent(selectedRuns[0].id)}&right=${encodeURIComponent(selectedRuns[1].id)}&leftConfig=${encodeURIComponent(selectedRuns[0].configId)}&rightConfig=${encodeURIComponent(selectedRuns[1].configId)}`}
+                      to={`/compare/results?left=${encodeURIComponent(
+                        selectedRuns[0].id
+                      )}&right=${encodeURIComponent(
+                        selectedRuns[1].id
+                      )}&leftConfig=${encodeURIComponent(
+                        selectedRuns[0].configId
+                      )}&rightConfig=${encodeURIComponent(selectedRuns[1].configId)}`}
                     >
                       Compare full results
                     </Link>
@@ -759,33 +848,57 @@ const Compare = () => {
           )}
 
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Summary Comparison</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Summary Comparison</CardTitle>
+            </CardHeader>
             <CardContent className="max-h-[24rem] overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead className="w-[220px]">Metric</TableHead>
                     {selectedRuns.map((r, i) => (
-                      <TableHead key={r.id} style={{ color: colors[i] }} className="font-mono text-xs">{r.id}</TableHead>
+                      <TableHead
+                        key={r.id}
+                        style={{ color: colors[i] }}
+                        className="font-mono text-xs"
+                      >
+                        {r.id}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium">Pass Rate</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id}><PassRateBadge rate={r.overallPassRate} /></TableCell>)}
+                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="text-right">
+                        <PassRateBadge rate={r.overallPassRate} />
+                      </TableCell>
+                    ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Total Runs</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id} className="font-mono">{r.totalRuns}</TableCell>)}
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {r.totalRuns}
+                      </TableCell>
+                    ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Tool Calls</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id} className="font-mono">{r.avgToolCalls.toFixed(1)}</TableCell>)}
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {r.avgToolCalls.toFixed(1)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Avg Latency</TableCell>
-                    {selectedRuns.map((r) => <TableCell key={r.id} className="font-mono">{r.avgLatency}ms</TableCell>)}
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {r.avgLatency}ms
+                      </TableCell>
+                    ))}
                   </TableRow>
                 </TableBody>
               </Table>
@@ -793,24 +906,42 @@ const Compare = () => {
           </Card>
 
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="text-base">Scenario Breakdown</CardTitle></CardHeader>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Scenario Breakdown</CardTitle>
+            </CardHeader>
             <CardContent className="max-h-[26rem] overflow-auto p-0">
               <Table className="table-fixed">
                 <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background">
                   <TableRow>
                     <TableHead className="w-[220px]">Scenario</TableHead>
                     {selectedRuns.map((r, i) => (
-                      <TableHead key={r.id} style={{ color: colors[i] }} className="font-mono text-xs">{r.id}</TableHead>
+                      <TableHead
+                        key={r.id}
+                        style={{ color: colors[i] }}
+                        className="font-mono text-xs"
+                      >
+                        {r.id}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {allScenarioIds.map((sid) => (
                     <TableRow key={sid}>
-                      <TableCell className="font-medium text-sm">{scenarioLabelById.get(sid) ?? sid}</TableCell>
+                      <TableCell className="font-medium text-sm">
+                        {scenarioLabelById.get(sid) ?? sid}
+                      </TableCell>
                       {selectedRuns.map((r) => {
                         const sc = r.scenarios.find((s) => s.scenarioId === sid);
-                        return <TableCell key={r.id}>{sc ? <PassRateBadge rate={sc.passRate} /> : <span className="text-xs text-muted-foreground">—</span>}</TableCell>;
+                        return (
+                          <TableCell key={r.id} className="text-right">
+                            {sc ? (
+                              <PassRateBadge rate={sc.passRate} />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        );
                       })}
                     </TableRow>
                   ))}
@@ -821,15 +952,26 @@ const Compare = () => {
         </>
       )}
 
-      {mode === "runs" && selectedRuns.length >= 2 && (
+      {mode === 'runs' && selectedRuns.length >= 2 && (
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Pass Rate Trend</CardTitle></CardHeader>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Pass Rate Trend</CardTitle>
+          </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={selectedRuns.map((r, i) => ({ idx: i + 1, runId: r.id, passRate: Number((r.overallPassRate * 100).toFixed(1)) }))}>
+              <LineChart
+                data={selectedRuns.map((r, i) => ({
+                  idx: i + 1,
+                  runId: r.id,
+                  passRate: Number((r.overallPassRate * 100).toFixed(1))
+                }))}
+              >
                 <XAxis dataKey="idx" tickFormatter={(v) => String(v)} />
                 <YAxis unit="%" domain={[0, 100]} />
-                <Tooltip formatter={(value) => [`${value}%`, "Pass Rate"]} labelFormatter={(label) => `Run ${label}`} />
+                <Tooltip
+                  formatter={(value) => [`${value}%`, 'Pass Rate']}
+                  labelFormatter={(label) => `Run ${label}`}
+                />
                 <Legend />
                 <Line type="monotone" dataKey="passRate" stroke={colors[0]} strokeWidth={2.5} dot />
               </LineChart>
@@ -838,7 +980,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "within-run" && withinRun && selectedWithinRunAgentOptions.length < 2 && (
+      {mode === 'within-run' && withinRun && selectedWithinRunAgentOptions.length < 2 && (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
             Select at least 2 agents to compare side-by-side within this run.
@@ -846,7 +988,7 @@ const Compare = () => {
         </Card>
       )}
 
-      {mode === "within-run" && withinRun && selectedWithinRunAgentOptions.length >= 2 && (
+      {mode === 'within-run' && withinRun && selectedWithinRunAgentOptions.length >= 2 && (
         <>
           <Card>
             <CardContent className="pt-6">
@@ -855,8 +997,8 @@ const Compare = () => {
                   <p className="text-sm font-medium">Need full result details?</p>
                   <p className="text-xs text-muted-foreground">
                     {withinRunComparePair
-                      ? "Open a side-by-side full result view filtered by the selected agents."
-                      : "Open the complete run result page for all details and trace navigation."}
+                      ? 'Open a side-by-side full result view filtered by the selected agents.'
+                      : 'Open the complete run result page for all details and trace navigation.'}
                   </p>
                 </div>
                 <Button asChild size="sm">
@@ -864,7 +1006,11 @@ const Compare = () => {
                     <Link to={withinRunComparePair.link}>Compare full results</Link>
                   ) : (
                     <Link
-                      to={`/results/${encodeURIComponent(withinRun.id)}${withinRun.configId ? `?configId=${encodeURIComponent(withinRun.configId)}` : ""}`}
+                      to={`/results/${encodeURIComponent(withinRun.id)}${
+                        withinRun.configId
+                          ? `?configId=${encodeURIComponent(withinRun.configId)}`
+                          : ''
+                      }`}
                     >
                       Open full result
                     </Link>
@@ -888,7 +1034,12 @@ const Compare = () => {
                         <div className="font-medium text-sm">{summary.agentName}</div>
                         {(summary.provider || summary.model) && (
                           <div className="font-mono text-xs font-normal text-muted-foreground">
-                            {[summary.provider ? formatProvider(summary.provider) : null, summary.model].filter(Boolean).join(" · ")}
+                            {[
+                              summary.provider ? formatProvider(summary.provider) : null,
+                              summary.model
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
                           </div>
                         )}
                       </TableHead>
@@ -897,9 +1048,9 @@ const Compare = () => {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium">Pass Rate</TableCell>
+                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
                     {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId}>
+                      <TableCell key={summary.agentId} className="text-right">
                         <PassRateBadge rate={summary.passRate} />
                       </TableCell>
                     ))}
@@ -949,7 +1100,12 @@ const Compare = () => {
                           <div className="font-medium text-sm">{agent.name}</div>
                           {(summary?.provider || summary?.model) && (
                             <div className="font-mono text-xs font-normal text-muted-foreground">
-                              {[summary.provider ? formatProvider(summary.provider) : null, summary.model].filter(Boolean).join(" · ")}
+                              {[
+                                summary.provider ? formatProvider(summary.provider) : null,
+                                summary.model
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </div>
                           )}
                         </TableHead>
@@ -974,16 +1130,19 @@ const Compare = () => {
                           <TableCell key={agent.id} className="min-w-0 align-top">
                             <div className="space-y-2">
                               <div className="text-xs text-muted-foreground">
-                                <PassRateBadge rate={scenario.passRate} />{" "}
-                                <span className="ml-2">runs: {scenario.runs.length}</span>{" "}
-                                · calls: {scenario.avgToolCalls.toFixed(1)} · latency: {Math.round(scenario.avgDuration)}ms
+                                <PassRateBadge rate={scenario.passRate} />{' '}
+                                <span className="ml-2">runs: {scenario.runs.length}</span> · calls:{' '}
+                                {scenario.avgToolCalls.toFixed(1)} · latency:{' '}
+                                {Math.round(scenario.avgDuration)}ms
                               </div>
                               {scenario.runs.length > 0 ? (
                                 <div className="space-y-1.5">
                                   {scenario.runs.map((run) => renderRunDetail(run))}
                                 </div>
                               ) : (
-                                <div className="text-xs text-muted-foreground">No runs captured.</div>
+                                <div className="text-xs text-muted-foreground">
+                                  No runs captured.
+                                </div>
                               )}
                             </div>
                           </TableCell>

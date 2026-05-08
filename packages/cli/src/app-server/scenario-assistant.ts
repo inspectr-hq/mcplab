@@ -5,7 +5,8 @@ import {
   McpClientManager,
   loadConfig,
   type AgentConfig,
-  type EvalConfig
+  type EvalConfig,
+  throwIfAborted
 } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext, AssistantSessionsMap } from './app-context.js';
 import type { ScenarioAssistantSession } from './scenario-assistant-domain.js';
@@ -87,10 +88,16 @@ export async function handleScenarioAssistantRoutes(params: {
     );
   };
 
-  const continueWithAutoApprovedReads = async (session: ScenarioAssistantSession) => {
+  const continueWithAutoApprovedReads = async (
+    session: ScenarioAssistantSession,
+    signal?: AbortSignal
+  ) => {
+    throwIfAborted(signal);
     publishSessionEvent(session, 'turn_started');
-    let output = await continueAssistantTurn(session);
+    let output = await continueAssistantTurn(session, signal);
+    throwIfAborted(signal);
     for (let i = 0; i < 25; i += 1) {
+      throwIfAborted(signal);
       const pendingCalls = output.response?.pendingToolCalls;
       if (!pendingCalls?.length || output.response?.type !== 'tool_call_request') {
         if (output.response?.type === 'assistant_message') {
@@ -113,6 +120,7 @@ export async function handleScenarioAssistantRoutes(params: {
         pendingToolCalls: pendingCalls,
         pendingToolCallId: pendingCalls[0]?.id
       });
+      throwIfAborted(signal);
       const allReadOnly = pendingCalls.every(
         (p) =>
           session.tools.find((t) => t.name === p.publicToolName)?.annotations?.readOnlyHint === true
@@ -123,7 +131,7 @@ export async function handleScenarioAssistantRoutes(params: {
         pending.status = 'approved';
         publishSessionEvent(session, 'tool_call_approved', { pendingToolCallId: pending.id });
         try {
-          const toolResult = await executeAssistantToolCall(session, pending);
+          const toolResult = await executeAssistantToolCall(session, pending, signal);
           pending.resultPreview = summarizeToolResultForAssistant(toolResult);
           session.llmMessages.push({
             role: 'tool',
@@ -136,6 +144,9 @@ export async function handleScenarioAssistantRoutes(params: {
             pendingToolCall: pending
           });
         } catch (error: unknown) {
+          if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+            throw error;
+          }
           pending.status = 'error';
           pending.error = error instanceof Error ? error.message : String(error);
           session.llmMessages.push({
@@ -153,7 +164,8 @@ export async function handleScenarioAssistantRoutes(params: {
       }
       touchAssistantSession(session);
       if (hadError) break;
-      output = await continueAssistantTurn(session);
+      output = await continueAssistantTurn(session, signal);
+      throwIfAborted(signal);
     }
     if (output.response?.type === 'assistant_message') {
       publishSessionEvent(session, 'assistant_message_completed', {
@@ -351,23 +363,43 @@ export async function handleScenarioAssistantRoutes(params: {
       asJson(res, 404, { error: 'Scenario Assistant session not found' });
       return true;
     }
-    const body = await parseBody(req);
-    const message = String(body.message ?? '').trim();
-    if (!message) {
-      asJson(res, 400, { error: 'message is required' });
+    const chatMessagesBefore = session.chatMessages.length;
+    const llmMessagesBefore = session.llmMessages.length;
+    const pendingToolCallsBefore = session.pendingToolCalls.length;
+    const abortController = new AbortController();
+    const handleClose = () => abortController.abort();
+    req.on('close', handleClose);
+    try {
+      const body = await parseBody(req);
+      const message = String(body.message ?? '').trim();
+      throwIfAborted(abortController.signal);
+      if (!message) {
+        asJson(res, 400, { error: 'message is required' });
+        return true;
+      }
+      session.chatMessages.push({
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: 'user',
+        text: message,
+        createdAt: new Date().toISOString()
+      });
+      flushDanglingToolCalls(session.llmMessages);
+      session.llmMessages.push({ role: 'user', content: message });
+      const output = await continueWithAutoApprovedReads(session, abortController.signal);
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, output);
       return true;
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        session.chatMessages.splice(chatMessagesBefore);
+        session.llmMessages.splice(llmMessagesBefore);
+        session.pendingToolCalls.splice(pendingToolCallsBefore);
+        return true;
+      }
+      throw error;
+    } finally {
+      req.off('close', handleClose);
     }
-    session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'user',
-      text: message,
-      createdAt: new Date().toISOString()
-    });
-    flushDanglingToolCalls(session.llmMessages);
-    session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueWithAutoApprovedReads(session);
-    asJson(res, 200, output);
-    return true;
   }
 
   // Helper: find sibling pending tool call IDs for a given call

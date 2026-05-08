@@ -11,8 +11,7 @@ function getStoredTheme(): Theme {
 
 function applyTheme(theme: Theme) {
   const isDark =
-    theme === 'dark' ||
-    (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', isDark);
   localStorage.setItem('theme', theme);
 }
@@ -20,19 +19,19 @@ function applyTheme(theme: Theme) {
 const NEXT_THEME: Record<Theme, Theme> = {
   light: 'dark',
   dark: 'system',
-  system: 'light',
+  system: 'light'
 };
 
 const ICONS: Record<Theme, typeof Sun> = {
   light: Sun,
   dark: Moon,
-  system: Monitor,
+  system: Monitor
 };
 
 const LABELS: Record<Theme, string> = {
   light: 'Switch to dark mode',
   dark: 'Switch to system mode',
-  system: 'Switch to light mode',
+  system: 'Switch to light mode'
 };
 
 const ThemeToggle = () => {

@@ -1,21 +1,24 @@
-import type { MutableRefObject, ReactNode } from "react";
-import { PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react";
+import type { MutableRefObject, ReactNode } from 'react';
+import { PanelRightClose, PanelRightOpen, Sparkles } from 'lucide-react';
 import {
   AssistantComposer,
   AssistantMessageRow,
   AssistantToolCallCard,
   AssistantTypingIndicator,
   type AssistantSnippet
-} from "@/components/assistant/AssistantChat";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MarkdownContent } from "@/components/MarkdownContent";
-import type { ResultAssistantPendingToolCall, ResultAssistantSessionView } from "@/lib/data-sources/types";
+} from '@/components/assistant/AssistantChat';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MarkdownContent } from '@/components/MarkdownContent';
+import type {
+  ResultAssistantPendingToolCall,
+  ResultAssistantSessionView
+} from '@/lib/data-sources/types';
 
 export type ResultAssistantSnippet = AssistantSnippet;
 
 export type ResultAssistantMessageRenderContext = {
-  message: ResultAssistantSessionView["messages"][number];
+  message: ResultAssistantSessionView['messages'][number];
   index: number;
   linkedPendingToolCall?: ResultAssistantPendingToolCall;
   isUser: boolean;
@@ -36,9 +39,10 @@ export function ResultAssistantPanel({
   input,
   onInputChange,
   onSend,
+  onCancel,
   inputPlaceholder,
   snippets,
-  snippetsLabel = "Result Assistant Snippets",
+  snippetsLabel = 'Result Assistant Snippets',
   onSnippetSelect,
   onApproveToolCall,
   onDenyToolCall,
@@ -46,20 +50,21 @@ export function ResultAssistantPanel({
   inputRef,
   renderMessage,
   renderMessageExtras,
-  className = "min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col",
-  contentClassName = "flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1"
+  className = 'min-w-0 overflow-hidden xl:flex xl:h-full xl:min-h-0 xl:flex-col',
+  contentClassName = 'flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1'
 }: {
   title: string;
   description: string;
   expanded: boolean;
   onToggleExpanded: () => void;
   onHide: () => void;
-  messages: ResultAssistantSessionView["messages"];
+  messages: ResultAssistantSessionView['messages'];
   pendingToolCalls: ResultAssistantPendingToolCall[];
   loading: boolean;
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   inputPlaceholder: string;
   snippets: readonly ResultAssistantSnippet[];
   snippetsLabel?: string;
@@ -95,7 +100,7 @@ export function ResultAssistantPanel({
                 ) : (
                   <PanelRightOpen className="h-3.5 w-3.5" />
                 )}
-                {expanded ? "Compact" : "Expand"}
+                {expanded ? 'Compact' : 'Expand'}
               </Button>
               <Button
                 type="button"
@@ -115,10 +120,10 @@ export function ResultAssistantPanel({
         <div className="min-h-0 flex-1 overflow-y-auto bg-muted/15 px-4 py-4">
           <div className="space-y-3 pr-2">
             {messages.map((message, index) => {
-              const isUser = message.role === "user";
-              const isAssistant = message.role === "assistant";
-              const isSystem = message.role === "system";
-              const isTool = message.role === "tool";
+              const isUser = message.role === 'user';
+              const isAssistant = message.role === 'assistant';
+              const isSystem = message.role === 'system';
+              const isTool = message.role === 'tool';
               const linkedPendingToolCall = message.pendingToolCallId
                 ? pendingToolCalls.find((call) => call.id === message.pendingToolCallId)
                 : undefined;
@@ -138,7 +143,10 @@ export function ResultAssistantPanel({
               const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
               if (isAssistantToolRequest) {
                 return (
-                  <div key={`${message.id ?? `${message.role}-${index}`}-tool`} className="rounded-md border bg-background p-3">
+                  <div
+                    key={`${message.id ?? `${message.role}-${index}`}-tool`}
+                    className="rounded-md border bg-background p-3"
+                  >
                     <MarkdownContent text={message.text} className="text-sm" />
                     {linkedPendingToolCall && (
                       <AssistantToolCallCard
@@ -171,6 +179,7 @@ export function ResultAssistantPanel({
             input={input}
             onInputChange={onInputChange}
             onSend={onSend}
+            onCancel={onCancel}
             inputPlaceholder={inputPlaceholder}
             snippets={snippets}
             snippetsLabel={snippetsLabel}

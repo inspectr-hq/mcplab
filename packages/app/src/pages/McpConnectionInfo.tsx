@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, RefreshCw, Link2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
-import type { WorkspaceHealthResponse } from "@/lib/data-sources/types";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Copy, RefreshCw, Link2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
+import type { WorkspaceHealthResponse } from '@/lib/data-sources/types';
 
-const DEFAULT_MCP_HOST = "127.0.0.1";
+const DEFAULT_MCP_HOST = '127.0.0.1';
 const DEFAULT_MCP_PORT = 3011;
-const DEFAULT_MCP_PATH = "/mcp";
+const DEFAULT_MCP_PATH = '/mcp';
 const DEFAULT_DIRECT_URL = `http://${DEFAULT_MCP_HOST}:${DEFAULT_MCP_PORT}${DEFAULT_MCP_PATH}`;
 
 function copyToClipboard(text: string) {
@@ -24,15 +24,15 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       await copyToClipboard(text);
       setCopied(true);
       toast({
-        title: "Copied",
+        title: 'Copied',
         description: `${label} copied to clipboard.`
       });
       window.setTimeout(() => setCopied(false), 1500);
     } catch (error: unknown) {
       toast({
-        title: "Copy failed",
+        title: 'Copy failed',
         description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        variant: 'destructive'
       });
     }
   };
@@ -40,7 +40,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <Button type="button" size="sm" variant="outline" onClick={() => void handleCopy()}>
       <Copy className="mr-2 h-3.5 w-3.5" />
-      {copied ? "Copied" : "Copy"}
+      {copied ? 'Copied' : 'Copy'}
     </Button>
   );
 }
@@ -49,7 +49,7 @@ function InfoRow({
   label,
   value,
   copyText,
-  valueClassName = ""
+  valueClassName = ''
 }: {
   label: string;
   value: string;
@@ -116,9 +116,9 @@ const McpConnectionInfoPage = () => {
     } catch (error: unknown) {
       setHealth(null);
       toast({
-        title: "Could not load MCP connection info",
+        title: 'Could not load MCP connection info',
         description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -131,7 +131,7 @@ const McpConnectionInfoPage = () => {
 
   const mcp = health?.mcp?.enabled ? health.mcp : null;
   const directUrl = mcp?.directUrl ?? DEFAULT_DIRECT_URL;
-  const transport = mcp?.transport ?? "streamable-http";
+  const transport = mcp?.transport ?? 'streamable-http';
 
   const claudeSnippet = useMemo(
     () =>
@@ -139,8 +139,8 @@ const McpConnectionInfoPage = () => {
         {
           mcpServers: {
             mcplab: {
-              command: "npx",
-              args: ["mcp-remote", directUrl]
+              command: 'npx',
+              args: ['mcp-remote', directUrl]
             }
           }
         },
@@ -154,7 +154,7 @@ const McpConnectionInfoPage = () => {
     () =>
       JSON.stringify(
         {
-          name: "mcplab",
+          name: 'mcplab',
           transport,
           url: directUrl
         },
@@ -176,7 +176,13 @@ const McpConnectionInfoPage = () => {
             Copy the local MCPLab MCP server details into Claude Desktop or any MCP-capable client.
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void loadHealth()} disabled={loading}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => void loadHealth()}
+          disabled={loading}
+        >
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
@@ -197,9 +203,7 @@ const McpConnectionInfoPage = () => {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Connection Details</CardTitle>
-            <CardDescription>
-              The local server is exposed over streamable HTTP.
-            </CardDescription>
+            <CardDescription>The local server is exposed over streamable HTTP.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-3">

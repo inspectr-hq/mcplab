@@ -55,16 +55,28 @@ export function touchSession<T extends { lastTouchedAt: number }>(session: T): v
 export async function withTimeout<T>(
   promiseFactory: () => Promise<T>,
   timeoutMs: number,
-  message = `Operation timed out after ${timeoutMs}ms`
+  message = `Operation timed out after ${timeoutMs}ms`,
+  signal?: AbortSignal
 ): Promise<T> {
+  throwIfAborted(signal);
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
   });
+  const abortPromise =
+    signal &&
+    new Promise<never>((_, reject) => {
+      abortListener = () => reject(createAbortError());
+      signal.addEventListener('abort', abortListener, { once: true });
+    });
   try {
-    return await Promise.race([promiseFactory(), timeout]);
+    return await Promise.race(
+      abortPromise ? [promiseFactory(), timeout, abortPromise] : [promiseFactory(), timeout]
+    );
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
+    if (signal && abortListener) signal.removeEventListener('abort', abortListener);
   }
 }
 
@@ -96,6 +108,11 @@ export function flushDanglingToolCalls(llmMessages: LlmMessage[]): void {
   }
 }
 
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw createAbortError();
+}
+
 export interface AssistantToolCallRequestEnvelope {
   type: 'tool_call_request';
   text: string;
@@ -110,6 +127,7 @@ export async function chatWithJsonRetry<T>(params: {
   system: string;
   parse: (text: string) => T;
   toolCallFallbackText: (toolName: string) => string;
+  signal?: AbortSignal;
 }): Promise<T | AssistantToolCallRequestEnvelope> {
   const invalidJsonRetryPrompt =
     'Your previous response was not valid JSON. Reply ONLY with a valid JSON envelope matching the specified schema.';
@@ -137,8 +155,10 @@ export async function chatWithJsonRetry<T>(params: {
     agent: params.agent,
     messages: params.messages,
     tools: params.tools,
-    system: params.system
+    system: params.system,
+    signal: params.signal
   });
+  throwIfAborted(params.signal);
   const nativeFirstPass = toToolCallRequest(response);
   if (nativeFirstPass) return nativeFirstPass;
 
@@ -155,10 +175,18 @@ export async function chatWithJsonRetry<T>(params: {
       agent: params.agent,
       messages: retryMessages,
       tools: params.tools,
-      system: params.system
+      system: params.system,
+      signal: params.signal
     });
+    throwIfAborted(params.signal);
     const nativeRetryPass = toToolCallRequest(response);
     if (nativeRetryPass) return nativeRetryPass;
     return params.parse(response.content?.trim() ?? '');
   }
+}
+
+function createAbortError(): Error {
+  const error = new Error('Request aborted');
+  error.name = 'AbortError';
+  return error;
 }

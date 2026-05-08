@@ -735,16 +735,20 @@ export interface EvalDataSource {
     outputPath?: string;
     overwrite?: boolean;
   }) => Promise<ResultAssistantApplyReportResponse>;
-  createResultAssistantSession: (params: {
-    runId?: string;
-    scope?: 'run' | 'all_runs';
-  }) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
+  createResultAssistantSession: (
+    params: {
+      runId?: string;
+      scope?: 'run' | 'all_runs';
+    },
+    signal?: AbortSignal
+  ) => Promise<{ sessionId: string; session: ResultAssistantSessionView }>;
   getResultAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ResultAssistantSessionView }>;
   sendResultAssistantMessage: (
     sessionId: string,
-    message: string
+    message: string,
+    signal?: AbortSignal
   ) => Promise<{ session: ResultAssistantSessionView; response: ResultAssistantTurnResponse }>;
   approveResultAssistantToolCall: (
     sessionId: string,
@@ -783,44 +787,48 @@ export interface EvalDataSource {
   updateWorkspaceSettings: (patch: {
     scenarioAssistantAgentName?: string;
   }) => Promise<WorkspaceSettings | null>;
-  createScenarioAssistantSession: (params: {
-    configId?: string;
-    configPath?: string;
-    scenarioId: string;
-    selectedAssistantAgentName: string;
-    context: {
-      configSnapshotPolicy?: {
-        enabled: boolean;
-        mode: 'warn' | 'fail_on_drift';
-        baselineSnapshotId?: string;
-      };
-      scenario: {
-        id: string;
-        name: string;
-        prompt: string;
-        serverNames: string[];
-        evalRules: Array<{
-          type: EvalRule['type'];
-          value?: string;
-          path?: string;
-          equals?: string | number | boolean;
-        }>;
-        extractRules: Array<{ name: string; pattern: string }>;
-        snapshotEval?: {
-          enabled?: boolean;
+  createScenarioAssistantSession: (
+    params: {
+      configId?: string;
+      configPath?: string;
+      scenarioId: string;
+      selectedAssistantAgentName: string;
+      context: {
+        configSnapshotPolicy?: {
+          enabled: boolean;
+          mode: 'warn' | 'fail_on_drift';
           baselineSnapshotId?: string;
         };
+        scenario: {
+          id: string;
+          name: string;
+          prompt: string;
+          serverNames: string[];
+          evalRules: Array<{
+            type: EvalRule['type'];
+            value?: string;
+            path?: string;
+            equals?: string | number | boolean;
+          }>;
+          extractRules: Array<{ name: string; pattern: string }>;
+          snapshotEval?: {
+            enabled?: boolean;
+            baselineSnapshotId?: string;
+          };
+        };
+        availableServers: Array<{ name: string; url?: string }>;
+        availableAgents: Array<{ name: string; provider: string; model: string }>;
       };
-      availableServers: Array<{ name: string; url?: string }>;
-      availableAgents: Array<{ name: string; provider: string; model: string }>;
-    };
-  }) => Promise<{ sessionId: string; session: ScenarioAssistantSessionView }>;
+    },
+    signal?: AbortSignal
+  ) => Promise<{ sessionId: string; session: ScenarioAssistantSessionView }>;
   getScenarioAssistantSession: (
     sessionId: string
   ) => Promise<{ session: ScenarioAssistantSessionView }>;
   sendScenarioAssistantMessage: (
     sessionId: string,
-    message: string
+    message: string,
+    signal?: AbortSignal
   ) => Promise<{ session: ScenarioAssistantSessionView; response: ScenarioAssistantTurnResponse }>;
   approveScenarioAssistantToolCall: (
     sessionId: string,

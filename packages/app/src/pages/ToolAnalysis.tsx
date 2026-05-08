@@ -1,22 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { toast } from "@/hooks/use-toast";
-import type { RunJobEvent, ToolAnalysisReport } from "@/lib/data-sources/types";
-import { isWriteDeleteClassification } from "@/lib/tool-analysis-utils";
-import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
-import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  ToolAnalysisReportView,
+  toolAnalysisReportToMarkdown
+} from '@/components/tool-analysis/ToolAnalysisReportView';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { toast } from '@/hooks/use-toast';
+import type { RunJobEvent, ToolAnalysisReport } from '@/lib/data-sources/types';
+import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
+import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -46,24 +49,19 @@ export function parseAnalysisProgressFromEvents(events: ProgressEvent[]): {
   return { totalTools, startedTools: started.size, finishedTools: finished.size, percent };
 }
 
-const TOOL_ANALYSIS_ACTIVE_JOB_KEY = "mcplab.toolAnalysis.activeJobId";
+const TOOL_ANALYSIS_ACTIVE_JOB_KEY = 'mcplab.toolAnalysis.activeJobId';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-
-function ModeInfo({
-  text
-}: {
-  text: string;
-}) {
+function ModeInfo({ text }: { text: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -85,7 +83,7 @@ function ModeInfo({
 
 function formatToolDiscoveryWarning(serverName: string, warning: string): string {
   const lower = warning.toLowerCase();
-  if (lower.includes("failed to load tools") || lower.includes("failed to connect to mcp server")) {
+  if (lower.includes('failed to load tools') || lower.includes('failed to connect to mcp server')) {
     return `Could not load tools from '${serverName}'. Check that the MCP server is running and reachable, then try Refresh Servers / Discover Tools again.`;
   }
   return warning;
@@ -116,12 +114,11 @@ function SafetyBadge({
   );
 }
 
-
 const ToolAnalysisPage = () => {
   const { source } = useDataSource();
   const { servers, agents, loading: librariesLoading, reload: reloadLibraries } = useLibraries();
 
-  const [settingsAssistantAgentName, setSettingsAssistantAgentName] = useState("");
+  const [settingsAssistantAgentName, setSettingsAssistantAgentName] = useState('');
   const [selectedServerNames, setSelectedServerNames] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<
@@ -134,13 +131,13 @@ const ToolAnalysisPage = () => {
         description?: string;
         inputSchema?: unknown;
         outputSchema?: unknown;
-        safetyClassification: "read_only" | "unsafe_or_unknown";
+        safetyClassification: 'read_only' | 'unsafe_or_unknown';
         classificationReason: string;
       }>;
     }[]
   >([]);
   const [selectedToolsByServer, setSelectedToolsByServer] = useState<Record<string, string[]>>({});
-  const [toolQuery, setToolQuery] = useState("");
+  const [toolQuery, setToolQuery] = useState('');
   const [metadataReview, setMetadataReview] = useState(true);
   const [deeperAnalysis, setDeeperAnalysis] = useState(false);
   const [maxParallelTools, setMaxParallelTools] = useState(2);
@@ -151,13 +148,13 @@ const ToolAnalysisPage = () => {
   const [report, setReport] = useState<ToolAnalysisReport | null>(null);
   const [savedReportId, setSavedReportId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [viewStep, setViewStep] = useState<"configure" | "run" | "report">("configure");
-  const [runState, setRunState] = useState<"idle" | "running" | "stopped" | "error">("idle");
+  const [viewStep, setViewStep] = useState<'configure' | 'run' | 'report'>('configure');
+  const [runState, setRunState] = useState<'idle' | 'running' | 'stopped' | 'error'>('idle');
   const [authInProgress, setAuthInProgress] = useState(false);
   const cleanupRef = useRef<null | (() => void)>(null);
   const eventsContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || "";
+  const effectiveAssistantAgentName = settingsAssistantAgentName || agents[0]?.name || '';
   const analysisProgress = useMemo(() => parseAnalysisProgressFromEvents(events), [events]);
 
   useEffect(() => {
@@ -166,10 +163,10 @@ const ToolAnalysisPage = () => {
       .getWorkspaceSettings()
       .then((settings) => {
         if (!active || !settings) return;
-        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? "");
+        setSettingsAssistantAgentName(settings.scenarioAssistantAgentName ?? '');
       })
       .catch(() => {
-        if (active) setSettingsAssistantAgentName("");
+        if (active) setSettingsAssistantAgentName('');
       });
     return () => {
       active = false;
@@ -210,7 +207,7 @@ const ToolAnalysisPage = () => {
     cleanupRef.current?.();
     cleanupRef.current = source.subscribeToolAnalysisJob(jobId, (event) => {
       setEvents((prev) => [...prev, event]);
-      if (event.type === "completed") {
+      if (event.type === 'completed') {
         void source
           .getToolAnalysisResult(jobId)
           .then((result) => {
@@ -219,22 +216,22 @@ const ToolAnalysisPage = () => {
           })
           .catch((error: unknown) =>
             toast({
-              title: "Could not load analysis report",
-              description: (error instanceof Error ? error.message : String(error)),
-              variant: "destructive"
+              title: 'Could not load analysis report',
+              description: error instanceof Error ? error.message : String(error),
+              variant: 'destructive'
             })
           )
           .finally(() => {
             clearActiveToolAnalysisJob();
             setActiveJobId(null);
             setSubmitting(false);
-            setRunState("idle");
-            setViewStep("run");
+            setRunState('idle');
+            setViewStep('run');
           });
-      } else if (event.type === "error") {
-        const message = String(event.payload?.message ?? "");
+      } else if (event.type === 'error') {
+        const message = String(event.payload?.message ?? '');
         clearActiveToolAnalysisJob();
-        setRunState(message.toLowerCase().includes("abort") ? "stopped" : "error");
+        setRunState(message.toLowerCase().includes('abort') ? 'stopped' : 'error');
         setActiveJobId(null);
         setSubmitting(false);
       }
@@ -243,16 +240,16 @@ const ToolAnalysisPage = () => {
 
   useEffect(() => {
     if (activeJobId || report) return;
-    let storedJobId = "";
+    let storedJobId = '';
     try {
-      storedJobId = sessionStorage.getItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY) ?? "";
+      storedJobId = sessionStorage.getItem(TOOL_ANALYSIS_ACTIVE_JOB_KEY) ?? '';
     } catch {
-      storedJobId = "";
+      storedJobId = '';
     }
     if (!storedJobId) return;
 
-    setViewStep("run");
-    setRunState("running");
+    setViewStep('run');
+    setRunState('running');
     setSubmitting(true);
     setActiveJobId(storedJobId);
     setEvents([]);
@@ -270,7 +267,7 @@ const ToolAnalysisPage = () => {
     }
     const oauthServerNames = selectedServerNames.filter((serverName) => {
       const selectedServer = servers.find((server) => server.id === serverName);
-      return selectedServer?.authType === "oauth2";
+      return selectedServer?.authType === 'oauth2';
     });
     try {
       if (oauthServerNames.length > 0) {
@@ -282,16 +279,16 @@ const ToolAnalysisPage = () => {
             toast({
               title: `OAuth login required for ${serverName}`,
               description:
-                "Complete login in the opened browser tab. Discovery will continue automatically."
+                'Complete login in the opened browser tab. Discovery will continue automatically.'
             });
           }
         });
       }
     } catch (error: unknown) {
       toast({
-        title: "OAuth login failed",
+        title: 'OAuth login failed',
         description: error instanceof Error ? error.message : String(error),
-        variant: "destructive"
+        variant: 'destructive'
       });
       setAuthInProgress(false);
       return;
@@ -315,9 +312,9 @@ const ToolAnalysisPage = () => {
       });
     } catch (error: unknown) {
       toast({
-        title: "Could not discover MCP tools",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not discover MCP tools',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setDiscovering(false);
@@ -327,7 +324,7 @@ const ToolAnalysisPage = () => {
   useEffect(() => {
     void discoverTools();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedServerNames.join("|")]);
+  }, [selectedServerNames.join('|')]);
 
   const filteredDiscovered = useMemo(() => {
     const q = toolQuery.trim().toLowerCase();
@@ -338,7 +335,7 @@ const ToolAnalysisPage = () => {
         tools: server.tools.filter(
           (tool) =>
             tool.name.toLowerCase().includes(q) ||
-            (tool.description || "").toLowerCase().includes(q)
+            (tool.description || '').toLowerCase().includes(q)
         )
       }))
       .filter((server) => server.tools.length > 0);
@@ -348,19 +345,19 @@ const ToolAnalysisPage = () => {
     () => Object.values(selectedToolsByServer).reduce((sum, list) => sum + list.length, 0),
     [selectedToolsByServer]
   );
-  const selectedServerLabel = selectedServerNames[0] ?? "";
+  const selectedServerLabel = selectedServerNames[0] ?? '';
 
   const startAnalysis = async () => {
     if (!metadataReview && !deeperAnalysis) {
-      toast({ title: "Select at least one mode", variant: "destructive" });
+      toast({ title: 'Select at least one mode', variant: 'destructive' });
       return;
     }
     if (selectedServerNames.length !== 1) {
-      toast({ title: "Select exactly one server", variant: "destructive" });
+      toast({ title: 'Select exactly one server', variant: 'destructive' });
       return;
     }
     if (totalSelectedTools === 0) {
-      toast({ title: "Select at least one tool", variant: "destructive" });
+      toast({ title: 'Select at least one tool', variant: 'destructive' });
       return;
     }
 
@@ -368,12 +365,12 @@ const ToolAnalysisPage = () => {
     setEvents([]);
     setReport(null);
     setSavedReportId(null);
-    setViewStep("run");
-    setRunState("running");
+    setViewStep('run');
+    setRunState('running');
     try {
       const selectedServerName = selectedServerNames[0];
       const selectedServer = servers.find((server) => server.id === selectedServerName);
-      if (selectedServer?.authType === "oauth2") {
+      if (selectedServer?.authType === 'oauth2') {
         setAuthInProgress(true);
         await ensureOAuthForServers({
           serverNames: [selectedServerName],
@@ -382,7 +379,7 @@ const ToolAnalysisPage = () => {
             toast({
               title: `OAuth login required for ${serverName}`,
               description:
-                "Complete login in the opened browser tab. Analysis will continue automatically."
+                'Complete login in the opened browser tab. Analysis will continue automatically.'
             });
           }
         });
@@ -393,7 +390,7 @@ const ToolAnalysisPage = () => {
         maxParallelTools,
         modes: { metadataReview, deeperAnalysis },
         deeperAnalysisOptions: {
-          autoRunPolicy: "read_only_allowlist",
+          autoRunPolicy: 'read_only_allowlist',
           sampleCallsPerTool,
           toolCallTimeoutMs
         }
@@ -403,12 +400,12 @@ const ToolAnalysisPage = () => {
       attachToJob(jobId);
     } catch (error: unknown) {
       setSubmitting(false);
-      setRunState("error");
-      setViewStep("run");
+      setRunState('error');
+      setViewStep('run');
       toast({
-        title: "Could not start tool analysis",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not start tool analysis',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setAuthInProgress(false);
@@ -420,7 +417,7 @@ const ToolAnalysisPage = () => {
     const jobId = activeJobId;
     try {
       const response = await source.stopToolAnalysis(jobId);
-      if (response.status === "completed") {
+      if (response.status === 'completed') {
         cleanupRef.current?.();
         cleanupRef.current = null;
         const result = await source.getToolAnalysisResult(jobId);
@@ -429,52 +426,54 @@ const ToolAnalysisPage = () => {
         clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
-        setRunState("idle");
-        setViewStep("run");
-        toast({ title: "Analysis already finished", description: "Showing the result overview." });
+        setRunState('idle');
+        setViewStep('run');
+        toast({ title: 'Analysis already finished', description: 'Showing the result overview.' });
         return;
       }
-      if (response.status === "stopped") {
+      if (response.status === 'stopped') {
         cleanupRef.current?.();
         cleanupRef.current = null;
         clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
-        setRunState("stopped");
-        toast({ title: "Analysis stopped" });
+        setRunState('stopped');
+        toast({ title: 'Analysis stopped' });
         return;
       }
-      if (response.status === "error") {
+      if (response.status === 'error') {
         cleanupRef.current?.();
         cleanupRef.current = null;
         clearActiveToolAnalysisJob();
         setActiveJobId(null);
         setSubmitting(false);
-        setRunState("error");
+        setRunState('error');
         toast({
-          title: "Analysis already ended with an error",
-          description: "Review the progress log and return to Configure Analysis."
+          title: 'Analysis already ended with an error',
+          description: 'Review the progress log and return to Configure Analysis.'
         });
         return;
       }
-      toast({ title: "Stopping analysis..." });
+      toast({ title: 'Stopping analysis...' });
     } catch (error: unknown) {
       toast({
-        title: "Could not stop analysis",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not stop analysis',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     }
   };
 
   const backToConfigure = () => {
-    setViewStep("configure");
-    setRunState("idle");
+    setViewStep('configure');
+    setRunState('idle');
     setActiveJobId(null);
   };
 
   const toggleServer = (serverName: string, checked: boolean) => {
-    setSelectedServerNames((prev) => (checked ? [serverName] : prev.filter((name) => name !== serverName)));
+    setSelectedServerNames((prev) =>
+      checked ? [serverName] : prev.filter((name) => name !== serverName)
+    );
   };
 
   const toggleTool = (serverName: string, toolName: string, checked: boolean) => {
@@ -492,20 +491,20 @@ const ToolAnalysisPage = () => {
 
   const canOpenConfigureStep = true;
   const canOpenRunStep =
-    activeJobId !== null || events.length > 0 || runState === "stopped" || runState === "error";
+    activeJobId !== null || events.length > 0 || runState === 'stopped' || runState === 'error';
   const canOpenReportStep = Boolean(report);
 
-  const openStep = (step: "configure" | "run" | "report") => {
-    if (step === "configure" && canOpenConfigureStep) {
-      setViewStep("configure");
+  const openStep = (step: 'configure' | 'run' | 'report') => {
+    if (step === 'configure' && canOpenConfigureStep) {
+      setViewStep('configure');
       return;
     }
-    if (step === "run" && canOpenRunStep) {
-      setViewStep("run");
+    if (step === 'run' && canOpenRunStep) {
+      setViewStep('run');
       return;
     }
-    if (step === "report" && canOpenReportStep) {
-      setViewStep("report");
+    if (step === 'report' && canOpenReportStep) {
+      setViewStep('report');
     }
   };
 
@@ -524,12 +523,12 @@ const ToolAnalysisPage = () => {
         <div className="hidden flex-wrap items-center gap-2 md:flex">
           <button
             type="button"
-            onClick={() => openStep("configure")}
+            onClick={() => openStep('configure')}
             className="rounded-full"
             aria-label="Open Configure Analysis"
           >
             <Badge
-              variant={viewStep === "configure" ? "default" : "outline"}
+              variant={viewStep === 'configure' ? 'default' : 'outline'}
               className="cursor-pointer"
             >
               Configure Analysis
@@ -537,28 +536,28 @@ const ToolAnalysisPage = () => {
           </button>
           <button
             type="button"
-            onClick={() => openStep("run")}
+            onClick={() => openStep('run')}
             disabled={!canOpenRunStep}
             className="rounded-full disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Open Run Analysis"
           >
             <Badge
-              variant={viewStep === "run" ? "default" : "outline"}
-              className={canOpenRunStep ? "cursor-pointer" : "cursor-not-allowed"}
+              variant={viewStep === 'run' ? 'default' : 'outline'}
+              className={canOpenRunStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Run Analysis
             </Badge>
           </button>
           <button
             type="button"
-            onClick={() => openStep("report")}
+            onClick={() => openStep('report')}
             disabled={!canOpenReportStep}
             className="rounded-full disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Open Report"
           >
             <Badge
-              variant={viewStep === "report" ? "default" : "outline"}
-              className={canOpenReportStep ? "cursor-pointer" : "cursor-not-allowed"}
+              variant={viewStep === 'report' ? 'default' : 'outline'}
+              className={canOpenReportStep ? 'cursor-pointer' : 'cursor-not-allowed'}
             >
               Report
             </Badge>
@@ -566,267 +565,341 @@ const ToolAnalysisPage = () => {
         </div>
       </div>
 
-      {viewStep === "configure" && (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Run MCP analysis</CardTitle>
-          <CardDescription>
-            Select servers and tools, choose metadata review and/or deeper sample-call analysis, then run the report.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {!effectiveAssistantAgentName && (
-            <Alert>
-              <AlertTitle>No assistant agent available</AlertTitle>
-              <AlertDescription>
-                Add a library agent in{" "}
-                <Link to="/libraries/agents" className="underline">
-                  Agents
-                </Link>{" "}
-                and optionally set the default Scenario Assistant Agent in{" "}
-                <Link to="/settings" className="underline">
-                  Settings
-                </Link>
-                .
-              </AlertDescription>
-            </Alert>
-          )}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Servers</Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void reloadLibraries()}
-                disabled={librariesLoading || authInProgress}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh Servers
-              </Button>
-            </div>
-            <div className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
-              {servers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No library servers configured.</p>
-              ) : (
-                servers.map((server) => {
-                  const checked = selectedServerNames.includes(server.id);
-                  return (
-                    <label key={server.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
-                      <Checkbox checked={checked} onCheckedChange={(value) => toggleServer(server.id, Boolean(value))} />
-                      <div className="min-w-0">
-                        <div className="font-medium">{server.name || server.id}</div>
-                        {server.url && <div className="truncate text-xs text-muted-foreground">{server.url}</div>}
-                      </div>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Select exactly one MCP server for analysis.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs">Filter visible tools</Label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-9 pl-8"
-                placeholder="Filter tools by name or description..."
-                value={toolQuery}
-                onChange={(e) => setToolQuery(e.target.value)}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Filtering only changes what is shown; selected tools remain selected.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">
-                {selectedServerLabel ? `Tools for ${selectedServerLabel}` : "Tools"}
-              </Label>
-              <Button type="button" size="sm" variant="outline" onClick={() => void discoverTools()} disabled={discovering || authInProgress || selectedServerNames.length === 0}>
-                {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Discover Tools
-              </Button>
-            </div>
-            <div className="space-y-3 rounded-md border p-3">
-              {selectedServerNames.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Select a server to discover tools.</p>
-              ) : discovering && discovered.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Loading tools...</p>
-              ) : filteredDiscovered.length === 0 && !discovering ? (
-                <p className="text-sm text-muted-foreground">No discovered tools match the current filters.</p>
-              ) : (
-                filteredDiscovered.map((server) => {
-                  const selected = new Set(selectedToolsByServer[server.serverName] ?? []);
-                  return (
-                    <div key={server.serverName} className="rounded-md border p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="font-medium">{server.serverName}</div>
-                        <div className="flex items-center gap-2">
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setAllToolsForServer(server.serverName, server.tools.map((t) => t.name))}>
-                            Select all
-                          </Button>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => setAllToolsForServer(server.serverName, [])}>
-                            Clear
-                          </Button>
-                        </div>
-                      </div>
-                      {server.warnings.length > 0 && (
-                        <div className="mb-2 space-y-1">
-                          {server.warnings.map((warning) => (
-                            <div key={`${server.serverName}-${warning}`} className="text-xs text-amber-700">
-                              {formatToolDiscoveryWarning(server.serverName, warning)}
+      {viewStep === 'configure' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Run MCP analysis</CardTitle>
+            <CardDescription>
+              Select servers and tools, choose metadata review and/or deeper sample-call analysis,
+              then run the report.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {!effectiveAssistantAgentName && (
+              <Alert>
+                <AlertTitle>No assistant agent available</AlertTitle>
+                <AlertDescription>
+                  Add a library agent in{' '}
+                  <Link to="/libraries/agents" className="underline">
+                    Agents
+                  </Link>{' '}
+                  and optionally set the default Scenario Assistant Agent in{' '}
+                  <Link to="/settings" className="underline">
+                    Settings
+                  </Link>
+                  .
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Servers</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void reloadLibraries()}
+                  disabled={librariesLoading || authInProgress}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh Servers
+                </Button>
+              </div>
+              <div className="grid gap-2 rounded-md border p-3 md:grid-cols-2">
+                {servers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No library servers configured.</p>
+                ) : (
+                  servers.map((server) => {
+                    const checked = selectedServerNames.includes(server.id);
+                    return (
+                      <label
+                        key={server.id}
+                        className="flex items-start gap-2 rounded-md border p-2 text-sm"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) => toggleServer(server.id, Boolean(value))}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-medium">{server.name || server.id}</div>
+                          {server.url && (
+                            <div className="truncate text-xs text-muted-foreground">
+                              {server.url}
                             </div>
-                          ))}
+                          )}
                         </div>
-                      )}
-                      <div className="grid gap-2">
-                        {server.tools.map((tool) => {
-                          const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
-                          const safetyLabel =
-                            tool.safetyClassification === "read_only"
-                              ? "read-only"
-                              : isWriteDelete
-                                ? "write/delete"
-                                : "unsafe/unknown";
-                          const safetyVariantClass =
-                            tool.safetyClassification === "read_only"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : isWriteDelete
-                                ? "border-amber-300 bg-amber-50 text-amber-800"
-                                : "border-slate-300 bg-slate-100 text-slate-700";
-                          return (
-                          <label key={`${server.serverName}-${tool.name}`} className="flex items-start gap-2 rounded border p-2">
-                            <Checkbox
-                              checked={selected.has(tool.name)}
-                              onCheckedChange={(value) =>
-                                toggleTool(server.serverName, tool.name, Boolean(value))
-                              }
-                            />
-                            <div className="min-w-0 space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono text-xs">{tool.name}</span>
-                                {tool.title && (
-                                  <span className="text-xs text-muted-foreground">{tool.title}</span>
-                                )}
-                                <SafetyBadge
-                                  label={safetyLabel}
-                                  reason={tool.classificationReason}
-                                  variantClassName={safetyVariantClass}
-                                />
-                                {tool.inputSchema && (
-                                  <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">
-                                    schema: input
-                                  </Badge>
-                                )}
-                                {tool.outputSchema && (
-                                  <Badge variant="outline" className="border-border text-[10px] text-muted-foreground">
-                                    schema: output
-                                  </Badge>
-                                )}
-                              </div>
-                              {tool.description && (
-                                <p className="text-xs text-muted-foreground line-clamp-2">{tool.description}</p>
-                              )}
-                            </div>
-                          </label>
-                        );
-                      })}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select exactly one MCP server for analysis.
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Selected tools: {totalSelectedTools}
-            </p>
-          </div>
 
-          <div className="space-y-3 rounded-md border p-3">
-            <div className="text-sm font-medium">Analysis Modes</div>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={metadataReview} onCheckedChange={(v) => setMetadataReview(Boolean(v))} />
-              <span className="inline-flex items-center gap-1.5">
-                Metadata / schema review
-                <ModeInfo text="No tool execution. Reviews tool names, descriptions, and schemas only." />
-              </span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={deeperAnalysis} onCheckedChange={(v) => setDeeperAnalysis(Boolean(v))} />
-              <span className="inline-flex items-center gap-1.5">
-                Deeper analysis
-                <ModeInfo text="Runs sample MCP tool calls automatically for read-only tools only (based on the safety allowlist)." />
-              </span>
-            </label>
-            <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Max parallel tools</Label>
+            <div className="space-y-2">
+              <Label className="text-xs">Filter visible tools</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  type="number"
-                  min={1}
-                  max={8}
-                  value={maxParallelTools}
-                  onChange={(e) => setMaxParallelTools(Math.max(1, Math.min(8, Number(e.target.value) || 2)))}
-                  className="h-8"
+                  className="h-9 pl-8"
+                  placeholder="Filter tools by name or description..."
+                  value={toolQuery}
+                  onChange={(e) => setToolQuery(e.target.value)}
                 />
               </div>
-              {deeperAnalysis ? (
-              <>
+              <p className="text-xs text-muted-foreground">
+                Filtering only changes what is shown; selected tools remain selected.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">
+                  {selectedServerLabel ? `Tools for ${selectedServerLabel}` : 'Tools'}
+                </Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void discoverTools()}
+                  disabled={discovering || authInProgress || selectedServerNames.length === 0}
+                >
+                  {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Discover Tools
+                </Button>
+              </div>
+              <div className="space-y-3 rounded-md border p-3">
+                {selectedServerNames.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Select a server to discover tools.
+                  </p>
+                ) : discovering && discovered.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Loading tools...</p>
+                ) : filteredDiscovered.length === 0 && !discovering ? (
+                  <p className="text-sm text-muted-foreground">
+                    No discovered tools match the current filters.
+                  </p>
+                ) : (
+                  filteredDiscovered.map((server) => {
+                    const selected = new Set(selectedToolsByServer[server.serverName] ?? []);
+                    return (
+                      <div key={server.serverName} className="rounded-md border p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="font-medium">{server.serverName}</div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setAllToolsForServer(
+                                  server.serverName,
+                                  server.tools.map((t) => t.name)
+                                )
+                              }
+                            >
+                              Select all
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setAllToolsForServer(server.serverName, [])}
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        </div>
+                        {server.warnings.length > 0 && (
+                          <div className="mb-2 space-y-1">
+                            {server.warnings.map((warning) => (
+                              <div
+                                key={`${server.serverName}-${warning}`}
+                                className="text-xs text-amber-700"
+                              >
+                                {formatToolDiscoveryWarning(server.serverName, warning)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="grid gap-2">
+                          {server.tools.map((tool) => {
+                            const isWriteDelete = isWriteDeleteClassification(
+                              tool.classificationReason
+                            );
+                            const safetyLabel =
+                              tool.safetyClassification === 'read_only'
+                                ? 'read-only'
+                                : isWriteDelete
+                                ? 'write/delete'
+                                : 'unsafe/unknown';
+                            const safetyVariantClass =
+                              tool.safetyClassification === 'read_only'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : isWriteDelete
+                                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                                : 'border-slate-300 bg-slate-100 text-slate-700';
+                            return (
+                              <label
+                                key={`${server.serverName}-${tool.name}`}
+                                className="flex items-start gap-2 rounded border p-2"
+                              >
+                                <Checkbox
+                                  checked={selected.has(tool.name)}
+                                  onCheckedChange={(value) =>
+                                    toggleTool(server.serverName, tool.name, Boolean(value))
+                                  }
+                                />
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-xs">{tool.name}</span>
+                                    {tool.title && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {tool.title}
+                                      </span>
+                                    )}
+                                    <SafetyBadge
+                                      label={safetyLabel}
+                                      reason={tool.classificationReason}
+                                      variantClassName={safetyVariantClass}
+                                    />
+                                    {tool.inputSchema && (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-border text-[10px] text-muted-foreground"
+                                      >
+                                        schema: input
+                                      </Badge>
+                                    )}
+                                    {tool.outputSchema && (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-border text-[10px] text-muted-foreground"
+                                      >
+                                        schema: output
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {tool.description && (
+                                    <p className="text-xs text-muted-foreground line-clamp-2">
+                                      {tool.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Selected tools: {totalSelectedTools}</p>
+            </div>
+
+            <div className="space-y-3 rounded-md border p-3">
+              <div className="text-sm font-medium">Analysis Modes</div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={metadataReview}
+                  onCheckedChange={(v) => setMetadataReview(Boolean(v))}
+                />
+                <span className="inline-flex items-center gap-1.5">
+                  Metadata / schema review
+                  <ModeInfo text="No tool execution. Reviews tool names, descriptions, and schemas only." />
+                </span>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={deeperAnalysis}
+                  onCheckedChange={(v) => setDeeperAnalysis(Boolean(v))}
+                />
+                <span className="inline-flex items-center gap-1.5">
+                  Deeper analysis
+                  <ModeInfo text="Runs sample MCP tool calls automatically for read-only tools only (based on the safety allowlist)." />
+                </span>
+              </label>
+              <div className="grid gap-3 rounded-md border bg-muted/20 p-3 md:grid-cols-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Safety profile</Label>
-                  <div className="text-sm">Read-only allowlist only</div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Sample calls per tool</Label>
+                  <Label className="text-xs">Max parallel tools</Label>
                   <Input
                     type="number"
                     min={1}
-                    max={5}
-                    value={sampleCallsPerTool}
-                    onChange={(e) => setSampleCallsPerTool(Math.max(1, Math.min(5, Number(e.target.value) || 1)))}
+                    max={8}
+                    value={maxParallelTools}
+                    onChange={(e) =>
+                      setMaxParallelTools(Math.max(1, Math.min(8, Number(e.target.value) || 2)))
+                    }
                     className="h-8"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Tool call timeout (ms)</Label>
-                  <Input
-                    type="number"
-                    min={1000}
-                    max={60000}
-                    step={500}
-                    value={toolCallTimeoutMs}
-                    onChange={(e) => setToolCallTimeoutMs(Math.max(1000, Math.min(60000, Number(e.target.value) || 10000)))}
-                    className="h-8"
-                  />
-                </div>
-                <div className="md:col-span-3 text-xs text-amber-700">
-                  Deeper analysis may execute read-only MCP tools automatically.
-                </div>
-              </>
-              ) : (
-                <div className="md:col-span-2 text-xs text-muted-foreground">
-                  Deeper analysis is disabled. Only metadata/schema review will run.
-                </div>
-              )}
+                {deeperAnalysis ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Safety profile</Label>
+                      <div className="text-sm">Read-only allowlist only</div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Sample calls per tool</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={5}
+                        value={sampleCallsPerTool}
+                        onChange={(e) =>
+                          setSampleCallsPerTool(
+                            Math.max(1, Math.min(5, Number(e.target.value) || 1))
+                          )
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Tool call timeout (ms)</Label>
+                      <Input
+                        type="number"
+                        min={1000}
+                        max={60000}
+                        step={500}
+                        value={toolCallTimeoutMs}
+                        onChange={(e) =>
+                          setToolCallTimeoutMs(
+                            Math.max(1000, Math.min(60000, Number(e.target.value) || 10000))
+                          )
+                        }
+                        className="h-8"
+                      />
+                    </div>
+                    <div className="md:col-span-3 text-xs text-amber-700">
+                      Deeper analysis may execute read-only MCP tools automatically.
+                    </div>
+                  </>
+                ) : (
+                  <div className="md:col-span-2 text-xs text-muted-foreground">
+                    Deeper analysis is disabled. Only metadata/schema review will run.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" onClick={() => void startAnalysis()} disabled={submitting || authInProgress || !!activeJobId}>
-              {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Analyze Tools
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                onClick={() => void startAnalysis()}
+                disabled={submitting || authInProgress || !!activeJobId}
+              >
+                {(submitting || !!activeJobId) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Analyze Tools
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {viewStep === "run" && (
+      {viewStep === 'run' && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-2">
@@ -835,19 +908,24 @@ const ToolAnalysisPage = () => {
                   <span>Progress</span>
                 </CardTitle>
                 <CardDescription>
-                {activeJobId
-                    ? "Live tool-analysis job events:"
+                  {activeJobId
+                    ? 'Live tool-analysis job events:'
                     : report
-                      ? "Analysis finished. Review the summary below or open the saved report details."
-                    : runState === "stopped"
-                      ? "Analysis was stopped. You can return to Configure Analysis."
-                      : runState === "error"
-                        ? "Analysis ended with an error. Review the log and go back to Configure Analysis."
-                        : "Analysis finished."}
+                    ? 'Analysis finished. Review the summary below or open the saved report details.'
+                    : runState === 'stopped'
+                    ? 'Analysis was stopped. You can return to Configure Analysis.'
+                    : runState === 'error'
+                    ? 'Analysis ended with an error. Review the log and go back to Configure Analysis.'
+                    : 'Analysis finished.'}
                 </CardDescription>
               </div>
               {activeJobId ? (
-                <Button type="button" size="sm" variant="outline" onClick={() => void stopAnalysis()}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void stopAnalysis()}
+                >
                   Stop Analysis
                 </Button>
               ) : (
@@ -870,25 +948,37 @@ const ToolAnalysisPage = () => {
                   <span>
                     {analysisProgress.totalTools > 0
                       ? `${analysisProgress.finishedTools}/${analysisProgress.totalTools} tools finished`
-                      : "Preparing analysis..."}
+                      : 'Preparing analysis...'}
                   </span>
-                  <span>{analysisProgress.totalTools > 0 ? `${analysisProgress.percent}%` : "0%"}</span>
+                  <span>
+                    {analysisProgress.totalTools > 0 ? `${analysisProgress.percent}%` : '0%'}
+                  </span>
                 </div>
-                <Progress value={analysisProgress.totalTools > 0 ? analysisProgress.percent : 0} className="h-2" />
+                <Progress
+                  value={analysisProgress.totalTools > 0 ? analysisProgress.percent : 0}
+                  className="h-2"
+                />
               </div>
             )}
             {events.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {activeJobId ? "Starting analysis..." : "No progress events captured."}
+                {activeJobId ? 'Starting analysis...' : 'No progress events captured.'}
               </p>
             ) : (
-              <div ref={eventsContainerRef} className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2">
+              <div
+                ref={eventsContainerRef}
+                className="max-h-64 space-y-1 overflow-auto rounded border bg-muted/20 p-2"
+              >
                 {events.map((event, index) => (
                   <div key={`${event.ts}-${index}`} className="text-xs">
-                    <span className="mr-2 font-mono text-muted-foreground">{new Date(event.ts).toLocaleTimeString()}</span>
-                    <Badge variant="outline" className="mr-2 text-[10px]">{event.type}</Badge>
+                    <span className="mr-2 font-mono text-muted-foreground">
+                      {new Date(event.ts).toLocaleTimeString()}
+                    </span>
+                    <Badge variant="outline" className="mr-2 text-[10px]">
+                      {event.type}
+                    </Badge>
                     <span className="break-all">
-                      {typeof event.payload.message === "string"
+                      {typeof event.payload.message === 'string'
                         ? event.payload.message
                         : JSON.stringify(event.payload)}
                     </span>
@@ -903,42 +993,60 @@ const ToolAnalysisPage = () => {
                     <div>
                       <div className="text-sm font-semibold">Result overview</div>
                       <p className="text-xs text-muted-foreground">
-                        {report.summary.toolsAnalyzed} tools analyzed, {report.summary.toolsSkipped} skipped, across{" "}
-                        {report.summary.serversAnalyzed} server{report.summary.serversAnalyzed !== 1 ? "s" : ""}.
+                        {report.summary.toolsAnalyzed} tools analyzed, {report.summary.toolsSkipped}{' '}
+                        skipped, across {report.summary.serversAnalyzed} server
+                        {report.summary.serversAnalyzed !== 1 ? 's' : ''}.
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {savedReportId && (
                         <Button asChild size="sm">
-                          <Link to={`/tool-analysis-results/${savedReportId}`}>Open result details</Link>
+                          <Link to={`/tool-analysis-results/${savedReportId}`}>
+                            Open result details
+                          </Link>
                         </Button>
                       )}
                       <Button asChild size="sm" variant="outline">
                         <Link to="/tool-analysis-results">View all results</Link>
                       </Button>
-                      <Button type="button" size="sm" variant="outline" onClick={() => openStep("report")}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openStep('report')}
+                      >
                         View inline report
                       </Button>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {report.summary.issueCounts.critical > 0 && (
-                      <Badge className="bg-red-600 text-white hover:bg-red-600">Critical: {report.summary.issueCounts.critical}</Badge>
+                      <Badge className="bg-red-600 text-white hover:bg-red-600">
+                        Critical: {report.summary.issueCounts.critical}
+                      </Badge>
                     )}
                     {report.summary.issueCounts.high > 0 && (
-                      <Badge className="bg-orange-500 text-white hover:bg-orange-500">High: {report.summary.issueCounts.high}</Badge>
+                      <Badge className="bg-orange-500 text-white hover:bg-orange-500">
+                        High: {report.summary.issueCounts.high}
+                      </Badge>
                     )}
                     {report.summary.issueCounts.medium > 0 && (
-                      <Badge className="bg-amber-500 text-white hover:bg-amber-500">Medium: {report.summary.issueCounts.medium}</Badge>
+                      <Badge className="bg-amber-500 text-white hover:bg-amber-500">
+                        Medium: {report.summary.issueCounts.medium}
+                      </Badge>
                     )}
                     {report.summary.issueCounts.low > 0 && (
-                      <Badge className="bg-blue-500 text-white hover:bg-blue-500">Low: {report.summary.issueCounts.low}</Badge>
+                      <Badge className="bg-blue-500 text-white hover:bg-blue-500">
+                        Low: {report.summary.issueCounts.low}
+                      </Badge>
                     )}
                     {report.summary.issueCounts.info > 0 && (
                       <Badge variant="outline">Info: {report.summary.issueCounts.info}</Badge>
                     )}
                     {Object.values(report.summary.issueCounts).every((n) => n === 0) && (
-                      <Badge className="bg-green-600 text-white hover:bg-green-600">No findings</Badge>
+                      <Badge className="bg-green-600 text-white hover:bg-green-600">
+                        No findings
+                      </Badge>
                     )}
                   </div>
                 </CardContent>
@@ -948,13 +1056,15 @@ const ToolAnalysisPage = () => {
         </Card>
       )}
 
-      {viewStep === "report" && report && (
+      {viewStep === 'report' && report && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-xl font-semibold">Report</h2>
               <p className="text-sm text-muted-foreground">
-                {report.summary.toolsAnalyzed} tools analyzed across {report.summary.serversAnalyzed} server{report.summary.serversAnalyzed !== 1 ? "s" : ""}.
+                {report.summary.toolsAnalyzed} tools analyzed across{' '}
+                {report.summary.serversAnalyzed} server
+                {report.summary.serversAnalyzed !== 1 ? 's' : ''}.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -979,7 +1089,7 @@ const ToolAnalysisPage = () => {
                   downloadTextFile(
                     `tool-analysis-${Date.now()}.json`,
                     `${JSON.stringify(report, null, 2)}\n`,
-                    "application/json"
+                    'application/json'
                   )
                 }
               >
@@ -994,7 +1104,7 @@ const ToolAnalysisPage = () => {
                   downloadTextFile(
                     `tool-analysis-${Date.now()}.md`,
                     toolAnalysisReportToMarkdown(report),
-                    "text/markdown"
+                    'text/markdown'
                   )
                 }
               >

@@ -218,6 +218,64 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     );
   });
 
+  it('cancels a pending scenario assistant prompt locally', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    mockSource.sendScenarioAssistantMessage.mockImplementation(
+      async (_sessionId: string, _message: string, signal?: AbortSignal) => {
+        capturedSignal = signal;
+        await new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          );
+        });
+        return {
+          session: makeAssistantSession(),
+          response: {
+            type: 'assistant_message',
+            text: 'aborted'
+          }
+        };
+      }
+    );
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={vi.fn()}
+      />
+    );
+
+    await waitFor(() => expect(mockSource.createScenarioAssistantSession).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Assistant is loading' })).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: 'Send assistant message' })).toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText(
+      'Get assistance with creating or refining this scenario ...'
+    );
+    fireEvent.change(input, { target: { value: 'Draft a better scenario' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send assistant message' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cancel assistant message' })).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assistant message' }));
+
+    await waitFor(() => expect(capturedSignal?.aborted).toBe(true));
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Draft a better scenario')).toBeInTheDocument()
+    );
+    expect(mockToast).not.toHaveBeenCalled();
+  });
+
   it('renders structured suggestions and applies patches', async () => {
     const onApplyPatch = vi.fn();
     mockSource.createScenarioAssistantSession.mockResolvedValue({
@@ -259,7 +317,9 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
   });
 
   it('merges live assistant session updates from SSE events', async () => {
-    let onScenarioEvent: ((event: { payload: { session: ScenarioAssistantSessionView } }) => void) | undefined;
+    let onScenarioEvent:
+      | ((event: { payload: { session: ScenarioAssistantSessionView } }) => void)
+      | undefined;
     mockSource.subscribeScenarioAssistantSessionEvents.mockImplementation(
       (_sessionId: string, onEvent: typeof onScenarioEvent) => {
         onScenarioEvent = onEvent;
@@ -282,7 +342,9 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
       />
     );
 
-    await waitFor(() => expect(mockSource.subscribeScenarioAssistantSessionEvents).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockSource.subscribeScenarioAssistantSessionEvents).toHaveBeenCalled()
+    );
     await act(async () => {
       onScenarioEvent?.({
         type: 'assistant_message_completed',
@@ -396,7 +458,11 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     fireEvent.click(screen.getByLabelText('Minimize assistant'));
 
     expect(mockSource.closeScenarioAssistantSession).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByPlaceholderText('Get assistance with creating or refining this scenario ...')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.queryByPlaceholderText('Get assistance with creating or refining this scenario ...')
+      ).not.toBeInTheDocument()
+    );
     expect(document.activeElement).not.toBe(assistantInput);
 
     expect(screen.getByText('Scenario Assistant (session active)')).toBeInTheDocument();

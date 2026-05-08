@@ -78,6 +78,7 @@ interface AdapterOptions {
   temperature?: number;
   max_tokens?: number;
   system?: string;
+  signal?: AbortSignal;
 }
 
 export async function runAgentScenario(params: {
@@ -140,7 +141,8 @@ export async function runAgentScenario(params: {
       model: agent.model,
       temperature: agent.temperature,
       max_tokens: agent.max_tokens,
-      system: agent.system
+      system: agent.system,
+      signal: params.signal
     });
 
     const responseText = truncate((response.content ?? '').trim(), 4000);
@@ -294,6 +296,7 @@ export async function chatWithAgent(params: {
   messages: LlmMessage[];
   tools?: ToolDef[];
   system?: string;
+  signal?: AbortSignal;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
   const tools = params.tools ?? [];
@@ -302,7 +305,8 @@ export async function chatWithAgent(params: {
     model: agent.model,
     temperature: agent.temperature,
     max_tokens: agent.max_tokens,
-    system: params.system ?? agent.system
+    system: params.system ?? agent.system,
+    signal: params.signal
   });
 }
 
@@ -337,13 +341,16 @@ class OpenAiAdapter implements LlmAdapter {
     tools: ToolDef[],
     options: AdapterOptions
   ): Promise<LlmResponse> {
-    const response = await this.client.chat.completions.create({
-      model: options.model,
-      messages: messages.map(toOpenAiMessage),
-      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-      temperature: options.temperature,
-      max_tokens: options.max_tokens
-    });
+    const response = await this.client.chat.completions.create(
+      {
+        model: options.model,
+        messages: messages.map(toOpenAiMessage),
+        tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+        temperature: options.temperature,
+        max_tokens: options.max_tokens
+      },
+      options.signal ? { signal: options.signal } : undefined
+    );
     const message = response.choices[0]?.message;
     const toolCalls = (message?.tool_calls ?? []).map((call: any) => ({
       id: call.id,
@@ -405,7 +412,10 @@ class AzureOpenAiAdapter implements LlmAdapter {
 
     const createWithTemperatureFallback = async (request: any) => {
       try {
-        return await this.client.chat.completions.create(request);
+        return await this.client.chat.completions.create(
+          request,
+          options.signal ? { signal: options.signal } : undefined
+        );
       } catch (err: any) {
         const message = String(err?.message ?? '');
         const unsupportedTemperature =
@@ -413,7 +423,10 @@ class AzureOpenAiAdapter implements LlmAdapter {
           (message.includes('not supported') || message.includes('Only the default'));
         if (!unsupportedTemperature || !('temperature' in request)) throw err;
         const { temperature: _ignored, ...withoutTemperature } = request;
-        return this.client.chat.completions.create(withoutTemperature as any);
+        return this.client.chat.completions.create(
+          withoutTemperature as any,
+          options.signal ? { signal: options.signal } : undefined
+        );
       }
     };
 
@@ -475,13 +488,17 @@ class AnthropicAdapter implements LlmAdapter {
     const system = messages.find((msg) => msg.role === 'system')?.content ?? options.system;
     const anthroMessages = toAnthropicMessages(messages);
 
-    const response = await this.createWithModelFallback(options.model, {
-      temperature: options.temperature,
-      max_tokens: options.max_tokens ?? 1024,
-      system,
-      messages: anthroMessages,
-      tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
-    });
+    const response = await this.createWithModelFallback(
+      options.model,
+      {
+        temperature: options.temperature,
+        max_tokens: options.max_tokens ?? 1024,
+        system,
+        messages: anthroMessages,
+        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
+      },
+      options.signal
+    );
 
     const toolCalls: ToolCall[] = [];
     let textContent = '';
@@ -519,18 +536,22 @@ class AnthropicAdapter implements LlmAdapter {
 
   private async createWithModelFallback(
     model: string,
-    payload: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, 'model'>
+    payload: Omit<Anthropic.Messages.MessageCreateParamsNonStreaming, 'model'>,
+    signal?: AbortSignal
   ): Promise<Anthropic.Messages.Message> {
     const candidates = anthropicModelCandidates(model);
     let lastError: unknown;
 
     for (const candidate of candidates) {
       try {
-        return await this.client.messages.create({
-          model: candidate,
-          stream: false,
-          ...payload
-        });
+        return await this.client.messages.create(
+          {
+            model: candidate,
+            stream: false,
+            ...payload
+          },
+          signal ? { signal } : undefined
+        );
       } catch (error) {
         lastError = error;
         if (!isModelNotFound(error) || candidate === candidates[candidates.length - 1]) {

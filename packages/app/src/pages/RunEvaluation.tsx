@@ -1,58 +1,66 @@
-import { useState, useEffect, useRef, useMemo } from "react";
-import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Link, useSearchParams } from "react-router-dom";
-import { useConfigs } from "@/contexts/ConfigContext";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { toast } from "@/hooks/use-toast";
-import { isUiFeatureEnabled } from "@/lib/feature-flags";
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Play, Square, CheckCircle2, RefreshCw, X, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useConfigs } from '@/contexts/ConfigContext';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { toast } from '@/hooks/use-toast';
+import { isUiFeatureEnabled } from '@/lib/feature-flags';
 import {
   buildEvalNameBySourcePath,
   buildRelativePathBySourcePath,
   buildScenarioLabelByConfigPath,
   formatQueueConfigPath,
   formatQueueScenarioLabel
-} from "@/lib/run-queue-display";
-import type { QueueEntry } from "@/lib/data-sources/types";
-import { ensureOAuthForServers } from "@/lib/oauth-session-utils";
+} from '@/lib/run-queue-display';
+import type { QueueEntry } from '@/lib/data-sources/types';
+import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
-const RUN_EVAL_ACTIVE_JOB_KEY = "mcplab.runEvaluation.activeJobId";
+const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
-  const [configId, setConfigId] = useState("");
-  const [varianceRuns, setVarianceRuns] = useState("1");
+  const [configId, setConfigId] = useState('');
+  const [varianceRuns, setVarianceRuns] = useState('1');
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [done, setDone] = useState(false);
   const [stopped, setStopped] = useState(false);
-  const [runId, setRunId] = useState<string>("");
+  const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
-  const [runNote, setRunNote] = useState("");
-  const [snapshotName, setSnapshotName] = useState("");
+  const [runNote, setRunNote] = useState('');
+  const [snapshotName, setSnapshotName] = useState('');
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
-  const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(null);
+  const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
+    null
+  );
   const logRef = useRef<HTMLDivElement>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
-  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
+  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const {
     agents: libraryAgents,
     scenarios: libraryScenarios,
@@ -61,31 +69,30 @@ const RunEvaluation = () => {
   } = useLibraries();
   const normalizedRunId = runId.trim();
   const resultsHref = normalizedRunId
-    ? `/results/${encodeURIComponent(normalizedRunId)}${configId ? `?configId=${encodeURIComponent(configId)}` : ""}`
-    : "/results";
+    ? `/results/${encodeURIComponent(normalizedRunId)}${
+        configId ? `?configId=${encodeURIComponent(configId)}` : ''
+      }`
+    : '/results';
   const selectedConfig = configs.find((item) => item.id === configId);
   const queueRelativePathBySourcePath = useMemo(
     () => buildRelativePathBySourcePath(configs),
     [configs]
   );
-  const queueEvalNameBySourcePath = useMemo(
-    () => buildEvalNameBySourcePath(configs),
-    [configs]
-  );
+  const queueEvalNameBySourcePath = useMemo(() => buildEvalNameBySourcePath(configs), [configs]);
   const queueScenarioLabelByConfigPath = useMemo(
     () => buildScenarioLabelByConfigPath(configs, libraryScenarios),
     [configs, libraryScenarios]
   );
-  const requestedConfigId = searchParams.get("configId");
+  const requestedConfigId = searchParams.get('configId');
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
     const byName = new Map<string, (typeof selectedConfig.agents)[number]>();
     const entries =
       selectedConfig.agentEntries && selectedConfig.agentEntries.length > 0
         ? selectedConfig.agentEntries
-        : selectedConfig.agents.map((agent) => ({ kind: "inline" as const, agent }));
+        : selectedConfig.agents.map((agent) => ({ kind: 'inline' as const, agent }));
     for (const entry of entries) {
-      if (entry.kind === "inline") {
+      if (entry.kind === 'inline') {
         const key = entry.agent.id;
         if (!byName.has(key)) byName.set(key, entry.agent);
         continue;
@@ -106,9 +113,9 @@ const RunEvaluation = () => {
     const entries =
       selectedConfig.scenarioEntries && selectedConfig.scenarioEntries.length > 0
         ? selectedConfig.scenarioEntries
-        : selectedConfig.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+        : selectedConfig.scenarios.map((scenario) => ({ kind: 'inline' as const, scenario }));
     for (const entry of entries) {
-      if (entry.kind === "inline") {
+      if (entry.kind === 'inline') {
         if (!byId.has(entry.scenario.id)) byId.set(entry.scenario.id, entry.scenario);
         continue;
       }
@@ -123,9 +130,11 @@ const RunEvaluation = () => {
     setConfigId(requestedConfigId);
   }, [requestedConfigId, configs]);
 
-  const prevConfigKeyRef = useRef("");
+  const prevConfigKeyRef = useRef('');
   useEffect(() => {
-    const configKey = selectedConfig ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ""}` : "";
+    const configKey = selectedConfig
+      ? `${selectedConfig.id}::${selectedConfig.sourcePath ?? ''}`
+      : '';
     if (configKey === prevConfigKeyRef.current) return;
     prevConfigKeyRef.current = configKey;
     if (!selectedConfig) {
@@ -134,9 +143,7 @@ const RunEvaluation = () => {
       return;
     }
     const configuredDefaultAgentIds = availableAgents
-      .filter((agent) =>
-        (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.id)
-      )
+      .filter((agent) => (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.id))
       .map((agent) => agent.id);
     setSelectedAgentIds(
       configuredDefaultAgentIds.length > 0
@@ -149,17 +156,28 @@ const RunEvaluation = () => {
 
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`]);
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`
+      ]);
       return;
     }
     const selectedAgents = availableAgents.filter((agent) => selectedAgentIds.includes(agent.id));
     if (selectedAgents.length === 0) {
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one agent.`]);
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Select at least one agent.`
+      ]);
       return;
     }
-    const selectedScenarios = availableScenarios.filter((scenario) => selectedScenarioIds.includes(scenario.id));
+    const selectedScenarios = availableScenarios.filter((scenario) =>
+      selectedScenarioIds.includes(scenario.id)
+    );
     if (selectedScenarios.length === 0) {
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Select at least one test.`]);
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Select at least one test.`
+      ]);
       return;
     }
     const oauthServerNames = Array.from(
@@ -171,7 +189,7 @@ const RunEvaluation = () => {
               (server) => server.id === serverName
             );
             const fromLibrary = libraryServers.find((server) => server.id === serverName);
-            return (fromConfig || fromLibrary)?.authType === "oauth2";
+            return (fromConfig || fromLibrary)?.authType === 'oauth2';
           })
       )
     );
@@ -185,21 +203,20 @@ const RunEvaluation = () => {
           onServerAuthStart: (serverName) => {
             setLogs((prev) => [
               ...prev,
-              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`,
+              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`
             ]);
           }
         });
         setLogs((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] OAuth login completed for required server(s): ${oauthServerNames.join(", ")}.`,
+          `[${new Date().toLocaleTimeString()}] OAuth login completed for required server(s): ${oauthServerNames.join(
+            ', '
+          )}.`
         ]);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] OAuth error: ${message}`,
-      ]);
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${message}`]);
       setOauthAuthInProgress(false);
       return;
     } finally {
@@ -209,16 +226,24 @@ const RunEvaluation = () => {
     setRunning(true);
     setDone(false);
     setStopped(false);
-    setRunId("");
+    setRunId('');
     const compositionMode =
-      (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === "referenced") ||
-      (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === "referenced") ||
-      (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === "referenced")
-        ? "refs-composed"
-        : "single-file/inline";
+      (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === 'referenced') ||
+      (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === 'referenced') ||
+      (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === 'referenced')
+        ? 'refs-composed'
+        : 'single-file/inline';
     setLogs([
       `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
-      `[${new Date().toLocaleTimeString()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents.map((a) => a.name || a.id).join(", ")} tests=${selectedScenarios.map((s) => s.id).join(", ")} runs=${Number(varianceRuns)} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? "on" : "off"}${runNote.trim() ? ` note=${runNote.trim()}` : ""}`
+      `[${new Date().toLocaleTimeString()}] Config=${
+        selectedConfig.name
+      } mode=${compositionMode} agents=${selectedAgents
+        .map((a) => a.name || a.id)
+        .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
+        varianceRuns
+      )} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? 'on' : 'off'}${
+        runNote.trim() ? ` note=${runNote.trim()}` : ''
+      }`
     ]);
     setProgress(10);
     try {
@@ -228,18 +253,21 @@ const RunEvaluation = () => {
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
-        runNote: runNote.trim() ? runNote.trim() : undefined,
+        runNote: runNote.trim() ? runNote.trim() : undefined
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
       attachRunJob(jobId);
       void refreshQueue();
     } catch (error: unknown) {
-      const message = (error instanceof Error ? error.message : String(error));
-      const extraHint = message.includes("Anthropic model not found")
-        ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
-        : "";
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Error: ${message}${extraHint}`]);
+      const message = error instanceof Error ? error.message : String(error);
+      const extraHint = message.includes('Anthropic model not found')
+        ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
+        : '';
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Error: ${message}${extraHint}`
+      ]);
       setRunning(false);
       setProgress(0);
       setActiveJobId(null);
@@ -272,17 +300,17 @@ const RunEvaluation = () => {
     try {
       const record = await source.createSnapshotFromRun(runId, snapshotName.trim() || undefined);
       toast({
-        title: "Snapshot saved",
-        description: `Created ${record.name} (${record.id})`,
+        title: 'Snapshot saved',
+        description: `Created ${record.name} (${record.id})`
       });
       if (!snapshotName.trim()) {
         setSnapshotName(record.name);
       }
     } catch (error: unknown) {
       toast({
-        title: "Could not save snapshot",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive",
+        title: 'Could not save snapshot',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setSavingSnapshot(false);
@@ -293,17 +321,20 @@ const RunEvaluation = () => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
 
-  useEffect(() => () => {
-    unsubscribeRef.current?.();
-  }, []);
+  useEffect(
+    () => () => {
+      unsubscribeRef.current?.();
+    },
+    []
+  );
 
   useEffect(() => {
     if (activeJobId || done) return;
-    let storedJobId = "";
+    let storedJobId = '';
     try {
-      storedJobId = sessionStorage.getItem(RUN_EVAL_ACTIVE_JOB_KEY) ?? "";
+      storedJobId = sessionStorage.getItem(RUN_EVAL_ACTIVE_JOB_KEY) ?? '';
     } catch {
-      storedJobId = "";
+      storedJobId = '';
     }
     if (!storedJobId) return;
     setActiveJobId(storedJobId);
@@ -319,7 +350,7 @@ const RunEvaluation = () => {
     return () => {
       // no-op; cleanup handled by existing unmount and attach replacement
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJobId, done]);
 
   const clearActiveRunJob = () => {
@@ -344,12 +375,16 @@ const RunEvaluation = () => {
       setQueuedJobs(q.queued);
       setActiveQueueEntry(q.active);
       // Restore blocked-auth state for page-load / reconnect scenarios where SSE was missed
-      const blockedEntry = q.queued.find((e) => e.status === "blocked_auth" && e.blockedReason === "oauth_required");
+      const blockedEntry = q.queued.find(
+        (e) => e.status === 'blocked_auth' && e.blockedReason === 'oauth_required'
+      );
       if (blockedEntry && (blockedEntry.requiredServers ?? []).length > 0) {
         setOauthRequired((prev) =>
-          prev?.jobId === blockedEntry.jobId ? prev : { jobId: blockedEntry.jobId, servers: blockedEntry.requiredServers! }
+          prev?.jobId === blockedEntry.jobId
+            ? prev
+            : { jobId: blockedEntry.jobId, servers: blockedEntry.requiredServers! }
         );
-      } else if (!q.queued.some((e) => e.status === "blocked_auth")) {
+      } else if (!q.queued.some((e) => e.status === 'blocked_auth')) {
         setOauthRequired(null);
       }
     } catch {
@@ -369,11 +404,11 @@ const RunEvaluation = () => {
       refreshConfigAndLibraries();
       void refreshQueue();
     };
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener('focus', handleFocus);
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener('focus', handleFocus);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload, reloadLibraries]);
 
   const removeQueuedJob = async (jobId: string) => {
@@ -383,7 +418,7 @@ const RunEvaluation = () => {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       // Job may have auto-advanced to running — stop it instead
-      if (msg.includes("Use the /stop endpoint")) {
+      if (msg.includes('Use the /stop endpoint')) {
         try {
           await source.stopRun(jobId);
         } catch {
@@ -391,9 +426,9 @@ const RunEvaluation = () => {
         }
       } else {
         toast({
-          title: "Could not remove queued run",
+          title: 'Could not remove queued run',
           description: msg,
-          variant: "destructive",
+          variant: 'destructive'
         });
       }
     }
@@ -405,28 +440,30 @@ const RunEvaluation = () => {
     unsubscribeRef.current?.();
     unsubscribeRef.current = source.subscribeRunJob(jobId, (event) => {
       const ts = new Date(event.ts).toLocaleTimeString();
-      if (event.type === "queued") {
+      if (event.type === 'queued') {
         setLogs((prev) => {
-          const position = event.payload.position ? ` (position ${event.payload.position})` : "";
+          const position = event.payload.position ? ` (position ${event.payload.position})` : '';
           const line = `[${ts}] Run queued${position}. Waiting for active run to finish...`;
           return prev.includes(line) ? prev : [...prev, line];
         });
         setProgress(5);
         return;
       }
-      if (event.type === "oauth_required") {
+      if (event.type === 'oauth_required') {
         const servers = Array.isArray(event.payload.servers)
           ? (event.payload.servers as string[])
           : [];
-        const jobId = String(event.payload.jobId ?? "");
+        const jobId = String(event.payload.jobId ?? '');
         setOauthRequired({ jobId, servers });
         setLogs((prev) => {
-          const line = `[${ts}] OAuth required for server(s): ${servers.join(", ")}. Click "Connect & Resume" to authenticate.`;
+          const line = `[${ts}] OAuth required for server(s): ${servers.join(
+            ', '
+          )}. Click "Connect & Resume" to authenticate.`;
           return prev.includes(line) ? prev : [...prev, line];
         });
         return;
       }
-      if (event.type === "started") {
+      if (event.type === 'started') {
         setOauthRequired(null);
         oauthConnectingRef.current = false;
         setRunning(true);
@@ -439,8 +476,8 @@ const RunEvaluation = () => {
         setProgress((prev) => Math.max(prev, 30));
         void refreshQueue();
       }
-      if (event.type === "log") {
-        const message = String(event.payload.message ?? "").trim();
+      if (event.type === 'log') {
+        const message = String(event.payload.message ?? '').trim();
         if (message) {
           setLogs((prev) => {
             const line = `[${ts}] ${message}`;
@@ -448,12 +485,16 @@ const RunEvaluation = () => {
           });
           setProgress((prev) => {
             const lower = message.toLowerCase();
-            if (lower.startsWith("loading mcp evaluation config")) return Math.max(prev, 15);
-            if (lower.startsWith("loaded config")) return Math.max(prev, 20);
-            if (lower.startsWith("selected ")) return Math.max(prev, 30);
-            if (lower.startsWith("using requested agents") || lower.startsWith("using resolved default agents")) return Math.max(prev, 35);
-            if (lower.startsWith("expanded to ")) return Math.max(prev, 45);
-            if (lower.startsWith("running evaluation")) return Math.max(prev, 50);
+            if (lower.startsWith('loading mcp evaluation config')) return Math.max(prev, 15);
+            if (lower.startsWith('loaded config')) return Math.max(prev, 20);
+            if (lower.startsWith('selected ')) return Math.max(prev, 30);
+            if (
+              lower.startsWith('using requested agents') ||
+              lower.startsWith('using resolved default agents')
+            )
+              return Math.max(prev, 35);
+            if (lower.startsWith('expanded to ')) return Math.max(prev, 45);
+            if (lower.startsWith('running evaluation')) return Math.max(prev, 50);
             // "Scenario 3/6 finished:" → interpolate between 50% and 75%
             const scenarioMatch = lower.match(/^scenario (\d+)\/(\d+) finished:/);
             if (scenarioMatch) {
@@ -461,24 +502,28 @@ const RunEvaluation = () => {
               const total = Number(scenarioMatch[2]);
               return Math.max(prev, 50 + Math.round((current / total) * 25));
             }
-            if (lower.startsWith("evaluation execution finished")) return Math.max(prev, 78);
-            if (lower.startsWith("applying snapshot evaluation policy")) return Math.max(prev, 82);
-            if (lower.includes("snapshot evaluation applied") || lower.includes("snapshot evaluation enabled")) return Math.max(prev, 88);
-            if (lower.startsWith("writing results to ")) return Math.max(prev, 94);
-            if (lower.startsWith("run finished:")) return Math.max(prev, 98);
+            if (lower.startsWith('evaluation execution finished')) return Math.max(prev, 78);
+            if (lower.startsWith('applying snapshot evaluation policy')) return Math.max(prev, 82);
+            if (
+              lower.includes('snapshot evaluation applied') ||
+              lower.includes('snapshot evaluation enabled')
+            )
+              return Math.max(prev, 88);
+            if (lower.startsWith('writing results to ')) return Math.max(prev, 94);
+            if (lower.startsWith('run finished:')) return Math.max(prev, 98);
             return prev;
           });
         }
       }
-      if (event.type === "completed") {
-        const nextRunId = String(event.payload.runId ?? "").trim();
+      if (event.type === 'completed') {
+        const nextRunId = String(event.payload.runId ?? '').trim();
         setOauthRequired(null);
         oauthConnectingRef.current = false;
         setLogs((prev) => {
           const line = `[${ts}] Run completed.`;
           return prev.includes(line) ? prev : [...prev, line];
         });
-        if (event.payload.snapshotEval && typeof event.payload.snapshotEval === "object") {
+        if (event.payload.snapshotEval && typeof event.payload.snapshotEval === 'object') {
           const snapshotEval = event.payload.snapshotEval as {
             mode?: string;
             baseline_snapshot_id?: string;
@@ -486,7 +531,9 @@ const RunEvaluation = () => {
             status?: string;
           };
           setLogs((prev) => {
-            const line = `[${ts}] Snapshot eval (${snapshotEval.mode ?? "warn"}) baseline=${snapshotEval.baseline_snapshot_id ?? "-"} score=${snapshotEval.overall_score ?? "-"} status=${snapshotEval.status ?? "-"}`;
+            const line = `[${ts}] Snapshot eval (${snapshotEval.mode ?? 'warn'}) baseline=${
+              snapshotEval.baseline_snapshot_id ?? '-'
+            } score=${snapshotEval.overall_score ?? '-'} status=${snapshotEval.status ?? '-'}`;
             return prev.includes(line) ? prev : [...prev, line];
           });
         }
@@ -501,11 +548,11 @@ const RunEvaluation = () => {
         unsubscribeRef.current = null;
         void refreshQueue();
       }
-      if (event.type === "error") {
-        const message = String(event.payload.message ?? "Unknown error");
-        const extraHint = message.includes("Anthropic model not found")
-          ? " Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config."
-          : "";
+      if (event.type === 'error') {
+        const message = String(event.payload.message ?? 'Unknown error');
+        const extraHint = message.includes('Anthropic model not found')
+          ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
+          : '';
         setOauthRequired(null);
         oauthConnectingRef.current = false;
         setLogs((prev) => [...prev, `[${ts}] Error: ${message}${extraHint}`]);
@@ -529,7 +576,9 @@ const RunEvaluation = () => {
           <Play className="h-6 w-6" />
           Run Evaluation
         </h1>
-        <p className="text-sm text-muted-foreground">Execute evaluation scenarios against MCP servers</p>
+        <p className="text-sm text-muted-foreground">
+          Execute evaluation scenarios against MCP servers
+        </p>
       </div>
 
       <Card>
@@ -539,9 +588,15 @@ const RunEvaluation = () => {
               <Label>MCP Evaluation</Label>
               <div className="flex items-center gap-2">
                 <Select value={configId} onValueChange={setConfigId}>
-                  <SelectTrigger><SelectValue placeholder="Select a config" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a config" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {configs.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    {configs.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
                 <Button
@@ -559,7 +614,13 @@ const RunEvaluation = () => {
             </div>
             <div className="space-y-2">
               <Label>Variance Runs</Label>
-              <Input type="number" min="1" max="10" value={varianceRuns} onChange={(e) => setVarianceRuns(e.target.value)} />
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={varianceRuns}
+                onChange={(e) => setVarianceRuns(e.target.value)}
+              />
             </div>
           </div>
           <div className="space-y-2">
@@ -579,8 +640,10 @@ const RunEvaluation = () => {
             <div className="space-y-2">
               {snapshotsUiEnabled && selectedConfig.snapshotEval?.enabled && (
                 <div className="rounded-md border bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
-                  Snapshot eval active ({selectedConfig.snapshotEval.mode}) · baseline:{" "}
-                  <span className="font-mono">{selectedConfig.snapshotEval.baselineSnapshotId ?? "none"}</span>
+                  Snapshot eval active ({selectedConfig.snapshotEval.mode}) · baseline:{' '}
+                  <span className="font-mono">
+                    {selectedConfig.snapshotEval.baselineSnapshotId ?? 'none'}
+                  </span>
                 </div>
               )}
               <div className="flex items-center justify-between">
@@ -606,13 +669,16 @@ const RunEvaluation = () => {
                 {availableAgents.map((agent) => {
                   const checked = selectedAgentIds.includes(agent.id);
                   return (
-                    <label key={agent.id} className="flex items-center gap-2 text-sm rounded-md border p-2">
+                    <label
+                      key={agent.id}
+                      className="flex items-center gap-2 text-sm rounded-md border p-2"
+                    >
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(value) => {
                           const isChecked = value === true;
                           setSelectedAgentIds((prev) =>
-                            isChecked ? [...prev, agent.id] : prev.filter((id) => id !== agent.id),
+                            isChecked ? [...prev, agent.id] : prev.filter((id) => id !== agent.id)
                           );
                         }}
                       />
@@ -623,7 +689,8 @@ const RunEvaluation = () => {
               </div>
               {availableAgents.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No agents available. Add agents to your workspace library, or define inline agents in this config.
+                  No agents available. Add agents to your workspace library, or define inline agents
+                  in this config.
                 </p>
               )}
             </div>
@@ -636,7 +703,9 @@ const RunEvaluation = () => {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id))}
+                    onClick={() =>
+                      setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id))
+                    }
                   >
                     Select all
                   </button>
@@ -656,19 +725,26 @@ const RunEvaluation = () => {
                 {availableScenarios.map((scenario) => {
                   const checked = selectedScenarioIds.includes(scenario.id);
                   return (
-                    <label key={scenario.id} className="flex items-start gap-2 text-sm rounded-md border p-2">
+                    <label
+                      key={scenario.id}
+                      className="flex items-start gap-2 text-sm rounded-md border p-2"
+                    >
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(value) => {
                           const isChecked = value === true;
                           setSelectedScenarioIds((prev) =>
-                            isChecked ? [...prev, scenario.id] : prev.filter((id) => id !== scenario.id),
+                            isChecked
+                              ? [...prev, scenario.id]
+                              : prev.filter((id) => id !== scenario.id)
                           );
                         }}
                       />
                       <span className="min-w-0">
                         <span className="block font-medium">{scenario.name || scenario.id}</span>
-                        <span className="block font-mono text-xs text-muted-foreground truncate">{scenario.id}</span>
+                        <span className="block font-mono text-xs text-muted-foreground truncate">
+                          {scenario.id}
+                        </span>
                       </span>
                     </label>
                   );
@@ -677,10 +753,13 @@ const RunEvaluation = () => {
             </div>
           )}
           {snapshotsUiEnabled && (
-          <label className="flex items-center gap-2 text-sm rounded-md border p-2">
-            <Checkbox checked={applySnapshotEval} onCheckedChange={(v) => setApplySnapshotEval(v === true)} />
-            <span>Apply snapshot evaluation policy (if configured)</span>
-          </label>
+            <label className="flex items-center gap-2 text-sm rounded-md border p-2">
+              <Checkbox
+                checked={applySnapshotEval}
+                onCheckedChange={(v) => setApplySnapshotEval(v === true)}
+              />
+              <span>Apply snapshot evaluation policy (if configured)</span>
+            </label>
           )}
           <div className="flex gap-2">
             <Button
@@ -692,11 +771,13 @@ const RunEvaluation = () => {
                 (availableScenarios.length > 0 && selectedScenarioIds.length === 0)
               }
             >
-              <Play className="mr-2 h-4 w-4" />{activeQueueEntry ? "Queue Run" : "Run"}
+              <Play className="mr-2 h-4 w-4" />
+              {activeQueueEntry ? 'Queue Run' : 'Run'}
             </Button>
             {running && (
               <Button variant="destructive" onClick={stopRun}>
-                <Square className="mr-2 h-4 w-4" />Stop
+                <Square className="mr-2 h-4 w-4" />
+                Stop
               </Button>
             )}
           </div>
@@ -708,7 +789,9 @@ const RunEvaluation = () => {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Progress</CardTitle>
-              <span className="text-xs text-muted-foreground font-mono">{Math.round(progress)}%</span>
+              <span className="text-xs text-muted-foreground font-mono">
+                {Math.round(progress)}%
+              </span>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -716,7 +799,7 @@ const RunEvaluation = () => {
             {oauthRequired && (
               <div className="flex items-center justify-between rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm">
                 <span className="text-yellow-700 dark:text-yellow-400">
-                  OAuth required for: <strong>{oauthRequired.servers.join(", ")}</strong>
+                  OAuth required for: <strong>{oauthRequired.servers.join(', ')}</strong>
                 </span>
                 <Button
                   size="sm"
@@ -732,7 +815,7 @@ const RunEvaluation = () => {
                       onServerAuthStart: (serverName) => {
                         setLogs((prev) => [
                           ...prev,
-                          `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`,
+                          `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`
                         ]);
                       }
                     })
@@ -741,7 +824,7 @@ const RunEvaluation = () => {
                         const jobId = oauthRequired?.jobId;
                         setLogs((prev) => [
                           ...prev,
-                          `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
+                          `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`
                         ]);
                         if (jobId) {
                           setActiveJobId(jobId);
@@ -753,7 +836,10 @@ const RunEvaluation = () => {
                       })
                       .catch((err: unknown) => {
                         const msg = err instanceof Error ? err.message : String(err);
-                        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`]);
+                        setLogs((prev) => [
+                          ...prev,
+                          `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`
+                        ]);
                         oauthConnectingRef.current = false;
                       })
                       .finally(() => {
@@ -761,19 +847,31 @@ const RunEvaluation = () => {
                       });
                   }}
                 >
-                  {oauthAuthInProgress ? "Connecting..." : "Connect & Resume"}
+                  {oauthAuthInProgress ? 'Connecting...' : 'Connect & Resume'}
                 </Button>
               </div>
             )}
-            <div ref={logRef} className="h-64 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs space-y-0.5">
+            <div
+              ref={logRef}
+              className="h-64 overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs space-y-0.5"
+            >
               {logs.map((log, i) => (
-                <div key={i} className={log.includes("✓") ? "text-success" : log.includes("aborted") ? "text-destructive" : "text-foreground"}>
+                <div
+                  key={i}
+                  className={
+                    log.includes('✓')
+                      ? 'text-success'
+                      : log.includes('aborted')
+                      ? 'text-destructive'
+                      : 'text-foreground'
+                  }
+                >
                   {log}
                 </div>
               ))}
             </div>
           </CardContent>
-      </Card>
+        </Card>
       )}
 
       <Card>
@@ -790,12 +888,16 @@ const RunEvaluation = () => {
         </CardHeader>
         <CardContent>
           {!activeQueueEntry && queuedJobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No active or queued runs. Start a run above.</p>
+            <p className="text-sm text-muted-foreground">
+              No active or queued runs. Start a run above.
+            </p>
           ) : (
             <div className="space-y-2">
               {activeQueueEntry && (
                 <div
-                  className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${activeJobId === activeQueueEntry.jobId ? "ring-2 ring-primary/40" : ""}`}
+                  className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${
+                    activeJobId === activeQueueEntry.jobId ? 'ring-2 ring-primary/40' : ''
+                  }`}
                   onClick={() => {
                     if (activeJobId === activeQueueEntry.jobId) return;
                     setActiveJobId(activeQueueEntry.jobId);
@@ -803,14 +905,20 @@ const RunEvaluation = () => {
                     setRunning(true);
                     setDone(false);
                     setStopped(false);
-                    setLogs([`[${new Date().toLocaleTimeString()}] Attached to running job ${activeQueueEntry.jobId}...`]);
+                    setLogs([
+                      `[${new Date().toLocaleTimeString()}] Attached to running job ${
+                        activeQueueEntry.jobId
+                      }...`
+                    ]);
                     setProgress(10);
                     attachRunJob(activeQueueEntry.jobId);
                   }}
                   title="Click to view progress"
                 >
                   <div className="min-w-0 flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Running</span>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      Running
+                    </span>
                     <span className="text-xs font-bold">
                       {queueEvalNameBySourcePath.get(activeQueueEntry.runParams.configPath) ||
                         formatQueueScenarioLabel(
@@ -827,7 +935,7 @@ const RunEvaluation = () => {
                     </span>
                     {activeQueueEntry.runParams.agents && (
                       <span className="text-xs text-muted-foreground">
-                        agents: {activeQueueEntry.runParams.agents.join(", ")}
+                        agents: {activeQueueEntry.runParams.agents.join(', ')}
                       </span>
                     )}
                     {activeQueueEntry.runParams.runNote && (
@@ -849,7 +957,8 @@ const RunEvaluation = () => {
                     }}
                     title="Stop running job"
                   >
-                    <Square className="mr-1 h-3 w-3" />Stop
+                    <Square className="mr-1 h-3 w-3" />
+                    Stop
                   </Button>
                 </div>
               )}
@@ -865,25 +974,34 @@ const RunEvaluation = () => {
                 );
                 const evalLabel =
                   queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
-                const isBlocked = entry.status === "blocked_auth";
+                const isBlocked = entry.status === 'blocked_auth';
                 return (
-                  <div key={entry.jobId} className={`flex items-center justify-between rounded-md border p-2 text-sm ${isBlocked ? "border-yellow-500/40 bg-yellow-500/5" : ""}`}>
+                  <div
+                    key={entry.jobId}
+                    className={`flex items-center justify-between rounded-md border p-2 text-sm ${
+                      isBlocked ? 'border-yellow-500/40 bg-yellow-500/5' : ''
+                    }`}
+                  >
                     <div className="min-w-0 flex items-center gap-2 flex-wrap">
                       {isBlocked ? (
-                        <span className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">#{i + 1} Blocked</span>
+                        <span className="inline-flex items-center rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-400">
+                          #{i + 1} Blocked
+                        </span>
                       ) : (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">#{i + 1} Queued</span>
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                          #{i + 1} Queued
+                        </span>
                       )}
                       <span className="text-xs font-bold">{evalLabel}</span>
                       <span className="font-mono text-xs">{configName}</span>
                       {isBlocked && (entry.requiredServers ?? []).length > 0 && (
                         <span className="text-xs text-yellow-700 dark:text-yellow-400">
-                          OAuth: {entry.requiredServers!.join(", ")}
+                          OAuth: {entry.requiredServers!.join(', ')}
                         </span>
                       )}
                       {!isBlocked && entry.runParams.agents && (
                         <span className="text-xs text-muted-foreground">
-                          agents: {entry.runParams.agents.join(", ")}
+                          agents: {entry.runParams.agents.join(', ')}
                         </span>
                       )}
                       {entry.runParams.runNote && (
@@ -912,7 +1030,7 @@ const RunEvaluation = () => {
                               onServerAuthStart: (serverName) => {
                                 setLogs((prev) => [
                                   ...prev,
-                                  `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`,
+                                  `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`
                                 ]);
                               }
                             })
@@ -920,7 +1038,7 @@ const RunEvaluation = () => {
                               .then(() => {
                                 setLogs((prev) => [
                                   ...prev,
-                                  `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`,
+                                  `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`
                                 ]);
                                 setActiveJobId(entry.jobId);
                                 setActiveRunJob(entry.jobId);
@@ -930,7 +1048,10 @@ const RunEvaluation = () => {
                               })
                               .catch((err: unknown) => {
                                 const msg = err instanceof Error ? err.message : String(err);
-                                setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`]);
+                                setLogs((prev) => [
+                                  ...prev,
+                                  `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`
+                                ]);
                                 oauthConnectingRef.current = false;
                               })
                               .finally(() => {
@@ -938,7 +1059,9 @@ const RunEvaluation = () => {
                               });
                           }}
                         >
-                          {oauthAuthInProgress && oauthRequired?.jobId === entry.jobId ? "Connecting..." : "Connect & Resume"}
+                          {oauthAuthInProgress && oauthRequired?.jobId === entry.jobId
+                            ? 'Connecting...'
+                            : 'Connect & Resume'}
                         </Button>
                       )}
                       <Button
@@ -967,19 +1090,25 @@ const RunEvaluation = () => {
               <div className="min-w-0">
                 <p className="font-medium">Run stopped</p>
                 <p className="text-sm text-muted-foreground">
-                  The evaluation was stopped before completion. You can start it again or clear the progress log.
+                  The evaluation was stopped before completion. You can start it again or clear the
+                  progress log.
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={() => {
-                  setLogs([]);
-                  setProgress(0);
-                  setStopped(false);
-                }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setLogs([]);
+                    setProgress(0);
+                    setStopped(false);
+                  }}
+                >
                   Clear Progress
                 </Button>
                 <Button type="button" onClick={startRun} disabled={!configId}>
-                  <Play className="mr-2 h-4 w-4" />Run Again
+                  <Play className="mr-2 h-4 w-4" />
+                  Run Again
                 </Button>
               </div>
             </div>
@@ -994,10 +1123,12 @@ const RunEvaluation = () => {
               <CheckCircle2 className="h-6 w-6 text-success" />
               <div>
                 <p className="font-medium">Evaluation Complete</p>
-                <p className="text-sm text-muted-foreground">All scenarios have been evaluated successfully.</p>
+                <p className="text-sm text-muted-foreground">
+                  All scenarios have been evaluated successfully.
+                </p>
               </div>
               <Button asChild className="ml-auto">
-                <Link to={resultsHref}>{normalizedRunId ? "View Results" : "View Runs"}</Link>
+                <Link to={resultsHref}>{normalizedRunId ? 'View Results' : 'View Runs'}</Link>
               </Button>
             </div>
             {snapshotsUiEnabled && normalizedRunId && (
@@ -1018,7 +1149,7 @@ const RunEvaluation = () => {
                   onClick={() => void saveSnapshot()}
                   disabled={savingSnapshot}
                 >
-                  {savingSnapshot ? "Saving..." : "Save Snapshot"}
+                  {savingSnapshot ? 'Saving...' : 'Save Snapshot'}
                 </Button>
               </div>
             )}

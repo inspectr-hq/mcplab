@@ -1,129 +1,200 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, BarChart3, Timer, Layers, CheckCircle2, XCircle, ChevronDown, Download, User, Bot, Wrench, GitCompare, RefreshCw, Sparkles, Loader2, PanelRightOpen, PanelRightClose, RectangleEllipsis, Copy, NotepadText, Plus, Clock, Clock3 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { StatCard } from "@/components/StatCard";
-import { ResultAssistantPanel } from "@/components/results/ResultAssistantPanel";
-import { MarkdownContent } from "@/components/MarkdownContent";
-import { PassRateBadge } from "@/components/PassRateBadge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { generateHtmlReport } from "@/lib/generate-html-report";
-import { sumTokenUsages } from "@/lib/token-usage";
-import { formatTokenCount } from "@/lib/format-duration";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { useConfigs } from "@/contexts/ConfigContext";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { useResultAssistant } from "@/hooks/use-result-assistant";
-import { toast } from "@/hooks/use-toast";
-import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import { formatAssistantToolName } from "@/lib/assistant-tool-name";
-import { formatProvider } from "@/components/ProviderBadge";
-import type { ConversationItem, EvalResult, EvalConfig as UiEvalConfig, EvalRule } from "@/types/eval";
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Activity,
+  BarChart3,
+  Timer,
+  Layers,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  Download,
+  User,
+  Bot,
+  Wrench,
+  GitCompare,
+  RefreshCw,
+  Sparkles,
+  Loader2,
+  PanelRightOpen,
+  PanelRightClose,
+  RectangleEllipsis,
+  Copy,
+  NotepadText,
+  Plus,
+  Clock,
+  Clock3
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
+import { StatCard } from '@/components/StatCard';
+import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { MarkdownContent } from '@/components/MarkdownContent';
+import { PassRateBadge } from '@/components/PassRateBadge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip as UiTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from 'recharts';
+import { generateHtmlReport } from '@/lib/generate-html-report';
+import { sumTokenUsages } from '@/lib/token-usage';
+import { formatTokenCount } from '@/lib/format-duration';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { useConfigs } from '@/contexts/ConfigContext';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { useResultAssistant } from '@/hooks/use-result-assistant';
+import { toast } from '@/hooks/use-toast';
+import { isUiFeatureEnabled } from '@/lib/feature-flags';
+import { formatAssistantToolName } from '@/lib/assistant-tool-name';
+import { formatProvider } from '@/components/ProviderBadge';
+import type {
+  ConversationItem,
+  EvalResult,
+  EvalConfig as UiEvalConfig,
+  EvalRule
+} from '@/types/eval';
 import type {
   MarkdownReportContent,
   MarkdownReportSummary,
   SnapshotComparison,
   SnapshotRecord
-} from "@/lib/data-sources/types";
+} from '@/lib/data-sources/types';
 
-const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = "mcplab.resultAssistantScenarioHandoff";
+const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 const RESULT_ASSISTANT_SNIPPETS = [
   {
-    label: "Summarize Run Results",
-    description: "Highlight failures first, then notable tool usage and extracted values.",
+    label: 'Summarize Run Results',
+    description: 'Highlight failures first, then notable tool usage and extracted values.',
     prompt:
-      "Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values."
+      'Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.'
   },
   {
-    label: "Compare Agent Answer Quality",
-    description: "Rank agents by completeness, depth, and recommendation quality.",
+    label: 'Compare Agent Answer Quality',
+    description: 'Rank agents by completeness, depth, and recommendation quality.',
     prompt:
-      "Compare the answer quality across all agents for this run. Rank them by completeness, analytical depth, and usefulness of recommendations. Highlight concrete differences in tool usage."
+      'Compare the answer quality across all agents for this run. Rank them by completeness, analytical depth, and usefulness of recommendations. Highlight concrete differences in tool usage.'
   },
   {
-    label: "Explain Key Failures",
-    description: "Use traces and tool outputs to identify likely root causes.",
+    label: 'Explain Key Failures',
+    description: 'Use traces and tool outputs to identify likely root causes.',
     prompt:
-      "Identify the most important failures in this run and explain likely root causes using the trace and tool outputs."
+      'Identify the most important failures in this run and explain likely root causes using the trace and tool outputs.'
   },
   {
-    label: "Compare With Previous Run",
-    description: "Summarize changes in outcomes, tool usage, and extracted values.",
+    label: 'Compare With Previous Run',
+    description: 'Summarize changes in outcomes, tool usage, and extracted values.',
     prompt:
-      "Compare this run with the previous run and summarize changes in outcomes, tool usage, and extracted values."
+      'Compare this run with the previous run and summarize changes in outcomes, tool usage, and extracted values.'
   }
 ] as const;
 
 function defaultResultAssistantReportPath(runId: string): string {
-  const stamp = new Date().toISOString().replace(/[:]/g, "-").replace(/\..+/, "");
+  const stamp = new Date().toISOString().replace(/[:]/g, '-').replace(/\..+/, '');
   return `mcplab/reports/result-assistant/${runId}-${stamp}.md`;
 }
 
 function formatCompactOneDecimal(value: number): string {
   const fixed = value.toFixed(1);
-  return fixed.endsWith(".0") ? fixed.slice(0, -2) : fixed;
+  return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
 }
-
 
 const ResultDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
-  const isEmbedded = searchParams.get("embed") === "1";
-  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
+  const isEmbedded = searchParams.get('embed') === '1';
+  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [editingRunNote, setEditingRunNote] = useState(false);
-  const [runNoteDraft, setRunNoteDraft] = useState("");
+  const [runNoteDraft, setRunNoteDraft] = useState('');
   const [savingRunNote, setSavingRunNote] = useState(false);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
   const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
   const [comparing, setComparing] = useState(false);
-  const [targetConfigId, setTargetConfigId] = useState("");
-  const [acceptSnapshotName, setAcceptSnapshotName] = useState("");
+  const [targetConfigId, setTargetConfigId] = useState('');
+  const [acceptSnapshotName, setAcceptSnapshotName] = useState('');
   const [acceptingBaseline, setAcceptingBaseline] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
-  const [contextPanelTab, setContextPanelTab] = useState<"assistant" | "reports" | "note">(
-    "assistant"
+  const [contextPanelTab, setContextPanelTab] = useState<'assistant' | 'reports' | 'note'>(
+    'assistant'
   );
   const [assistantContextScenarioId, setAssistantContextScenarioId] = useState<string | null>(null);
 
   const [applyReportOpen, setApplyReportOpen] = useState(false);
-  const [applyReportMarkdown, setApplyReportMarkdown] = useState("");
-  const [applyReportOutputPath, setApplyReportOutputPath] = useState("");
+  const [applyReportMarkdown, setApplyReportMarkdown] = useState('');
+  const [applyReportOutputPath, setApplyReportOutputPath] = useState('');
   const [applyReportOverwrite, setApplyReportOverwrite] = useState(false);
   const [applyReportPending, setApplyReportPending] = useState(false);
   const [applyReportIsManual, setApplyReportIsManual] = useState(false);
   const [referenceReports, setReferenceReports] = useState<MarkdownReportSummary[]>([]);
   const [referenceReportsLoading, setReferenceReportsLoading] = useState(false);
-  const [selectedReferenceReportPath, setSelectedReferenceReportPath] = useState("");
-  const [selectedReferenceReport, setSelectedReferenceReport] = useState<MarkdownReportContent | null>(null);
+  const [selectedReferenceReportPath, setSelectedReferenceReportPath] = useState('');
+  const [selectedReferenceReport, setSelectedReferenceReport] =
+    useState<MarkdownReportContent | null>(null);
   const [selectedReferenceReportLoading, setSelectedReferenceReportLoading] = useState(false);
-  const [selectedReferenceReportError, setSelectedReferenceReportError] = useState<string | null>(null);
+  const [selectedReferenceReportError, setSelectedReferenceReportError] = useState<string | null>(
+    null
+  );
   const {
     assistantMessages,
     assistantPendingToolCalls,
     assistantInput,
     assistantLoading,
+    assistantTurnCancelable,
+    cancelAssistantTurn,
     assistantChatEndRef,
     assistantInputRef,
     setAssistantInput,
@@ -136,7 +207,7 @@ const ResultDetail = () => {
   } = useResultAssistant({
     source,
     open: assistantOpen,
-    scope: "run",
+    scope: 'run',
     runId: id,
     onSessionSync: undefined
   });
@@ -147,8 +218,8 @@ const ResultDetail = () => {
       try {
         const items = await source.listMarkdownReports();
         const filtered = items.filter((item) => {
-          const path = String(item.relativePath ?? "");
-          const name = String(item.name ?? "");
+          const path = String(item.relativePath ?? '');
+          const name = String(item.name ?? '');
           return path.includes(runId) || name.includes(runId);
         });
         setReferenceReports(filtered);
@@ -183,7 +254,7 @@ const ResultDetail = () => {
     source.getResult(id).then((next) => {
       if (active) {
         setResult(next);
-        setRunNoteDraft(next?.runNote ?? "");
+        setRunNoteDraft(next?.runNote ?? '');
         setEditingRunNote(false);
         setLoading(false);
       }
@@ -227,18 +298,21 @@ const ResultDetail = () => {
 
   useEffect(() => {
     if (referenceReports.length === 0) {
-      setSelectedReferenceReportPath("");
+      setSelectedReferenceReportPath('');
       setSelectedReferenceReport(null);
       setSelectedReferenceReportError(null);
       return;
     }
-    if (!selectedReferenceReportPath || !referenceReports.some((r) => r.relativePath === selectedReferenceReportPath)) {
+    if (
+      !selectedReferenceReportPath ||
+      !referenceReports.some((r) => r.relativePath === selectedReferenceReportPath)
+    ) {
       setSelectedReferenceReportPath(referenceReports[0].relativePath);
     }
   }, [referenceReports, selectedReferenceReportPath]);
 
   useEffect(() => {
-    if (!assistantOpen || contextPanelTab !== "reports") return;
+    if (!assistantOpen || contextPanelTab !== 'reports') return;
     if (!selectedReferenceReportPath) {
       setSelectedReferenceReport(null);
       setSelectedReferenceReportError(null);
@@ -256,7 +330,7 @@ const ResultDetail = () => {
       .catch((error: unknown) => {
         if (!active) return;
         setSelectedReferenceReport(null);
-        setSelectedReferenceReportError((error instanceof Error ? error.message : String(error)));
+        setSelectedReferenceReportError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
         if (active) setSelectedReferenceReportLoading(false);
@@ -266,10 +340,12 @@ const ResultDetail = () => {
     };
   }, [assistantOpen, contextPanelTab, selectedReferenceReportPath, source]);
 
-  const requestedConfigId = searchParams.get("configId") ?? "";
-  const requestedAgentId = (searchParams.get("agent") ?? "").trim();
+  const requestedConfigId = searchParams.get('configId') ?? '';
+  const requestedAgentId = (searchParams.get('agent') ?? '').trim();
   const activeConfig = useMemo(() => {
-    const byRequested = requestedConfigId ? configs.find((c) => c.id === requestedConfigId) : undefined;
+    const byRequested = requestedConfigId
+      ? configs.find((c) => c.id === requestedConfigId)
+      : undefined;
     if (byRequested) return byRequested;
     return result ? configs.find((c) => c.id === result.configId) : undefined;
   }, [configs, requestedConfigId, result]);
@@ -281,27 +357,27 @@ const ResultDetail = () => {
     const fromActive = activeConfig?.relativePath?.trim() || activeConfig?.name?.trim();
     if (fromActive) return fromActive;
     const explicitId = result?.configId?.trim();
-    return explicitId || "";
+    return explicitId || '';
   }, [result, activeConfig]);
   const resultEvalName = useMemo(() => {
     const explicitName = result?.configName?.trim();
     if (explicitName) return explicitName;
-    return activeConfig?.name?.trim() || "";
+    return activeConfig?.name?.trim() || '';
   }, [result, activeConfig]);
   const resultConfigPath = useMemo(() => {
     const explicitPath = result?.configPath?.trim();
     if (explicitPath) return explicitPath;
-    return activeConfig?.relativePath?.trim() || "";
+    return activeConfig?.relativePath?.trim() || '';
   }, [result, activeConfig]);
   const scenarioDefinitionByResultId = useMemo(() => {
-    const map = new Map<string, UiEvalConfig["scenarios"][number]>();
+    const map = new Map<string, UiEvalConfig['scenarios'][number]>();
     if (activeConfig) {
       for (const scenario of activeConfig.scenarios) {
         map.set(scenario.id, scenario);
         if (scenario.name && !map.has(scenario.name)) map.set(scenario.name, scenario);
       }
       for (const entry of activeConfig.scenarioEntries ?? []) {
-        if (entry.kind !== "referenced") continue;
+        if (entry.kind !== 'referenced') continue;
         const libScenario = libraryScenarios.find((s) => s.id === entry.ref);
         if (libScenario) {
           map.set(libScenario.id, libScenario);
@@ -318,11 +394,12 @@ const ResultDetail = () => {
     return map;
   }, [activeConfig, libraryScenarios]);
   const inferredConfigId = useMemo(() => {
-    if (!result?.snapshotEval?.baselineSnapshotId) return "";
+    if (!result?.snapshotEval?.baselineSnapshotId) return '';
     const matches = configs.filter(
-      (config) => config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
+      (config) =>
+        config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
     );
-    return matches.length === 1 ? matches[0].id : "";
+    return matches.length === 1 ? matches[0].id : '';
   }, [configs, result?.snapshotEval?.baselineSnapshotId]);
 
   useEffect(() => {
@@ -351,7 +428,7 @@ const ResultDetail = () => {
   } = useMemo(() => {
     if (!result) {
       return {
-        filteredScenarios: [] as EvalResult["scenarios"],
+        filteredScenarios: [] as EvalResult['scenarios'],
         filteredTotalRuns: 0,
         filteredPassCount: 0,
         displayPassRate: 0,
@@ -405,18 +482,19 @@ const ResultDetail = () => {
       .sort((a, b) => b.count - a.count);
   }, [filteredScenarios]);
 
-  if (loading) return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
+  if (loading)
+    return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
   const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
   const mcpVersionSummary = mcpServerVersionEntries
-    .map(([serverId, version]) => `${serverId}: ${version ?? "unknown"}`)
-    .join(", ");
+    .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
+    .join(', ');
   const passCount = filteredPassCount;
   const failCount = Math.max(0, filteredTotalRuns - passCount);
   const pieData = [
-    { name: "Pass", value: passCount, color: "hsl(152, 69%, 40%)" },
-    { name: "Fail", value: failCount, color: "hsl(0, 72%, 51%)" },
+    { name: 'Pass', value: passCount, color: 'hsl(152, 69%, 40%)' },
+    { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
   ];
 
   const toggle = (rowId: string) => {
@@ -432,7 +510,7 @@ const ResultDetail = () => {
     scenarioId: string,
     agentName: string,
     runIndex: number,
-    section: "checks" | "extracts" | "tools" | "final" | "conversation"
+    section: 'checks' | 'extracts' | 'tools' | 'final' | 'conversation'
   ) => `${scenarioId}:${agentName}:${runIndex}:${section}`;
   const scenarioRowKey = (scenarioId: string, agentName: string) => `${scenarioId}::${agentName}`;
   const toggleRunSection = (key: string) => {
@@ -444,7 +522,7 @@ const ResultDetail = () => {
     });
   };
   const isRunSectionOpen = (key: string) => {
-    const defaultOpen = !key.endsWith(":conversation");
+    const defaultOpen = !key.endsWith(':conversation');
     return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
   };
   const comparisonByScenario = new Map(
@@ -472,9 +550,9 @@ const ResultDetail = () => {
       setSnapshotComparison(comparison);
     } catch (error: unknown) {
       toast({
-        title: "Could not review drift",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not review drift',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setComparing(false);
@@ -484,9 +562,9 @@ const ResultDetail = () => {
   const acceptAsNewBaseline = async () => {
     if (!targetConfigId) {
       toast({
-        title: "Select a configuration",
-        description: "Choose which config should receive the new baseline.",
-        variant: "destructive"
+        title: 'Select a configuration',
+        description: 'Choose which config should receive the new baseline.',
+        variant: 'destructive'
       });
       return;
     }
@@ -497,10 +575,13 @@ const ResultDetail = () => {
         targetConfigId,
         acceptSnapshotName.trim() || undefined
       );
-      setSnapshots((prev) => [response.snapshot, ...prev.filter((item) => item.id !== response.snapshot.id)]);
+      setSnapshots((prev) => [
+        response.snapshot,
+        ...prev.filter((item) => item.id !== response.snapshot.id)
+      ]);
       setSelectedSnapshotId(response.snapshot.id);
       toast({
-        title: "Baseline updated",
+        title: 'Baseline updated',
         description: `${response.snapshot.name} is now linked to the selected config.`
       });
       if (!acceptSnapshotName.trim()) {
@@ -511,9 +592,9 @@ const ResultDetail = () => {
       }
     } catch (error: unknown) {
       toast({
-        title: "Could not accept new baseline",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not accept new baseline',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setAcceptingBaseline(false);
@@ -521,11 +602,11 @@ const ResultDetail = () => {
   };
 
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
-    setContextPanelTab("assistant");
+    setContextPanelTab('assistant');
     setAssistantOpen(true);
     setAssistantContextScenarioId(options?.scenarioId ?? null);
     ensureIntroMessage(
-      "Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result."
+      'Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result.'
     );
     if (prompt) {
       setAssistantInput(prompt);
@@ -534,18 +615,18 @@ const ResultDetail = () => {
 
   const unmatchedPendingToolCalls = assistantPendingToolCalls.filter(
     (call) =>
-      call.status === "pending" &&
+      call.status === 'pending' &&
       !assistantMessages.some((message) => message.pendingToolCallId === call.id)
   );
 
   const openReportsPanel = (relativePath?: string) => {
     if (relativePath) setSelectedReferenceReportPath(relativePath);
-    setContextPanelTab("reports");
+    setContextPanelTab('reports');
     setAssistantOpen(true);
   };
 
   const openRunNotePanel = () => {
-    setContextPanelTab("note");
+    setContextPanelTab('note');
     setAssistantOpen(true);
   };
 
@@ -553,9 +634,9 @@ const ResultDetail = () => {
     if (!result) return;
     if (!assistantContextScenarioId) {
       toast({
-        title: "No scenario context",
-        description: "Ask about a specific scenario or run first, then send the suggestion.",
-        variant: "destructive"
+        title: 'No scenario context',
+        description: 'Ask about a specific scenario or run first, then send the suggestion.',
+        variant: 'destructive'
       });
       return;
     }
@@ -564,26 +645,26 @@ const ResultDetail = () => {
       libraryScenarios.find((s) => s.name === assistantContextScenarioId);
     if (!libScenario) {
       toast({
-        title: "Scenario not found in library",
+        title: 'Scenario not found in library',
         description: `Could not find library scenario '${assistantContextScenarioId}' to open in Scenario Assistant.`,
-        variant: "destructive"
+        variant: 'destructive'
       });
       return;
     }
     const prompt = [
       `I am sending a suggestion from the Result Assistant for scenario '${assistantContextScenarioId}' based on run '${result.id}'.`,
-      "Please review the suggestion, check it against the current scenario configuration, and propose concrete updates to the Checks and/or Value Capture Rules if appropriate.",
-      "",
-      "Result Assistant suggestion:",
+      'Please review the suggestion, check it against the current scenario configuration, and propose concrete updates to the Checks and/or Value Capture Rules if appropriate.',
+      '',
+      'Result Assistant suggestion:',
       assistantReply
-    ].join("\n");
+    ].join('\n');
     try {
       window.sessionStorage.setItem(
         RESULT_ASSISTANT_HANDOFF_STORAGE_KEY,
         JSON.stringify({
-          type: "result-assistant-handoff-v1",
+          type: 'result-assistant-handoff-v1',
           runId: result.id,
-          configId: requestedConfigId || result.configId || "",
+          configId: requestedConfigId || result.configId || '',
           scenarioId: libScenario.id,
           prompt,
           sourceReply: assistantReply
@@ -592,9 +673,9 @@ const ResultDetail = () => {
       navigate(`/libraries/test-cases/${encodeURIComponent(libScenario.id)}?assistantHandoff=1`);
     } catch (error: unknown) {
       toast({
-        title: "Could not create handoff",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not create handoff',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     }
   };
@@ -611,7 +692,7 @@ const ResultDetail = () => {
   const openManualReportDialog = () => {
     if (!result) return;
     setApplyReportIsManual(true);
-    setApplyReportMarkdown("");
+    setApplyReportMarkdown('');
     setApplyReportOutputPath(defaultResultAssistantReportPath(result.id));
     setApplyReportOverwrite(false);
     setApplyReportOpen(true);
@@ -622,9 +703,9 @@ const ResultDetail = () => {
     const markdown = applyReportMarkdown.trim();
     if (!markdown) {
       toast({
-        title: "No markdown to write",
-        description: "The selected assistant response is empty.",
-        variant: "destructive"
+        title: 'No markdown to write',
+        description: 'The selected assistant response is empty.',
+        variant: 'destructive'
       });
       return;
     }
@@ -637,25 +718,23 @@ const ResultDetail = () => {
         overwrite: applyReportOverwrite
       });
       toast({
-        title: "Markdown report written",
+        title: 'Markdown report written',
         description:
-          typeof response.path === "string" && response.path
-            ? response.path
-            : response.outputPath
+          typeof response.path === 'string' && response.path ? response.path : response.outputPath
       });
       await refreshReferenceReports(
         result.id,
-        (typeof response.path === "string" && response.path) || response.outputPath || undefined
+        (typeof response.path === 'string' && response.path) || response.outputPath || undefined
       );
       if (assistantOpen) {
-        setContextPanelTab("reports");
+        setContextPanelTab('reports');
       }
       setApplyReportOpen(false);
     } catch (error: unknown) {
       toast({
-        title: "Could not write markdown report",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not write markdown report',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setApplyReportPending(false);
@@ -665,12 +744,12 @@ const ResultDetail = () => {
   const copyAssistantChatText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast({ title: "Copied" });
+      toast({ title: 'Copied' });
     } catch (error: unknown) {
       toast({
-        title: "Could not copy",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not copy',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     }
   };
@@ -684,12 +763,12 @@ const ResultDetail = () => {
       setResult((prev) => (prev ? { ...prev, runNote: trimmed || undefined } : prev));
       setRunNoteDraft(trimmed);
       setEditingRunNote(false);
-      toast({ title: "Run note saved" });
+      toast({ title: 'Run note saved' });
     } catch (error: unknown) {
       toast({
-        title: "Could not save run note",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not save run note',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setSavingRunNote(false);
@@ -699,10 +778,12 @@ const ResultDetail = () => {
   return (
     <div
       className={`${
-        assistantOpen ? "xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden" : ""
+        assistantOpen
+          ? 'xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden'
+          : ''
       }`}
     >
-      <div className={`${assistantOpen ? "xl:shrink-0 xl:pb-6" : "mb-6"}`}>
+      <div className={`${assistantOpen ? 'xl:shrink-0 xl:pb-6' : 'mb-6'}`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             {!isEmbedded && (
@@ -730,7 +811,9 @@ const ResultDetail = () => {
                 <span className="mx-1">·</span>
                 {requestedAgentId ? (
                   <>
-                    <span className="inline-flex items-center align-middle">Agent: {requestedAgentId}</span>
+                    <span className="inline-flex items-center align-middle">
+                      Agent: {requestedAgentId}
+                    </span>
                     <span className="mx-1">·</span>
                   </>
                 ) : null}
@@ -753,7 +836,9 @@ const ResultDetail = () => {
               </p>
               {snapshotsUiEnabled && result.snapshotEval?.applied && (
                 <p className="text-xs text-muted-foreground">
-                  Baseline: <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> · score: {result.snapshotEval.overallScore}
+                  Baseline:{' '}
+                  <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> ·
+                  score: {result.snapshotEval.overallScore}
                 </p>
               )}
             </div>
@@ -766,72 +851,74 @@ const ResultDetail = () => {
               </span>
             ) : null}
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            {snapshotsUiEnabled && result.snapshotEval?.applied && (
+              {snapshotsUiEnabled && result.snapshotEval?.applied && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="max-w-full gap-1.5"
+                  onClick={() => void reviewDrift()}
+                  disabled={comparing}
+                >
+                  <GitCompare className="h-3.5 w-3.5" />
+                  {comparing ? 'Reviewing drift...' : 'Review Drift'}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className={`max-w-full gap-1.5 ${isEmbedded ? 'px-2' : ''}`}
+                onClick={() => {
+                  const html = generateHtmlReport(result);
+                  const blob = new Blob([html], { type: 'text/html' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `mcplab-report-${result.id}.html`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                aria-label="Download Report"
+                title="Download Report"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {!isEmbedded && 'Download Report'}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="max-w-full gap-1.5"
-                onClick={() => void reviewDrift()}
-                disabled={comparing}
+                onClick={() => openReportsPanel()}
+                disabled={referenceReportsLoading}
               >
-                <GitCompare className="h-3.5 w-3.5" />
-                {comparing ? "Reviewing drift..." : "Review Drift"}
+                <NotepadText className="h-3.5 w-3.5" />
+                {referenceReportsLoading
+                  ? 'Reference Reports...'
+                  : `Reference Reports${
+                      referenceReports.length ? ` (${referenceReports.length})` : ''
+                    }`}
               </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              className={`max-w-full gap-1.5 ${isEmbedded ? "px-2" : ""}`}
-              onClick={() => {
-                const html = generateHtmlReport(result);
-                const blob = new Blob([html], { type: "text/html" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `mcplab-report-${result.id}.html`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              aria-label="Download Report"
-              title="Download Report"
-            >
-              <Download className="h-3.5 w-3.5" />
-              {!isEmbedded && "Download Report"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="max-w-full gap-1.5"
-              onClick={() => openReportsPanel()}
-              disabled={referenceReportsLoading}
-            >
-              <NotepadText className="h-3.5 w-3.5" />
-              {referenceReportsLoading
-                ? "Reference Reports..."
-                : `Reference Reports${referenceReports.length ? ` (${referenceReports.length})` : ""}`}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="max-w-full gap-1.5"
-              onClick={() => openRunNotePanel()}
-            >
-              <NotepadText className="h-3.5 w-3.5" />
-              Run Note
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="max-w-full gap-1.5"
-              onClick={() => openAssistantWithPrompt()}
-            >
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              MCP Lab Assistant
-            </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-w-full gap-1.5"
+                onClick={() => openRunNotePanel()}
+              >
+                <NotepadText className="h-3.5 w-3.5" />
+                Run Note
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-w-full gap-1.5"
+                onClick={() => openAssistantWithPrompt()}
+              >
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                MCP Lab Assistant
+              </Button>
             </div>
           </div>
         </div>
@@ -841,1186 +928,1626 @@ const ResultDetail = () => {
         className={`grid gap-6 items-start ${
           assistantOpen
             ? assistantExpanded
-              ? "xl:grid-cols-[minmax(0,1fr)_52rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
-              : "xl:grid-cols-[minmax(0,1fr)_28rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden"
-            : "grid-cols-1"
+              ? 'xl:grid-cols-[minmax(0,1fr)_52rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden'
+              : 'xl:grid-cols-[minmax(0,1fr)_28rem] xl:flex-1 xl:min-h-0 xl:overflow-hidden'
+            : 'grid-cols-1'
         }`}
       >
-      <div className={`min-w-0 space-y-6 ${assistantOpen ? "xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2" : ""}`}>
-
-      {snapshotsUiEnabled && result.snapshotEval?.applied && (
-        <Card className="border-amber-500/30">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="outline">Mode: {result.snapshotEval.mode}</Badge>
-              <Badge variant="outline">Status: {result.snapshotEval.status}</Badge>
-              <Badge variant="outline">Overall score: {result.snapshotEval.overallScore}</Badge>
-              <Badge variant="outline" className="font-mono">
-                Baseline: {result.snapshotEval.baselineSnapshotId}
-              </Badge>
-            </div>
-            {result.snapshotEval.impactedScenarios.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Impacted scenarios: {result.snapshotEval.impactedScenarios.join(", ")}
-              </p>
-            )}
-            <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] items-end">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Target config for baseline update</p>
-                <Select value={targetConfigId} onValueChange={setTargetConfigId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select config to update" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {configs.map((config) => (
-                      <SelectItem key={config.id} value={config.id}>
-                        {config.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!targetConfigId && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Tip: open results from the Run page to prefill the config automatically.
+        <div
+          className={`min-w-0 space-y-6 ${
+            assistantOpen ? 'xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2' : ''
+          }`}
+        >
+          {snapshotsUiEnabled && result.snapshotEval?.applied && (
+            <Card className="border-amber-500/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="outline">Mode: {result.snapshotEval.mode}</Badge>
+                  <Badge variant="outline">Status: {result.snapshotEval.status}</Badge>
+                  <Badge variant="outline">Overall score: {result.snapshotEval.overallScore}</Badge>
+                  <Badge variant="outline" className="font-mono">
+                    Baseline: {result.snapshotEval.baselineSnapshotId}
+                  </Badge>
+                </div>
+                {result.snapshotEval.impactedScenarios.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Impacted scenarios: {result.snapshotEval.impactedScenarios.join(', ')}
                   </p>
                 )}
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">New snapshot name (optional)</p>
-                <div className="relative">
-                  <input
-                    value={acceptSnapshotName}
-                    onChange={(e) => setAcceptSnapshotName(e.target.value)}
-                    placeholder={`Snapshot ${result.id}`}
-                    className="h-8 w-full rounded-md border bg-background px-2 text-xs"
-                  />
+                <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] items-end">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Target config for baseline update
+                    </p>
+                    <Select value={targetConfigId} onValueChange={setTargetConfigId}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Select config to update" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {configs.map((config) => (
+                          <SelectItem key={config.id} value={config.id}>
+                            {config.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!targetConfigId && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Tip: open results from the Run page to prefill the config automatically.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      New snapshot name (optional)
+                    </p>
+                    <div className="relative">
+                      <input
+                        value={acceptSnapshotName}
+                        onChange={(e) => setAcceptSnapshotName(e.target.value)}
+                        placeholder={`Snapshot ${result.id}`}
+                        className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5"
+                      onClick={() => void reviewDrift()}
+                      disabled={comparing}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${comparing ? 'animate-spin' : ''}`} />
+                      Review Drift
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => void acceptAsNewBaseline()}
+                      disabled={acceptingBaseline || displayPassRate !== 1}
+                    >
+                      {acceptingBaseline ? 'Accepting...' : 'Accept as New Baseline'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-2">
+                {displayPassRate !== 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    Baseline updates require a fully passing run (same rule as snapshot creation).
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <div
+            className={`grid gap-4 ${
+              assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-6'
+            }`}
+          >
+            <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
+            <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
+            <StatCard
+              title="Pass Rate"
+              value={`${Math.round(displayPassRate * 100)}%`}
+              icon={BarChart3}
+            />
+            <StatCard
+              title="Avg Tool Calls"
+              value={formatCompactOneDecimal(displayAvgToolCalls)}
+              icon={CheckCircle2}
+            />
+            <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
+            <StatCard
+              title="Tool Tokens"
+              value={formatTokenCount(displayToolTokenUsage?.totalTokens)}
+              icon={Wrench}
+            />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Pass / Fail</CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center justify-center">
+                <PieChart width={180} height={180}>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={3}
+                  >
+                    {pieData.map((d, i) => (
+                      <Cell key={i} fill={d.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+                <div className="ml-4 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="h-3 w-3 rounded-full bg-success" />
+                    {passCount} passed
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="h-3 w-3 rounded-full bg-destructive" />
+                    {failCount} failed
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Tool Usage</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={toolData} layout="vertical">
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="hsl(38, 92%, 50%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">Scenarios</CardTitle>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5"
-                  onClick={() => void reviewDrift()}
-                  disabled={comparing}
+                  className="h-8 gap-1.5 px-2 text-xs"
+                  onClick={() =>
+                    openAssistantWithPrompt(
+                      `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
+                    )
+                  }
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${comparing ? "animate-spin" : ""}`} />
-                  Review Drift
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-8"
-                  onClick={() => void acceptAsNewBaseline()}
-                  disabled={acceptingBaseline || displayPassRate !== 1}
-                >
-                  {acceptingBaseline ? "Accepting..." : "Accept as New Baseline"}
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  Ask Assistant
                 </Button>
               </div>
-            </div>
-            {displayPassRate !== 1 && (
-              <p className="text-xs text-muted-foreground">
-                Baseline updates require a fully passing run (same rule as snapshot creation).
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <div className={`grid gap-4 ${assistantOpen ? "grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-6"}`}>
-        <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
-        <StatCard title="Total Runs" value={filteredTotalRuns} icon={Activity} />
-        <StatCard title="Pass Rate" value={`${Math.round(displayPassRate * 100)}%`} icon={BarChart3} />
-        <StatCard title="Avg Tool Calls" value={formatCompactOneDecimal(displayAvgToolCalls)} icon={CheckCircle2} />
-        <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
-        <StatCard title="Tool Tokens" value={formatTokenCount(displayToolTokenUsage?.totalTokens)} icon={Wrench} />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Pass / Fail</CardTitle></CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <PieChart width={180} height={180}>
-              <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={75} paddingAngle={3}>
-                {pieData.map((d, i) => <Cell key={i} fill={d.color} />)}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-            <div className="ml-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-success" />{passCount} passed</div>
-              <div className="flex items-center gap-2 text-sm"><div className="h-3 w-3 rounded-full bg-destructive" />{failCount} failed</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Tool Usage</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={toolData} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
-                <Tooltip />
-                <Bar dataKey="count" fill="hsl(38, 92%, 50%)" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-base">Scenarios</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 px-2 text-xs"
-              onClick={() =>
-                openAssistantWithPrompt(
-                  `Summarize the scenario results in this run. Highlight failed scenarios/checks first, then mention notable tool usage and extracted values.`
-                )
-              }
-            >
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              Ask Assistant
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {snapshotsUiEnabled && (
-            <div className="flex flex-wrap items-end gap-2 border-b p-3">
-              <div className="min-w-60 space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
-                <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
-                  <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select snapshot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {snapshots.map((snapshot) => (
-                      <SelectItem key={snapshot.id} value={snapshot.id}>
-                        {snapshot.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!selectedSnapshotId || comparing}
-                onClick={() => void compareWithSnapshot()}
-              >
-                {comparing ? "Comparing..." : "Compare Snapshot"}
-              </Button>
-              {snapshotComparison && (
-                <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
-                  Overall snapshot score: {snapshotComparison.overall_score}
-                </Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              {snapshotsUiEnabled && (
+                <div className="flex flex-wrap items-end gap-2 border-b p-3">
+                  <div className="min-w-60 space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
+                    <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Select snapshot" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {snapshots.map((snapshot) => (
+                          <SelectItem key={snapshot.id} value={snapshot.id}>
+                            {snapshot.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!selectedSnapshotId || comparing}
+                    onClick={() => void compareWithSnapshot()}
+                  >
+                    {comparing ? 'Comparing...' : 'Compare Snapshot'}
+                  </Button>
+                  {snapshotComparison && (
+                    <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
+                      Overall snapshot score: {snapshotComparison.overall_score}
+                    </Badge>
+                  )}
+                </div>
               )}
-            </div>
-          )}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-8" />
-                <TableHead>Scenario</TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead>Runs</TableHead>
-                <TableHead>Pass Rate</TableHead>
-                <TableHead>Tool Calls</TableHead>
-                <TableHead>Tool Tokens</TableHead>
-                <TableHead>Snapshot</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredScenarios.map((sc) => {
-                const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
-                const scenarioLabel = sc.scenarioName || sc.scenarioId;
-                return (
-                <Collapsible key={rowKey} open={openScenarios.has(rowKey)} onOpenChange={() => toggle(rowKey)} asChild>
-                  <>
-                    <CollapsibleTrigger asChild>
-                      <TableRow className="cursor-pointer hover:bg-muted/50">
-                        <TableCell><ChevronDown className={`h-4 w-4 transition-transform ${openScenarios.has(rowKey) ? "rotate-180" : ""}`} /></TableCell>
-                        <TableCell className="font-medium text-sm">{sc.scenarioName}</TableCell>
-                        <TableCell className="text-sm">
-                          <div>{sc.agentName}</div>
-                          {(sc.provider || sc.model) && (
-                            <div className="text-xs text-muted-foreground">
-                              {[sc.provider ? formatProvider(sc.provider) : null, sc.model].filter(Boolean).join(" · ")}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
-                        <TableCell><PassRateBadge rate={sc.passRate} /></TableCell>
-                        <TableCell className="font-mono text-sm">{formatCompactOneDecimal(sc.avgToolCalls)}</TableCell>
-                        <TableCell className="font-mono text-sm">{formatTokenCount(sc.toolTokenUsage?.totalTokens)}</TableCell>
-                        <TableCell>
-                          {(() => {
-                            const row = comparisonByScenario.get(sc.scenarioId);
-                            if (!row) return <span className="text-xs text-muted-foreground">—</span>;
-                            const className =
-                              row.status === "Match"
-                                ? "bg-success/15 text-success"
-                                : row.status === "Warn"
-                                  ? "bg-amber-500/15 text-amber-600"
-                                  : "bg-destructive/15 text-destructive";
-                            return (
-                              <Badge variant="outline" className={`text-xs ${className}`}>
-                                {row.status} · {row.score}
-                              </Badge>
-                            );
-                          })()}
-                        </TableCell>
-                      </TableRow>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent asChild>
-                      <tr>
-                        <td colSpan={8} className="p-0">
-                          <div className="bg-muted/30 p-4 space-y-2">
-                            <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold">Scenario details</p>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {scenarioLabel} · {sc.agentName} · {Math.round(sc.passRate * 100)}% pass rate · {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool tokens
-                                </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>Scenario</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Runs</TableHead>
+                    <TableHead>Pass Rate</TableHead>
+                    <TableHead>Tool Calls</TableHead>
+                    <TableHead>Tool Tokens</TableHead>
+                    <TableHead>Snapshot</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredScenarios.map((sc) => {
+                    const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
+                    const scenarioLabel = sc.scenarioName || sc.scenarioId;
+                    return (
+                      <Collapsible
+                        key={rowKey}
+                        open={openScenarios.has(rowKey)}
+                        onOpenChange={() => toggle(rowKey)}
+                        asChild
+                      >
+                        <>
+                          <CollapsibleTrigger asChild>
+                            <TableRow className="cursor-pointer hover:bg-muted/50">
+                              <TableCell>
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    openScenarios.has(rowKey) ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium text-sm">
+                                {sc.scenarioName}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                <div>{sc.agentName}</div>
+                                {(sc.provider || sc.model) && (
+                                  <div className="text-xs text-muted-foreground">
+                                    {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
+                              <TableCell>
+                                <PassRateBadge rate={sc.passRate} />
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                {formatCompactOneDecimal(sc.avgToolCalls)}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
+                              </TableCell>
+                              <TableCell>
+                                {(() => {
+                                  const row = comparisonByScenario.get(sc.scenarioId);
+                                  if (!row)
+                                    return <span className="text-xs text-muted-foreground">—</span>;
+                                  const className =
+                                    row.status === 'Match'
+                                      ? 'bg-success/15 text-success'
+                                      : row.status === 'Warn'
+                                      ? 'bg-amber-500/15 text-amber-600'
+                                      : 'bg-destructive/15 text-destructive';
+                                  return (
+                                    <Badge variant="outline" className={`text-xs ${className}`}>
+                                      {row.status} · {row.score}
+                                    </Badge>
+                                  );
+                                })()}
+                              </TableCell>
+                            </TableRow>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent asChild>
+                            <tr>
+                              <td colSpan={8} className="p-0">
+                                <div className="bg-muted/30 p-4 space-y-2">
+                                  <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold">Scenario details</p>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {scenarioLabel} · {sc.agentName} ·{' '}
+                                        {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
+                                        tokens
+                                      </p>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 gap-1.5 px-2 text-xs shrink-0"
+                                      onClick={() =>
+                                        openAssistantWithPrompt(
+                                          `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`,
+                                          { scenarioId: sc.scenarioId }
+                                        )
+                                      }
+                                    >
+                                      <Sparkles className="h-4 w-4 text-amber-500" />
+                                      Ask Assistant
+                                    </Button>
+                                  </div>
+                                  {(() => {
+                                    const row = comparisonByScenario.get(sc.scenarioId);
+                                    if (!row || row.reasons.length === 0) return null;
+                                    return (
+                                      <div className="rounded-md border bg-card p-2">
+                                        <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                          Snapshot reasons
+                                        </p>
+                                        <p className="mb-1 text-[11px] text-muted-foreground">
+                                          Baseline agents: {row.baseline_agents.join(', ') || '—'} ·
+                                          observed agents: {row.observed_agents.join(', ') || '—'}
+                                        </p>
+                                        <ul className="space-y-1 text-xs text-muted-foreground">
+                                          {row.reasons.map((reason, index) => (
+                                            <li key={index}>• {reason}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    );
+                                  })()}
+                                  {sc.runs.map((run) => (
+                                    <div
+                                      key={run.runIndex}
+                                      className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
+                                    >
+                                      <div className="mt-0.5">
+                                        {run.passed ? (
+                                          <CheckCircle2 className="h-4 w-4 text-success" />
+                                        ) : (
+                                          <XCircle className="h-4 w-4 text-destructive" />
+                                        )}
+                                      </div>
+                                      <div className="flex-1 space-y-1">
+                                        {(() => {
+                                          const scenarioDef = scenarioDefinitionByResultId.get(
+                                            sc.scenarioId
+                                          );
+                                          const checks = scenarioDef
+                                            ? buildRunCheckItems(
+                                                scenarioDef.evalRules,
+                                                run.failureReasons
+                                              )
+                                            : [];
+                                          const failedChecks = checks.filter(
+                                            (c) => c.status === 'failed'
+                                          );
+                                          const passedChecks = checks.filter(
+                                            (c) => c.status === 'passed'
+                                          );
+                                          return (
+                                            <>
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-mono text-xs text-muted-foreground">
+                                                  Run #{run.runIndex + 1}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  ·
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {run.duration}ms
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  ·
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {formatTokenCount(
+                                                    run.toolTokenUsage?.totalTokens
+                                                  )}{' '}
+                                                  tool tokens
+                                                </span>
+                                                {!run.passed && (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]"
+                                                  >
+                                                    Failed
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              {run.failureReasons.length > 0 && (
+                                                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                                                  <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                                                    <XCircle className="h-3.5 w-3.5" />
+                                                    Failure reasons
+                                                  </p>
+                                                  <ul className="space-y-1 text-xs text-destructive">
+                                                    {run.failureReasons.map((reason, index) => (
+                                                      <li key={index}>
+                                                        • {formatFailureReason(reason)}
+                                                      </li>
+                                                    ))}
+                                                  </ul>
+                                                </div>
+                                              )}
+                                              {checks.length > 0 && (
+                                                <Collapsible
+                                                  open={isRunSectionOpen(
+                                                    runSectionKey(
+                                                      sc.scenarioId,
+                                                      sc.agentName,
+                                                      run.runIndex,
+                                                      'checks'
+                                                    )
+                                                  )}
+                                                  onOpenChange={() =>
+                                                    toggleRunSection(
+                                                      runSectionKey(
+                                                        sc.scenarioId,
+                                                        sc.agentName,
+                                                        run.runIndex,
+                                                        'checks'
+                                                      )
+                                                    )
+                                                  }
+                                                >
+                                                  <div className="rounded-md border bg-muted/20 p-2">
+                                                    <CollapsibleTrigger asChild>
+                                                      <button
+                                                        type="button"
+                                                        className="mb-2 flex w-full flex-wrap items-center gap-2 text-left"
+                                                      >
+                                                        <ChevronDown
+                                                          className={`h-3.5 w-3.5 transition-transform ${
+                                                            isRunSectionOpen(
+                                                              runSectionKey(
+                                                                sc.scenarioId,
+                                                                sc.agentName,
+                                                                run.runIndex,
+                                                                'checks'
+                                                              )
+                                                            )
+                                                              ? 'rotate-180'
+                                                              : ''
+                                                          }`}
+                                                        />
+                                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                          Checks
+                                                        </p>
+                                                        <Badge
+                                                          variant="outline"
+                                                          className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
+                                                        >
+                                                          {passedChecks.length} passed
+                                                        </Badge>
+                                                        <Badge
+                                                          variant="outline"
+                                                          className={`h-5 text-[10px] ${
+                                                            failedChecks.length > 0
+                                                              ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                                                              : ''
+                                                          }`}
+                                                        >
+                                                          {failedChecks.length} failed
+                                                        </Badge>
+                                                      </button>
+                                                    </CollapsibleTrigger>
+                                                    <CollapsibleContent>
+                                                      <div className="space-y-1">
+                                                        {checks.map((check, idx) => (
+                                                          <div
+                                                            key={`${check.rule.type}-${
+                                                              check.rule.value ??
+                                                              check.rule.path ??
+                                                              ''
+                                                            }-${idx}`}
+                                                            className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
+                                                              check.status === 'failed'
+                                                                ? 'border-destructive/20 bg-destructive/5'
+                                                                : 'border-success/20 bg-success/5'
+                                                            }`}
+                                                          >
+                                                            <div className="min-w-0">
+                                                              <div className="flex items-center gap-2">
+                                                                {check.status === 'failed' ? (
+                                                                  <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                                ) : (
+                                                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                                                                )}
+                                                                <span className="font-medium">
+                                                                  {formatEvalRuleLabel(check.rule)}
+                                                                </span>
+                                                              </div>
+                                                              {check.failureReason && (
+                                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                                  {formatFailureReason(
+                                                                    check.failureReason
+                                                                  )}
+                                                                </p>
+                                                              )}
+                                                            </div>
+                                                            <Badge
+                                                              variant="outline"
+                                                              className={`shrink-0 text-[10px] ${
+                                                                check.status === 'failed'
+                                                                  ? 'border-destructive/30 text-destructive'
+                                                                  : 'border-success/30 text-success'
+                                                              }`}
+                                                            >
+                                                              {check.status}
+                                                            </Badge>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </CollapsibleContent>
+                                                  </div>
+                                                </Collapsible>
+                                              )}
+                                            </>
+                                          );
+                                        })()}
+                                        <Collapsible
+                                          open={isRunSectionOpen(
+                                            runSectionKey(
+                                              sc.scenarioId,
+                                              sc.agentName,
+                                              run.runIndex,
+                                              'extracts'
+                                            )
+                                          )}
+                                          onOpenChange={() =>
+                                            toggleRunSection(
+                                              runSectionKey(
+                                                sc.scenarioId,
+                                                sc.agentName,
+                                                run.runIndex,
+                                                'extracts'
+                                              )
+                                            )
+                                          }
+                                        >
+                                          <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
+                                            <CollapsibleTrigger asChild>
+                                              <button
+                                                type="button"
+                                                className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left"
+                                              >
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                  <ChevronDown
+                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                      isRunSectionOpen(
+                                                        runSectionKey(
+                                                          sc.scenarioId,
+                                                          sc.agentName,
+                                                          run.runIndex,
+                                                          'extracts'
+                                                        )
+                                                      )
+                                                        ? 'rotate-180'
+                                                        : ''
+                                                    }`}
+                                                  />
+                                                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    <Layers className="h-3.5 w-3.5 text-violet-600" />
+                                                    Extracted values
+                                                  </p>
+                                                </div>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="h-5 text-[10px]"
+                                                >
+                                                  {Object.keys(run.extractedValues ?? {}).length}{' '}
+                                                  total
+                                                </Badge>
+                                              </button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                              {Object.keys(run.extractedValues ?? {}).length ===
+                                              0 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                  No extracted values captured for this run.
+                                                </p>
+                                              ) : (
+                                                <div className="grid gap-1.5 sm:grid-cols-2">
+                                                  {Object.entries(run.extractedValues ?? {}).map(
+                                                    ([key, value]) => (
+                                                      <div
+                                                        key={key}
+                                                        className="rounded-md border bg-background px-2 py-1.5 text-xs"
+                                                      >
+                                                        <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                          {key}
+                                                        </div>
+                                                        <div className="font-mono break-all text-foreground">
+                                                          {value === null ? 'null' : String(value)}
+                                                        </div>
+                                                      </div>
+                                                    )
+                                                  )}
+                                                </div>
+                                              )}
+                                            </CollapsibleContent>
+                                          </div>
+                                        </Collapsible>
+                                        <Collapsible
+                                          open={isRunSectionOpen(
+                                            runSectionKey(
+                                              sc.scenarioId,
+                                              sc.agentName,
+                                              run.runIndex,
+                                              'tools'
+                                            )
+                                          )}
+                                          onOpenChange={() =>
+                                            toggleRunSection(
+                                              runSectionKey(
+                                                sc.scenarioId,
+                                                sc.agentName,
+                                                run.runIndex,
+                                                'tools'
+                                              )
+                                            )
+                                          }
+                                        >
+                                          <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
+                                            <CollapsibleTrigger asChild>
+                                              <button
+                                                type="button"
+                                                className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left"
+                                              >
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                  <ChevronDown
+                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                      isRunSectionOpen(
+                                                        runSectionKey(
+                                                          sc.scenarioId,
+                                                          sc.agentName,
+                                                          run.runIndex,
+                                                          'tools'
+                                                        )
+                                                      )
+                                                        ? 'rotate-180'
+                                                        : ''
+                                                    }`}
+                                                  />
+                                                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    <Wrench className="h-3.5 w-3.5 text-sky-600" />
+                                                    Tool call sequence
+                                                  </p>
+                                                </div>
+                                                <Badge
+                                                  variant="outline"
+                                                  className="h-5 text-[10px]"
+                                                >
+                                                  {run.toolCalls.length} total
+                                                </Badge>
+                                              </button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                              {run.toolCalls.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground">
+                                                  No tool calls captured for this run.
+                                                </p>
+                                              ) : (
+                                                <div className="space-y-2">
+                                                  <div className="flex flex-wrap gap-1">
+                                                    <TooltipProvider delayDuration={0}>
+                                                      {run.toolCalls.map((tc, i) => {
+                                                        const usage = run.conversation.filter(
+                                                          (item) => item.kind === 'tool_call'
+                                                        )[i]?.estimatedTokens;
+                                                        const hasEstimate =
+                                                          typeof usage?.totalTokens === 'number';
+                                                        return (
+                                                          <UiTooltip key={i}>
+                                                            <TooltipTrigger asChild>
+                                                              <Badge
+                                                                variant="outline"
+                                                                className="font-mono text-xs bg-background"
+                                                              >
+                                                                <span className="mr-1 text-muted-foreground">
+                                                                  #{i + 1}
+                                                                </span>
+                                                                {tc.name}
+                                                                <span className="ml-1 text-muted-foreground">
+                                                                  {tc.duration}ms
+                                                                </span>
+                                                                {hasEstimate && (
+                                                                  <span className="ml-1 text-muted-foreground">
+                                                                    ·{' '}
+                                                                    {formatTokenCount(
+                                                                      usage?.totalTokens
+                                                                    )}
+                                                                    tok
+                                                                  </span>
+                                                                )}
+                                                              </Badge>
+                                                            </TooltipTrigger>
+                                                            {hasEstimate && (
+                                                              <TooltipContent className="text-xs">
+                                                                {`${
+                                                                  tc.name
+                                                                } · tokens total: ${formatTokenCount(
+                                                                  usage?.totalTokens
+                                                                )} · in: ${formatTokenCount(
+                                                                  usage?.inputTokens
+                                                                )} · out: ${formatTokenCount(
+                                                                  usage?.outputTokens
+                                                                )}`}
+                                                              </TooltipContent>
+                                                            )}
+                                                          </UiTooltip>
+                                                        );
+                                                      })}
+                                                    </TooltipProvider>
+                                                  </div>
+                                                  <div className="rounded-md border bg-background p-2">
+                                                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                                                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                        Tool token estimate
+                                                      </p>
+                                                      <Badge
+                                                        variant="outline"
+                                                        className="h-5 text-[10px]"
+                                                      >
+                                                        estimated
+                                                      </Badge>
+                                                    </div>
+                                                    {Object.keys(run.toolTokenUsageByTool ?? {})
+                                                      .length === 0 ? (
+                                                      <p className="text-xs text-muted-foreground">
+                                                        n/a
+                                                      </p>
+                                                    ) : (
+                                                      <div className="grid gap-1.5 sm:grid-cols-2">
+                                                        {Object.entries(
+                                                          run.toolTokenUsageByTool ?? {}
+                                                        ).map(([toolName, usage]) => (
+                                                          <div
+                                                            key={toolName}
+                                                            className="rounded border bg-muted/30 px-2 py-1.5 text-xs"
+                                                          >
+                                                            <div className="font-mono text-[11px]">
+                                                              {toolName}
+                                                            </div>
+                                                            <div className="text-muted-foreground">
+                                                              total:{' '}
+                                                              {formatTokenCount(usage.totalTokens)}{' '}
+                                                              · in:{' '}
+                                                              {formatTokenCount(usage.inputTokens)}{' '}
+                                                              · out:{' '}
+                                                              {formatTokenCount(usage.outputTokens)}
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </CollapsibleContent>
+                                          </div>
+                                        </Collapsible>
+                                        <Collapsible
+                                          open={isRunSectionOpen(
+                                            runSectionKey(
+                                              sc.scenarioId,
+                                              sc.agentName,
+                                              run.runIndex,
+                                              'final'
+                                            )
+                                          )}
+                                          onOpenChange={() =>
+                                            toggleRunSection(
+                                              runSectionKey(
+                                                sc.scenarioId,
+                                                sc.agentName,
+                                                run.runIndex,
+                                                'final'
+                                              )
+                                            )
+                                          }
+                                        >
+                                          <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
+                                            <CollapsibleTrigger asChild>
+                                              <button
+                                                type="button"
+                                                className="mb-2 flex w-full items-center gap-2 text-left"
+                                              >
+                                                <ChevronDown
+                                                  className={`h-3.5 w-3.5 transition-transform ${
+                                                    isRunSectionOpen(
+                                                      runSectionKey(
+                                                        sc.scenarioId,
+                                                        sc.agentName,
+                                                        run.runIndex,
+                                                        'final'
+                                                      )
+                                                    )
+                                                      ? 'rotate-180'
+                                                      : ''
+                                                  }`}
+                                                />
+                                                <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                  <Bot className="h-3.5 w-3.5" />
+                                                  Final answer
+                                                </p>
+                                              </button>
+                                            </CollapsibleTrigger>
+                                            <CollapsibleContent>
+                                              <ExpandableText
+                                                text={
+                                                  run.finalAnswer || 'No final answer captured.'
+                                                }
+                                                maxLength={1200}
+                                                className="text-xs text-foreground"
+                                              />
+                                            </CollapsibleContent>
+                                          </div>
+                                        </Collapsible>
+                                        <Collapsible
+                                          open={isRunSectionOpen(
+                                            runSectionKey(
+                                              sc.scenarioId,
+                                              sc.agentName,
+                                              run.runIndex,
+                                              'conversation'
+                                            )
+                                          )}
+                                          onOpenChange={() =>
+                                            toggleRunSection(
+                                              runSectionKey(
+                                                sc.scenarioId,
+                                                sc.agentName,
+                                                run.runIndex,
+                                                'conversation'
+                                              )
+                                            )
+                                          }
+                                        >
+                                          <div className="rounded-md border bg-muted/10 p-2">
+                                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                              <CollapsibleTrigger asChild>
+                                                <button
+                                                  type="button"
+                                                  className="flex min-w-0 items-center gap-2 text-left"
+                                                >
+                                                  <ChevronDown
+                                                    className={`h-3.5 w-3.5 shrink-0 transition-transform ${
+                                                      isRunSectionOpen(
+                                                        runSectionKey(
+                                                          sc.scenarioId,
+                                                          sc.agentName,
+                                                          run.runIndex,
+                                                          'conversation'
+                                                        )
+                                                      )
+                                                        ? 'rotate-180'
+                                                        : ''
+                                                    }`}
+                                                  />
+                                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    Conversation trace
+                                                  </p>
+                                                </button>
+                                              </CollapsibleTrigger>
+                                              <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="h-7 gap-1.5 px-2 text-xs"
+                                                  onClick={() =>
+                                                    openAssistantWithPrompt(
+                                                      `Explain Run #${
+                                                        run.runIndex + 1
+                                                      } for scenario '${scenarioLabel}'. It ${
+                                                        run.passed ? 'passed' : 'failed'
+                                                      } in ${
+                                                        run.duration
+                                                      }ms. Focus on the tool sequence and ${
+                                                        run.passed
+                                                          ? 'why it passed'
+                                                          : 'what caused the failure'
+                                                      }.`,
+                                                      { scenarioId: sc.scenarioId }
+                                                    )
+                                                  }
+                                                >
+                                                  <Sparkles className="h-4 w-4 text-amber-500" />
+                                                  Ask Assistant
+                                                </Button>
+                                              </div>
+                                            </div>
+                                            <CollapsibleContent>
+                                              <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                                {run.conversation.length === 0 ? (
+                                                  <p className="text-xs text-muted-foreground">
+                                                    No conversation trace captured.
+                                                  </p>
+                                                ) : (
+                                                  run.conversation.map((item) => (
+                                                    <ConversationRow
+                                                      key={item.id}
+                                                      item={item}
+                                                      fallbackUserPrompt={
+                                                        scenarioDefinitionByResultId.get(
+                                                          sc.scenarioId
+                                                        )?.prompt
+                                                      }
+                                                    />
+                                                  ))
+                                                )}
+                                              </div>
+                                            </CollapsibleContent>
+                                            {!isRunSectionOpen(
+                                              runSectionKey(
+                                                sc.scenarioId,
+                                                sc.agentName,
+                                                run.runIndex,
+                                                'conversation'
+                                              )
+                                            ) && (
+                                              <p className="text-xs text-muted-foreground">
+                                                Expand to inspect user/assistant/tool messages for
+                                                this run.
+                                              </p>
+                                            )}
+                                          </div>
+                                        </Collapsible>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          </CollapsibleContent>
+                        </>
+                      </Collapsible>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+
+        {assistantOpen && (
+          <div className="min-w-0 space-y-0 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+            <Tabs
+              value={contextPanelTab}
+              onValueChange={(v) => setContextPanelTab(v as 'assistant' | 'reports' | 'note')}
+              className="min-w-0 -mb-px px-3 pt-1"
+            >
+              <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
+                <TabsTrigger
+                  value="assistant"
+                  className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+                >
+                  Assistant
+                </TabsTrigger>
+                <TabsTrigger
+                  value="reports"
+                  className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+                >
+                  Reports
+                </TabsTrigger>
+                <TabsTrigger
+                  value="note"
+                  className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
+                >
+                  Note
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            {contextPanelTab === 'assistant' ? (
+              <ResultAssistantPanel
+                title="MCP Lab Assistant"
+                description="Ask questions about this run result, failures, tool usage, and snapshot drift."
+                expanded={assistantExpanded}
+                onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
+                onHide={() => setAssistantOpen(false)}
+                messages={assistantMessages}
+                pendingToolCalls={assistantPendingToolCalls}
+                loading={assistantLoading}
+                onCancel={assistantTurnCancelable ? cancelAssistantTurn : undefined}
+                input={assistantInput}
+                onInputChange={setAssistantInput}
+                onSend={() => void askResultAssistant()}
+                inputPlaceholder="Ask about this result..."
+                snippets={RESULT_ASSISTANT_SNIPPETS}
+                onSnippetSelect={applyResultAssistantSnippet}
+                onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
+                onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
+                chatEndRef={assistantChatEndRef}
+                inputRef={assistantInputRef}
+                className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col"
+                renderMessage={({
+                  message,
+                  index,
+                  linkedPendingToolCall,
+                  isUser,
+                  isAssistant,
+                  isSystem,
+                  isTool
+                }) => {
+                  const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
+                  if (
+                    isTool &&
+                    /^(Approved|Denied) tool call\\b/i.test(String(message.text ?? '').trim())
+                  ) {
+                    return null;
+                  }
+                  const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
+                  const toolStepPublicName =
+                    linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
+                  const canShowHandoff =
+                    isAssistant &&
+                    !isAssistantToolRequest &&
+                    isScenarioAssistantHandoffRelevant(
+                      message.text,
+                      Boolean(assistantContextScenarioId)
+                    );
+
+                  if (isAssistantToolRequest) {
+                    const isPendingApproval = linkedPendingToolCall?.status === 'pending';
+                    const displayToolName = formatAssistantToolName(
+                      toolStepName ?? toolStepPublicName ?? 'unknown_tool'
+                    );
+                    return (
+                      <div
+                        key={`${message.id ?? `${message.role}-${index}`}:${
+                          linkedPendingToolCall ? 'pending' : 'completed'
+                        }`}
+                        className="flex items-start gap-2"
+                      >
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          <Bot className="h-3 w-3" />
+                        </div>
+                        <details
+                          open={Boolean(linkedPendingToolCall)}
+                          className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
+                        >
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
+                                <span
+                                  className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    isPendingApproval
+                                      ? 'bg-amber-100 text-amber-900'
+                                      : 'bg-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {isPendingApproval ? 'Needs approval' : 'Completed'}
+                                </span>
                               </div>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
+                            <MarkdownContent text={message.text} className="text-sm" />
+                            {isPendingApproval && linkedPendingToolCall && (
+                              <>
+                                <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                                  <code className="break-words">
+                                    {JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}
+                                  </code>
+                                </pre>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() =>
+                                      void denyResultAssistantToolCall(linkedPendingToolCall.id)
+                                    }
+                                  >
+                                    Deny
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    disabled={assistantLoading}
+                                    onClick={() =>
+                                      void approveResultAssistantToolCall(linkedPendingToolCall.id)
+                                    }
+                                  >
+                                    Approve
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    );
+                  }
+
+                  const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
+                  return (
+                    <div
+                      key={message.id ?? `${message.role}-${index}`}
+                      className={`flex items-start gap-2 ${
+                        isUser ? 'justify-end' : 'justify-start'
+                      }`}
+                    >
+                      {!isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+                          {isSystem ? (
+                            <RectangleEllipsis className="h-3 w-3" />
+                          ) : (
+                            <Bot className="h-3 w-3" />
+                          )}
+                        </div>
+                      )}
+                      <div className="relative max-w-[92%]">
+                        <div
+                          className={`max-w-full rounded-md border p-3 text-sm ${
+                            isUser
+                              ? 'border-primary/20 bg-primary/10'
+                              : isSystem
+                              ? 'border-amber-400/30 bg-amber-50/70'
+                              : isTool
+                              ? 'border-blue-300/30 bg-blue-50/50'
+                              : 'border-border/80 bg-background shadow-sm'
+                          }`}
+                        >
+                          {!(isUser || isSystem) && (
+                            <p
+                              className={`mb-2 text-[11px] font-semibold text-muted-foreground ${
+                                isUser ? 'text-right' : ''
+                              }`}
+                            >
+                              {isTool ? 'Tool' : 'Assistant'}
+                            </p>
+                          )}
+                          {isUser ? (
+                            <p className="whitespace-pre-wrap">{message.text}</p>
+                          ) : (
+                            <MarkdownContent text={message.text} className="text-sm" />
+                          )}
+                          {canShowHandoff && (
+                            <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-7 gap-1.5 px-2 text-xs shrink-0"
-                                onClick={() =>
-                                  openAssistantWithPrompt(
-                                    `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`
-                                  , { scenarioId: sc.scenarioId })
-                                }
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => sendToScenarioAssistant(message.text)}
                               >
                                 <Sparkles className="h-4 w-4 text-amber-500" />
-                                Ask Assistant
+                                Send to Scenario Assistant
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
                               </Button>
                             </div>
-                            {(() => {
-                              const row = comparisonByScenario.get(sc.scenarioId);
-                              if (!row || row.reasons.length === 0) return null;
-                              return (
-                                <div className="rounded-md border bg-card p-2">
-                                  <p className="mb-1 text-xs font-semibold text-muted-foreground">Snapshot reasons</p>
-                                  <p className="mb-1 text-[11px] text-muted-foreground">
-                                    Baseline agents: {row.baseline_agents.join(", ") || "—"} · observed agents: {row.observed_agents.join(", ") || "—"}
-                                  </p>
-                                  <ul className="space-y-1 text-xs text-muted-foreground">
-                                    {row.reasons.map((reason, index) => (
-                                      <li key={index}>• {reason}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              );
-                            })()}
-                            {sc.runs.map((run) => (
-                              <div key={run.runIndex} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
-                                <div className="mt-0.5">
-                                  {run.passed ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-destructive" />}
-                                </div>
-                                <div className="flex-1 space-y-1">
-                                  {(() => {
-                                    const scenarioDef = scenarioDefinitionByResultId.get(sc.scenarioId);
-                                    const checks = scenarioDef ? buildRunCheckItems(scenarioDef.evalRules, run.failureReasons) : [];
-                                    const failedChecks = checks.filter((c) => c.status === "failed");
-                                    const passedChecks = checks.filter((c) => c.status === "passed");
-                                    return (
-                                      <>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-mono text-xs text-muted-foreground">Run #{run.runIndex + 1}</span>
-                                    <span className="text-xs text-muted-foreground">·</span>
-                                    <span className="text-xs text-muted-foreground">{run.duration}ms</span>
-                                    <span className="text-xs text-muted-foreground">·</span>
-                                    <span className="text-xs text-muted-foreground">{formatTokenCount(run.toolTokenUsage?.totalTokens)} tool tokens</span>
-                                    {!run.passed && (
-                                      <Badge variant="outline" className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]">
-                                        Failed
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  {run.failureReasons.length > 0 && (
-                                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
-                                      <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
-                                        <XCircle className="h-3.5 w-3.5" />
-                                        Failure reasons
-                                      </p>
-                                      <ul className="space-y-1 text-xs text-destructive">
-                                        {run.failureReasons.map((reason, index) => (
-                                          <li key={index}>• {formatFailureReason(reason)}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {checks.length > 0 && (
-                                    <Collapsible
-                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
-                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks"))}
-                                    >
-                                      <div className="rounded-md border bg-muted/20 p-2">
-                                        <CollapsibleTrigger asChild>
-                                          <button type="button" className="mb-2 flex w-full flex-wrap items-center gap-2 text-left">
-                                            <ChevronDown
-                                              className={`h-3.5 w-3.5 transition-transform ${
-                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "checks")) ? "rotate-180" : ""
-                                              }`}
-                                            />
-                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              Checks
-                                            </p>
-                                            <Badge
-                                              variant="outline"
-                                              className="h-5 border-success/30 bg-success/10 text-success text-[10px]"
-                                            >
-                                              {passedChecks.length} passed
-                                            </Badge>
-                                            <Badge
-                                              variant="outline"
-                                              className={`h-5 text-[10px] ${failedChecks.length > 0 ? "border-destructive/30 bg-destructive/10 text-destructive" : ""}`}
-                                            >
-                                              {failedChecks.length} failed
-                                            </Badge>
-                                          </button>
-                                        </CollapsibleTrigger>
-                                        <CollapsibleContent>
-                                          <div className="space-y-1">
-                                            {checks.map((check, idx) => (
-                                              <div
-                                                key={`${check.rule.type}-${check.rule.value ?? check.rule.path ?? ""}-${idx}`}
-                                                className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
-                                                  check.status === "failed"
-                                                    ? "border-destructive/20 bg-destructive/5"
-                                                    : "border-success/20 bg-success/5"
-                                                }`}
-                                              >
-                                                <div className="min-w-0">
-                                                  <div className="flex items-center gap-2">
-                                                    {check.status === "failed" ? (
-                                                      <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                                                    ) : (
-                                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
-                                                    )}
-                                                    <span className="font-medium">{formatEvalRuleLabel(check.rule)}</span>
-                                                  </div>
-                                                  {check.failureReason && (
-                                                    <p className="mt-1 pl-5 text-[11px] text-destructive">
-                                                      {formatFailureReason(check.failureReason)}
-                                                    </p>
-                                                  )}
-                                                </div>
-                                                <Badge
-                                                  variant="outline"
-                                                  className={`shrink-0 text-[10px] ${
-                                                    check.status === "failed"
-                                                      ? "border-destructive/30 text-destructive"
-                                                      : "border-success/30 text-success"
-                                                  }`}
-                                                >
-                                                  {check.status}
-                                                </Badge>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </CollapsibleContent>
-                                      </div>
-                                    </Collapsible>
-                                  )}
-                                      </>
-                                    );
-                                  })()}
-                                  <Collapsible
-                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
-                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts"))}
-                                  >
-                                    <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-2">
-                                      <CollapsibleTrigger asChild>
-                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
-                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                            <ChevronDown
-                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "extracts")) ? "rotate-180" : ""
-                                              }`}
-                                            />
-                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              <Layers className="h-3.5 w-3.5 text-violet-600" />
-                                              Extracted values
-                                            </p>
-                                          </div>
-                                          <Badge variant="outline" className="h-5 text-[10px]">
-                                            {Object.keys(run.extractedValues ?? {}).length} total
-                                          </Badge>
-                                        </button>
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent>
-                                        {Object.keys(run.extractedValues ?? {}).length === 0 ? (
-                                          <p className="text-xs text-muted-foreground">No extracted values captured for this run.</p>
-                                        ) : (
-                                          <div className="grid gap-1.5 sm:grid-cols-2">
-                                            {Object.entries(run.extractedValues ?? {}).map(([key, value]) => (
-                                              <div key={key} className="rounded-md border bg-background px-2 py-1.5 text-xs">
-                                                <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                  {key}
-                                                </div>
-                                                <div className="font-mono break-all text-foreground">
-                                                  {value === null ? "null" : String(value)}
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </CollapsibleContent>
-                                    </div>
-                                  </Collapsible>
-                                  <Collapsible
-                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
-                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools"))}
-                                  >
-                                    <div className="rounded-md border border-sky-500/20 bg-sky-500/5 p-2">
-                                      <CollapsibleTrigger asChild>
-                                        <button type="button" className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-left">
-                                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                            <ChevronDown
-                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "tools")) ? "rotate-180" : ""
-                                              }`}
-                                            />
-                                            <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              <Wrench className="h-3.5 w-3.5 text-sky-600" />
-                                              Tool call sequence
-                                            </p>
-                                          </div>
-                                          <Badge variant="outline" className="h-5 text-[10px]">
-                                            {run.toolCalls.length} total
-                                          </Badge>
-                                        </button>
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent>
-                                        {run.toolCalls.length === 0 ? (
-                                          <p className="text-xs text-muted-foreground">No tool calls captured for this run.</p>
-                                        ) : (
-                                          <div className="space-y-2">
-                                            <div className="flex flex-wrap gap-1">
-                                              <TooltipProvider delayDuration={0}>
-                                                {run.toolCalls.map((tc, i) => {
-                                                  const usage = run.conversation.filter((item) => item.kind === "tool_call")[i]?.estimatedTokens;
-                                                  const hasEstimate = typeof usage?.totalTokens === "number";
-                                                  return (
-                                                    <UiTooltip key={i}>
-                                                      <TooltipTrigger asChild>
-                                                        <Badge variant="outline" className="font-mono text-xs bg-background">
-                                                          <span className="mr-1 text-muted-foreground">#{i + 1}</span>
-                                                          {tc.name}
-                                                          <span className="ml-1 text-muted-foreground">{tc.duration}ms</span>
-                                                          {hasEstimate && (
-                                                            <span className="ml-1 text-muted-foreground">
-                                                              · {formatTokenCount(usage?.totalTokens)}tok
-                                                            </span>
-                                                          )}
-                                                        </Badge>
-                                                      </TooltipTrigger>
-                                                      {hasEstimate && (
-                                                        <TooltipContent className="text-xs">
-                                                          {`${tc.name} · tokens total: ${formatTokenCount(usage?.totalTokens)} · in: ${formatTokenCount(usage?.inputTokens)} · out: ${formatTokenCount(usage?.outputTokens)}`}
-                                                        </TooltipContent>
-                                                      )}
-                                                    </UiTooltip>
-                                                  );
-                                                })}
-                                              </TooltipProvider>
-                                            </div>
-                                            <div className="rounded-md border bg-background p-2">
-                                              <div className="mb-1.5 flex items-center justify-between gap-2">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                                  Tool token estimate
-                                                </p>
-                                                <Badge variant="outline" className="h-5 text-[10px]">
-                                                  estimated
-                                                </Badge>
-                                              </div>
-                                              {Object.keys(run.toolTokenUsageByTool ?? {}).length === 0 ? (
-                                                <p className="text-xs text-muted-foreground">n/a</p>
-                                              ) : (
-                                                <div className="grid gap-1.5 sm:grid-cols-2">
-                                                  {Object.entries(run.toolTokenUsageByTool ?? {}).map(([toolName, usage]) => (
-                                                    <div key={toolName} className="rounded border bg-muted/30 px-2 py-1.5 text-xs">
-                                                      <div className="font-mono text-[11px]">{toolName}</div>
-                                                      <div className="text-muted-foreground">
-                                                        total: {formatTokenCount(usage.totalTokens)} · in: {formatTokenCount(usage.inputTokens)} · out: {formatTokenCount(usage.outputTokens)}
-                                                      </div>
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </CollapsibleContent>
-                                    </div>
-                                  </Collapsible>
-                                  <Collapsible
-                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
-                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final"))}
-                                  >
-                                    <div className="rounded-md border border-muted-foreground/20 bg-card p-2">
-                                      <CollapsibleTrigger asChild>
-                                        <button type="button" className="mb-2 flex w-full items-center gap-2 text-left">
-                                          <ChevronDown
-                                            className={`h-3.5 w-3.5 transition-transform ${
-                                              isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "final")) ? "rotate-180" : ""
-                                            }`}
-                                          />
-                                          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                            <Bot className="h-3.5 w-3.5" />
-                                            Final answer
-                                          </p>
-                                        </button>
-                                      </CollapsibleTrigger>
-                                      <CollapsibleContent>
-                                        <ExpandableText
-                                          text={run.finalAnswer || "No final answer captured."}
-                                          maxLength={1200}
-                                          className="text-xs text-foreground"
-                                        />
-                                      </CollapsibleContent>
-                                    </div>
-                                  </Collapsible>
-                                  <Collapsible
-                                    open={isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
-                                    onOpenChange={() => toggleRunSection(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))}
-                                  >
-                                    <div className="rounded-md border bg-muted/10 p-2">
-                                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                        <CollapsibleTrigger asChild>
-                                          <button type="button" className="flex min-w-0 items-center gap-2 text-left">
-                                            <ChevronDown
-                                              className={`h-3.5 w-3.5 shrink-0 transition-transform ${
-                                                isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation"))
-                                                  ? "rotate-180"
-                                                  : ""
-                                              }`}
-                                            />
-                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                              Conversation trace
-                                            </p>
-                                          </button>
-                                        </CollapsibleTrigger>
-                                        <div className="flex flex-wrap gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-7 gap-1.5 px-2 text-xs"
-                                            onClick={() =>
-                                              openAssistantWithPrompt(
-                                                `Explain Run #${run.runIndex + 1} for scenario '${scenarioLabel}'. It ${run.passed ? "passed" : "failed"} in ${run.duration}ms. Focus on the tool sequence and ${run.passed ? "why it passed" : "what caused the failure"}.`
-                                              , { scenarioId: sc.scenarioId })
-                                            }
-                                          >
-                                            <Sparkles className="h-4 w-4 text-amber-500" />
-                                            Ask Assistant
-                                          </Button>
-                                        </div>
-                                      </div>
-                                      <CollapsibleContent>
-                                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                                          {run.conversation.length === 0 ? (
-                                            <p className="text-xs text-muted-foreground">No conversation trace captured.</p>
-                                          ) : (
-                                            run.conversation.map((item) => (
-                                              <ConversationRow
-                                                key={item.id}
-                                                item={item}
-                                                fallbackUserPrompt={scenarioDefinitionByResultId.get(sc.scenarioId)?.prompt}
-                                              />
-                                            ))
-                                          )}
-                                        </div>
-                                      </CollapsibleContent>
-                                      {!isRunSectionOpen(runSectionKey(sc.scenarioId, sc.agentName, run.runIndex, "conversation")) && (
-                                        <p className="text-xs text-muted-foreground">
-                                          Expand to inspect user/assistant/tool messages for this run.
-                                        </p>
-                                      )}
-                                    </div>
-                                  </Collapsible>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    </CollapsibleContent>
-                  </>
-                </Collapsible>
-              )})}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      </div>
-
-      {assistantOpen && (
-        <div className="min-w-0 space-y-0 xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          <Tabs
-            value={contextPanelTab}
-            onValueChange={(v) => setContextPanelTab(v as "assistant" | "reports" | "note")}
-            className="min-w-0 -mb-px px-3 pt-1"
-          >
-            <TabsList className="h-auto w-full justify-start rounded-none border-b bg-transparent p-0">
-              <TabsTrigger
-                value="assistant"
-                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
-              >
-                Assistant
-              </TabsTrigger>
-              <TabsTrigger
-                value="reports"
-                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
-              >
-                Reports
-              </TabsTrigger>
-              <TabsTrigger
-                value="note"
-                className="-mb-px h-9 rounded-none rounded-t border border-border border-b-border bg-muted/20 px-3 text-xs text-muted-foreground data-[state=active]:z-10 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-card data-[state=active]:shadow-none"
-              >
-                Note
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {contextPanelTab === "assistant" ? (
-            <ResultAssistantPanel
-              title="MCP Lab Assistant"
-              description="Ask questions about this run result, failures, tool usage, and snapshot drift."
-              expanded={assistantExpanded}
-              onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
-              onHide={() => setAssistantOpen(false)}
-              messages={assistantMessages}
-              pendingToolCalls={assistantPendingToolCalls}
-              loading={assistantLoading}
-              input={assistantInput}
-              onInputChange={setAssistantInput}
-              onSend={() => void askResultAssistant()}
-              inputPlaceholder="Ask about this result..."
-              snippets={RESULT_ASSISTANT_SNIPPETS}
-              onSnippetSelect={applyResultAssistantSnippet}
-              onApproveToolCall={(callId) => void approveResultAssistantToolCall(callId)}
-              onDenyToolCall={(callId) => void denyResultAssistantToolCall(callId)}
-              chatEndRef={assistantChatEndRef}
-              inputRef={assistantInputRef}
-              className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col"
-              renderMessage={({ message, index, linkedPendingToolCall, isUser, isAssistant, isSystem, isTool }) => {
-                const isAssistantToolRequest = isAssistant && Boolean(message.pendingToolCallId);
-                if (isTool && /^(Approved|Denied) tool call\\b/i.test(String(message.text ?? "").trim())) {
-                  return null;
-                }
-                const toolStepName = linkedPendingToolCall?.tool ?? message.toolRequestName;
-                const toolStepPublicName = linkedPendingToolCall?.publicToolName ?? message.toolRequestPublicName;
-                const canShowHandoff =
-                  isAssistant &&
-                  !isAssistantToolRequest &&
-                  isScenarioAssistantHandoffRelevant(message.text, Boolean(assistantContextScenarioId));
-
-                if (isAssistantToolRequest) {
-                  const isPendingApproval = linkedPendingToolCall?.status === "pending";
-                  const displayToolName = formatAssistantToolName(
-                    toolStepName ?? toolStepPublicName ?? "unknown_tool"
-                  );
-                  return (
-                    <div
-                      key={`${message.id ?? `${message.role}-${index}`}:${linkedPendingToolCall ? "pending" : "completed"}`}
-                      className="flex items-start gap-2"
-                    >
-                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                        <Bot className="h-3 w-3" />
-                      </div>
-                      <details
-                        open={Boolean(linkedPendingToolCall)}
-                        className="group min-w-0 w-full max-w-[92%] overflow-hidden rounded-md border border-border/60 bg-background"
-                      >
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <Wrench className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                              <span className="min-w-0 truncate text-sm font-medium">{`Tool call ${displayToolName}`}</span>
-                              <span
-                                className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                  isPendingApproval
-                                    ? "bg-amber-100 text-amber-900"
-                                    : "bg-muted text-muted-foreground"
-                                }`}
+                          )}
+                          {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
+                            <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1.5 px-2 text-xs"
+                                onClick={() => openApplyReportDialog(message.text)}
                               >
-                                {isPendingApproval ? "Needs approval" : "Completed"}
-                              </span>
+                                <Wrench className="h-3.5 w-3.5" />
+                                Apply: Write Markdown Report
+                              </Button>
                             </div>
-                          </div>
-                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                        </summary>
-                        <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
-                          <MarkdownContent text={message.text} className="text-sm" />
-                          {isPendingApproval && linkedPendingToolCall && (
-                            <>
-                              <pre className="max-h-40 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                                <code className="break-words">{JSON.stringify(linkedPendingToolCall.arguments ?? {}, null, 2)}</code>
-                              </pre>
-                              <div className="flex justify-end gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-xs"
-                                  disabled={assistantLoading}
-                                  onClick={() => void denyResultAssistantToolCall(linkedPendingToolCall.id)}
-                                >
-                                  Deny
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  disabled={assistantLoading}
-                                  onClick={() => void approveResultAssistantToolCall(linkedPendingToolCall.id)}
-                                >
-                                  Approve
-                                </Button>
-                              </div>
-                            </>
                           )}
                         </div>
-                      </details>
-                    </div>
-                  );
-                }
-
-                const showCopyButton = isUser || (isAssistant && !isTool && !isSystem);
-                return (
-                  <div
-                    key={message.id ?? `${message.role}-${index}`}
-                    className={`flex items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}
-                  >
-                    {!isUser && (
-                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
-                        {isSystem ? <RectangleEllipsis className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                      </div>
-                    )}
-                    <div className="relative max-w-[92%]">
-                      <div
-                        className={`max-w-full rounded-md border p-3 text-sm ${
-                          isUser
-                            ? "border-primary/20 bg-primary/10"
-                            : isSystem
-                              ? "border-amber-400/30 bg-amber-50/70"
-                              : isTool
-                                ? "border-blue-300/30 bg-blue-50/50"
-                                : "border-border/80 bg-background shadow-sm"
-                        }`}
-                      >
-                        {!(isUser || isSystem) && (
-                          <p className={`mb-2 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>
-                            {isTool ? "Tool" : "Assistant"}
-                          </p>
-                        )}
-                        {isUser ? (
-                          <p className="whitespace-pre-wrap">{message.text}</p>
-                        ) : (
-                          <MarkdownContent text={message.text} className="text-sm" />
-                        )}
-                        {canShowHandoff && (
-                          <div className="mt-3 flex max-w-full flex-wrap justify-end gap-2 overflow-x-auto pb-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => sendToScenarioAssistant(message.text)}
-                            >
-                              <Sparkles className="h-4 w-4 text-amber-500" />
-                              Send to Scenario Assistant
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => openApplyReportDialog(message.text)}
-                            >
-                              <Wrench className="h-3.5 w-3.5" />
-                              Apply: Write Markdown Report
-                            </Button>
-                          </div>
-                        )}
-                        {!canShowHandoff && isAssistant && !isAssistantToolRequest && (
-                          <div className="mt-3 flex max-w-full justify-end overflow-x-auto pb-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2 text-xs"
-                              onClick={() => openApplyReportDialog(message.text)}
-                            >
-                              <Wrench className="h-3.5 w-3.5" />
-                              Apply: Write Markdown Report
-                            </Button>
-                          </div>
+                        {showCopyButton && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
+                            onClick={() => void copyAssistantChatText(message.text)}
+                            aria-label="Copy message"
+                            title="Copy message"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                       </div>
-                      {showCopyButton && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute -right-8 bottom-1 h-6 w-6 text-muted-foreground"
-                          onClick={() => void copyAssistantChatText(message.text)}
-                          aria-label="Copy message"
-                          title="Copy message"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
+                      {isUser && (
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
+                          <User className="h-3 w-3" />
+                        </div>
                       )}
                     </div>
-                    {isUser && (
-                      <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15 text-primary">
-                        <User className="h-3 w-3" />
+                  );
+                }}
+                renderMessageExtras={
+                  unmatchedPendingToolCalls.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Pending actions (approve/deny)
                       </div>
-                    )}
-                  </div>
-                );
-              }}
-              renderMessageExtras={
-                unmatchedPendingToolCalls.length > 0 ? (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Pending actions (approve/deny)
-                    </div>
-                    {unmatchedPendingToolCalls.map((call) => (
-                      <details key={call.id} open className="group min-w-0 rounded-md border bg-background">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="break-all font-mono text-xs font-semibold">
-                              {formatAssistantToolName(call.publicToolName)}
-                            </p>
-                            <p className="break-all text-xs text-muted-foreground">
-                              {call.server}::{formatAssistantToolName(call.tool)}
-                            </p>
+                      {unmatchedPendingToolCalls.map((call) => (
+                        <details
+                          key={call.id}
+                          open
+                          className="group min-w-0 rounded-md border bg-background"
+                        >
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="break-all font-mono text-xs font-semibold">
+                                {formatAssistantToolName(call.publicToolName)}
+                              </p>
+                              <p className="break-all text-xs text-muted-foreground">
+                                {call.server}::{formatAssistantToolName(call.tool)}
+                              </p>
+                            </div>
+                            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+                          </summary>
+                          <div className="border-t px-3 pb-3 pt-2">
+                            <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
+                              <code className="break-words">
+                                {JSON.stringify(call.arguments ?? {}, null, 2)}
+                              </code>
+                            </pre>
+                            <div className="mt-2 flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void denyResultAssistantToolCall(call.id)}
+                              >
+                                Deny
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                disabled={assistantLoading}
+                                onClick={() => void approveResultAssistantToolCall(call.id)}
+                              >
+                                Approve
+                              </Button>
+                            </div>
                           </div>
-                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                        </summary>
-                        <div className="border-t px-3 pb-3 pt-2">
-                          <pre className="max-h-48 min-w-0 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded border bg-muted/50 p-2 text-xs">
-                            <code className="break-words">{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
-                          </pre>
-                          <div className="mt-2 flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-xs"
-                              disabled={assistantLoading}
-                              onClick={() => void denyResultAssistantToolCall(call.id)}
-                            >
-                              Deny
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-7 px-2 text-xs"
-                              disabled={assistantLoading}
-                              onClick={() => void approveResultAssistantToolCall(call.id)}
-                            >
-                              Approve
-                            </Button>
-                          </div>
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                ) : null
-              }
-            />
-      ) : contextPanelTab === "reports" ? (
-        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          <CardHeader className="border-b px-4 py-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <NotepadText className="h-4 w-4 text-muted-foreground" />
-                  Reference Reports
-                </CardTitle>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => setAssistantExpanded((prev) => !prev)}
-                  >
-                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                    {assistantExpanded ? "Compact" : "Expand"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setAssistantOpen(false)}
-                  >
-                    Hide
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Review markdown reports for this run while keeping the result visible.
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
-            {(referenceReportsLoading || referenceReports.length === 0 || referenceReports.length > 1) && (
-            <div className="border-b px-4 py-3">
-              {referenceReportsLoading ? (
-                <p className="text-xs text-muted-foreground">Loading reference reports...</p>
-              ) : referenceReports.length === 0 ? (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-muted-foreground">No reference reports for this run yet.</p>
-                  <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => openManualReportDialog()}>
-                    <Plus className="h-3.5 w-3.5" />
-                    New Report
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {referenceReports.length > 1 ? (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Selected report</p>
-                      <Select value={selectedReferenceReportPath} onValueChange={setSelectedReferenceReportPath}>
-                        <SelectTrigger className="h-8">
-                          <SelectValue placeholder="Select a report" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {referenceReports.map((report) => (
-                            <SelectItem key={report.path} value={report.relativePath}>
-                              {report.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        </details>
+                      ))}
                     </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-            )}
-            <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
-              {referenceReports.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No report selected.</div>
-              ) : selectedReferenceReportLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading report...
-                </div>
-              ) : selectedReferenceReportError ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  Could not load report: {selectedReferenceReportError}
-                </div>
-              ) : selectedReferenceReport ? (
-                <div className="space-y-3">
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="font-mono text-xs font-semibold">{selectedReferenceReport.name}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{selectedReferenceReport.relativePath}</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      {new Date(selectedReferenceReport.mtime).toLocaleString()}
+                  ) : null
+                }
+              />
+            ) : contextPanelTab === 'reports' ? (
+              <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+                <CardHeader className="border-b px-4 py-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <NotepadText className="h-4 w-4 text-muted-foreground" />
+                        Reference Reports
+                      </CardTitle>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => setAssistantExpanded((prev) => !prev)}
+                        >
+                          {assistantExpanded ? (
+                            <PanelRightClose className="h-3.5 w-3.5" />
+                          ) : (
+                            <PanelRightOpen className="h-3.5 w-3.5" />
+                          )}
+                          {assistantExpanded ? 'Compact' : 'Expand'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setAssistantOpen(false)}
+                        >
+                          Hide
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Review markdown reports for this run while keeping the result visible.
                     </p>
                   </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <MarkdownContent text={selectedReferenceReport.content} className="text-sm" />
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">Select a report to preview.</div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
-          <CardHeader className="border-b px-4 py-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <NotepadText className="h-4 w-4 text-muted-foreground" />
-                  Run Note
-                </CardTitle>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => setAssistantExpanded((prev) => !prev)}
-                  >
-                    {assistantExpanded ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                    {assistantExpanded ? "Compact" : "Expand"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setAssistantOpen(false)}
-                  >
-                    Hide
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Add context for this run, such as server version or environment details.
-              </p>
-            </div>
-          </CardHeader>
-          <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-4 xl:h-auto xl:min-h-0 xl:flex-1">
-            {editingRunNote ? (
-              <div className="w-full max-w-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium">Run note</p>
-                  <span className="text-xs text-muted-foreground">{runNoteDraft.length}/500</span>
-                </div>
-                <Textarea
-                  value={runNoteDraft}
-                  onChange={(e) => setRunNoteDraft(e.target.value.slice(0, 500))}
-                  placeholder="Optional context for this run"
-                  rows={3}
-                  className="min-h-20 resize"
-                />
-                <div className="flex items-center gap-2">
-                  <Button size="sm" onClick={() => void saveRunNote()} disabled={savingRunNote}>
-                    {savingRunNote ? "Saving..." : "Save note"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setRunNoteDraft(result.runNote ?? "");
-                      setEditingRunNote(false);
-                    }}
-                    disabled={savingRunNote}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+                </CardHeader>
+                <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-0 xl:h-auto xl:min-h-0 xl:flex-1">
+                  {(referenceReportsLoading ||
+                    referenceReports.length === 0 ||
+                    referenceReports.length > 1) && (
+                    <div className="border-b px-4 py-3">
+                      {referenceReportsLoading ? (
+                        <p className="text-xs text-muted-foreground">
+                          Loading reference reports...
+                        </p>
+                      ) : referenceReports.length === 0 ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            No reference reports for this run yet.
+                          </p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 gap-1.5"
+                            onClick={() => openManualReportDialog()}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            New Report
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {referenceReports.length > 1 ? (
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">
+                                Selected report
+                              </p>
+                              <Select
+                                value={selectedReferenceReportPath}
+                                onValueChange={setSelectedReferenceReportPath}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="Select a report" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {referenceReports.map((report) => (
+                                    <SelectItem key={report.path} value={report.relativePath}>
+                                      {report.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <ScrollArea className="min-h-0 flex-1 bg-muted/15 px-4 py-4">
+                    {referenceReports.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No report selected.</div>
+                    ) : selectedReferenceReportLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading report...
+                      </div>
+                    ) : selectedReferenceReportError ? (
+                      <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                        Could not load report: {selectedReferenceReportError}
+                      </div>
+                    ) : selectedReferenceReport ? (
+                      <div className="space-y-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <p className="font-mono text-xs font-semibold">
+                            {selectedReferenceReport.name}
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {selectedReferenceReport.relativePath}
+                          </p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {new Date(selectedReferenceReport.mtime).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <MarkdownContent
+                            text={selectedReferenceReport.content}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        Select a report to preview.
+                      </div>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
             ) : (
-              <div className="flex w-full max-w-3xl items-center gap-2 rounded-md border bg-muted/20 px-2 py-1 text-xs">
-                <div className="min-w-0 flex items-center gap-2">
-                  <span className="text-muted-foreground">Run note:</span>
-                  <span
-                    className={`break-words ${
-                      result.runNote ? "text-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    {result.runNote || "none"}
-                  </span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-auto h-6 px-2 text-xs"
-                  onClick={() => setEditingRunNote(true)}
-                >
-                  {result.runNote ? "Edit" : "Add note"}
-                </Button>
-              </div>
+              <Card className="min-w-0 overflow-hidden rounded-t-none xl:flex xl:h-full xl:min-h-0 xl:flex-col">
+                <CardHeader className="border-b px-4 py-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <NotepadText className="h-4 w-4 text-muted-foreground" />
+                        Run Note
+                      </CardTitle>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1 px-2 text-xs"
+                          onClick={() => setAssistantExpanded((prev) => !prev)}
+                        >
+                          {assistantExpanded ? (
+                            <PanelRightClose className="h-3.5 w-3.5" />
+                          ) : (
+                            <PanelRightOpen className="h-3.5 w-3.5" />
+                          )}
+                          {assistantExpanded ? 'Compact' : 'Expand'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setAssistantOpen(false)}
+                        >
+                          Hide
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Add context for this run, such as server version or environment details.
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex h-[70vh] min-h-[520px] flex-col p-4 xl:h-auto xl:min-h-0 xl:flex-1">
+                  {editingRunNote ? (
+                    <div className="w-full max-w-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium">Run note</p>
+                        <span className="text-xs text-muted-foreground">
+                          {runNoteDraft.length}/500
+                        </span>
+                      </div>
+                      <Textarea
+                        value={runNoteDraft}
+                        onChange={(e) => setRunNoteDraft(e.target.value.slice(0, 500))}
+                        placeholder="Optional context for this run"
+                        rows={3}
+                        className="min-h-20 resize"
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => void saveRunNote()}
+                          disabled={savingRunNote}
+                        >
+                          {savingRunNote ? 'Saving...' : 'Save note'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setRunNoteDraft(result.runNote ?? '');
+                            setEditingRunNote(false);
+                          }}
+                          disabled={savingRunNote}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex w-full max-w-3xl items-center gap-2 rounded-md border bg-muted/20 px-2 py-1 text-xs">
+                      <div className="min-w-0 flex items-center gap-2">
+                        <span className="text-muted-foreground">Run note:</span>
+                        <span
+                          className={`break-words ${
+                            result.runNote ? 'text-foreground' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {result.runNote || 'none'}
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="ml-auto h-6 px-2 text-xs"
+                        onClick={() => setEditingRunNote(true)}
+                      >
+                        {result.runNote ? 'Edit' : 'Add note'}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
-      )}
-      </div>
-      )}
-      <AlertDialog open={applyReportOpen} onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}>
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {applyReportIsManual ? "Create markdown report" : "Approve MCP action: write markdown report"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {applyReportIsManual
-                ? "Write a custom markdown report and save it to the workspace."
-                : <>This will call <code>mcplab_write_markdown_report</code> via the local MCPLab MCP server.</>}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="space-y-3">
-            {!applyReportIsManual && (
+          </div>
+        )}
+        <AlertDialog
+          open={applyReportOpen}
+          onOpenChange={(open) => !applyReportPending && setApplyReportOpen(open)}
+        >
+          <AlertDialogContent className="max-w-2xl">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {applyReportIsManual
+                  ? 'Create markdown report'
+                  : 'Approve MCP action: write markdown report'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {applyReportIsManual ? (
+                  'Write a custom markdown report and save it to the workspace.'
+                ) : (
+                  <>
+                    This will call <code>mcplab_write_markdown_report</code> via the local MCPLab
+                    MCP server.
+                  </>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-3">
+              {!applyReportIsManual && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Output path</p>
+                  <Input
+                    value={applyReportOutputPath}
+                    onChange={(e) => setApplyReportOutputPath(e.target.value)}
+                    placeholder="mcplab/reports/result-assistant/my-report.md"
+                    disabled={applyReportPending}
+                  />
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={applyReportOverwrite}
+                  onCheckedChange={(v) => setApplyReportOverwrite(v === true)}
+                  disabled={applyReportPending}
+                />
+                <span>Overwrite if file exists</span>
+              </label>
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Output path</p>
-                <Input
-                  value={applyReportOutputPath}
-                  onChange={(e) => setApplyReportOutputPath(e.target.value)}
-                  placeholder="mcplab/reports/result-assistant/my-report.md"
+                <p className="text-xs font-medium text-muted-foreground">
+                  {applyReportIsManual ? 'Markdown content' : 'Markdown preview (to be written)'}
+                </p>
+                <Textarea
+                  value={applyReportMarkdown}
+                  onChange={(e) => setApplyReportMarkdown(e.target.value)}
+                  rows={10}
+                  className="font-mono text-xs"
                   disabled={applyReportPending}
                 />
               </div>
-            )}
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={applyReportOverwrite}
-                onCheckedChange={(v) => setApplyReportOverwrite(v === true)}
-                disabled={applyReportPending}
-              />
-              <span>Overwrite if file exists</span>
-            </label>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">
-                {applyReportIsManual ? "Markdown content" : "Markdown preview (to be written)"}
-              </p>
-              <Textarea
-                value={applyReportMarkdown}
-                onChange={(e) => setApplyReportMarkdown(e.target.value)}
-                rows={10}
-                className="font-mono text-xs"
-                disabled={applyReportPending}
-              />
             </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={applyReportPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                void applyAssistantReport();
-              }}
-              disabled={applyReportPending}
-            >
-              {applyReportPending ? "Writing..." : applyReportIsManual ? "Save Report" : "Approve & Write"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={applyReportPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void applyAssistantReport();
+                }}
+                disabled={applyReportPending}
+              >
+                {applyReportPending
+                  ? 'Writing...'
+                  : applyReportIsManual
+                  ? 'Save Report'
+                  : 'Approve & Write'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
 };
 
-function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem; fallbackUserPrompt?: string }) {
-  if (item.kind === "tool_call") {
-    const tokenSuffix = formatEstimatedTokenSuffix(item, "input");
+function ConversationRow({
+  item,
+  fallbackUserPrompt
+}: {
+  item: ConversationItem;
+  fallbackUserPrompt?: string;
+}) {
+  if (item.kind === 'tool_call') {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, 'input');
     return (
       <ToolEventRow
         variant="call"
-        title={`Tool call · ${item.toolName || "unknown"}${tokenSuffix}`}
+        title={`Tool call · ${item.toolName || 'unknown'}${tokenSuffix}`}
         text={item.text}
       />
     );
   }
-  if (item.kind === "tool_result") {
-    const tokenSuffix = formatEstimatedTokenSuffix(item, "output");
+  if (item.kind === 'tool_result') {
+    const tokenSuffix = formatEstimatedTokenSuffix(item, 'output');
     const statusIcon = item.ok ? (
       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
     ) : (
@@ -2028,34 +2555,42 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
     );
     return (
       <ToolEventRow
-        variant={item.ok ? "result_ok" : "result_error"}
-        title={`Tool result · ${item.toolName || "unknown"} · ${item.ok ? "ok" : "error"}${typeof item.durationMs === "number" ? ` · ${item.durationMs}ms` : ""}${tokenSuffix}`}
+        variant={item.ok ? 'result_ok' : 'result_error'}
+        title={`Tool result · ${item.toolName || 'unknown'} · ${item.ok ? 'ok' : 'error'}${
+          typeof item.durationMs === 'number' ? ` · ${item.durationMs}ms` : ''
+        }${tokenSuffix}`}
         text={item.text}
         icon={statusIcon}
       />
     );
   }
 
-  const isUser = item.kind === "user_prompt";
+  const isUser = item.kind === 'user_prompt';
   const normalizedItemText = normalizeConversationText(item.text, item.kind);
   const normalizedFallbackUserPrompt = fallbackUserPrompt
-    ? normalizeConversationText(fallbackUserPrompt, "user_prompt")
-    : "";
+    ? normalizeConversationText(fallbackUserPrompt, 'user_prompt')
+    : '';
   const displayText =
     isUser && !normalizedItemText && normalizedFallbackUserPrompt
       ? normalizedFallbackUserPrompt
       : normalizedItemText;
-  const label = isUser ? "User prompt" : item.kind === "assistant_final" ? "Agent final" : "Agent";
+  const label = isUser ? 'User prompt' : item.kind === 'assistant_final' ? 'Agent final' : 'Agent';
   const Icon = isUser ? User : Bot;
   return (
-    <div className={`flex items-start gap-2 text-xs ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && (
         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
           <Icon className="h-3 w-3" />
         </div>
       )}
-      <div className={`max-w-[90%] rounded-md p-2 ${isUser ? "bg-primary/10" : "bg-muted/50"}`}>
-        <p className={`mb-1 text-[11px] font-semibold text-muted-foreground ${isUser ? "text-right" : ""}`}>{label}</p>
+      <div className={`max-w-[90%] rounded-md p-2 ${isUser ? 'bg-primary/10' : 'bg-muted/50'}`}>
+        <p
+          className={`mb-1 text-[11px] font-semibold text-muted-foreground ${
+            isUser ? 'text-right' : ''
+          }`}
+        >
+          {label}
+        </p>
         {isUser ? (
           <ExpandableText text={displayText} maxLength={280} className="text-xs" />
         ) : (
@@ -2071,68 +2606,71 @@ function ConversationRow({ item, fallbackUserPrompt }: { item: ConversationItem;
   );
 }
 
-function formatEstimatedTokenSuffix(item: ConversationItem, mode: "input" | "output"): string {
+function formatEstimatedTokenSuffix(item: ConversationItem, mode: 'input' | 'output'): string {
   const value =
-    mode === "input" ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
-  if (typeof value !== "number") return "";
+    mode === 'input' ? item.estimatedTokens?.inputTokens : item.estimatedTokens?.outputTokens;
+  if (typeof value !== 'number') return '';
   return ` · ${formatTokenCount(value)} tokens`;
 }
 
-function normalizeConversationText(text: string, kind: ConversationItem["kind"]): string {
-  const raw = String(text ?? "");
-  const trimmedStart = raw.replace(/^\s+/, "");
-  if (kind === "user_prompt") {
-    return trimmedStart.replace(/^user:\s*/i, "");
+function normalizeConversationText(text: string, kind: ConversationItem['kind']): string {
+  const raw = String(text ?? '');
+  const trimmedStart = raw.replace(/^\s+/, '');
+  if (kind === 'user_prompt') {
+    return trimmedStart.replace(/^user:\s*/i, '');
   }
-  if (kind === "assistant_final" || kind === "assistant_thought") {
-    return trimmedStart.replace(/^assistant:\s*/i, "");
+  if (kind === 'assistant_final' || kind === 'assistant_thought') {
+    return trimmedStart.replace(/^assistant:\s*/i, '');
   }
   return trimmedStart;
 }
 
 function isScenarioAssistantHandoffRelevant(reply: string, hasScenarioContext: boolean): boolean {
   if (!hasScenarioContext) return false;
-  const text = String(reply ?? "").toLowerCase();
+  const text = String(reply ?? '').toLowerCase();
   if (!text.trim()) return false;
 
   const editSignals = [
-    "check",
-    "checks",
-    "rule",
-    "rules",
-    "regex",
-    "pattern",
-    "value capture",
-    "extract rule",
-    "update",
-    "change",
-    "replace",
-    "modify",
-    "adjust",
-    "use ",
-    "set ",
+    'check',
+    'checks',
+    'rule',
+    'rules',
+    'regex',
+    'pattern',
+    'value capture',
+    'extract rule',
+    'update',
+    'change',
+    'replace',
+    'modify',
+    'adjust',
+    'use ',
+    'set '
   ];
   const concreteSuggestionSignals = [
-    "change ",
-    "replace ",
-    "update ",
-    "use ",
-    "set the",
-    "suggested",
-    "you should",
-    "try ",
-    "text match failed",
-    "text must match pattern",
+    'change ',
+    'replace ',
+    'update ',
+    'use ',
+    'set the',
+    'suggested',
+    'you should',
+    'try ',
+    'text match failed',
+    'text must match pattern'
   ];
   const explanationOnlySignals = [
-    "i can only read",
+    'i can only read',
     "i don't have write access",
-    "i cannot directly edit",
-    "what happened",
-    "summary",
+    'i cannot directly edit',
+    'what happened',
+    'summary'
   ];
 
-  if (explanationOnlySignals.some((s) => text.includes(s)) && !concreteSuggestionSignals.some((s) => text.includes(s))) {
+  if (
+    explanationOnlySignals.some((s) => text.includes(s)) &&
+    !concreteSuggestionSignals.some((s) => text.includes(s))
+  ) {
     return false;
   }
 
@@ -2150,28 +2688,33 @@ function ToolEventRow({
   text,
   icon
 }: {
-  variant: "call" | "result_ok" | "result_error";
+  variant: 'call' | 'result_ok' | 'result_error';
   title: string;
   text: string;
   icon?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const styleByVariant = {
-    call: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    result_ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    result_error: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+    call: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+    result_ok: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    result_error: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300'
   } as const;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className={`rounded-md border p-2 text-xs ${styleByVariant[variant]}`}>
         <CollapsibleTrigger asChild>
-          <button type="button" className="flex w-full items-center justify-between gap-2 text-left">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 text-left"
+          >
             <div className="flex items-center gap-1.5 font-mono text-[11px]">
               {icon ?? <Wrench className="h-3.5 w-3.5" />}
               <span>{title}</span>
             </div>
-            <span className="text-[11px] font-semibold">{open ? "Hide content" : "Show content"}</span>
+            <span className="text-[11px] font-semibold">
+              {open ? 'Hide content' : 'Show content'}
+            </span>
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -2182,7 +2725,15 @@ function ToolEventRow({
   );
 }
 
-function ExpandableText({ text, maxLength, className }: { text: string; maxLength: number; className?: string }) {
+function ExpandableText({
+  text,
+  maxLength,
+  className
+}: {
+  text: string;
+  maxLength: number;
+  className?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const isLong = text.length > maxLength;
   const display = expanded || !isLong ? text : `${text.slice(0, maxLength)}...`;
@@ -2196,7 +2747,7 @@ function ExpandableText({ text, maxLength, className }: { text: string; maxLengt
           className="mt-1 text-[11px] font-medium text-primary hover:underline"
           onClick={() => setExpanded((prev) => !prev)}
         >
-          {expanded ? "Show less" : "Show all"}
+          {expanded ? 'Show less' : 'Show all'}
         </button>
       )}
     </div>
@@ -2208,7 +2759,7 @@ function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
     const failureReason = matchFailureReasonForRule(rule, failureReasons);
     return {
       rule,
-      status: failureReason ? ("failed" as const) : ("passed" as const),
+      status: failureReason ? ('failed' as const) : ('passed' as const),
       failureReason
     };
   });
@@ -2216,69 +2767,65 @@ function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
 
 function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
   const expectedPrefix = (() => {
-    if (rule.type === "required_tool") return `Required tool not used: ${rule.value}`;
-    if (rule.type === "forbidden_tool") return `Forbidden tool used: ${rule.value}`;
-    if (rule.type === "response_contains") return `Contains assertion failed: ${rule.value}`;
-    if (rule.type === "response_not_contains")
+    if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
+    if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
+    if (rule.type === 'response_contains') return `Contains assertion failed: ${rule.value}`;
+    if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${rule.value}`;
-    if (rule.type === "response_starts_with")
-      return `Starts-with assertion failed: ${rule.value}`;
-    if (rule.type === "response_ends_with") return `Ends-with assertion failed: ${rule.value}`;
-    if (rule.type === "response_equals") return `Equals assertion failed: ${rule.value}`;
-    if (rule.type === "response_regex") return `Regex assertion failed: ${rule.value}`;
-    if (rule.type === "response_jsonpath")
+    if (rule.type === 'response_starts_with') return `Starts-with assertion failed: ${rule.value}`;
+    if (rule.type === 'response_ends_with') return `Ends-with assertion failed: ${rule.value}`;
+    if (rule.type === 'response_equals') return `Equals assertion failed: ${rule.value}`;
+    if (rule.type === 'response_regex') return `Regex assertion failed: ${rule.value}`;
+    if (rule.type === 'response_jsonpath')
       return rule.equals !== undefined
         ? `JSONPath equals assertion failed: ${rule.path}`
         : `JSONPath assertion failed: ${rule.path}`;
-    if (rule.type === "response_jsonpath_exists")
-      return `JSONPath assertion failed: ${rule.path}`;
-    if (rule.type === "response_jsonpath_not_exists")
+    if (rule.type === 'response_jsonpath_exists') return `JSONPath assertion failed: ${rule.path}`;
+    if (rule.type === 'response_jsonpath_not_exists')
       return `JSONPath not-exists assertion failed: ${rule.path}`;
-    return "";
+    return '';
   })();
 
   const exact = failureReasons.find((reason) => reason === expectedPrefix);
   if (exact) return exact;
 
-  if (rule.type === "response_regex") {
+  if (rule.type === 'response_regex') {
     return failureReasons.find(
-      (reason) =>
-        reason.startsWith("Regex assertion failed:") &&
-        reason.includes(rule.value ?? "")
+      (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(rule.value ?? '')
     );
   }
 
   if (
-    rule.type === "response_jsonpath" ||
-    rule.type === "response_jsonpath_exists" ||
-    rule.type === "response_jsonpath_not_exists"
+    rule.type === 'response_jsonpath' ||
+    rule.type === 'response_jsonpath_exists' ||
+    rule.type === 'response_jsonpath_not_exists'
   ) {
-    return failureReasons.find((reason) => reason.includes(rule.path ?? ""));
+    return failureReasons.find((reason) => reason.includes(rule.path ?? ''));
   }
 
   return undefined;
 }
 
 function formatEvalRuleLabel(rule: EvalRule): string {
-  if (rule.type === "required_tool") return `Required tool · ${rule.value}`;
-  if (rule.type === "forbidden_tool") return `Forbidden tool · ${rule.value}`;
-  if (rule.type === "response_contains") return `Text contains · ${rule.value}`;
-  if (rule.type === "response_not_contains") return `Text does not contain · ${rule.value}`;
-  if (rule.type === "response_starts_with") return `Text starts with · ${rule.value}`;
-  if (rule.type === "response_ends_with") return `Text ends with · ${rule.value}`;
-  if (rule.type === "response_equals") return `Text equals · ${rule.value}`;
-  if (rule.type === "response_regex") return `Text matches regex · ${rule.value}`;
-  if (rule.type === "response_jsonpath")
+  if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
+  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
+  if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
+  if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
+  if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
+  if (rule.type === 'response_ends_with') return `Text ends with · ${rule.value}`;
+  if (rule.type === 'response_equals') return `Text equals · ${rule.value}`;
+  if (rule.type === 'response_regex') return `Text matches regex · ${rule.value}`;
+  if (rule.type === 'response_jsonpath')
     return rule.equals !== undefined
       ? `JSONPath equals · ${rule.path} == ${String(rule.equals)}`
       : `JSONPath exists · ${rule.path}`;
-  if (rule.type === "response_jsonpath_exists") return `JSONPath exists · ${rule.path}`;
-  if (rule.type === "response_jsonpath_not_exists") return `JSONPath not exists · ${rule.path}`;
+  if (rule.type === 'response_jsonpath_exists') return `JSONPath exists · ${rule.path}`;
+  if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
   return `${rule.type} · ${rule.value}`;
 }
 
 function formatFailureReason(reason: string): string {
-  const trimmed = String(reason ?? "").trim();
+  const trimmed = String(reason ?? '').trim();
   const regexMatch = trimmed.match(/^Regex assertion failed:\s*(.+)$/i);
   if (regexMatch) {
     return `Text match failed: ${regexMatch[1]}`;

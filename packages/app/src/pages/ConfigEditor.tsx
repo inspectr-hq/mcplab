@@ -1,31 +1,55 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Save, Bot, FileText, Play, ChevronUp, ChevronDown, AlertTriangle, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ProviderBadge } from "@/components/ProviderBadge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useConfigs } from "@/contexts/ConfigContext";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { useLibraries } from "@/contexts/LibraryContext";
-import { ScenarioForm } from "@/components/config-editor/ScenarioForm";
-import { toast } from "@/hooks/use-toast";
-import { isUiFeatureEnabled } from "@/lib/feature-flags";
-import { validateServerAuthConfig } from "@/lib/server-auth-validation";
-import type { AgentConfig, AgentEntry, EvalConfig, Scenario, ScenarioEntry, ServerConfig, ServerEntry } from "@/types/eval";
-import type { SnapshotRecord } from "@/lib/data-sources/types";
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Save,
+  Bot,
+  FileText,
+  Play,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+  Trash2
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ProviderBadge } from '@/components/ProviderBadge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { useConfigs } from '@/contexts/ConfigContext';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { useLibraries } from '@/contexts/LibraryContext';
+import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
+import { toast } from '@/hooks/use-toast';
+import { isUiFeatureEnabled } from '@/lib/feature-flags';
+import { validateServerAuthConfig } from '@/lib/server-auth-validation';
+import type {
+  AgentConfig,
+  AgentEntry,
+  EvalConfig,
+  Scenario,
+  ScenarioEntry,
+  ServerConfig,
+  ServerEntry
+} from '@/types/eval';
+import type { SnapshotRecord } from '@/lib/data-sources/types';
 
 const emptyConfig = (): EvalConfig => ({
   id: `cfg-${Date.now()}`,
-  name: "",
-  configName: "",
-  description: "",
+  name: '',
+  configName: '',
+  description: '',
   servers: [],
   serverEntries: [],
   agents: [],
@@ -33,7 +57,7 @@ const emptyConfig = (): EvalConfig => ({
   scenarios: [],
   scenarioEntries: [],
   createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
 });
 
 const ConfigEditor = () => {
@@ -42,32 +66,34 @@ const ConfigEditor = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
-  const snapshotsUiEnabled = isUiFeatureEnabled("snapshots", false);
+  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
 
-  const isNew = id === "new";
+  const isNew = id === 'new';
   const isView = !isNew && !!id;
   const existing = isView ? getConfig(id!) : undefined;
 
-  const [editing, setEditing] = useState(isNew || tabParam === "edit");
+  const [editing, setEditing] = useState(isNew || tabParam === 'edit');
   const [config, setConfig] = useState<EvalConfig>(() =>
     existing ? structuredClone(existing) : emptyConfig()
   );
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
-  const [snapshotRunId, setSnapshotRunId] = useState("");
-  const [snapshotName, setSnapshotName] = useState("");
-  const [snapshotBaselineId, setSnapshotBaselineId] = useState("");
+  const [snapshotRunId, setSnapshotRunId] = useState('');
+  const [snapshotName, setSnapshotName] = useState('');
+  const [snapshotBaselineId, setSnapshotBaselineId] = useState('');
   const [snapshotRunIsFullyPassing, setSnapshotRunIsFullyPassing] = useState<boolean | null>(null);
   const [updatingSnapshotPolicy, setUpdatingSnapshotPolicy] = useState(false);
   const [generatingBaseline, setGeneratingBaseline] = useState(false);
-  const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState("");
-  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState("");
+  const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState('');
+  const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState('');
   const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
   const [expandedViewAgentIds, setExpandedViewAgentIds] = useState<Record<string, boolean>>({});
-  const [expandedInlineScenarioIds, setExpandedInlineScenarioIds] = useState<Record<string, boolean>>({});
+  const [expandedInlineScenarioIds, setExpandedInlineScenarioIds] = useState<
+    Record<string, boolean>
+  >({});
   const activeTab = useMemo(() => {
-    const tab = tabParam || searchParams.get("tab");
-    return tab === "agents" || tab === "scenarios" ? tab : "scenarios";
+    const tab = tabParam || searchParams.get('tab');
+    return tab === 'agents' || tab === 'scenarios' ? tab : 'scenarios';
   }, [tabParam, searchParams]);
 
   useEffect(() => {
@@ -77,16 +103,19 @@ const ConfigEditor = () => {
   }, [existing, editing]);
 
   useEffect(() => {
-    if (tabParam === "edit" && !isNew) setEditing(true);
+    if (tabParam === 'edit' && !isNew) setEditing(true);
   }, [tabParam, isNew]);
 
   useEffect(() => {
     let active = true;
-    source.listSnapshots().then((next) => {
-      if (active) setSnapshots(next);
-    }).catch(() => {
-      if (active) setSnapshots([]);
-    });
+    source
+      .listSnapshots()
+      .then((next) => {
+        if (active) setSnapshots(next);
+      })
+      .catch(() => {
+        if (active) setSnapshots([]);
+      });
     return () => {
       active = false;
     };
@@ -123,42 +152,48 @@ const ConfigEditor = () => {
 
   const serverEntries = useMemo<ServerEntry[]>(() => {
     if (config.serverEntries && config.serverEntries.length > 0) return config.serverEntries;
-    return (config.servers ?? []).map((server) => ({ kind: "inline" as const, server }));
+    return (config.servers ?? []).map((server) => ({ kind: 'inline' as const, server }));
   }, [config.serverEntries, config.servers]);
 
   const setServerEntries = (entries: ServerEntry[]) => {
     patch({
       serverEntries: entries,
       servers: entries
-        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<ServerEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.server)
     });
   };
 
   const scenarioEntries = useMemo<ScenarioEntry[]>(() => {
     if (config.scenarioEntries && config.scenarioEntries.length > 0) return config.scenarioEntries;
-    return config.scenarios.map((scenario) => ({ kind: "inline" as const, scenario }));
+    return config.scenarios.map((scenario) => ({ kind: 'inline' as const, scenario }));
   }, [config.scenarioEntries, config.scenarios]);
 
   const setScenarioEntries = (entries: ScenarioEntry[]) => {
     patch({
       scenarioEntries: entries,
       scenarios: entries
-        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<ScenarioEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.scenario)
     });
   };
 
   const agentEntries = useMemo<AgentEntry[]>(() => {
     if (config.agentEntries && config.agentEntries.length > 0) return config.agentEntries;
-    return config.agents.map((agent) => ({ kind: "inline" as const, agent }));
+    return config.agents.map((agent) => ({ kind: 'inline' as const, agent }));
   }, [config.agentEntries, config.agents]);
 
   const setAgentEntries = (entries: AgentEntry[]) => {
     patch({
       agentEntries: entries,
       agents: entries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<AgentEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.agent)
     });
   };
@@ -166,14 +201,12 @@ const ConfigEditor = () => {
   const readOnly = !editing;
   const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
 
-  const persistSnapshotPolicy = async (
-    nextPolicy: {
-      enabled: boolean;
-      mode: "warn" | "fail_on_drift";
-      baselineSnapshotId?: string;
-      baselineSourceRunId?: string;
-    }
-  ) => {
+  const persistSnapshotPolicy = async (nextPolicy: {
+    enabled: boolean;
+    mode: 'warn' | 'fail_on_drift';
+    baselineSnapshotId?: string;
+    baselineSourceRunId?: string;
+  }) => {
     if (!config.id || readOnly === false) {
       patch({
         snapshotEval: {
@@ -190,12 +223,12 @@ const ConfigEditor = () => {
     try {
       const updated = await source.updateSnapshotPolicy(config.id, nextPolicy);
       setConfig(updated);
-      toast({ title: "Snapshot policy updated" });
+      toast({ title: 'Snapshot policy updated' });
     } catch (error: unknown) {
       toast({
-        title: "Could not update snapshot policy",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not update snapshot policy',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setUpdatingSnapshotPolicy(false);
@@ -213,16 +246,19 @@ const ConfigEditor = () => {
       );
       setConfig(response.config);
       setSnapshotBaselineId(response.snapshot.id);
-      setSnapshots((prev) => [response.snapshot, ...prev.filter((item) => item.id !== response.snapshot.id)]);
+      setSnapshots((prev) => [
+        response.snapshot,
+        ...prev.filter((item) => item.id !== response.snapshot.id)
+      ]);
       toast({
-        title: "Snapshot baseline generated",
+        title: 'Snapshot baseline generated',
         description: `${response.snapshot.name} (${response.snapshot.id})`
       });
     } catch (error: unknown) {
       toast({
-        title: "Could not generate baseline",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive"
+        title: 'Could not generate baseline',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setGeneratingBaseline(false);
@@ -231,36 +267,40 @@ const ConfigEditor = () => {
 
   const handleSave = async () => {
     if (!config.name.trim()) {
-      toast({ title: "Validation Error", description: "Config ID is required.", variant: "destructive" });
+      toast({
+        title: 'Validation Error',
+        description: 'Config ID is required.',
+        variant: 'destructive'
+      });
       return;
     }
     const normalizedServerEntries = serverEntries.map((entry) => {
-      if (entry.kind === "referenced") {
+      if (entry.kind === 'referenced') {
         const matched = libServers.find((item) => item.id === entry.ref);
-        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+        return { kind: 'referenced' as const, ref: matched?.id || entry.ref };
       }
       return entry;
     });
     const normalizedAgentEntries = agentEntries.map((entry) => {
-      if (entry.kind === "referenced") {
+      if (entry.kind === 'referenced') {
         const matched = libAgents.find((item) => item.id === entry.ref);
-        return { kind: "referenced" as const, ref: matched?.id || entry.ref };
+        return { kind: 'referenced' as const, ref: matched?.id || entry.ref };
       }
       return entry;
     });
 
     const normalizedScenarioEntries = scenarioEntries.map((entry) => {
-      if (entry.kind === "referenced") {
+      if (entry.kind === 'referenced') {
         const matched = libScenarios.find((item) => item.id === entry.ref);
         const normalizedMcpServers = (entry.mcpServers ?? []).map((serverEntry) => {
-          if (serverEntry.kind === "referenced") {
+          if (serverEntry.kind === 'referenced') {
             const serverMatch = libServers.find((item) => item.id === serverEntry.ref);
-            return { kind: "referenced" as const, ref: serverMatch?.id || serverEntry.ref };
+            return { kind: 'referenced' as const, ref: serverMatch?.id || serverEntry.ref };
           }
           return serverEntry;
         });
         return {
-          kind: "referenced" as const,
+          kind: 'referenced' as const,
           ref: matched?.id || entry.ref,
           ...(entry.mcpServers !== undefined ? { mcpServers: normalizedMcpServers } : {})
         };
@@ -268,32 +308,32 @@ const ConfigEditor = () => {
       return entry;
     });
     const invalidInlineServer = normalizedServerEntries
-      .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+      .filter((entry): entry is Extract<ServerEntry, { kind: 'inline' }> => entry.kind === 'inline')
       .map((entry) => ({ server: entry.server, error: validateServerAuthConfig(entry.server) }))
       .find((entry) => Boolean(entry.error));
     if (invalidInlineServer?.error) {
       toast({
-        title: "Validation Error",
+        title: 'Validation Error',
         description: invalidInlineServer.error,
-        variant: "destructive"
+        variant: 'destructive'
       });
       return;
     }
     const unnamedInline = normalizedScenarioEntries
-      .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+      .filter(
+        (entry): entry is Extract<ScenarioEntry, { kind: 'inline' }> => entry.kind === 'inline'
+      )
       .some((entry) => !entry.scenario.name?.trim());
     if (unnamedInline) {
       toast({
-        title: "Validation Error",
-        description: "Inline scenarios must have a name before saving.",
-        variant: "destructive"
+        title: 'Validation Error',
+        description: 'Inline scenarios must have a name before saving.',
+        variant: 'destructive'
       });
       return;
     }
     const validAgentIds = new Set(
-      normalizedAgentEntries.map((entry) =>
-        entry.kind === "inline" ? entry.agent.id : entry.ref
-      )
+      normalizedAgentEntries.map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
     );
     const normalizedDefaultAgentIds = (config.runDefaults?.selectedAgentNames ?? []).filter((id) =>
       validAgentIds.has(id)
@@ -302,15 +342,21 @@ const ConfigEditor = () => {
       ...config,
       serverEntries: normalizedServerEntries,
       servers: normalizedServerEntries
-        .filter((entry): entry is Extract<ServerEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<ServerEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.server),
       agentEntries: normalizedAgentEntries,
       agents: normalizedAgentEntries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<AgentEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.agent),
       scenarioEntries: normalizedScenarioEntries,
       scenarios: normalizedScenarioEntries
-        .filter((entry): entry is Extract<ScenarioEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<ScenarioEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.scenario as Scenario),
       runDefaults:
         normalizedDefaultAgentIds.length > 0
@@ -325,23 +371,34 @@ const ConfigEditor = () => {
       const created = await addConfig(nextConfig);
       setConfig(created);
       const createdDisplayName = created.configName?.trim() || created.name;
-      toast({ title: "MCP Evaluation Created", description: `"${createdDisplayName}" has been saved.` });
+      toast({
+        title: 'MCP Evaluation Created',
+        description: `"${createdDisplayName}" has been saved.`
+      });
       navigate(`/mcp-evaluations/${created.id}`);
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
       const updatedDisplayName = updated.configName?.trim() || updated.name;
-      toast({ title: "MCP Evaluation Updated", description: `"${updatedDisplayName}" has been updated.` });
+      toast({
+        title: 'MCP Evaluation Updated',
+        description: `"${updatedDisplayName}" has been updated.`
+      });
       setEditing(false);
       navigate(`/mcp-evaluations/${updated.id}`, { replace: true });
     }
   };
 
   const displayConfigName = config.configName?.trim() || config.name;
-  const title = isNew ? "New MCP Evaluation" : editing ? `Editing: ${displayConfigName}` : displayConfigName;
-  const configBasePath = isNew ? "/mcp-evaluations/new" : `/mcp-evaluations/${encodeURIComponent(config.id || id || "")}`;
+  const title = isNew
+    ? 'New MCP Evaluation'
+    : editing
+    ? `Editing: ${displayConfigName}`
+    : displayConfigName;
+  const configBasePath = isNew
+    ? '/mcp-evaluations/new'
+    : `/mcp-evaluations/${encodeURIComponent(config.id || id || '')}`;
   const isBrokenConfig = Boolean(existing?.loadError);
-
 
   const libraryAgentRefOptions = useMemo(
     () =>
@@ -372,7 +429,9 @@ const ConfigEditor = () => {
   const createCustomInlineAgentName = (baseName: string) => {
     const usedNames = new Set([
       ...agentEntries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline")
+        .filter(
+          (entry): entry is Extract<AgentEntry, { kind: 'inline' }> => entry.kind === 'inline'
+        )
         .map((entry) => entry.agent.name || entry.agent.id),
       ...libAgents.map((agent) => agent.name || agent.id)
     ]);
@@ -390,13 +449,13 @@ const ConfigEditor = () => {
     const createdAt = Date.now();
     const inlineAgent: AgentConfig = {
       id: `agt-${createdAt}`,
-      name: "",
-      provider: "openai",
-      model: "gpt-4o",
+      name: '',
+      provider: 'openai',
+      model: 'gpt-4o',
       temperature: 0,
-      maxTokens: 4096,
+      maxTokens: 4096
     };
-    setAgentEntries([{ kind: "inline", agent: inlineAgent }, ...agentEntries]);
+    setAgentEntries([{ kind: 'inline', agent: inlineAgent }, ...agentEntries]);
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineAgent.id]: true }));
   };
 
@@ -406,24 +465,30 @@ const ConfigEditor = () => {
     const refName = template.id;
     const existing = new Set(
       agentEntries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .filter(
+          (entry): entry is Extract<AgentEntry, { kind: 'referenced' }> =>
+            entry.kind === 'referenced'
+        )
         .map((entry) => entry.ref)
     );
     if (!existing.has(refName)) {
-      setAgentEntries([...agentEntries, { kind: "referenced", ref: refName }]);
+      setAgentEntries([...agentEntries, { kind: 'referenced', ref: refName }]);
     }
-    setSelectedLibraryAgentId("");
+    setSelectedLibraryAgentId('');
   };
 
   const addAllAgentReferences = () => {
     const existing = new Set(
       agentEntries
-        .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .filter(
+          (entry): entry is Extract<AgentEntry, { kind: 'referenced' }> =>
+            entry.kind === 'referenced'
+        )
         .map((entry) => entry.ref)
     );
     const newRefs = libAgents
       .filter((agent) => !existing.has(agent.id))
-      .map((agent) => ({ kind: "referenced" as const, ref: agent.id }));
+      .map((agent) => ({ kind: 'referenced' as const, ref: agent.id }));
     if (newRefs.length > 0) {
       setAgentEntries([...agentEntries, ...newRefs]);
     }
@@ -439,16 +504,16 @@ const ConfigEditor = () => {
       id: `agt-${Date.now()}`,
       name: customName
     };
-    setAgentEntries([...agentEntries, { kind: "inline", agent: inlineCopy }]);
+    setAgentEntries([...agentEntries, { kind: 'inline', agent: inlineCopy }]);
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
-    setSelectedLibraryAgentId("");
-    toast({ title: "Imported agent as inline", description: customName });
+    setSelectedLibraryAgentId('');
+    toast({ title: 'Imported agent as inline', description: customName });
   };
 
   const removeAgentEntryAt = (index: number) => {
     const entry = agentEntries[index];
     if (!entry) return;
-    const removedAgentId = entry.kind === "inline" ? entry.agent.id : entry.ref;
+    const removedAgentId = entry.kind === 'inline' ? entry.agent.id : entry.ref;
     const nextDefaults = defaultRunAgentNames.filter((item) => item !== removedAgentId);
     patch({
       runDefaults: {
@@ -456,7 +521,7 @@ const ConfigEditor = () => {
         selectedAgentNames: nextDefaults
       }
     });
-    if (entry.kind === "inline") {
+    if (entry.kind === 'inline') {
       setExpandedInlineAgentIds((prev) => {
         const next = { ...prev };
         delete next[entry.agent.id];
@@ -477,10 +542,10 @@ const ConfigEditor = () => {
 
   const convertReferencedAgentToInline = (index: number) => {
     const entry = agentEntries[index];
-    if (!entry || entry.kind !== "referenced") return;
+    if (!entry || entry.kind !== 'referenced') return;
     const template = findLibraryAgentByRef(entry.ref);
     if (!template) {
-      toast({ title: "Referenced agent not found", variant: "destructive" });
+      toast({ title: 'Referenced agent not found', variant: 'destructive' });
       return;
     }
     const displayName = template.name || template.id;
@@ -491,7 +556,7 @@ const ConfigEditor = () => {
       name: customName
     };
     const nextEntries = [...agentEntries];
-    nextEntries[index] = { kind: "inline", agent: inlineCopy };
+    nextEntries[index] = { kind: 'inline', agent: inlineCopy };
     setAgentEntries(nextEntries);
     if (defaultRunAgentNames.includes(entry.ref)) {
       const nextDefaults = defaultRunAgentNames.map((item) =>
@@ -505,7 +570,7 @@ const ConfigEditor = () => {
       });
     }
     setExpandedInlineAgentIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
-    toast({ title: "Referenced agent converted to inline", description: customName });
+    toast({ title: 'Referenced agent converted to inline', description: customName });
   };
 
   const importScenarioFromLibrary = () => {
@@ -516,22 +581,22 @@ const ConfigEditor = () => {
       id: `scn-${Date.now()}`,
       serverIds: [...template.serverIds]
     };
-    setScenarioEntries([...scenarioEntries, { kind: "inline", scenario: importedScenario }]);
+    setScenarioEntries([...scenarioEntries, { kind: 'inline', scenario: importedScenario }]);
     setExpandedInlineScenarioIds((prev) => ({ ...prev, [importedScenario.id]: true }));
-    setSelectedLibraryScenarioId("");
+    setSelectedLibraryScenarioId('');
   };
 
   const addInlineScenarioEntry = () => {
     const createdAt = Date.now();
     const inlineScenario: Scenario = {
       id: `scn-${createdAt}`,
-      name: "",
+      name: '',
       serverIds: [],
-      prompt: "",
+      prompt: '',
       evalRules: [],
-      extractRules: [],
+      extractRules: []
     };
-    setScenarioEntries([{ kind: "inline", scenario: inlineScenario }, ...scenarioEntries]);
+    setScenarioEntries([{ kind: 'inline', scenario: inlineScenario }, ...scenarioEntries]);
     setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineScenario.id]: true }));
   };
 
@@ -541,18 +606,21 @@ const ConfigEditor = () => {
     const refId = template.id;
     const existing = new Set(
       scenarioEntries
-        .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+        .filter(
+          (entry): entry is Extract<ScenarioEntry, { kind: 'referenced' }> =>
+            entry.kind === 'referenced'
+        )
         .map((entry) => entry.ref)
     );
     if (!existing.has(refId)) {
-      setScenarioEntries([...scenarioEntries, { kind: "referenced", ref: refId }]);
+      setScenarioEntries([...scenarioEntries, { kind: 'referenced', ref: refId }]);
     }
-    setSelectedLibraryScenarioId("");
+    setSelectedLibraryScenarioId('');
   };
 
   const removeScenarioEntryAt = (index: number) => {
     const entry = scenarioEntries[index];
-    if (entry?.kind === "inline") {
+    if (entry?.kind === 'inline') {
       setExpandedInlineScenarioIds((prev) => {
         const next = { ...prev };
         delete next[entry.scenario.id];
@@ -573,15 +641,17 @@ const ConfigEditor = () => {
 
   const convertReferencedScenarioToInline = (index: number) => {
     const entry = scenarioEntries[index];
-    if (!entry || entry.kind !== "referenced") return;
+    if (!entry || entry.kind !== 'referenced') return;
     const template = findLibraryScenarioByRef(entry.ref);
     if (!template) {
-      toast({ title: "Referenced scenario not found", variant: "destructive" });
+      toast({ title: 'Referenced scenario not found', variant: 'destructive' });
       return;
     }
     const usedNames = new Set(
       scenarioEntries
-        .filter((item): item is Extract<ScenarioEntry, { kind: "inline" }> => item.kind === "inline")
+        .filter(
+          (item): item is Extract<ScenarioEntry, { kind: 'inline' }> => item.kind === 'inline'
+        )
         .map((item) => item.scenario.name?.trim().toLowerCase())
         .filter(Boolean) as string[]
     );
@@ -600,83 +670,103 @@ const ConfigEditor = () => {
       serverIds:
         entry.mcpServers && entry.mcpServers.length > 0
           ? entry.mcpServers.map((serverEntry) =>
-              serverEntry.kind === "referenced" ? serverEntry.ref : serverEntry.server.id
+              serverEntry.kind === 'referenced' ? serverEntry.ref : serverEntry.server.id
             )
-          : [...template.serverIds],
+          : [...template.serverIds]
     };
     const nextEntries = [...scenarioEntries];
-    nextEntries[index] = { kind: "inline", scenario: inlineCopy };
+    nextEntries[index] = { kind: 'inline', scenario: inlineCopy };
     setScenarioEntries(nextEntries);
     setExpandedInlineScenarioIds((prev) => ({ ...prev, [inlineCopy.id]: true }));
-    toast({ title: "Referenced scenario converted to inline", description: nextName });
+    toast({ title: 'Referenced scenario converted to inline', description: nextName });
   };
 
-  const findLibraryServerByRef = (ref: string) =>
-    libServers.find((item) => item.id === ref);
-  const findLibraryAgentByRef = (ref: string) =>
-    libAgents.find((item) => item.id === ref);
-  const findLibraryScenarioByRef = (ref: string) =>
-    libScenarios.find((item) => item.id === ref);
+  const findLibraryServerByRef = (ref: string) => libServers.find((item) => item.id === ref);
+  const findLibraryAgentByRef = (ref: string) => libAgents.find((item) => item.id === ref);
+  const findLibraryScenarioByRef = (ref: string) => libScenarios.find((item) => item.id === ref);
   const referencedServerRefs = serverEntries
-    .filter((entry): entry is Extract<ServerEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .filter(
+      (entry): entry is Extract<ServerEntry, { kind: 'referenced' }> => entry.kind === 'referenced'
+    )
     .map((entry) => entry.ref);
   const referencedServers = referencedServerRefs
     .map(findLibraryServerByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
   const referencedAgentRefs = agentEntries
-    .filter((entry): entry is Extract<AgentEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .filter(
+      (entry): entry is Extract<AgentEntry, { kind: 'referenced' }> => entry.kind === 'referenced'
+    )
     .map((entry) => entry.ref);
   const referencedAgents = referencedAgentRefs
     .map(findLibraryAgentByRef)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const inlineAgentEntries = agentEntries
-    .filter((entry): entry is Extract<AgentEntry, { kind: "inline" }> => entry.kind === "inline");
+  const inlineAgentEntries = agentEntries.filter(
+    (entry): entry is Extract<AgentEntry, { kind: 'inline' }> => entry.kind === 'inline'
+  );
   const agentViewRows = agentEntries.flatMap(
-    (entry): { agent: AgentConfig; origin: "inline" | "referenced"; ref: string | undefined }[] => {
-      if (entry.kind === "referenced") {
+    (entry): { agent: AgentConfig; origin: 'inline' | 'referenced'; ref: string | undefined }[] => {
+      if (entry.kind === 'referenced') {
         const agent = findLibraryAgentByRef(entry.ref);
-        return agent ? [{ agent, origin: "referenced", ref: entry.ref }] : [];
+        return agent ? [{ agent, origin: 'referenced', ref: entry.ref }] : [];
       }
-      return [{ agent: entry.agent, origin: "inline", ref: undefined }];
+      return [{ agent: entry.agent, origin: 'inline', ref: undefined }];
     }
   );
   const referencedScenarioIds = scenarioEntries
-    .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .filter(
+      (entry): entry is Extract<ScenarioEntry, { kind: 'referenced' }> =>
+        entry.kind === 'referenced'
+    )
     .map((entry) => entry.ref);
   const scenarioViewRows = scenarioEntries.flatMap(
-    (entry): { scenario: Scenario; origin: "inline" | "referenced"; hasMcpServerOverride: boolean }[] => {
-      if (entry.kind === "referenced") {
+    (
+      entry
+    ): { scenario: Scenario; origin: 'inline' | 'referenced'; hasMcpServerOverride: boolean }[] => {
+      if (entry.kind === 'referenced') {
         const scenario = findLibraryScenarioByRef(entry.ref);
         if (!scenario) return [];
         if (entry.mcpServers === undefined) {
-          return [{ scenario, origin: "referenced", hasMcpServerOverride: false }];
+          return [{ scenario, origin: 'referenced', hasMcpServerOverride: false }];
         }
         const overrideServerIds = entry.mcpServers.flatMap((serverEntry) => {
-          if (serverEntry.kind === "referenced") return [serverEntry.ref];
+          if (serverEntry.kind === 'referenced') return [serverEntry.ref];
           return [serverEntry.server.id];
         });
-        return [{ scenario: { ...scenario, serverIds: overrideServerIds }, origin: "referenced", hasMcpServerOverride: true }];
+        return [
+          {
+            scenario: { ...scenario, serverIds: overrideServerIds },
+            origin: 'referenced',
+            hasMcpServerOverride: true
+          }
+        ];
       }
-      return [{ scenario: entry.scenario, origin: "inline", hasMcpServerOverride: false }];
+      return [{ scenario: entry.scenario, origin: 'inline', hasMcpServerOverride: false }];
     }
   );
   const scenarioViewAgents = Array.from(
     new Map(
-      [...libAgents, ...config.agents, ...referencedAgents].map((agent) => [agent.id, agent] as const)
+      [...libAgents, ...config.agents, ...referencedAgents].map(
+        (agent) => [agent.id, agent] as const
+      )
     ).values()
   );
   const scenarioViewServers = Array.from(
     new Map(
-      [...libServers, ...(config.servers ?? []), ...referencedServers].map((server) => [server.id, server] as const)
+      [...libServers, ...(config.servers ?? []), ...referencedServers].map(
+        (server) => [server.id, server] as const
+      )
     ).values()
   );
   const scenarioOverrideServerRefs = scenarioEntries
-    .filter((entry): entry is Extract<ScenarioEntry, { kind: "referenced" }> => entry.kind === "referenced")
+    .filter(
+      (entry): entry is Extract<ScenarioEntry, { kind: 'referenced' }> =>
+        entry.kind === 'referenced'
+    )
     .flatMap((entry) =>
       (entry.mcpServers ?? [])
         .filter(
-          (serverEntry): serverEntry is Extract<ServerEntry, { kind: "referenced" }> =>
-            serverEntry.kind === "referenced"
+          (serverEntry): serverEntry is Extract<ServerEntry, { kind: 'referenced' }> =>
+            serverEntry.kind === 'referenced'
         )
         .map((serverEntry) => serverEntry.ref)
     );
@@ -698,28 +788,28 @@ const ConfigEditor = () => {
 
   const updateReferencedScenarioServers = (index: number, nextServerIds: string[]) => {
     const entry = scenarioEntries[index];
-    if (!entry || entry.kind !== "referenced") return;
+    if (!entry || entry.kind !== 'referenced') return;
     const nextEntries = [...scenarioEntries];
     nextEntries[index] = {
-      kind: "referenced",
+      kind: 'referenced',
       ref: entry.ref,
-      mcpServers: nextServerIds.map((id) => ({ kind: "referenced" as const, ref: id }))
+      mcpServers: nextServerIds.map((id) => ({ kind: 'referenced' as const, ref: id }))
     };
     setScenarioEntries(nextEntries);
   };
 
   const resetReferencedScenarioServersOverride = (index: number) => {
     const entry = scenarioEntries[index];
-    if (!entry || entry.kind !== "referenced") return;
+    if (!entry || entry.kind !== 'referenced') return;
     const nextEntries = [...scenarioEntries];
-    nextEntries[index] = { kind: "referenced", ref: entry.ref };
+    nextEntries[index] = { kind: 'referenced', ref: entry.ref };
     setScenarioEntries(nextEntries);
   };
 
   useEffect(() => {
     if (!selectedLibraryAgentId) return;
     const exists = libAgents.some((item) => item.id === selectedLibraryAgentId);
-    if (!exists) setSelectedLibraryAgentId("");
+    if (!exists) setSelectedLibraryAgentId('');
   }, [libAgents, selectedLibraryAgentId]);
 
   return (
@@ -727,25 +817,35 @@ const ConfigEditor = () => {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-          <Link to="/mcp-evaluations"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link to="/mcp-evaluations">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{title}</h1>
           <p className="text-sm text-muted-foreground">
             {isNew
-              ? "Create a new MCP evaluation"
-                : loading
-                  ? "Loading configuration..."
-                : existing
-                  ? existing.loadError
-                    ? "MCP evaluation could not be fully loaded"
-                    : `Last updated ${new Date(config.updatedAt).toLocaleDateString()}`
-                  : "MCP evaluation not found"}
+              ? 'Create a new MCP evaluation'
+              : loading
+              ? 'Loading configuration...'
+              : existing
+              ? existing.loadError
+                ? 'MCP evaluation could not be fully loaded'
+                : `Last updated ${new Date(config.updatedAt).toLocaleDateString()}`
+              : 'MCP evaluation not found'}
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
           {isView && !editing && (
-            <Button size="sm" onClick={() => { setEditing(true); navigate(`${configBasePath}/edit`); }}>Edit</Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(true);
+                navigate(`${configBasePath}/edit`);
+              }}
+            >
+              Edit
+            </Button>
           )}
           {isView && !editing && existing && !isBrokenConfig && (
             <Button size="sm" variant="outline" asChild>
@@ -764,11 +864,22 @@ const ConfigEditor = () => {
           {editing && (
             <>
               {!isNew && (
-                <Button variant="outline" size="sm" onClick={() => { setConfig(structuredClone(existing!)); setEditing(false); navigate(configBasePath); }}>Cancel</Button>
-              )}
-                <Button size="sm" onClick={() => void handleSave()}>
-                  <Save className="mr-1.5 h-3.5 w-3.5" />Save
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setConfig(structuredClone(existing!));
+                    setEditing(false);
+                    navigate(configBasePath);
+                  }}
+                >
+                  Cancel
                 </Button>
+              )}
+              <Button size="sm" onClick={() => void handleSave()}>
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                Save
+              </Button>
             </>
           )}
         </div>
@@ -782,34 +893,41 @@ const ConfigEditor = () => {
               <div className="min-w-0">
                 <p className="text-sm font-semibold">This configuration is broken</p>
                 <p className="text-xs text-muted-foreground">
-                  The file is still present, but it could not be loaded because one or more references or fields are invalid.
+                  The file is still present, but it could not be loaded because one or more
+                  references or fields are invalid.
                 </p>
               </div>
             </div>
             <div className="rounded-md border bg-muted/20 p-3">
               <p className="text-xs font-medium mb-1">File</p>
-              <p className="text-xs font-mono break-all">{existing?.sourcePath || existing?.description}</p>
+              <p className="text-xs font-mono break-all">
+                {existing?.sourcePath || existing?.description}
+              </p>
             </div>
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <p className="text-xs font-medium mb-1 text-destructive">Load Error</p>
               <p className="text-xs break-all text-destructive">{existing?.loadError}</p>
             </div>
-            {(missingServerRefs.length > 0 || missingAgentRefs.length > 0 || missingScenarioRefs.length > 0) && (
+            {(missingServerRefs.length > 0 ||
+              missingAgentRefs.length > 0 ||
+              missingScenarioRefs.length > 0) && (
               <div className="rounded-md border border-destructive/30 bg-background p-3 space-y-1.5">
                 <p className="text-xs font-medium">Broken references</p>
                 {missingServerRefs.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Servers: <span className="text-destructive">{missingServerRefs.join(", ")}</span>
+                    Servers:{' '}
+                    <span className="text-destructive">{missingServerRefs.join(', ')}</span>
                   </p>
                 )}
                 {missingAgentRefs.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Agents: <span className="text-destructive">{missingAgentRefs.join(", ")}</span>
+                    Agents: <span className="text-destructive">{missingAgentRefs.join(', ')}</span>
                   </p>
                 )}
                 {missingScenarioRefs.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Scenarios: <span className="text-destructive">{missingScenarioRefs.join(", ")}</span>
+                    Scenarios:{' '}
+                    <span className="text-destructive">{missingScenarioRefs.join(', ')}</span>
                   </p>
                 )}
               </div>
@@ -840,19 +958,27 @@ const ConfigEditor = () => {
       {/* Stats bar */}
       <div className="flex gap-4">
         <Badge
-          variant={activeTab === "scenarios" ? "default" : "outline"}
+          variant={activeTab === 'scenarios' ? 'default' : 'outline'}
           className="py-1 px-3 text-xs"
         >
-          <Link to={`${configBasePath}/scenarios`} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <FileText className="h-3 w-3" />{totalScenarioCount} scenario{totalScenarioCount !== 1 ? "s" : ""}
+          <Link
+            to={`${configBasePath}/scenarios`}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <FileText className="h-3 w-3" />
+            {totalScenarioCount} scenario{totalScenarioCount !== 1 ? 's' : ''}
           </Link>
         </Badge>
         <Badge
-          variant={activeTab === "agents" ? "default" : "outline"}
+          variant={activeTab === 'agents' ? 'default' : 'outline'}
           className="py-1 px-3 text-xs"
         >
-          <Link to={`${configBasePath}/agents`} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            <Bot className="h-3 w-3" />{totalAgentCount} agent{totalAgentCount !== 1 ? "s" : ""}
+          <Link
+            to={`${configBasePath}/agents`}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap"
+          >
+            <Bot className="h-3 w-3" />
+            {totalAgentCount} agent{totalAgentCount !== 1 ? 's' : ''}
           </Link>
         </Badge>
       </div>
@@ -860,183 +986,216 @@ const ConfigEditor = () => {
       {/* Meta fields */}
       <Card>
         <CardContent className="pt-6 space-y-3">
-          <div className={`grid gap-4 ${readOnly || !isNew ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+          <div className={`grid gap-4 ${readOnly || !isNew ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
             {!readOnly && isNew && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Config ID</Label>
-                <Input value={config.name} onChange={(e) => patch({ name: e.target.value })} disabled={readOnly} placeholder="e.g. check-weather" />
+                <Input
+                  value={config.name}
+                  onChange={(e) => patch({ name: e.target.value })}
+                  disabled={readOnly}
+                  placeholder="e.g. check-weather"
+                />
               </div>
             )}
             <div className="space-y-1.5">
               <Label className="text-xs">Name (optional)</Label>
-              <Input value={config.configName || ""} onChange={(e) => patch({ configName: e.target.value })} disabled={readOnly} placeholder="e.g. Weather checks baseline" />
+              <Input
+                value={config.configName || ''}
+                onChange={(e) => patch({ configName: e.target.value })}
+                disabled={readOnly}
+                placeholder="e.g. Weather checks baseline"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Description</Label>
-              <Input value={config.description || ""} onChange={(e) => patch({ description: e.target.value })} disabled={readOnly} placeholder="Brief description..." />
+              <Input
+                value={config.description || ''}
+                onChange={(e) => patch({ description: e.target.value })}
+                disabled={readOnly}
+                placeholder="Brief description..."
+              />
             </div>
           </div>
         </CardContent>
       </Card>
 
       {snapshotsUiEnabled && (
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold">Snapshot Evaluation</p>
-              <p className="text-xs text-muted-foreground">Config baseline versioning. One active baseline is selected; scenarios can opt in/out below.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-xs">Enable snapshot baseline</Label>
-              <Switch
-                checked={config.snapshotEval?.enabled ?? false}
-                disabled={updatingSnapshotPolicy}
-                onCheckedChange={(checked) => {
-                  const current = config.snapshotEval;
-                  void persistSnapshotPolicy({
-                    enabled: checked,
-                    mode: current?.mode ?? "warn",
-                    baselineSnapshotId: current?.baselineSnapshotId,
-                    baselineSourceRunId: current?.baselineSourceRunId
-                  });
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Drift mode</Label>
-              <Select
-                value={config.snapshotEval?.mode ?? "warn"}
-                onValueChange={(modeValue) => {
-                  const current = config.snapshotEval;
-                  void persistSnapshotPolicy({
-                    enabled: current?.enabled ?? false,
-                    mode: modeValue as "warn" | "fail_on_drift",
-                    baselineSnapshotId: current?.baselineSnapshotId,
-                    baselineSourceRunId: current?.baselineSourceRunId
-                  });
-                }}
-              >
-                <SelectTrigger className="h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="warn">Warn</SelectItem>
-                  <SelectItem value="fail_on_drift">Fail on drift</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Active baseline</Label>
-              <p className="rounded-md border bg-muted/20 px-2 py-2 text-xs font-mono">
-                {config.snapshotEval?.baselineSnapshotId ?? "No baseline linked"}
-              </p>
-            </div>
-          </div>
-
-          {config.id && (
-            <div className="grid gap-2 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Generate baseline from passing run</Label>
-                <Input
-                  value={snapshotRunId}
-                  onChange={(e) => setSnapshotRunId(e.target.value)}
-                  placeholder="Run id (e.g. 20260208-140213)"
-                  className="h-8 font-mono text-xs"
-                />
-                {snapshotRunIsFullyPassing === false && (
-                  <p className="text-[11px] text-destructive">Run is missing or not fully passing.</p>
-                )}
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">Snapshot Evaluation</p>
+                <p className="text-xs text-muted-foreground">
+                  Config baseline versioning. One active baseline is selected; scenarios can opt
+                  in/out below.
+                </p>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Snapshot name (optional)</Label>
-                <Input
-                  value={snapshotName}
-                  onChange={(e) => setSnapshotName(e.target.value)}
-                  placeholder="e.g. config-baseline-v1"
-                  className="h-8 text-xs"
+              <div className="flex items-center gap-2">
+                <Label className="text-xs">Enable snapshot baseline</Label>
+                <Switch
+                  checked={config.snapshotEval?.enabled ?? false}
+                  disabled={updatingSnapshotPolicy}
+                  onCheckedChange={(checked) => {
+                    const current = config.snapshotEval;
+                    void persistSnapshotPolicy({
+                      enabled: checked,
+                      mode: current?.mode ?? 'warn',
+                      baselineSnapshotId: current?.baselineSnapshotId,
+                      baselineSourceRunId: current?.baselineSourceRunId
+                    });
+                  }}
                 />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Switch baseline</Label>
-                <Select value={snapshotBaselineId || config.snapshotEval?.baselineSnapshotId || ""} onValueChange={(value) => {
-                  setSnapshotBaselineId(value);
-                  void persistSnapshotPolicy({
-                    enabled: config.snapshotEval?.enabled ?? true,
-                    mode: config.snapshotEval?.mode ?? "warn",
-                    baselineSnapshotId: value || undefined,
-                    baselineSourceRunId: config.snapshotEval?.baselineSourceRunId
-                  });
-                }}>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Drift mode</Label>
+                <Select
+                  value={config.snapshotEval?.mode ?? 'warn'}
+                  onValueChange={(modeValue) => {
+                    const current = config.snapshotEval;
+                    void persistSnapshotPolicy({
+                      enabled: current?.enabled ?? false,
+                      mode: modeValue as 'warn' | 'fail_on_drift',
+                      baselineSnapshotId: current?.baselineSnapshotId,
+                      baselineSourceRunId: current?.baselineSourceRunId
+                    });
+                  }}
+                >
                   <SelectTrigger className="h-8">
-                    <SelectValue placeholder="Select snapshot" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {snapshots.map((snapshot) => (
-                      <SelectItem key={snapshot.id} value={snapshot.id}>
-                        {snapshot.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="warn">Warn</SelectItem>
+                    <SelectItem value="fail_on_drift">Fail on drift</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-end gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() => void generateBaseline()}
-                  disabled={generatingBaseline || !snapshotRunId.trim() || snapshotRunIsFullyPassing !== true}
-                >
-                  {generatingBaseline ? "Generating..." : "Generate Baseline"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() =>
-                    void persistSnapshotPolicy({
-                      enabled: config.snapshotEval?.enabled ?? false,
-                      mode: config.snapshotEval?.mode ?? "warn",
-                      baselineSnapshotId: undefined,
-                      baselineSourceRunId: undefined
-                    })
-                  }
-                  disabled={updatingSnapshotPolicy}
-                >
-                  Clear Baseline
-                </Button>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Active baseline</Label>
+                <p className="rounded-md border bg-muted/20 px-2 py-2 text-xs font-mono">
+                  {config.snapshotEval?.baselineSnapshotId ?? 'No baseline linked'}
+                </p>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {config.id && (
+              <div className="grid gap-2 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Generate baseline from passing run</Label>
+                  <Input
+                    value={snapshotRunId}
+                    onChange={(e) => setSnapshotRunId(e.target.value)}
+                    placeholder="Run id (e.g. 20260208-140213)"
+                    className="h-8 font-mono text-xs"
+                  />
+                  {snapshotRunIsFullyPassing === false && (
+                    <p className="text-[11px] text-destructive">
+                      Run is missing or not fully passing.
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Snapshot name (optional)</Label>
+                  <Input
+                    value={snapshotName}
+                    onChange={(e) => setSnapshotName(e.target.value)}
+                    placeholder="e.g. config-baseline-v1"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Switch baseline</Label>
+                  <Select
+                    value={snapshotBaselineId || config.snapshotEval?.baselineSnapshotId || ''}
+                    onValueChange={(value) => {
+                      setSnapshotBaselineId(value);
+                      void persistSnapshotPolicy({
+                        enabled: config.snapshotEval?.enabled ?? true,
+                        mode: config.snapshotEval?.mode ?? 'warn',
+                        baselineSnapshotId: value || undefined,
+                        baselineSourceRunId: config.snapshotEval?.baselineSourceRunId
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Select snapshot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {snapshots.map((snapshot) => (
+                        <SelectItem key={snapshot.id} value={snapshot.id}>
+                          {snapshot.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => void generateBaseline()}
+                    disabled={
+                      generatingBaseline ||
+                      !snapshotRunId.trim() ||
+                      snapshotRunIsFullyPassing !== true
+                    }
+                  >
+                    {generatingBaseline ? 'Generating...' : 'Generate Baseline'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() =>
+                      void persistSnapshotPolicy({
+                        enabled: config.snapshotEval?.enabled ?? false,
+                        mode: config.snapshotEval?.mode ?? 'warn',
+                        baselineSnapshotId: undefined,
+                        baselineSourceRunId: undefined
+                      })
+                    }
+                    disabled={updatingSnapshotPolicy}
+                  >
+                    Clear Baseline
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabbed sections */}
       <Tabs
         value={activeTab}
         onValueChange={(tab) => {
-          if (tab !== "servers" && tab !== "agents" && tab !== "scenarios") return;
+          if (tab !== 'servers' && tab !== 'agents' && tab !== 'scenarios') return;
           const next = new URLSearchParams(searchParams);
-          next.delete("tab");
+          next.delete('tab');
           setSearchParams(next, { replace: true });
-          if (id && id !== "new") {
+          if (id && id !== 'new') {
             navigate(`/mcp-evaluations/${encodeURIComponent(id)}/${tab}`, { replace: true });
             return;
           }
-          navigate(`/mcp-evaluations/${id ?? "new"}/${tab}`, { replace: true });
+          navigate(`/mcp-evaluations/${id ?? 'new'}/${tab}`, { replace: true });
         }}
         className="space-y-4"
       >
         <TabsList>
-          <TabsTrigger value="scenarios" className="gap-1.5"><FileText className="h-3.5 w-3.5" />Scenarios</TabsTrigger>
-          <TabsTrigger value="agents" className="gap-1.5"><Bot className="h-3.5 w-3.5" />Agents</TabsTrigger>
+          <TabsTrigger value="scenarios" className="gap-1.5">
+            <FileText className="h-3.5 w-3.5" />
+            Scenarios
+          </TabsTrigger>
+          <TabsTrigger value="agents" className="gap-1.5">
+            <Bot className="h-3.5 w-3.5" />
+            Agents
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents">
@@ -1050,40 +1209,82 @@ const ConfigEditor = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {libraryAgentRefOptions.map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
-                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={addAgentReference}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!selectedLibraryAgentId}
+                      onClick={addAgentReference}
+                    >
                       Add Ref
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryAgentId} onClick={importAgentFromLibraryInline}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!selectedLibraryAgentId}
+                      onClick={importAgentFromLibraryInline}
+                    >
                       Import Inline
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={libAgents.length === 0 || libAgents.every((a) => agentEntries.some((e) => e.kind === "referenced" && e.ref === a.id))} onClick={addAllAgentReferences}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={
+                        libAgents.length === 0 ||
+                        libAgents.every((a) =>
+                          agentEntries.some((e) => e.kind === 'referenced' && e.ref === a.id)
+                        )
+                      }
+                      onClick={addAllAgentReferences}
+                    >
                       Add All Refs
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineAgentEntry}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={addInlineAgentEntry}
+                    >
                       Add agent
                     </Button>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {agentEntries.map((entry, index) => {
-                    const referenceAgent = entry.kind === "referenced" ? findLibraryAgentByRef(entry.ref) : null;
+                    const referenceAgent =
+                      entry.kind === 'referenced' ? findLibraryAgentByRef(entry.ref) : null;
                     const rowName =
-                      entry.kind === "inline"
-                        ? (entry.agent.name?.trim() || entry.agent.id)
-                        : (referenceAgent?.name || entry.ref);
-                    const rowModel = entry.kind === "inline" ? entry.agent.model : (referenceAgent?.model || "unknown");
-                    const rowKey = entry.kind === "inline" ? entry.agent.id : entry.ref;
-                    const isMissingRef = entry.kind === "referenced" && !referenceAgent;
-                    const defaultName = entry.kind === "inline" ? entry.agent.id : entry.ref;
+                      entry.kind === 'inline'
+                        ? entry.agent.name?.trim() || entry.agent.id
+                        : referenceAgent?.name || entry.ref;
+                    const rowModel =
+                      entry.kind === 'inline'
+                        ? entry.agent.model
+                        : referenceAgent?.model || 'unknown';
+                    const rowKey = entry.kind === 'inline' ? entry.agent.id : entry.ref;
+                    const isMissingRef = entry.kind === 'referenced' && !referenceAgent;
+                    const defaultName = entry.kind === 'inline' ? entry.agent.id : entry.ref;
                     const defaultChecked = defaultRunAgentNames.includes(defaultName);
-                    const inlineExpanded = entry.kind === "inline" && Boolean(expandedInlineAgentIds[entry.agent.id]);
+                    const inlineExpanded =
+                      entry.kind === 'inline' && Boolean(expandedInlineAgentIds[entry.agent.id]);
                     return (
-                      <div key={`agent-entry-${index}-${rowKey}`} className="rounded-md border text-sm">
+                      <div
+                        key={`agent-entry-${index}-${rowKey}`}
+                        className="rounded-md border text-sm"
+                      >
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="flex items-center gap-1">
@@ -1112,12 +1313,17 @@ const ConfigEditor = () => {
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowName}</span>
-                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
-                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            <Badge variant={entry.kind === 'inline' ? 'secondary' : 'outline'}>
+                              {entry.kind === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
-                            <Badge variant="outline" className="font-mono text-[10px]">{rowModel}</Badge>
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {rowModel}
+                            </Badge>
                             {defaultChecked && (
-                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
+                              >
                                 Default
                               </Badge>
                             )}
@@ -1132,7 +1338,7 @@ const ConfigEditor = () => {
                               />
                               <span>Default</span>
                             </label>
-                            {entry.kind === "inline" && (
+                            {entry.kind === 'inline' && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -1145,10 +1351,10 @@ const ConfigEditor = () => {
                                   }))
                                 }
                               >
-                                {inlineExpanded ? "Collapse" : "Expand"}
+                                {inlineExpanded ? 'Collapse' : 'Expand'}
                               </Button>
                             )}
-                            {entry.kind === "referenced" && (
+                            {entry.kind === 'referenced' && (
                               <>
                                 <Button
                                   type="button"
@@ -1173,7 +1379,7 @@ const ConfigEditor = () => {
                             </Button>
                           </div>
                         </div>
-                        {entry.kind === "inline" && inlineExpanded && (
+                        {entry.kind === 'inline' && inlineExpanded && (
                           <div className="border-t px-3 py-3 space-y-3">
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div className="space-y-1.5">
@@ -1183,7 +1389,7 @@ const ConfigEditor = () => {
                                   onChange={(e) => {
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
-                                      kind: "inline",
+                                      kind: 'inline',
                                       agent: { ...entry.agent, name: e.target.value }
                                     };
                                     setAgentEntries(nextEntries);
@@ -1198,13 +1404,18 @@ const ConfigEditor = () => {
                                   onValueChange={(value) => {
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
-                                      kind: "inline",
-                                      agent: { ...entry.agent, provider: value as AgentConfig["provider"] }
+                                      kind: 'inline',
+                                      agent: {
+                                        ...entry.agent,
+                                        provider: value as AgentConfig['provider']
+                                      }
                                     };
                                     setAgentEntries(nextEntries);
                                   }}
                                 >
-                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="openai">OpenAI</SelectItem>
                                     <SelectItem value="anthropic">Anthropic</SelectItem>
@@ -1223,7 +1434,7 @@ const ConfigEditor = () => {
                                   onChange={(e) => {
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
-                                      kind: "inline",
+                                      kind: 'inline',
                                       agent: { ...entry.agent, model: e.target.value }
                                     };
                                     setAgentEntries(nextEntries);
@@ -1241,8 +1452,11 @@ const ConfigEditor = () => {
                                   onChange={(e) => {
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
-                                      kind: "inline",
-                                      agent: { ...entry.agent, maxTokens: parseInt(e.target.value) || 0 }
+                                      kind: 'inline',
+                                      agent: {
+                                        ...entry.agent,
+                                        maxTokens: parseInt(e.target.value) || 0
+                                      }
                                     };
                                     setAgentEntries(nextEntries);
                                   }}
@@ -1261,8 +1475,11 @@ const ConfigEditor = () => {
                                 onChange={(e) => {
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
-                                    kind: "inline",
-                                    agent: { ...entry.agent, temperature: Number(e.target.value) || 0 }
+                                    kind: 'inline',
+                                    agent: {
+                                      ...entry.agent,
+                                      temperature: Number(e.target.value) || 0
+                                    }
                                   };
                                   setAgentEntries(nextEntries);
                                 }}
@@ -1272,11 +1489,11 @@ const ConfigEditor = () => {
                             <div className="space-y-1.5">
                               <Label className="text-xs">System Prompt</Label>
                               <Textarea
-                                value={entry.agent.systemPrompt || ""}
+                                value={entry.agent.systemPrompt || ''}
                                 onChange={(e) => {
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
-                                    kind: "inline",
+                                    kind: 'inline',
                                     agent: { ...entry.agent, systemPrompt: e.target.value }
                                   };
                                   setAgentEntries(nextEntries);
@@ -1298,7 +1515,7 @@ const ConfigEditor = () => {
                 </div>
                 {missingAgentRefs.length > 0 && (
                   <p className="text-xs text-destructive">
-                    Missing agent refs: {missingAgentRefs.join(", ")}
+                    Missing agent refs: {missingAgentRefs.join(', ')}
                   </p>
                 )}
               </CardContent>
@@ -1310,11 +1527,16 @@ const ConfigEditor = () => {
                 <div className="space-y-2">
                   {agentViewRows.map((row, index) => {
                     const name = row.agent.name || row.agent.id;
-                    const isDefault = defaultRunAgentNames.includes(row.origin === "inline" ? row.agent.id : (row.ref || row.agent.id));
+                    const isDefault = defaultRunAgentNames.includes(
+                      row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
+                    );
                     const viewAgentKey = row.ref ?? row.agent.id;
                     const expanded = Boolean(expandedViewAgentIds[viewAgentKey]);
                     return (
-                      <div key={`agent-view-${index}-${row.ref ?? row.agent.id}`} className="rounded-md border p-3">
+                      <div
+                        key={`agent-view-${index}-${row.ref ?? row.agent.id}`}
+                        className="rounded-md border p-3"
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
@@ -1322,12 +1544,15 @@ const ConfigEditor = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             {isDefault && (
-                              <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50">
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-emerald-300 text-emerald-700 bg-emerald-50"
+                              >
                                 Default
                               </Badge>
                             )}
-                            <Badge variant={row.origin === "inline" ? "secondary" : "outline"}>
-                              {row.origin === "inline" ? "Inline" : "Referenced"}
+                            <Badge variant={row.origin === 'inline' ? 'secondary' : 'outline'}>
+                              {row.origin === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
                             <Button
                               type="button"
@@ -1341,9 +1566,15 @@ const ConfigEditor = () => {
                                   [viewAgentKey]: !Boolean(prev[viewAgentKey])
                                 }))
                               }
-                              aria-label={expanded ? "Collapse agent details" : "Expand agent details"}
+                              aria-label={
+                                expanded ? 'Collapse agent details' : 'Expand agent details'
+                              }
                             >
-                              <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${
+                                  expanded ? 'rotate-180' : ''
+                                }`}
+                              />
                             </Button>
                           </div>
                         </div>
@@ -1380,45 +1611,79 @@ const ConfigEditor = () => {
             <Card className="mb-4">
               <CardContent className="pt-4 space-y-3">
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                  <Select value={selectedLibraryScenarioId} onValueChange={setSelectedLibraryScenarioId}>
+                  <Select
+                    value={selectedLibraryScenarioId}
+                    onValueChange={setSelectedLibraryScenarioId}
+                  >
                     <SelectTrigger className="h-8">
                       <SelectValue placeholder="Select scenario from library" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[...libScenarios].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)).map((item) => (
-                        <SelectItem key={item.id} value={item.id}>{item.name || item.id}</SelectItem>
-                      ))}
+                      {[...libScenarios]
+                        .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))
+                        .map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name || item.id}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
-                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={addScenarioReference}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!selectedLibraryScenarioId}
+                      onClick={addScenarioReference}
+                    >
                       Add Ref
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" disabled={!selectedLibraryScenarioId} onClick={importScenarioFromLibrary}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      disabled={!selectedLibraryScenarioId}
+                      onClick={importScenarioFromLibrary}
+                    >
                       Import Inline
                     </Button>
-                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={addInlineScenarioEntry}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={addInlineScenarioEntry}
+                    >
                       Add scenario
                     </Button>
                   </div>
                 </div>
                 <div className="space-y-2">
                   {scenarioEntries.map((entry, index) => {
-                    const referenceScenario = entry.kind === "referenced" ? findLibraryScenarioByRef(entry.ref) : null;
+                    const referenceScenario =
+                      entry.kind === 'referenced' ? findLibraryScenarioByRef(entry.ref) : null;
                     const rowTitle =
-                      entry.kind === "inline"
+                      entry.kind === 'inline'
                         ? entry.scenario.name?.trim() || entry.scenario.id
                         : referenceScenario?.name || entry.ref;
                     const hasMissingInlineName =
-                      entry.kind === "inline" && !entry.scenario.name?.trim();
-                    const isMissingRef = entry.kind === "referenced" && missingScenarioRefSet.has(entry.ref);
+                      entry.kind === 'inline' && !entry.scenario.name?.trim();
+                    const isMissingRef =
+                      entry.kind === 'referenced' && missingScenarioRefSet.has(entry.ref);
                     const hasOverrides =
-                      entry.kind === "referenced" &&
-                      Array.isArray(entry.mcpServers);
+                      entry.kind === 'referenced' && Array.isArray(entry.mcpServers);
                     const scenarioExpanded =
-                      entry.kind === "inline" && Boolean(expandedInlineScenarioIds[entry.scenario.id]);
+                      entry.kind === 'inline' &&
+                      Boolean(expandedInlineScenarioIds[entry.scenario.id]);
                     return (
-                      <div key={`scenario-entry-${index}-${entry.kind === "inline" ? entry.scenario.id : entry.ref}`} className="rounded-md border text-sm">
+                      <div
+                        key={`scenario-entry-${index}-${
+                          entry.kind === 'inline' ? entry.scenario.id : entry.ref
+                        }`}
+                        className="rounded-md border text-sm"
+                      >
                         <div className="flex items-center justify-between px-2 py-1.5">
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="flex items-center gap-1">
@@ -1447,15 +1712,17 @@ const ConfigEditor = () => {
                             </div>
                             <span className="text-xs text-muted-foreground">{index + 1}.</span>
                             <span className="truncate font-medium">{rowTitle}</span>
-                            <Badge variant={entry.kind === "inline" ? "secondary" : "outline"}>
-                              {entry.kind === "inline" ? "Inline" : "Referenced"}
+                            <Badge variant={entry.kind === 'inline' ? 'secondary' : 'outline'}>
+                              {entry.kind === 'inline' ? 'Inline' : 'Referenced'}
                             </Badge>
                             {hasOverrides && <Badge variant="secondary">Override</Badge>}
-                            {hasMissingInlineName && <Badge variant="destructive">Name required</Badge>}
+                            {hasMissingInlineName && (
+                              <Badge variant="destructive">Name required</Badge>
+                            )}
                             {isMissingRef && <Badge variant="destructive">Missing</Badge>}
                           </div>
                           <div className="flex items-center gap-1">
-                            {entry.kind === "inline" && (
+                            {entry.kind === 'inline' && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -1468,12 +1735,20 @@ const ConfigEditor = () => {
                                     [entry.scenario.id]: !Boolean(prev[entry.scenario.id])
                                   }))
                                 }
-                                aria-label={scenarioExpanded ? "Collapse scenario details" : "Expand scenario details"}
+                                aria-label={
+                                  scenarioExpanded
+                                    ? 'Collapse scenario details'
+                                    : 'Expand scenario details'
+                                }
                               >
-                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${scenarioExpanded ? "rotate-180" : ""}`} />
+                                <ChevronDown
+                                  className={`h-3.5 w-3.5 transition-transform ${
+                                    scenarioExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
                               </Button>
                             )}
-                            {entry.kind === "referenced" && (
+                            {entry.kind === 'referenced' && (
                               <>
                                 <Button
                                   type="button"
@@ -1498,22 +1773,24 @@ const ConfigEditor = () => {
                             </Button>
                           </div>
                         </div>
-                        {entry.kind === "inline" && scenarioExpanded && (
+                        {entry.kind === 'inline' && scenarioExpanded && (
                           <div className="border-t px-3 py-3">
                             <ScenarioForm
                               scenarios={[entry.scenario]}
-                              scenarioOrigins={["inline"]}
+                              scenarioOrigins={['inline']}
                               agents={[...config.agents, ...referencedAgents]}
                               servers={[...(config.servers ?? []), ...referencedServers]}
                               configId={config.id}
                               configPath={config.sourcePath}
-                              defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+                              defaultAssistantAgentName={
+                                config.runDefaults?.selectedAgentNames?.[0]
+                              }
                               snapshotEval={config.snapshotEval}
                               onChange={(scenarios) => {
                                 const nextScenario = scenarios[0];
                                 if (!nextScenario) return;
                                 const nextEntries = [...scenarioEntries];
-                                nextEntries[index] = { kind: "inline", scenario: nextScenario };
+                                nextEntries[index] = { kind: 'inline', scenario: nextScenario };
                                 setScenarioEntries(nextEntries);
                               }}
                               readOnly={false}
@@ -1522,7 +1799,7 @@ const ConfigEditor = () => {
                             />
                           </div>
                         )}
-                        {entry.kind === "referenced" && !isMissingRef && (
+                        {entry.kind === 'referenced' && !isMissingRef && (
                           <div className="border-t px-3 py-3 space-y-2">
                             <div className="text-xs text-muted-foreground">
                               Optional MCP server override for this referenced scenario.
@@ -1531,20 +1808,25 @@ const ConfigEditor = () => {
                               {allServerOptions.map((server) => {
                                 const selected = (entry.mcpServers ?? []).some(
                                   (serverEntry) =>
-                                    serverEntry.kind === "referenced" && serverEntry.ref === server.id
+                                    serverEntry.kind === 'referenced' &&
+                                    serverEntry.ref === server.id
                                 );
                                 return (
                                   <Button
                                     key={`${entry.ref}-override-server-${server.id}`}
                                     type="button"
                                     size="sm"
-                                    variant={selected ? "default" : "outline"}
-                                    className={`h-7 text-xs ${selected ? "" : "opacity-70"}`}
+                                    variant={selected ? 'default' : 'outline'}
+                                    className={`h-7 text-xs ${selected ? '' : 'opacity-70'}`}
                                     onClick={() => {
                                       const current = (entry.mcpServers ?? [])
                                         .filter(
-                                          (serverEntry): serverEntry is Extract<ServerEntry, { kind: "referenced" }> =>
-                                            serverEntry.kind === "referenced"
+                                          (
+                                            serverEntry
+                                          ): serverEntry is Extract<
+                                            ServerEntry,
+                                            { kind: 'referenced' }
+                                          > => serverEntry.kind === 'referenced'
                                         )
                                         .map((serverEntry) => serverEntry.ref);
                                       const next = current.includes(server.id)
@@ -1582,7 +1864,7 @@ const ConfigEditor = () => {
                 </div>
                 {missingScenarioRefs.length > 0 && (
                   <p className="text-xs text-destructive">
-                    Missing scenario refs: {missingScenarioRefs.join(", ")}
+                    Missing scenario refs: {missingScenarioRefs.join(', ')}
                   </p>
                 )}
               </CardContent>

@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { workspaceSource } from "@/lib/data-sources/workspace-source";
-import { workspaceApiClient } from "@/lib/data-sources/workspace-api-client";
-import type { EvalDataSource } from "@/lib/data-sources/types";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { workspaceSource } from '@/lib/data-sources/workspace-source';
+import { workspaceApiClient } from '@/lib/data-sources/workspace-api-client';
+import type { EvalDataSource } from '@/lib/data-sources/types';
 
 interface DataSourceContextValue {
-  mode: "workspace";
-  connection: "connected" | "disconnected" | "checking";
+  mode: 'workspace';
+  connection: 'connected' | 'disconnected' | 'checking';
   version: string | null;
   source: EvalDataSource;
 }
@@ -13,22 +13,22 @@ interface DataSourceContextValue {
 const DataSourceContext = createContext<DataSourceContextValue | null>(null);
 
 export function DataSourceProvider({ children }: { children: ReactNode }) {
-  const mode = "workspace" as const;
-  const [connection, setConnection] = useState<"connected" | "disconnected" | "checking">(
-    "checking",
+  const mode = 'workspace' as const;
+  const [connection, setConnection] = useState<'connected' | 'disconnected' | 'checking'>(
+    'checking'
   );
   const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    setConnection("checking");
+    setConnection('checking');
     workspaceApiClient
       .health()
       .then((health) => {
-        setConnection("connected");
-        setVersion(typeof health?.version === "string" ? health.version : null);
+        setConnection('connected');
+        setVersion(typeof health?.version === 'string' ? health.version : null);
       })
       .catch(() => {
-        setConnection("disconnected");
+        setConnection('disconnected');
         setVersion(null);
       });
   }, [mode]);
@@ -44,6 +44,6 @@ export function DataSourceProvider({ children }: { children: ReactNode }) {
 
 export function useDataSource() {
   const ctx = useContext(DataSourceContext);
-  if (!ctx) throw new Error("useDataSource must be used within DataSourceProvider");
+  if (!ctx) throw new Error('useDataSource must be used within DataSourceProvider');
   return ctx;
 }

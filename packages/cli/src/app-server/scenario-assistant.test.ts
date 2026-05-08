@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import type { AssistantSessionsMap } from './app-context.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
@@ -221,5 +222,86 @@ describe('POST /api/scenario-assistant/sessions OAuth manager handling', () => {
     expect((response.body as any).error).toMatch(/OAuth login required/i);
     expect((response.body as any).oauth.required[0].serverName).toBe('oauth-server');
     expect(preloadAssistantTools).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () => {
+  it('does not return a canceled turn response after the request closes', async () => {
+    let resolveTurn!: (value: unknown) => void;
+    const turnPromise = new Promise((resolve) => {
+      resolveTurn = resolve;
+    });
+    const req = new EventEmitter() as any;
+    req.headers = { host: 'localhost:8787' };
+    const asJson = vi.fn();
+    const assistantSessions: AssistantSessionsMap = new Map([
+      [
+        'sas-1',
+        {
+          id: 'sas-1',
+          createdAt: Date.now(),
+          lastTouchedAt: Date.now(),
+          selectedAssistantAgentName: 'assistant-1',
+          context: makeBody().context,
+          agentConfig: { provider: 'openai', model: 'gpt-4o-mini' },
+          mcp: {},
+          tools: [],
+          toolPublicMap: new Map(),
+          pendingToolCalls: [],
+          chatMessages: [],
+          llmMessages: [],
+          warnings: [],
+          events: [],
+          clients: new Set()
+        }
+      ]
+    ]) as any;
+
+    const handled = handleScenarioAssistantRoutes({
+      req,
+      res: {} as any,
+      pathname: '/api/scenario-assistant/sessions/sas-1/messages',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp/evals',
+        librariesDir: '/tmp/libraries',
+        scenarioAssistantAgentName: 'assistant-1'
+      } as any,
+      assistantSessions,
+      oauthSessionManager: { getAuthHeadersForServers: vi.fn() } as any,
+      deps: {
+        parseBody: vi.fn().mockResolvedValue({ message: 'hello' }),
+        asJson,
+        cleanupAssistantSessions: vi.fn(),
+        touchAssistantSession: vi.fn(),
+        assistantSessionView: vi.fn((session: any) => ({ id: session.id })),
+        ensureInsideRoot: vi.fn((_root: string, p: string) => p),
+        readLibraries: vi.fn(),
+        pickDefaultAssistantAgentName: vi.fn(),
+        resolveAssistantAgentFromConfig: vi.fn(),
+        resolveAssistantAgentFromLibraries: vi.fn(),
+        preloadAssistantTools: vi.fn(),
+        continueAssistantTurn: vi.fn().mockReturnValue(turnPromise),
+        executeAssistantToolCall: vi.fn(),
+        summarizeToolResultForAssistant: vi.fn()
+      } as any
+    });
+
+    const handlerPromise = Promise.resolve(handled);
+    req.emit('close');
+    resolveTurn({
+      response: {
+        type: 'assistant_message',
+        text: 'late response',
+        suggestions: undefined
+      }
+    });
+
+    await expect(handlerPromise).resolves.toBe(true);
+    expect(asJson).not.toHaveBeenCalled();
+    const session = assistantSessions.get('sas-1');
+    expect(session?.chatMessages).toHaveLength(0);
+    expect(session?.llmMessages).toHaveLength(0);
+    expect(session?.pendingToolCalls).toHaveLength(0);
   });
 });

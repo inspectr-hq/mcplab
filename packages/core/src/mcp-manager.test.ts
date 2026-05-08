@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const connectEvents: string[] = [];
 const closeEvents: string[] = [];
 const callToolEvents: string[] = [];
+const callToolSignals: Array<AbortSignal | undefined> = [];
 let failFirstScopedConnect = false;
 
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
@@ -32,8 +33,13 @@ vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
       }
     }
 
-    async callTool(input: { name: string }): Promise<{ ok: true; tool: string }> {
+    async callTool(
+      input: { name: string },
+      _resultSchema?: unknown,
+      options?: { signal?: AbortSignal }
+    ): Promise<{ ok: true; tool: string }> {
       callToolEvents.push(`${this.name}:${input.name}`);
+      callToolSignals.push(options?.signal);
       return { ok: true, tool: input.name };
     }
 
@@ -53,6 +59,7 @@ describe('McpClientManager scoped clients', () => {
     connectEvents.length = 0;
     closeEvents.length = 0;
     callToolEvents.length = 0;
+    callToolSignals.length = 0;
     failFirstScopedConnect = false;
   });
 
@@ -145,5 +152,19 @@ describe('McpClientManager scoped clients', () => {
 
     const scopedCloseCount = closeEvents.filter((name) => name === 'mcp-eval-api-scoped').length;
     expect(scopedCloseCount).toBe(1);
+  });
+
+  it('forwards abort signals to tool calls', async () => {
+    const { McpClientManager } = await import('./mcp.js');
+    const manager = new McpClientManager();
+    await manager.connectAll({
+      api: { transport: 'http', url: 'https://example.test/mcp' }
+    });
+    const controller = new AbortController();
+
+    await manager.callTool('api', 'signal-check', {}, { signal: controller.signal });
+
+    expect(callToolSignals).toContain(controller.signal);
+    await manager.disconnectAll();
   });
 });

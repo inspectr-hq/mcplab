@@ -1,16 +1,16 @@
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/AppSidebar';
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { Fragment } from "react";
-import { Link, Outlet, matchPath, useLocation } from "react-router-dom";
+  BreadcrumbSeparator
+} from '@/components/ui/breadcrumb';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { Fragment } from 'react';
+import { Link, Outlet, matchPath, useLocation } from 'react-router-dom';
 
 type Crumb = {
   label: string;
@@ -18,126 +18,130 @@ type Crumb = {
 };
 
 const buildCrumbs = (pathname: string, search: string): Crumb[] => {
-  if (pathname === "/") {
-    return [{ label: "Dashboard" }];
+  if (pathname === '/') {
+    return [{ label: 'Dashboard' }];
   }
 
-  const crumbs: Crumb[] = [{ label: "Dashboard", to: "/" }];
+  const crumbs: Crumb[] = [{ label: 'Dashboard', to: '/' }];
 
-  if (matchPath("/mcp-evaluations/:id/edit", pathname)) {
-    crumbs.push({ label: "MCP Evaluations", to: "/mcp-evaluations" }, { label: "MCP Evaluation", to: pathname.replace(/\/edit$/, "") }, { label: "Edit" });
-    return crumbs;
-  }
-  if (matchPath("/mcp-evaluations/:id", pathname)) {
-    crumbs.push({ label: "MCP Evaluations", to: "/mcp-evaluations" }, { label: "MCP Evaluation" });
-    return crumbs;
-  }
-  if (matchPath("/mcp-evaluations", pathname)) {
-    crumbs.push({ label: "MCP Evaluations" });
-    return crumbs;
-  }
-  if (matchPath("/settings/mcp", pathname)) {
-    crumbs.push({ label: "Settings", to: "/settings" }, { label: "MCP Connection" });
-    return crumbs;
-  }
-  if (matchPath("/settings", pathname)) {
-    crumbs.push({ label: "Settings" });
-    return crumbs;
-  }
-  if (matchPath("/tool-analysis", pathname)) {
-    crumbs.push({ label: "Analyze MCP Tools" });
-    return crumbs;
-  }
-  if (matchPath("/tool-analysis-results/:id", pathname)) {
-    const match = matchPath("/tool-analysis-results/:id", pathname);
+  if (matchPath('/mcp-evaluations/:id/edit', pathname)) {
     crumbs.push(
-      { label: "Tool Analysis Results", to: "/tool-analysis-results" },
-      { label: match?.params.id ?? "Report" }
+      { label: 'MCP Evaluations', to: '/mcp-evaluations' },
+      { label: 'MCP Evaluation', to: pathname.replace(/\/edit$/, '') },
+      { label: 'Edit' }
     );
     return crumbs;
   }
-  if (matchPath("/tool-analysis-results", pathname)) {
-    crumbs.push({ label: "Tool Analysis Results" });
+  if (matchPath('/mcp-evaluations/:id', pathname)) {
+    crumbs.push({ label: 'MCP Evaluations', to: '/mcp-evaluations' }, { label: 'MCP Evaluation' });
     return crumbs;
   }
-  if (matchPath("/markdown-reports/view", pathname)) {
-    crumbs.push({ label: "Markdown Reports", to: "/markdown-reports" }, { label: "View Report" });
+  if (matchPath('/mcp-evaluations', pathname)) {
+    crumbs.push({ label: 'MCP Evaluations' });
     return crumbs;
   }
-  if (matchPath("/markdown-reports", pathname)) {
-    crumbs.push({ label: "Markdown Reports" });
+  if (matchPath('/settings/mcp', pathname)) {
+    crumbs.push({ label: 'Settings', to: '/settings' }, { label: 'MCP Connection' });
     return crumbs;
   }
-  if (matchPath("/oauth-debugger", pathname)) {
-    crumbs.push({ label: "OAuth Debugger" });
+  if (matchPath('/settings', pathname)) {
+    crumbs.push({ label: 'Settings' });
     return crumbs;
   }
-  if (matchPath("/results/:id", pathname)) {
-    crumbs.push({ label: "Evaluation Results", to: "/results" }, { label: "Result" });
+  if (matchPath('/tool-analysis', pathname)) {
+    crumbs.push({ label: 'Analyze MCP Tools' });
     return crumbs;
   }
-  if (matchPath("/results", pathname)) {
-    crumbs.push({ label: "Evaluation Results" });
-    return crumbs;
-  }
-  if (matchPath("/run", pathname)) {
-    crumbs.push({ label: "Run Evaluation" });
-    return crumbs;
-  }
-  if (matchPath("/libraries/servers/:serverId", pathname)) {
-    const match = matchPath("/libraries/servers/:serverId", pathname);
-    const serverId = match?.params.serverId
-      ? decodeURIComponent(match.params.serverId)
-      : "Server";
+  if (matchPath('/tool-analysis-results/:id', pathname)) {
+    const match = matchPath('/tool-analysis-results/:id', pathname);
     crumbs.push(
-      { label: "Libraries", to: "/libraries/servers" },
-      { label: "MCP servers", to: "/libraries/servers" },
-      { label: serverId === "new" ? "New Server" : serverId }
+      { label: 'Tool Analysis Results', to: '/tool-analysis-results' },
+      { label: match?.params.id ?? 'Report' }
     );
     return crumbs;
   }
-  if (matchPath("/libraries/servers", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/servers" }, { label: "MCP servers" });
+  if (matchPath('/tool-analysis-results', pathname)) {
+    crumbs.push({ label: 'Tool Analysis Results' });
     return crumbs;
   }
-  if (matchPath("/libraries/agents/:agentName", pathname)) {
-    const match = matchPath("/libraries/agents/:agentName", pathname);
+  if (matchPath('/markdown-reports/view', pathname)) {
+    crumbs.push({ label: 'Markdown Reports', to: '/markdown-reports' }, { label: 'View Report' });
+    return crumbs;
+  }
+  if (matchPath('/markdown-reports', pathname)) {
+    crumbs.push({ label: 'Markdown Reports' });
+    return crumbs;
+  }
+  if (matchPath('/oauth-debugger', pathname)) {
+    crumbs.push({ label: 'OAuth Debugger' });
+    return crumbs;
+  }
+  if (matchPath('/results/:id', pathname)) {
+    crumbs.push({ label: 'Evaluation Results', to: '/results' }, { label: 'Result' });
+    return crumbs;
+  }
+  if (matchPath('/results', pathname)) {
+    crumbs.push({ label: 'Evaluation Results' });
+    return crumbs;
+  }
+  if (matchPath('/run', pathname)) {
+    crumbs.push({ label: 'Run Evaluation' });
+    return crumbs;
+  }
+  if (matchPath('/libraries/servers/:serverId', pathname)) {
+    const match = matchPath('/libraries/servers/:serverId', pathname);
+    const serverId = match?.params.serverId ? decodeURIComponent(match.params.serverId) : 'Server';
+    crumbs.push(
+      { label: 'Libraries', to: '/libraries/servers' },
+      { label: 'MCP servers', to: '/libraries/servers' },
+      { label: serverId === 'new' ? 'New Server' : serverId }
+    );
+    return crumbs;
+  }
+  if (matchPath('/libraries/servers', pathname)) {
+    crumbs.push({ label: 'Libraries', to: '/libraries/servers' }, { label: 'MCP servers' });
+    return crumbs;
+  }
+  if (matchPath('/libraries/agents/:agentName', pathname)) {
+    const match = matchPath('/libraries/agents/:agentName', pathname);
     const agentName = match?.params.agentName
       ? decodeURIComponent(match.params.agentName)
-      : "Agent";
+      : 'Agent';
     crumbs.push(
-      { label: "Libraries", to: "/libraries/agents" },
-      { label: "Agents", to: "/libraries/agents" },
-      { label: agentName === "new" ? "New Agent" : agentName }
+      { label: 'Libraries', to: '/libraries/agents' },
+      { label: 'Agents', to: '/libraries/agents' },
+      { label: agentName === 'new' ? 'New Agent' : agentName }
     );
     return crumbs;
   }
-  if (matchPath("/libraries/agents", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/agents" }, { label: "Agents" });
+  if (matchPath('/libraries/agents', pathname)) {
+    crumbs.push({ label: 'Libraries', to: '/libraries/agents' }, { label: 'Agents' });
     return crumbs;
   }
-  if (matchPath("/libraries/test-cases/:testCaseId", pathname)) {
-    const match = matchPath("/libraries/test-cases/:testCaseId", pathname);
-    const testCaseId = match?.params.testCaseId ? decodeURIComponent(match.params.testCaseId) : "Test Case";
+  if (matchPath('/libraries/test-cases/:testCaseId', pathname)) {
+    const match = matchPath('/libraries/test-cases/:testCaseId', pathname);
+    const testCaseId = match?.params.testCaseId
+      ? decodeURIComponent(match.params.testCaseId)
+      : 'Test Case';
     crumbs.push(
-      { label: "Libraries", to: "/libraries/test-cases" },
-      { label: "Test Cases", to: "/libraries/test-cases" },
+      { label: 'Libraries', to: '/libraries/test-cases' },
+      { label: 'Test Cases', to: '/libraries/test-cases' },
       { label: testCaseId }
     );
     return crumbs;
   }
-  if (matchPath("/libraries/test-cases", pathname)) {
-    crumbs.push({ label: "Libraries", to: "/libraries/test-cases" }, { label: "Test Cases" });
+  if (matchPath('/libraries/test-cases', pathname)) {
+    crumbs.push({ label: 'Libraries', to: '/libraries/test-cases' }, { label: 'Test Cases' });
     return crumbs;
   }
-  if (matchPath("/compare/results", pathname)) {
-    crumbs.push({ label: "Compare Evaluations", to: "/compare" }, { label: "Full Result Compare" });
+  if (matchPath('/compare/results', pathname)) {
+    crumbs.push({ label: 'Compare Evaluations', to: '/compare' }, { label: 'Full Result Compare' });
     return crumbs;
   }
-  if (matchPath("/compare", pathname)) {
-    const mode = new URLSearchParams(search).get("mode");
-    const modeLabel = mode === "within-run" ? "Agents" : "Runs";
-    crumbs.push({ label: "Compare Evaluations", to: "/compare" }, { label: modeLabel });
+  if (matchPath('/compare', pathname)) {
+    const mode = new URLSearchParams(search).get('mode');
+    const modeLabel = mode === 'within-run' ? 'Agents' : 'Runs';
+    crumbs.push({ label: 'Compare Evaluations', to: '/compare' }, { label: modeLabel });
     return crumbs;
   }
 
@@ -146,7 +150,7 @@ const buildCrumbs = (pathname: string, search: string): Crumb[] => {
 
 export function AppLayout() {
   const location = useLocation();
-  const embed = new URLSearchParams(location.search).get("embed") === "1";
+  const embed = new URLSearchParams(location.search).get('embed') === '1';
   const crumbs = buildCrumbs(location.pathname, location.search);
   const { connection, version } = useDataSource();
 
@@ -190,21 +194,21 @@ export function AppLayout() {
               <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1">
                 <span
                   className={`h-2 w-2 rounded-full ${
-                    connection === "connected"
-                      ? "bg-emerald-500"
-                      : connection === "checking"
-                        ? "bg-amber-400"
-                        : "bg-rose-500"
+                    connection === 'connected'
+                      ? 'bg-emerald-500'
+                      : connection === 'checking'
+                      ? 'bg-amber-400'
+                      : 'bg-rose-500'
                   }`}
                   aria-hidden="true"
                 />
                 <span
                   className={`text-xs ${
-                    connection === "connected"
-                      ? "text-emerald-700"
-                      : connection === "checking"
-                        ? "text-muted-foreground"
-                        : "text-destructive"
+                    connection === 'connected'
+                      ? 'text-emerald-700'
+                      : connection === 'checking'
+                      ? 'text-muted-foreground'
+                      : 'text-destructive'
                   }`}
                 >
                   {connection}

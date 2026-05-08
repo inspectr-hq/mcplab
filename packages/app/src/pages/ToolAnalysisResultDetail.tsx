@@ -1,17 +1,29 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
-import type { SavedToolAnalysisReportRecord } from "@/lib/data-sources/types";
-import { ToolAnalysisReportView, toolAnalysisReportToMarkdown } from "@/components/tool-analysis/ToolAnalysisReportView";
-import { Clock, Download, Trash2 } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
+import type { SavedToolAnalysisReportRecord } from '@/lib/data-sources/types';
+import {
+  ToolAnalysisReportView,
+  toolAnalysisReportToMarkdown
+} from '@/components/tool-analysis/ToolAnalysisReportView';
+import { Clock, Download, Trash2 } from 'lucide-react';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
@@ -19,7 +31,7 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
 }
 
 export default function ToolAnalysisResultDetailPage() {
-  const { id = "" } = useParams();
+  const { id = '' } = useParams();
   const navigate = useNavigate();
   const { source } = useDataSource();
   const [record, setRecord] = useState<SavedToolAnalysisReportRecord | null>(null);
@@ -40,13 +52,17 @@ export default function ToolAnalysisResultDetailPage() {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        const msg = (error instanceof Error ? error.message : String(error));
-        if (msg.includes("(404)")) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('(404)')) {
           setNotFound(true);
           setRecord(null);
           return;
         }
-        toast({ title: "Could not load saved tool analysis report", description: msg, variant: "destructive" });
+        toast({
+          title: 'Could not load saved tool analysis report',
+          description: msg,
+          variant: 'destructive'
+        });
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -60,10 +76,14 @@ export default function ToolAnalysisResultDetailPage() {
     setDeleting(true);
     try {
       await source.deleteToolAnalysisSavedResult(id);
-      toast({ title: "Tool analysis report deleted" });
-      navigate("/tool-analysis-results");
+      toast({ title: 'Tool analysis report deleted' });
+      navigate('/tool-analysis-results');
     } catch (error: unknown) {
-      toast({ title: "Could not delete report", description: (error instanceof Error ? error.message : String(error)), variant: "destructive" });
+      toast({
+        title: 'Could not delete report',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
     } finally {
       setDeleting(false);
       setDeleteOpen(false);
@@ -95,21 +115,22 @@ export default function ToolAnalysisResultDetailPage() {
             <span className="inline-flex items-center gap-1 align-middle">
               <Clock className="h-3 w-3 shrink-0" />
               {new Date(record.createdAt).toLocaleString()}
-            </span>{" "}
-            · {record.serverNames.join(", ") || "—"}
+            </span>{' '}
+            · {record.serverNames.join(', ') || '—'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {record.report.mcpServerVersions && Object.keys(record.report.mcpServerVersions).length > 0 && (
-            <span className="inline-flex items-center align-middle rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] leading-none text-muted-foreground">
-              <span className="font-medium">MCP:</span>
-              <span className="ml-1 font-mono">
-                {Object.entries(record.report.mcpServerVersions)
-                  .map(([name, v]) => `${name}: ${v ?? "unknown"}`)
-                  .join(", ")}
+          {record.report.mcpServerVersions &&
+            Object.keys(record.report.mcpServerVersions).length > 0 && (
+              <span className="inline-flex items-center align-middle rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] leading-none text-muted-foreground">
+                <span className="font-medium">MCP:</span>
+                <span className="ml-1 font-mono">
+                  {Object.entries(record.report.mcpServerVersions)
+                    .map(([name, v]) => `${name}: ${v ?? 'unknown'}`)
+                    .join(', ')}
+                </span>
               </span>
-            </span>
-          )}
+            )}
           <Button asChild size="sm" variant="outline">
             <Link to="/tool-analysis-results">Back to results</Link>
           </Button>
@@ -118,7 +139,11 @@ export default function ToolAnalysisResultDetailPage() {
             size="sm"
             variant="outline"
             onClick={() =>
-              downloadTextFile(`${record.reportId}.json`, `${JSON.stringify(record, null, 2)}\n`, "application/json")
+              downloadTextFile(
+                `${record.reportId}.json`,
+                `${JSON.stringify(record, null, 2)}\n`,
+                'application/json'
+              )
             }
           >
             <Download className="mr-2 h-4 w-4" />
@@ -129,7 +154,11 @@ export default function ToolAnalysisResultDetailPage() {
             size="sm"
             variant="outline"
             onClick={() =>
-              downloadTextFile(`${record.reportId}.md`, toolAnalysisReportToMarkdown(record.report), "text/markdown")
+              downloadTextFile(
+                `${record.reportId}.md`,
+                toolAnalysisReportToMarkdown(record.report),
+                'text/markdown'
+              )
             }
           >
             <Download className="mr-2 h-4 w-4" />
@@ -154,8 +183,14 @@ export default function ToolAnalysisResultDetailPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -163,4 +198,3 @@ export default function ToolAnalysisResultDetailPage() {
     </div>
   );
 }
-

@@ -6,6 +6,7 @@ import {
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
   newAssistantEntityId,
+  throwIfAborted,
   touchSession,
   truncateJson,
   withTimeout
@@ -622,7 +623,8 @@ function safeAssistantTextFromResponse(rawText: string): string {
 }
 
 async function assistantChatModel(
-  session: ScenarioAssistantSession
+  session: ScenarioAssistantSession,
+  signal?: AbortSignal
 ): Promise<ReturnType<typeof parseAssistantModelOutput>> {
   return chatWithJsonRetry({
     agent: session.agentConfig,
@@ -630,11 +632,15 @@ async function assistantChatModel(
     tools: session.tools,
     system: assistantSystemPrompt(session),
     parse: parseAssistantModelOutput,
-    toolCallFallbackText: (toolName) => `I need to call '${toolName}' to help answer.`
+    toolCallFallbackText: (toolName) => `I need to call '${toolName}' to help answer.`,
+    signal
   });
 }
 
-export async function continueAssistantTurn(session: ScenarioAssistantSession): Promise<{
+export async function continueAssistantTurn(
+  session: ScenarioAssistantSession,
+  signal?: AbortSignal
+): Promise<{
   session: ReturnType<typeof assistantSessionView>;
   response: {
     type: 'assistant_message' | 'tool_call_request';
@@ -648,7 +654,8 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
   if (pendingCountForTurn > SCENARIO_ASSISTANT_MAX_TOOL_CALLS_PER_TURN) {
     throw new Error('Scenario Assistant exceeded maximum pending tool calls for this turn');
   }
-  const modelOutput = await assistantChatModel(session);
+  const modelOutput = await assistantChatModel(session, signal);
+  throwIfAborted(signal);
   normalizeEvalRuleToolNames(modelOutput.suggestions, session.toolPublicMap);
   normalizeEvalRuleSuggestions(modelOutput.suggestions);
   if (modelOutput.type === 'tool_call_request') {
@@ -678,6 +685,7 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
         status: 'pending',
         createdAt: new Date().toISOString()
       };
+      throwIfAborted(signal);
       session.pendingToolCalls.push(pending);
       pendingCalls.push(pending);
       llmToolCalls.push({
@@ -742,13 +750,18 @@ export async function continueAssistantTurn(session: ScenarioAssistantSession): 
 
 export async function executeAssistantToolCall(
   session: ScenarioAssistantSession,
-  pending: AssistantPendingToolCall
+  pending: AssistantPendingToolCall,
+  signal?: AbortSignal
 ): Promise<unknown> {
   const timeoutMs = 30_000;
   return withTimeout(
-    () => session.mcp.callTool(pending.server, pending.tool, pending.arguments),
+    () =>
+      session.mcp.callTool(pending.server, pending.tool, pending.arguments, {
+        signal
+      }),
     timeoutMs,
-    `Tool call timed out after ${timeoutMs}ms`
+    `Tool call timed out after ${timeoutMs}ms`,
+    signal
   );
 }
 

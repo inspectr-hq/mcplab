@@ -12,7 +12,12 @@ interface CodeBlockProps {
 function inferLanguage(title?: string, code?: string): string {
   if (title) {
     const normalized = title.toLowerCase();
-    if (normalized === 'terminal' || normalized === 'cli' || normalized === 'sh' || normalized === 'shell') {
+    if (
+      normalized === 'terminal' ||
+      normalized === 'cli' ||
+      normalized === 'sh' ||
+      normalized === 'shell'
+    ) {
       return 'bash';
     }
     if (normalized.endsWith('.js')) return 'javascript';
@@ -25,7 +30,12 @@ function inferLanguage(title?: string, code?: string): string {
   if (code) {
     const trimmed = code.trimStart();
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
-    if (trimmed.startsWith('$') || code.includes('npx ') || code.includes('npm ') || code.includes('mcplab ')) {
+    if (
+      trimmed.startsWith('$') ||
+      code.includes('npx ') ||
+      code.includes('npm ') ||
+      code.includes('mcplab ')
+    ) {
       return 'bash';
     }
   }
@@ -42,11 +52,11 @@ const CodeBlock = ({ code, language, title }: CodeBlockProps) => {
     shell: 'bash',
     terminal: 'bash',
     js: 'javascript',
-    ts: 'typescript',
+    ts: 'typescript'
   };
 
   const baseLanguage = language
-    ? (langMap[language.toLowerCase()] ?? language.toLowerCase())
+    ? langMap[language.toLowerCase()] ?? language.toLowerCase()
     : inferLanguage(title, code);
 
   const resolvedLanguage =

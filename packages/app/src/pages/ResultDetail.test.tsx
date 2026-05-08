@@ -107,11 +107,40 @@ function makeResult(): EvalResult {
             ],
             finalAnswer: 'Here are the requested tags.',
             conversation: [
-              { id: '1', kind: 'user_prompt', text: 'user: list tags', timestamp: '2026-02-08T10:00:00.100Z' },
-              { id: '2', kind: 'assistant_thought', text: 'tool_calls:search_tags', timestamp: '2026-02-08T10:00:00.200Z' },
-              { id: '3', kind: 'tool_call', text: '{"q":"TM5-BP2"}', toolName: 'search_tags', timestamp: '2026-02-08T10:00:00.300Z' },
-              { id: '4', kind: 'tool_result', text: '{"count":9}', toolName: 'search_tags', ok: true, durationMs: 120, timestamp: '2026-02-08T10:00:00.420Z' },
-              { id: '5', kind: 'assistant_final', text: 'Here are the requested tags.', timestamp: '2026-02-08T10:00:00.500Z' }
+              {
+                id: '1',
+                kind: 'user_prompt',
+                text: 'user: list tags',
+                timestamp: '2026-02-08T10:00:00.100Z'
+              },
+              {
+                id: '2',
+                kind: 'assistant_thought',
+                text: 'tool_calls:search_tags',
+                timestamp: '2026-02-08T10:00:00.200Z'
+              },
+              {
+                id: '3',
+                kind: 'tool_call',
+                text: '{"q":"TM5-BP2"}',
+                toolName: 'search_tags',
+                timestamp: '2026-02-08T10:00:00.300Z'
+              },
+              {
+                id: '4',
+                kind: 'tool_result',
+                text: '{"count":9}',
+                toolName: 'search_tags',
+                ok: true,
+                durationMs: 120,
+                timestamp: '2026-02-08T10:00:00.420Z'
+              },
+              {
+                id: '5',
+                kind: 'assistant_final',
+                text: 'Here are the requested tags.',
+                timestamp: '2026-02-08T10:00:00.500Z'
+              }
             ],
             duration: 120,
             extractedValues: {},
@@ -142,7 +171,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -161,7 +193,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -188,7 +223,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -209,7 +247,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -226,7 +267,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -241,14 +285,21 @@ describe('ResultDetail conversation toggle', () => {
     const result = makeResult();
     result.toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
     result.scenarios[0].toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
-    result.scenarios[0].runs[0].toolTokenUsage = { inputTokens: 10, outputTokens: 6, totalTokens: 16 };
+    result.scenarios[0].runs[0].toolTokenUsage = {
+      inputTokens: 10,
+      outputTokens: 6,
+      totalTokens: 16
+    };
     result.scenarios[0].runs[0].toolTokenUsageByTool = {
       search_tags: { inputTokens: 10, outputTokens: 6, totalTokens: 16 }
     };
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -301,7 +352,10 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1?agent=agent-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1?agent=agent-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -343,7 +397,10 @@ describe('ResultDetail conversation toggle', () => {
     ];
 
     render(
-      <MemoryRouter initialEntries={['/results/run-1']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>

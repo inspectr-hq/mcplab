@@ -1,6 +1,6 @@
 import React from 'react';
-import { Github } from "lucide-react";
-import IconInspectr from "@/components/ui/IconInspectr";
+import { Github } from 'lucide-react';
+import IconInspectr from '@/components/ui/IconInspectr';
 
 const Footer = () => {
   return (
@@ -11,7 +11,14 @@ const Footer = () => {
             <IconInspectr width={28} height={28} from="#7c2d12" to="#f97316" />
             <span className="font-display font-bold text-primary">MCPLab</span>
             <span className="text-muted-foreground text-[10px]">by</span>
-            <a href="https://inspectr.dev" target="_blank" rel="noopener noreferrer" className="link-brand text-[10px]">Inspectr</a>
+            <a
+              href="https://inspectr.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link-brand text-[10px]"
+            >
+              Inspectr
+            </a>
           </div>
           <div className="flex items-center gap-6">
             <a

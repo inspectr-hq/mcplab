@@ -6,6 +6,7 @@ import {
   Plus,
   RectangleEllipsis,
   Send,
+  Square,
   User,
   Wrench
 } from 'lucide-react';
@@ -64,7 +65,12 @@ export function AssistantMessageRow({
     const trimmed = String(message.text ?? '').trim();
     if (/^(Approved|Denied) tool call\b/i.test(trimmed)) return null;
     return (
-      <div className={cn('rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm', className)}>
+      <div
+        className={cn(
+          'rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm',
+          className
+        )}
+      >
         <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
           <Wrench className="h-3.5 w-3.5" />
           Tool
@@ -93,7 +99,12 @@ export function AssistantMessageRow({
   const isUser = role === 'user';
   const Icon = isUser ? User : Bot;
   return (
-    <div className={cn(`flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`, className)}>
+    <div
+      className={cn(
+        `flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`,
+        className
+      )}
+    >
       {!isUser && (
         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
           <Icon className="h-3 w-3" />
@@ -148,7 +159,10 @@ export function AssistantToolCallCard({
   return (
     <details
       open={defaultOpen ?? isPending}
-      className={cn('group overflow-hidden rounded-md border border-border/60 bg-background', className)}
+      className={cn(
+        'group overflow-hidden rounded-md border border-border/60 bg-background',
+        className
+      )}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
         <div className="min-w-0 flex-1">
@@ -160,13 +174,19 @@ export function AssistantToolCallCard({
                 isPending
                   ? 'bg-amber-100 text-amber-900'
                   : call.status === 'error'
-                    ? 'bg-red-100 text-red-900'
-                    : call.status === 'denied'
-                      ? 'bg-gray-100 text-gray-700'
-                      : 'bg-muted text-muted-foreground'
+                  ? 'bg-red-100 text-red-900'
+                  : call.status === 'denied'
+                  ? 'bg-gray-100 text-gray-700'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
-              {isPending ? 'Needs approval' : call.status === 'error' ? 'Error' : call.status === 'denied' ? 'Denied' : 'Approved'}
+              {isPending
+                ? 'Needs approval'
+                : call.status === 'error'
+                ? 'Error'
+                : call.status === 'denied'
+                ? 'Denied'
+                : 'Approved'}
             </span>
           </div>
         </div>
@@ -261,7 +281,9 @@ export function AssistantSnippetMenu({
           >
             <div className="space-y-0.5">
               <div className="text-xs font-medium leading-tight">{snippet.label}</div>
-              <div className="text-[11px] leading-snug text-muted-foreground">{snippet.description}</div>
+              <div className="text-[11px] leading-snug text-muted-foreground">
+                {snippet.description}
+              </div>
             </div>
           </DropdownMenuItem>
         ))}
@@ -274,6 +296,7 @@ export function AssistantComposer({
   input,
   onInputChange,
   onSend,
+  onCancel,
   inputPlaceholder,
   snippets,
   snippetsLabel,
@@ -286,6 +309,7 @@ export function AssistantComposer({
   input: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   inputPlaceholder: string;
   snippets: readonly AssistantSnippet[];
   snippetsLabel: string;
@@ -322,17 +346,44 @@ export function AssistantComposer({
           disabled={controlsDisabled}
           contentClassName={snippetContentClassName}
         />
-        <Button
-          type="button"
-          size="icon"
-          className="h-8 w-8 shrink-0 rounded-full"
-          onClick={onSend}
-          disabled={controlsDisabled || !input.trim()}
-          aria-label="Send assistant message"
-          title="Send assistant message"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
+        {loading && onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full"
+            onClick={onCancel}
+            aria-label="Cancel assistant message"
+            title="Cancel assistant message"
+          >
+            <span className="pointer-events-none absolute inset-[2px] rounded-full border border-primary/20 border-t-primary/70 motion-reduce:animate-none animate-[spin_2.2s_linear_infinite]" />
+            <span className="pointer-events-none absolute inset-[4px] rounded-full border border-primary/10 motion-reduce:animate-none animate-pulse" />
+            <Square className="relative z-10 h-4 w-4" />
+          </Button>
+        ) : loading ? (
+          <Button
+            type="button"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full"
+            disabled
+            aria-label="Assistant is loading"
+            title="Assistant is loading"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-full pr-0.5"
+            onClick={onSend}
+            disabled={controlsDisabled || !input.trim()}
+            aria-label="Send assistant message"
+            title="Send assistant message"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

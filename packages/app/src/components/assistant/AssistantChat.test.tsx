@@ -40,6 +40,27 @@ describe('AssistantChat shared primitives', () => {
     expect(onSend).toHaveBeenCalled();
   });
 
+  it('shows a cancel action while loading', () => {
+    const onCancel = vi.fn();
+
+    render(
+      <AssistantComposer
+        input="hello"
+        onInputChange={vi.fn()}
+        onSend={vi.fn()}
+        onCancel={onCancel}
+        inputPlaceholder="Ask the assistant..."
+        snippets={[]}
+        snippetsLabel="Assistant Snippets"
+        onSnippetSelect={vi.fn()}
+        loading
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel assistant message' }));
+    expect(onCancel).toHaveBeenCalled();
+  });
+
   it('renders assistant messages and pending tool call actions consistently', () => {
     const onApprove = vi.fn();
     const onDeny = vi.fn();

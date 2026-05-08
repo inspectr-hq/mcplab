@@ -1,14 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useDataSource } from "@/contexts/DataSourceContext";
-import { toast } from "@/hooks/use-toast";
-import type { MarkdownReportSummary } from "@/lib/data-sources/types";
-import {Clock, MoreHorizontal, NotepadText, Trash2} from "lucide-react";
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { toast } from '@/hooks/use-toast';
+import type { MarkdownReportSummary } from '@/lib/data-sources/types';
+import { Clock, MoreHorizontal, NotepadText, Trash2 } from 'lucide-react';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -17,7 +38,9 @@ function formatBytes(bytes: number): string {
 }
 
 function detectRunIdFromPath(relativePath: string): string | null {
-  const match = relativePath.match(/(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i);
+  const match = relativePath.match(
+    /(?:^|\/)(?:result-assistant|results?)\/([0-9]{8}-[0-9]{6})(?:-|\/)/i
+  );
   return match?.[1] ?? null;
 }
 
@@ -34,9 +57,9 @@ export default function MarkdownReportsPage() {
       setItems(await source.listMarkdownReports());
     } catch (error: unknown) {
       toast({
-        title: "Could not load markdown reports",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive",
+        title: 'Could not load markdown reports',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setLoading(false);
@@ -49,7 +72,10 @@ export default function MarkdownReportsPage() {
   }, []);
 
   const latest = useMemo(() => items[0], [items]);
-  const deleteTarget = useMemo(() => items.find((item) => item.relativePath === deletePath) ?? null, [items, deletePath]);
+  const deleteTarget = useMemo(
+    () => items.find((item) => item.relativePath === deletePath) ?? null,
+    [items, deletePath]
+  );
 
   const handleDelete = async () => {
     if (!deletePath) return;
@@ -57,13 +83,13 @@ export default function MarkdownReportsPage() {
     try {
       await source.deleteMarkdownReport(deletePath);
       setItems((prev) => prev.filter((item) => item.relativePath !== deletePath));
-      toast({ title: "Markdown report deleted" });
+      toast({ title: 'Markdown report deleted' });
       setDeletePath(null);
     } catch (error: unknown) {
       toast({
-        title: "Could not delete markdown report",
-        description: (error instanceof Error ? error.message : String(error)),
-        variant: "destructive",
+        title: 'Could not delete markdown report',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
       });
     } finally {
       setDeleting(false);
@@ -119,7 +145,9 @@ export default function MarkdownReportsPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <Link
-                          to={`/markdown-reports/view?path=${encodeURIComponent(item.relativePath)}`}
+                          to={`/markdown-reports/view?path=${encodeURIComponent(
+                            item.relativePath
+                          )}`}
                           className="font-mono text-xs text-primary hover:underline"
                         >
                           {item.name}
@@ -133,7 +161,10 @@ export default function MarkdownReportsPage() {
                       {(() => {
                         const runId = detectRunIdFromPath(item.relativePath);
                         return runId ? (
-                          <Link to={`/results/${encodeURIComponent(runId)}`} className="text-primary hover:underline">
+                          <Link
+                            to={`/results/${encodeURIComponent(runId)}`}
+                            className="text-primary hover:underline"
+                          >
                             {runId}
                           </Link>
                         ) : (
@@ -142,12 +173,15 @@ export default function MarkdownReportsPage() {
                       })()}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground font-mono">
-                      {item.relativePath.includes("/")
-                        ? item.relativePath.slice(0, item.relativePath.lastIndexOf("/"))
-                        : "."}
+                      {item.relativePath.includes('/')
+                        ? item.relativePath.slice(0, item.relativePath.lastIndexOf('/'))
+                        : '.'}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(item.mtime).toLocaleString()}</div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {new Date(item.mtime).toLocaleString()}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -158,7 +192,11 @@ export default function MarkdownReportsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link to={`/markdown-reports/view?path=${encodeURIComponent(item.relativePath)}`}>
+                            <Link
+                              to={`/markdown-reports/view?path=${encodeURIComponent(
+                                item.relativePath
+                              )}`}
+                            >
                               View
                             </Link>
                           </DropdownMenuItem>
@@ -189,13 +227,19 @@ export default function MarkdownReportsPage() {
             <AlertDialogDescription>
               {deleteTarget
                 ? `Delete '${deleteTarget.name}' from disk? This cannot be undone.`
-                : "Delete this report from disk? This cannot be undone."}
+                : 'Delete this report from disk? This cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={(e) => { e.preventDefault(); void handleDelete(); }} disabled={deleting}>
-              {deleting ? "Deleting..." : "Delete"}
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDelete();
+              }}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

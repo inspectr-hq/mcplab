@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { basename, relative, resolve, sep } from 'node:path';
 import { readdirSync, statSync } from 'node:fs';
 import { McpClientManager } from '@inspectr/mcplab-core';
+import { throwIfAborted } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import type { ResultAssistantSession } from './result-assistant-domain.js';
 import {
@@ -87,7 +88,7 @@ export async function handleResultAssistantRoutes(params: {
     session: ResultAssistantSession,
     pending: ResultAssistantSession['pendingToolCalls'][number],
     approvalLabel: string,
-    options?: { emitApprovalChatMessage?: boolean }
+    options?: { emitApprovalChatMessage?: boolean; signal?: AbortSignal }
   ): Promise<void> => {
     const emitApprovalChatMessage = options?.emitApprovalChatMessage ?? true;
     pending.status = 'approved';
@@ -101,7 +102,7 @@ export async function handleResultAssistantRoutes(params: {
       });
     }
     try {
-      const toolResult = await executeResultAssistantToolCall(session, pending);
+      const toolResult = await executeResultAssistantToolCall(session, pending, options?.signal);
       pending.resultPreview = summarizeToolResultForResultAssistant(toolResult);
       if (pending.tool === 'mcplab_write_markdown_report' && session.scope === 'run') {
         session.referenceReportsForRun = listReferenceReportsForRun(session.runId);
@@ -118,6 +119,9 @@ export async function handleResultAssistantRoutes(params: {
         pendingToolCall: pending
       });
     } catch (error: unknown) {
+      if (options?.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        throw error;
+      }
       pending.status = 'error';
       pending.error = errorMessage(error);
       session.llmMessages.push({
@@ -140,11 +144,15 @@ export async function handleResultAssistantRoutes(params: {
   };
 
   const continueWithAutoApprovedReads = async (
-    session: ResultAssistantSession
+    session: ResultAssistantSession,
+    signal?: AbortSignal
   ): Promise<ResultAssistantTurnRouteResponse> => {
+    throwIfAborted(signal);
     publishSessionEvent(session, 'turn_started');
-    let output = await continueResultAssistantTurn(session);
+    let output = await continueResultAssistantTurn(session, signal);
+    throwIfAborted(signal);
     for (let i = 0; i < 25; i += 1) {
+      throwIfAborted(signal);
       const pending = output.response.pendingToolCall;
       if (
         output.response.type !== 'tool_call_request' ||
@@ -170,12 +178,16 @@ export async function handleResultAssistantRoutes(params: {
         pendingToolCallId: pending.id,
         pendingToolCall: pending
       });
+      throwIfAborted(signal);
       await executePendingToolCall(session, pending, 'Auto-approved read-only', {
-        emitApprovalChatMessage: false
+        emitApprovalChatMessage: false,
+        signal: signal
       });
+      throwIfAborted(signal);
       touchResultAssistantSession(session);
       if (pending.error) break;
-      output = await continueResultAssistantTurn(session);
+      output = await continueResultAssistantTurn(session, signal);
+      throwIfAborted(signal);
     }
     return output;
   };
@@ -308,23 +320,43 @@ export async function handleResultAssistantRoutes(params: {
       asJson(res, 404, { error: 'Result Assistant session not found' });
       return true;
     }
-    const body = await parseBody(req);
-    const message = String(body.message ?? '').trim();
-    if (!message) {
-      asJson(res, 400, { error: 'message is required' });
+    const chatMessagesBefore = session.chatMessages.length;
+    const llmMessagesBefore = session.llmMessages.length;
+    const pendingToolCallsBefore = session.pendingToolCalls.length;
+    const abortController = new AbortController();
+    const handleClose = () => abortController.abort();
+    req.on('close', handleClose);
+    try {
+      const body = await parseBody(req);
+      const message = String(body.message ?? '').trim();
+      throwIfAborted(abortController.signal);
+      if (!message) {
+        asJson(res, 400, { error: 'message is required' });
+        return true;
+      }
+      session.chatMessages.push({
+        id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: 'user',
+        text: message,
+        createdAt: new Date().toISOString()
+      });
+      flushDanglingToolCalls(session.llmMessages);
+      session.llmMessages.push({ role: 'user', content: message });
+      const output = await continueWithAutoApprovedReads(session, abortController.signal);
+      throwIfAborted(abortController.signal);
+      asJson(res, 200, output);
       return true;
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        session.chatMessages.splice(chatMessagesBefore);
+        session.llmMessages.splice(llmMessagesBefore);
+        session.pendingToolCalls.splice(pendingToolCallsBefore);
+        return true;
+      }
+      throw error;
+    } finally {
+      req.off('close', handleClose);
     }
-    session.chatMessages.push({
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      role: 'user',
-      text: message,
-      createdAt: new Date().toISOString()
-    });
-    flushDanglingToolCalls(session.llmMessages);
-    session.llmMessages.push({ role: 'user', content: message });
-    const output = await continueWithAutoApprovedReads(session);
-    asJson(res, 200, output);
-    return true;
   }
 
   if (

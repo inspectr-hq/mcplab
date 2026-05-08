@@ -1,6 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { AgentConfig, Scenario, ServerConfig } from "@/types/eval";
-import { useDataSource } from "@/contexts/DataSourceContext";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode
+} from 'react';
+import type { AgentConfig, Scenario, ServerConfig } from '@/types/eval';
+import { useDataSource } from '@/contexts/DataSourceContext';
 
 interface LibraryState {
   servers: ServerConfig[];
@@ -41,16 +49,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     const handleFocus = () => {
       void reload();
     };
-    window.addEventListener("focus", handleFocus);
+    window.addEventListener('focus', handleFocus);
     return () => {
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [source]);
 
-  const save = useCallback(async (next: LibraryState) => {
-    setState(next);
-    await source.saveLibraries(next);
-  }, [source]);
+  const save = useCallback(
+    async (next: LibraryState) => {
+      setState(next);
+      await source.saveLibraries(next);
+    },
+    [source]
+  );
 
   const value = useMemo<LibraryContextValue>(
     () => ({
@@ -69,6 +80,6 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
 
 export function useLibraries() {
   const ctx = useContext(LibraryContext);
-  if (!ctx) throw new Error("useLibraries must be used within LibraryProvider");
+  if (!ctx) throw new Error('useLibraries must be used within LibraryProvider');
   return ctx;
 }
