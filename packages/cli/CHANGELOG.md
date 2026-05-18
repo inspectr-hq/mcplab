@@ -1,5 +1,14 @@
 # @inspectr/mcplab
 
+## 1.15.0
+
+### Minor Changes
+
+- feat: Dashboard shows only data for past 30 days
+- feat: Dashboard calculate WoW deltas
+- fix: Preserve nested eval path when saving renamed config
+- fix: Show paths for eval dropdown names
+
 ## 1.14.3
 
 ### Patch Changes
