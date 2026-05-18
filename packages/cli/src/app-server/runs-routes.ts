@@ -141,7 +141,9 @@ export async function handleRunsRoutes(params: {
     const lastDaysRaw = requestUrl.searchParams.get('last_days');
     const lastDaysParsed = lastDaysRaw === null ? NaN : Number(lastDaysRaw);
     const lastDays =
-      Number.isFinite(lastDaysParsed) && lastDaysParsed > 0 ? Math.floor(lastDaysParsed) : undefined;
+      Number.isFinite(lastDaysParsed) && lastDaysParsed > 0
+        ? Math.floor(lastDaysParsed)
+        : undefined;
     asJson(
       res,
       200,

@@ -136,10 +136,7 @@ export async function handleEvalsRoutes(params: {
     if (nextFileName) {
       const baseName = safeFileName(nextFileName);
       const currentDir = dirname(currentPath);
-      const desiredPath = ensureInsideRoot(
-        settings.evalsDir,
-        join(currentDir, `${baseName}.yaml`)
-      );
+      const desiredPath = ensureInsideRoot(settings.evalsDir, join(currentDir, `${baseName}.yaml`));
       if (desiredPath !== currentPath) {
         let uniquePath = desiredPath;
         let suffix = 1;
