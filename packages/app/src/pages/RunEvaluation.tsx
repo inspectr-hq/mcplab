@@ -32,6 +32,19 @@ import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
+function displayConfigName(config: { configName?: string; name: string }): string {
+  return config.configName?.trim() || config.name;
+}
+
+function configSuiteLabel(config: { suitePath?: string; relativePath?: string }): string | null {
+  if (config.suitePath?.trim()) return config.suitePath.trim();
+  if (config.relativePath?.includes('/')) {
+    const idx = config.relativePath.lastIndexOf('/');
+    return config.relativePath.slice(0, idx);
+  }
+  return null;
+}
+
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState('');
@@ -592,11 +605,17 @@ const RunEvaluation = () => {
                     <SelectValue placeholder="Select a config" />
                   </SelectTrigger>
                   <SelectContent>
-                    {configs.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
+                    {configs.map((c) => {
+                      const suiteLabel = configSuiteLabel(c);
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span>{displayConfigName(c)}</span>
+                          {suiteLabel && (
+                            <span className="ml-2 text-muted-foreground">({suiteLabel})</span>
+                          )}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 <Button

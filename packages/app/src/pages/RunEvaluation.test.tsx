@@ -134,4 +134,43 @@ describe('RunEvaluation', () => {
     });
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
   });
+
+  it('shows suite path context in config dropdown labels', async () => {
+    const configA: EvalConfig = {
+      id: 'cfg-a',
+      name: 'basic-asset-tags',
+      configName: 'basic-asset-tags',
+      relativePath: 'suite-a/basic-asset-tags.yaml',
+      suitePath: 'suite-a',
+      agents: [],
+      scenarios: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z'
+    };
+    const configB: EvalConfig = {
+      id: 'cfg-b',
+      name: 'basic-asset-tags',
+      configName: 'basic-asset-tags',
+      relativePath: 'suite-b/basic-asset-tags.yaml',
+      suitePath: 'suite-b',
+      agents: [],
+      scenarios: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z'
+    };
+    configsRef.value = [configA, configB];
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    expect(screen.getByText('(suite-a)')).toBeInTheDocument();
+    expect(screen.getByText('(suite-b)')).toBeInTheDocument();
+  });
 });
