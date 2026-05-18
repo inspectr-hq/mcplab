@@ -605,16 +605,17 @@ const RunEvaluation = () => {
                     <SelectValue placeholder="Select a config" />
                   </SelectTrigger>
                   <SelectContent>
-                    {configs.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <span>{displayConfigName(c)}</span>
-                        {configSuiteLabel(c) && (
-                          <span className="ml-2 text-muted-foreground">
-                            ({configSuiteLabel(c)})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
+                    {configs.map((c) => {
+                      const suiteLabel = configSuiteLabel(c);
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span>{displayConfigName(c)}</span>
+                          {suiteLabel && (
+                            <span className="ml-2 text-muted-foreground">({suiteLabel})</span>
+                          )}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 <Button

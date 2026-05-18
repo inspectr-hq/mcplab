@@ -46,6 +46,7 @@ function formatSigned(value: number, digits = 0): string {
 const Dashboard = () => {
   const { configs } = useConfigs();
   const { source } = useDataSource();
+  const [loading, setLoading] = useState(true);
   const [last30DayResults, setLast30DayResults] = useState<EvalResult[]>([]);
   const [currentWeekResults, setCurrentWeekResults] = useState<EvalResult[]>([]);
   const [previousWeekResults, setPreviousWeekResults] = useState<EvalResult[]>([]);
@@ -65,6 +66,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     const nowMs = Date.now();
     const last30SinceMs = nowMs - 30 * 24 * 60 * 60 * 1000;
     const currentSinceMs = nowMs - WEEK_MS;
@@ -79,12 +81,16 @@ const Dashboard = () => {
       source.listResults({ since: last30Since, until: currentUntil }),
       source.listResults({ since: currentSince, until: currentUntil }),
       source.listResults({ since: previousSince, until: previousUntil })
-    ]).then(([last30WindowResults, currentWindowResults, previousWindowResults]) => {
-      if (!active) return;
-      setLast30DayResults(last30WindowResults);
-      setCurrentWeekResults(currentWindowResults);
-      setPreviousWeekResults(previousWindowResults);
-    });
+    ])
+      .then(([last30WindowResults, currentWindowResults, previousWindowResults]) => {
+        if (!active) return;
+        setLast30DayResults(last30WindowResults);
+        setCurrentWeekResults(currentWindowResults);
+        setPreviousWeekResults(previousWindowResults);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -196,17 +202,17 @@ const Dashboard = () => {
         <StatCard title="Total Runs" value={totalRuns} icon={Activity} subtitle="Last 30 days" />
         <StatCard
           title="Pass Rate"
-          value={`${Math.round(overallPassRate * 100)}%`}
+          value={loading ? '—' : `${Math.round(overallPassRate * 100)}%`}
           icon={BarChart3}
-          subtitle={passRateSubtitle}
-          trend={passRateTrend}
+          subtitle={loading ? 'Loading...' : passRateSubtitle}
+          trend={loading ? 'neutral' : passRateTrend}
         />
         <StatCard
           title="Avg Latency"
-          value={`${avgLatency}ms`}
+          value={loading ? '—' : `${avgLatency}ms`}
           icon={Timer}
-          subtitle={latencySubtitle}
-          trend={latencyTrend}
+          subtitle={loading ? 'Loading...' : latencySubtitle}
+          trend={loading ? 'neutral' : latencyTrend}
         />
       </div>
 

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from './Index';
 import type { EvalResult } from '@/types/eval';
 
@@ -47,6 +47,10 @@ function makeRun(id: string, passRate: number, avgLatency: number, timestamp: st
 }
 
 describe('Dashboard', () => {
+  beforeEach(() => {
+    sourceMock.listResults.mockReset();
+  });
+
   it('computes WoW deltas for pass rate and latency', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T12:00:00.000Z').getTime());
     sourceMock.listResults
@@ -76,8 +80,8 @@ describe('Dashboard', () => {
     });
     expect(screen.getByText('70%')).toBeInTheDocument();
     expect(screen.getByText('120ms')).toBeInTheDocument();
-    expect(screen.getByText(/20\.0% from last week/)).toBeInTheDocument();
-    expect(screen.getByText(/-80ms from last week/)).toBeInTheDocument();
+    expect(screen.getByText(/Last 7 days · \+20\.0% from last week/)).toBeInTheDocument();
+    expect(screen.getByText(/Last 7 days · -80ms from last week/)).toBeInTheDocument();
   });
 
   it('shows fallback text when previous-week baseline is missing', async () => {
