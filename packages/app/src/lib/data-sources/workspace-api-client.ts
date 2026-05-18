@@ -181,7 +181,16 @@ export const workspaceApiClient = {
       body: JSON.stringify({ config, fileName })
     }),
   deleteConfig: (id: string) => request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
-  listRuns: () => request<WorkspaceRunSummary[]>('/api/runs'),
+  listRuns: (filter?: { since?: string; until?: string; lastDays?: number }) => {
+    const query = new URLSearchParams();
+    if (filter?.since?.trim()) query.set('since', filter.since.trim());
+    if (filter?.until?.trim()) query.set('until', filter.until.trim());
+    if (typeof filter?.lastDays === 'number' && Number.isFinite(filter.lastDays) && filter.lastDays > 0) {
+      query.set('last_days', String(Math.floor(filter.lastDays)));
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    return request<WorkspaceRunSummary[]>(`/api/runs${suffix}`);
+  },
   listMarkdownReports: () =>
     request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),
   getMarkdownReport: (path: string) =>

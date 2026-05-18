@@ -48,8 +48,8 @@ export const workspaceSource: EvalDataSource = {
   async deleteConfig(id) {
     await workspaceApiClient.deleteConfig(id);
   },
-  async listResults() {
-    const summaries = await workspaceApiClient.listRuns();
+  async listResults(filter) {
+    const summaries = await workspaceApiClient.listRuns(filter);
     const resultPromises = summaries.map(async (summary) => {
       const [{ results }, trace] = await Promise.all([
         workspaceApiClient.getRun(summary.runId),

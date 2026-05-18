@@ -51,7 +51,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     let active = true;
-    source.listResults().then((next) => {
+    source.listResults({ lastDays: 30 }).then((next) => {
       if (active) setResults(next);
     });
     return () => {
@@ -64,7 +64,9 @@ const Dashboard = () => {
   const overallPassRate =
     totalRuns === 0 ? 0 : results.reduce((s, r) => s + r.overallPassRate, 0) / totalRuns;
   const avgLatency =
-    totalRuns === 0 ? 0 : Math.round(results.reduce((s, r) => s + r.avgLatency, 0) / totalRuns);
+    totalRuns === 0
+      ? 0
+      : Math.round(results.reduce((s, r) => s + r.avgLatency, 0) / totalRuns);
 
   const recentRuns = useMemo(() => {
     const sorted = [...results].sort((a, b) => {
@@ -78,6 +80,7 @@ const Dashboard = () => {
     });
     return sorted;
   }, [results, sortBy, sortDir]);
+  const recentRunsPreview = recentRuns.slice(0, 20);
 
   const formatToolTokenTotal = (result: EvalResult) => {
     const total = result.toolTokenUsage?.totalTokens;
@@ -269,7 +272,7 @@ const Dashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentRuns.map((run) => (
+                {recentRunsPreview.map((run) => (
                   <TableRow key={run.id} className="cursor-pointer">
                     <TableCell>
                       <Link
@@ -319,6 +322,13 @@ const Dashboard = () => {
                 ))}
               </TableBody>
             </Table>
+            {recentRuns.length > 20 && (
+              <div className="border-t p-4 text-center">
+                <Button variant="outline" asChild>
+                  <Link to="/results">Show more</Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

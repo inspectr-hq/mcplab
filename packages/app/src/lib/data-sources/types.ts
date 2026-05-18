@@ -707,7 +707,7 @@ export interface EvalDataSource {
   createConfig: (config: EvalConfig) => Promise<EvalConfig>;
   updateConfig: (config: EvalConfig) => Promise<EvalConfig>;
   deleteConfig: (id: string) => Promise<void>;
-  listResults: () => Promise<EvalResult[]>;
+  listResults: (filter?: { since?: string; until?: string; lastDays?: number }) => Promise<EvalResult[]>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;

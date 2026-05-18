@@ -16,8 +16,24 @@ export interface RunSummary {
   avgLatencyMs: number;
 }
 
-export function listRuns(runsDir: string): RunSummary[] {
+export interface ListRunsFilter {
+  since?: string;
+  until?: string;
+  lastDays?: number;
+}
+
+export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[] {
   if (!existsSync(runsDir)) return [];
+  const sinceMsFromIso = filter?.since ? new Date(filter.since).getTime() : Number.NEGATIVE_INFINITY;
+  const untilMsFromIso = filter?.until ? new Date(filter.until).getTime() : Number.POSITIVE_INFINITY;
+  const lastDays =
+    typeof filter?.lastDays === 'number' && Number.isFinite(filter.lastDays) && filter.lastDays > 0
+      ? filter.lastDays
+      : null;
+  const sinceMsFromLastDays =
+    lastDays !== null ? Date.now() - lastDays * 24 * 60 * 60 * 1000 : Number.NEGATIVE_INFINITY;
+  const sinceMs = Math.max(sinceMsFromIso, sinceMsFromLastDays);
+  const untilMs = untilMsFromIso;
   const runDirs = readdirSync(runsDir).map((name) =>
     ensureInsideRoot(runsDir, join(runsDir, name))
   );
@@ -27,6 +43,10 @@ export function listRuns(runsDir: string): RunSummary[] {
     if (!existsSync(resultsPath)) continue;
     try {
       const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+      const timestampMs = new Date(results.metadata.timestamp).getTime();
+      if (!Number.isFinite(timestampMs) || timestampMs < sinceMs || timestampMs > untilMs) {
+        continue;
+      }
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,

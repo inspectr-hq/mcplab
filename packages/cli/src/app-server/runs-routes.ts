@@ -135,7 +135,22 @@ export async function handleRunsRoutes(params: {
   } = deps;
 
   if (pathname === '/api/runs' && method === 'GET') {
-    asJson(res, 200, listRuns(settings.runsDir));
+    const requestUrl = new URL(req.url ?? '/api/runs', 'http://localhost');
+    const since = requestUrl.searchParams.get('since') ?? undefined;
+    const until = requestUrl.searchParams.get('until') ?? undefined;
+    const lastDaysRaw = requestUrl.searchParams.get('last_days');
+    const lastDaysParsed = lastDaysRaw === null ? NaN : Number(lastDaysRaw);
+    const lastDays =
+      Number.isFinite(lastDaysParsed) && lastDaysParsed > 0 ? Math.floor(lastDaysParsed) : undefined;
+    asJson(
+      res,
+      200,
+      listRuns(settings.runsDir, {
+        since,
+        until,
+        lastDays
+      })
+    );
     return true;
   }
 
