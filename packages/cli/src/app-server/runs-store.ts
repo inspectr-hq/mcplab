@@ -24,8 +24,10 @@ export interface ListRunsFilter {
 
 export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[] {
   if (!existsSync(runsDir)) return [];
-  const sinceMsFromIso = filter?.since ? new Date(filter.since).getTime() : Number.NEGATIVE_INFINITY;
-  const untilMsFromIso = filter?.until ? new Date(filter.until).getTime() : Number.POSITIVE_INFINITY;
+  const sinceParsedMs = filter?.since ? new Date(filter.since).getTime() : NaN;
+  const untilParsedMs = filter?.until ? new Date(filter.until).getTime() : NaN;
+  const sinceMsFromIso = Number.isFinite(sinceParsedMs) ? sinceParsedMs : Number.NEGATIVE_INFINITY;
+  const untilMsFromIso = Number.isFinite(untilParsedMs) ? untilParsedMs : Number.POSITIVE_INFINITY;
   const lastDays =
     typeof filter?.lastDays === 'number' && Number.isFinite(filter.lastDays) && filter.lastDays > 0
       ? filter.lastDays

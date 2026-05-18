@@ -31,10 +31,24 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult } from '@/types/eval';
 import { buildRunScopeSummary } from '@/lib/run-scope-summary';
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function formatSigned(value: number, digits = 0): string {
+  const rounded = Number(value.toFixed(digits));
+  return `${rounded > 0 ? '+' : ''}${rounded.toFixed(digits)}`;
+}
+
 const Dashboard = () => {
   const { configs } = useConfigs();
   const { source } = useDataSource();
-  const [results, setResults] = useState<EvalResult[]>([]);
+  const [last30DayResults, setLast30DayResults] = useState<EvalResult[]>([]);
+  const [currentWeekResults, setCurrentWeekResults] = useState<EvalResult[]>([]);
+  const [previousWeekResults, setPreviousWeekResults] = useState<EvalResult[]>([]);
   const [sortBy, setSortBy] = useState<'timestamp' | 'passRate' | 'latency' | 'scenarios'>(
     'timestamp'
   );
@@ -51,8 +65,25 @@ const Dashboard = () => {
 
   useEffect(() => {
     let active = true;
-    source.listResults({ lastDays: 30 }).then((next) => {
-      if (active) setResults(next);
+    const nowMs = Date.now();
+    const last30SinceMs = nowMs - 30 * 24 * 60 * 60 * 1000;
+    const currentSinceMs = nowMs - WEEK_MS;
+    const previousSinceMs = currentSinceMs - WEEK_MS;
+    const last30Since = new Date(last30SinceMs).toISOString();
+    const currentSince = new Date(currentSinceMs).toISOString();
+    const previousSince = new Date(previousSinceMs).toISOString();
+    const previousUntil = new Date(currentSinceMs - 1).toISOString();
+    const currentUntil = new Date(nowMs).toISOString();
+
+    Promise.all([
+      source.listResults({ since: last30Since, until: currentUntil }),
+      source.listResults({ since: currentSince, until: currentUntil }),
+      source.listResults({ since: previousSince, until: previousUntil })
+    ]).then(([last30WindowResults, currentWindowResults, previousWindowResults]) => {
+      if (!active) return;
+      setLast30DayResults(last30WindowResults);
+      setCurrentWeekResults(currentWindowResults);
+      setPreviousWeekResults(previousWindowResults);
     });
     return () => {
       active = false;
@@ -60,16 +91,45 @@ const Dashboard = () => {
   }, [source]);
 
   const totalConfigs = configs.length;
-  const totalRuns = results.length;
+  const totalRuns = last30DayResults.length;
   const overallPassRate =
-    totalRuns === 0 ? 0 : results.reduce((s, r) => s + r.overallPassRate, 0) / totalRuns;
-  const avgLatency =
-    totalRuns === 0
+    currentWeekResults.length === 0
       ? 0
-      : Math.round(results.reduce((s, r) => s + r.avgLatency, 0) / totalRuns);
+      : currentWeekResults.reduce((s, r) => s + r.overallPassRate, 0) / currentWeekResults.length;
+  const avgLatency =
+    currentWeekResults.length === 0
+      ? 0
+      : Math.round(
+          currentWeekResults.reduce((s, r) => s + r.avgLatency, 0) / currentWeekResults.length
+        );
+  const previousWeekPassRate = average(previousWeekResults.map((run) => run.overallPassRate));
+  const previousWeekAvgLatency = average(previousWeekResults.map((run) => run.avgLatency));
+  const passRateDeltaPp = (overallPassRate - previousWeekPassRate) * 100;
+  const latencyDeltaMs = avgLatency - previousWeekAvgLatency;
+  const hasPreviousWeekBaseline = previousWeekResults.length > 0;
+  const passRateSubtitle = hasPreviousWeekBaseline
+    ? `${formatSigned(passRateDeltaPp, 1)}% from last week`
+    : 'No prior-week baseline';
+  const latencySubtitle = hasPreviousWeekBaseline
+    ? `${formatSigned(latencyDeltaMs, 0)}ms from last week`
+    : 'No prior-week baseline';
+  const passRateTrend = hasPreviousWeekBaseline
+    ? passRateDeltaPp > 0
+      ? ('up' as const)
+      : passRateDeltaPp < 0
+      ? ('down' as const)
+      : ('neutral' as const)
+    : ('neutral' as const);
+  const latencyTrend = hasPreviousWeekBaseline
+    ? latencyDeltaMs < 0
+      ? ('up' as const)
+      : latencyDeltaMs > 0
+      ? ('down' as const)
+      : ('neutral' as const)
+    : ('neutral' as const);
 
   const recentRuns = useMemo(() => {
-    const sorted = [...results].sort((a, b) => {
+    const sorted = [...last30DayResults].sort((a, b) => {
       let cmp = 0;
       if (sortBy === 'timestamp')
         cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -79,7 +139,7 @@ const Dashboard = () => {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [results, sortBy, sortDir]);
+  }, [last30DayResults, sortBy, sortDir]);
   const recentRunsPreview = recentRuns.slice(0, 20);
 
   const formatToolTokenTotal = (result: EvalResult) => {
@@ -138,15 +198,15 @@ const Dashboard = () => {
           title="Pass Rate"
           value={`${Math.round(overallPassRate * 100)}%`}
           icon={BarChart3}
-          subtitle="+5% from last week"
-          trend="up"
+          subtitle={passRateSubtitle}
+          trend={passRateTrend}
         />
         <StatCard
           title="Avg Latency"
           value={`${avgLatency}ms`}
           icon={Timer}
-          subtitle="-120ms from last week"
-          trend="up"
+          subtitle={latencySubtitle}
+          trend={latencyTrend}
         />
       </div>
 
@@ -272,6 +332,13 @@ const Dashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {recentRunsPreview.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                      No runs in the past 30 days.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {recentRunsPreview.map((run) => (
                   <TableRow key={run.id} className="cursor-pointer">
                     <TableCell>

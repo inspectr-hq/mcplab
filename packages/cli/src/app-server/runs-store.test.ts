@@ -59,4 +59,47 @@ describe('listRuns filters', () => {
     const runs = listRuns(runsDir, { since, until });
     expect(runs.map((item) => item.runId)).toEqual(['run-b']);
   });
+
+  it('includes runs exactly on since/until boundaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    const since = '2026-03-10T10:00:00.000Z';
+    const until = '2026-03-10T11:00:00.000Z';
+    writeRun(runsDir, 'run-at-since', since);
+    writeRun(runsDir, 'run-at-until', until);
+    writeRun(runsDir, 'run-outside', '2026-03-10T11:00:00.001Z');
+
+    const runs = listRuns(runsDir, { since, until });
+    expect(runs.map((item) => item.runId)).toEqual(['run-at-until', 'run-at-since']);
+  });
+
+  it('uses stricter lower bound when since and lastDays are both set', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    const now = Date.now();
+    const olderThanSince = new Date(now - 11 * 24 * 60 * 60 * 1000).toISOString();
+    const withinSince = new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString();
+    writeRun(runsDir, 'run-old', olderThanSince);
+    writeRun(runsDir, 'run-new', withinSince);
+
+    const since = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const runs = listRuns(runsDir, { since, lastDays: 30 });
+    expect(runs.map((item) => item.runId)).toEqual(['run-new']);
+  });
+
+  it('treats malformed since/until as unset filters', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-a', '2026-03-10T10:00:00.000Z');
+    writeRun(runsDir, 'run-b', '2026-03-11T10:00:00.000Z');
+
+    const runs = listRuns(runsDir, { since: 'not-a-date', until: 'bad-date' });
+    expect(runs.map((item) => item.runId)).toEqual(['run-b', 'run-a']);
+  });
 });
