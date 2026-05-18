@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ResultsJson, ScenarioRunTraceRecord } from './types.js';
+import { normalizeResultsJson } from './results.js';
+import { failureMessage } from './failures.js';
 
 export type ResultSource = 'results' | 'trace' | 'summary';
 export type ResultStatus = 'passed' | 'failed';
@@ -205,7 +207,7 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
         pass_rate: scenario.pass_rate,
         tool_usage_frequency: scenario.tool_usage_frequency,
         last_final_answer: scenario.last_final_answer,
-        failures: scenario.runs.flatMap((r) => r.failures),
+        failures: scenario.runs.flatMap((r) => r.failures).map((failure) => failureMessage(failure)),
         errors: scenario.runs.map((r) => r.error).filter(Boolean)
       }),
       tags: ['scenario', scenarioStatus, 'results', 'assertion']
@@ -331,7 +333,7 @@ export function buildSearchIndex(runsDir: string): SearchDoc[] {
     if (!existsSync(resultsPath)) continue;
     let results: ResultsJson;
     try {
-      results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+      results = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
     } catch {
       continue;
     }
@@ -493,7 +495,7 @@ export function searchDocs(docs: SearchDoc[], filters: SearchFilters): SearchHit
 function readResults(runsDir: string, runId: string): ResultsJson {
   const path = resolveRunArtifactPath(runsDir, runId, 'results.json');
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as ResultsJson;
+    return normalizeResultsJson(JSON.parse(readFileSync(path, 'utf8')) as ResultsJson);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not read results.json for run ${runId} at ${path}: ${msg}`);

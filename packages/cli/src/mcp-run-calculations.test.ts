@@ -17,7 +17,9 @@ function makeRunResult(
   return {
     run_index: index,
     pass,
-    failures: pass ? [] : ['failed'],
+    failures: pass ? [] : [{ message: 'failed', severity: 'error' }],
+    error_failures: pass ? 0 : 1,
+    warning_failures: 0,
     tool_calls: [],
     tool_call_count: toolCallCount,
     tool_sequence: [],

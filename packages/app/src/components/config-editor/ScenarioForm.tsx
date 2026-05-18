@@ -190,6 +190,7 @@ function ScenarioCard({
   const [newRuleValue, setNewRuleValue] = useState('');
   const [newRulePath, setNewRulePath] = useState('');
   const [newRuleEquals, setNewRuleEquals] = useState('');
+  const [newRuleOptional, setNewRuleOptional] = useState(false);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -215,6 +216,8 @@ function ScenarioCard({
   };
 
   const addRule = () => {
+    const severityPatch =
+      isResponseRuleType(newRuleType) && newRuleOptional ? { severity: 'warning' as const } : {};
     if (
       newRuleType === 'response_jsonpath' ||
       newRuleType === 'response_jsonpath_exists' ||
@@ -234,11 +237,16 @@ function ScenarioCard({
         onUpdate({
           evalRules: [
             ...scenario.evalRules,
-            { type: newRuleType, path, ...(equals !== undefined ? { equals } : {}) }
+            {
+              type: newRuleType,
+              path,
+              ...(equals !== undefined ? { equals } : {}),
+              ...severityPatch
+            }
           ]
         });
       } else {
-        onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, path }] });
+        onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, path, ...severityPatch }] });
       }
       setNewRulePath('');
       setNewRuleEquals('');
@@ -247,7 +255,10 @@ function ScenarioCard({
 
     if (!newRuleValue.trim()) return;
     onUpdate({
-      evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }]
+      evalRules: [
+        ...scenario.evalRules,
+        { type: newRuleType, value: newRuleValue.trim(), ...severityPatch }
+      ]
     });
     setNewRuleValue('');
     setToolPickerValue('');
@@ -255,6 +266,18 @@ function ScenarioCard({
 
   const removeRule = (ri: number) => {
     onUpdate({ evalRules: scenario.evalRules.filter((_, i) => i !== ri) });
+  };
+
+  const updateRuleOptional = (ri: number, optional: boolean) => {
+    onUpdate({
+      evalRules: scenario.evalRules.map((rule, index) =>
+        index === ri
+          ? optional
+            ? { ...rule, severity: 'warning' }
+            : { ...rule, severity: undefined }
+          : rule
+      )
+    });
   };
 
   const addExtract = () => {
@@ -346,6 +369,7 @@ function ScenarioCard({
     setToolPickerValue('');
     setNewRulePath('');
     setNewRuleEquals('');
+    setNewRuleOptional(false);
   }, [newRuleType]);
 
   useEffect(() => {
@@ -929,16 +953,31 @@ function ScenarioCard({
                               </div>
                             </div>
                             {!readOnly && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 shrink-0"
-                                onClick={() => removeRule(ri)}
-                                aria-label={`Remove check ${ri + 1}`}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {isResponseRuleType(rule.type) && (
+                                  <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <span className="scale-75 origin-left">
+                                      <Switch
+                                        checked={rule.severity === 'warning'}
+                                        onCheckedChange={(checked) =>
+                                          updateRuleOptional(ri, checked)
+                                        }
+                                      />
+                                    </span>
+                                    Soft check
+                                  </label>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 shrink-0"
+                                  onClick={() => removeRule(ri)}
+                                  aria-label={`Remove check ${ri + 1}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                         ))
@@ -1009,6 +1048,17 @@ function ScenarioCard({
                                 e.key === 'Enter' && (e.preventDefault(), addRule())
                               }
                             />
+                          )}
+                          {isResponseRuleType(newRuleType) && (
+                            <label className="flex h-8 items-center gap-1 rounded-md border px-2 text-xs text-muted-foreground">
+                              <span className="scale-75 origin-left">
+                                <Switch
+                                  checked={newRuleOptional}
+                                  onCheckedChange={(checked) => setNewRuleOptional(checked)}
+                                />
+                              </span>
+                              Soft check
+                            </label>
                           )}
                           <Button
                             type="button"
@@ -1294,6 +1344,20 @@ function buildPreviewCheckItems(evalRules: EvalRule[], failureReasons: string[])
       failureReason
     };
   });
+}
+
+function isResponseRuleType(type: EvalRule['type']): boolean {
+  return (
+    type === 'response_contains' ||
+    type === 'response_not_contains' ||
+    type === 'response_starts_with' ||
+    type === 'response_ends_with' ||
+    type === 'response_equals' ||
+    type === 'response_regex' ||
+    type === 'response_jsonpath' ||
+    type === 'response_jsonpath_exists' ||
+    type === 'response_jsonpath_not_exists'
+  );
 }
 
 function renderEvalRulePreview(rule: EvalRule): string {

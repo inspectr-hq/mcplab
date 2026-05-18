@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { ResultsJson, ScenarioAggregate } from '@inspectr/mcplab-core';
+import { failureMessage, type ResultsJson, type ScenarioAggregate } from '@inspectr/mcplab-core';
 
 export interface SnapshotSourceSummary {
   total_scenarios: number;
@@ -243,9 +243,11 @@ export function applySnapshotPolicyToRunResult(params: {
           const reason = `Snapshot drift (${row.status}, score=${row.score}): ${
             row.reasons[0] ?? 'baseline mismatch'
           }`;
-          if (!run.failures.includes(reason)) {
-            run.failures.push(reason);
+          if (!run.failures.some((failure) => failureMessage(failure) === reason)) {
+            run.failures.push({ message: reason, severity: 'error' });
           }
+          run.error_failures = run.failures.filter((failure) => failure.severity === 'error').length;
+          run.warning_failures = run.failures.filter((failure) => failure.severity === 'warning').length;
         }
         scenario.pass_rate =
           scenario.runs.length === 0
@@ -254,13 +256,13 @@ export function applySnapshotPolicyToRunResult(params: {
       }
     }
 
-    const totalRuns = results.scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
-    const totalPasses = results.scenarios.reduce(
-      (sum, scenario) => sum + scenario.runs.filter((run) => run.pass).length,
-      0
-    );
-    results.summary.pass_rate = totalRuns === 0 ? 0 : totalPasses / totalRuns;
   }
+  const totalRuns = results.scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+  const totalPasses = results.scenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.filter((run) => run.pass).length,
+    0
+  );
+  results.summary.pass_rate = totalRuns === 0 ? 0 : totalPasses / totalRuns;
 
   const applied: AppliedSnapshotEval = {
     applied: true,
@@ -320,9 +322,9 @@ function scoreTools(item: SnapshotItem, scenario: ScenarioAggregate, reasons: st
 
   for (const run of scenario.runs) {
     for (const failure of run.failures) {
-      if (failure.toLowerCase().includes('assertion')) {
+      if (failureMessage(failure).toLowerCase().includes('assertion')) {
         score -= 0.15;
-        reasons.push(`Assertion mismatch: ${failure}`);
+        reasons.push(`Assertion mismatch: ${failureMessage(failure)}`);
         break;
       }
     }

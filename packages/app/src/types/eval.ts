@@ -57,6 +57,7 @@ export interface EvalRule {
   value?: string;
   path?: string;
   equals?: string | number | boolean;
+  severity?: 'error' | 'warning';
 }
 
 export interface ExtractRule {
@@ -160,6 +161,9 @@ export interface ScenarioRun {
   duration: number;
   extractedValues: Record<string, string>;
   failureReasons: string[];
+  failures?: Array<{ message: string; severity: 'error' | 'warning' }>;
+  errorFailureCount?: number;
+  warningFailureCount?: number;
 }
 
 export interface ScenarioResult {

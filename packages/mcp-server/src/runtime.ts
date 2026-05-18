@@ -26,6 +26,7 @@ import {
   loadOrBuildSearchIndex,
   indexNeedsRefresh,
   getResultsIndexPaths,
+  normalizeResultsJson,
   resolveRunArtifactPath,
   searchDocs,
   getContext,
@@ -2096,7 +2097,7 @@ export function registerTools(server: McpServer): void {
         };
         if (artifact === 'results.json') {
           try {
-            const parsed = JSON.parse(raw) as ResultsJson;
+            const parsed = normalizeResultsJson(JSON.parse(raw) as ResultsJson);
             structured.summary = parsed.summary;
             structured.metadata = parsed.metadata;
             structured.scenarios = parsed.scenarios.map((scenario) => ({
@@ -2750,7 +2751,7 @@ function loadSingleRunForAnalysis(primaryRunsDir: string, runIdInput: string): L
   if (!existsSync(resultsPath)) {
     throw new Error(`results.json not found for run '${resolvedRunId}' at ${resultsPath}`);
   }
-  const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+  const parsed = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
   return {
     run_id: resolvedRunId,
     path: runPath,
@@ -2823,7 +2824,9 @@ function listRuns(
       const resultsPath = join(runsDir, runId, 'results.json');
       if (existsSync(resultsPath)) {
         try {
-          const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+          const parsed = normalizeResultsJson(
+            JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson
+          );
           out.summary = parsed.summary;
           out.metadata = parsed.metadata;
         } catch (error) {

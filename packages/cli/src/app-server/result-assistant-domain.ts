@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
+import { chatWithAgent, failureMessage, McpClientManager } from '@inspectr/mcplab-core';
 import {
   cleanupSessionsByTtl,
   makeAssistantToolPublicName,
@@ -249,7 +249,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
       agent: sc.agent,
       pass_rate: sc.pass_rate,
       run_count: sc.runs.length,
-      sample_failures: sc.runs.flatMap((r) => r.failures).slice(0, 5)
+      sample_failures: sc.runs.flatMap((r) => r.failures).map(failureMessage).slice(0, 5)
     })) ?? [];
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);

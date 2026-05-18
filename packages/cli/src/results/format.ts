@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { listRunIdsDesc, resolveRunArtifactPath, type ResultsJson } from '@inspectr/mcplab-core';
+import {
+  listRunIdsDesc,
+  normalizeResultsJson,
+  resolveRunArtifactPath,
+  type ResultsJson
+} from '@inspectr/mcplab-core';
 import type { ContextResult } from './context.js';
 import type { SearchHit } from './types.js';
 
@@ -21,7 +26,7 @@ export function listRuns(runsDir: string): RunListItem[] {
       return { run_id: runId };
     }
     try {
-      const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+      const parsed = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
       return {
         run_id: runId,
         timestamp: parsed.metadata.timestamp,
@@ -46,7 +51,7 @@ export function showRun(runsDir: string, runId: string, format: 'json' | 'markdo
     throw new Error(`results.json not found for run ${runId}`);
   }
   try {
-    const parsed = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+    const parsed = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
     return JSON.stringify(parsed, null, 2);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

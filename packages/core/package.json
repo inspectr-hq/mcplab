@@ -29,7 +29,8 @@
     "dist"
   ],
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./failures": "./dist/failures.js"
   },
   "scripts": {
     "build": "tsc -b",

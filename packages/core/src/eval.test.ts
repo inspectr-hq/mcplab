@@ -22,7 +22,7 @@ describe('evaluateScenario — tool_constraints', () => {
       tool_constraints: { required_tools: ['search'] }
     });
     expect(result.pass).toBe(false);
-    expect(result.failures).toContain('Required tool not used: search');
+    expect(result.failures[0]?.message).toContain('Required tool not used: search');
   });
 
   it('fails when a forbidden tool is used', () => {
@@ -30,7 +30,7 @@ describe('evaluateScenario — tool_constraints', () => {
       tool_constraints: { forbidden_tools: ['delete'] }
     });
     expect(result.pass).toBe(false);
-    expect(result.failures).toContain('Forbidden tool used: delete');
+    expect(result.failures[0]?.message).toContain('Forbidden tool used: delete');
   });
 
   it('passes when a forbidden tool is not used', () => {
@@ -68,7 +68,7 @@ describe('evaluateScenario — tool_sequence', () => {
       tool_sequence: { allow: [['search', 'fetch']] }
     });
     expect(result.pass).toBe(false);
-    expect(result.failures).toContain('Tool sequence did not match any allowed sequence');
+    expect(result.failures[0]?.message).toContain('Tool sequence did not match any allowed sequence');
   });
 
   it('passes when empty sequence is explicitly allowed', () => {
@@ -99,7 +99,7 @@ describe('evaluateScenario — response_assertions regex', () => {
       response_assertions: [{ type: 'regex', pattern: '\\$\\d+\\.\\d+' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Regex assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Regex assertion failed/);
   });
 
   it('is case-insensitive by default', () => {
@@ -114,7 +114,7 @@ describe('evaluateScenario — response_assertions regex', () => {
       response_assertions: [{ type: 'regex', pattern: '[invalid(' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Invalid regex/);
+    expect(result.failures[0]?.message).toMatch(/Invalid regex/);
   });
 });
 
@@ -131,7 +131,7 @@ describe('evaluateScenario — response_assertions jsonpath', () => {
       response_assertions: [{ type: 'jsonpath', path: '$.missing' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/JSONPath assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/JSONPath assertion failed/);
   });
 
   it('fails with "invalid JSON" when response is not JSON', () => {
@@ -139,7 +139,7 @@ describe('evaluateScenario — response_assertions jsonpath', () => {
       response_assertions: [{ type: 'jsonpath', path: '$.name' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/invalid JSON/);
+    expect(result.failures[0]?.message).toMatch(/invalid JSON/);
   });
 
   it('passes when equals assertion matches', () => {
@@ -154,7 +154,7 @@ describe('evaluateScenario — response_assertions jsonpath', () => {
       response_assertions: [{ type: 'jsonpath', path: '$.status', equals: 'active' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/JSONPath equals assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/JSONPath equals assertion failed/);
   });
 });
 
@@ -171,7 +171,7 @@ describe('evaluateScenario — response_assertions contains/not_contains', () =>
       response_assertions: [{ type: 'contains', value: 'refund processed' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Contains assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Contains assertion failed/);
   });
 
   it('passes not_contains when literal text is absent (case-insensitive)', () => {
@@ -186,7 +186,7 @@ describe('evaluateScenario — response_assertions contains/not_contains', () =>
       response_assertions: [{ type: 'not_contains', value: 'error' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Not-contains assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Not-contains assertion failed/);
   });
 });
 
@@ -203,7 +203,7 @@ describe('evaluateScenario — response_assertions starts_with/ends_with/equals'
       response_assertions: [{ type: 'starts_with', value: 'hello customer' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Starts-with assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Starts-with assertion failed/);
   });
 
   it('passes ends_with when suffix matches (case-insensitive)', () => {
@@ -218,7 +218,7 @@ describe('evaluateScenario — response_assertions starts_with/ends_with/equals'
       response_assertions: [{ type: 'ends_with', value: 'complete' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Ends-with assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Ends-with assertion failed/);
   });
 
   it('passes equals when full text matches (case-insensitive)', () => {
@@ -233,7 +233,7 @@ describe('evaluateScenario — response_assertions starts_with/ends_with/equals'
       response_assertions: [{ type: 'equals', value: 'success' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/Equals assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/Equals assertion failed/);
   });
 });
 
@@ -250,7 +250,7 @@ describe('evaluateScenario — response_assertions jsonpath_exists/jsonpath_not_
       response_assertions: [{ type: 'jsonpath_exists', path: '$.data.missing' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/JSONPath assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/JSONPath assertion failed/);
   });
 
   it('passes jsonpath_not_exists when path does not resolve', () => {
@@ -265,7 +265,7 @@ describe('evaluateScenario — response_assertions jsonpath_exists/jsonpath_not_
       response_assertions: [{ type: 'jsonpath_not_exists', path: '$.data.id' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/JSONPath not-exists assertion failed/);
+    expect(result.failures[0]?.message).toMatch(/JSONPath not-exists assertion failed/);
   });
 
   it('fails jsonpath_exists with invalid JSON', () => {
@@ -273,7 +273,41 @@ describe('evaluateScenario — response_assertions jsonpath_exists/jsonpath_not_
       response_assertions: [{ type: 'jsonpath_exists', path: '$.data.id' }]
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]).toMatch(/invalid JSON/);
+    expect(result.failures[0]?.message).toMatch(/invalid JSON/);
+  });
+});
+
+describe('evaluateScenario — response_assertions severity', () => {
+  it('defaults missing severity to error', () => {
+    const result = evaluateScenario('hello', [], {
+      response_assertions: [{ type: 'contains', value: 'missing' }]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.error_failures).toBe(1);
+    expect(result.warning_failures).toBe(0);
+    expect(result.failures[0]?.severity).toBe('error');
+  });
+
+  it('does not fail run when only warning assertions fail', () => {
+    const result = evaluateScenario('hello', [], {
+      response_assertions: [{ type: 'contains', value: 'missing', severity: 'warning' }]
+    });
+    expect(result.pass).toBe(true);
+    expect(result.error_failures).toBe(0);
+    expect(result.warning_failures).toBe(1);
+    expect(result.failures[0]?.severity).toBe('warning');
+  });
+
+  it('fails run when at least one error assertion fails with warning failures present', () => {
+    const result = evaluateScenario('hello', [], {
+      response_assertions: [
+        { type: 'contains', value: 'missing', severity: 'warning' },
+        { type: 'contains', value: 'missing2', severity: 'error' }
+      ]
+    });
+    expect(result.pass).toBe(false);
+    expect(result.error_failures).toBe(1);
+    expect(result.warning_failures).toBe(1);
   });
 });
 

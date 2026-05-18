@@ -35,7 +35,9 @@ export function createResultsRunFixture(): RunFixture {
           {
             run_index: 0,
             pass: false,
-            failures: ['response assertion failed'],
+            failures: [{ message: 'response assertion failed', severity: 'error' }],
+            error_failures: 1,
+            warning_failures: 0,
             tool_calls: ['search_tags'],
             tool_call_count: 1,
             tool_sequence: ['search_tags'],

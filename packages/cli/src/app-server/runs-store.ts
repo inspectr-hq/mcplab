@@ -1,6 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { EvalConfig, ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
+import {
+  normalizeResultsJson,
+  type EvalConfig,
+  type ResultsJson,
+  type ScenarioRunTraceRecord
+} from '@inspectr/mcplab-core';
 import { ensureInsideRoot } from './store-utils.js';
 
 export interface RunSummary {
@@ -26,7 +31,7 @@ export function listRuns(runsDir: string): RunSummary[] {
     const resultsPath = join(dir, 'results.json');
     if (!existsSync(resultsPath)) continue;
     try {
-      const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+      const results = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,
@@ -52,7 +57,7 @@ export function getRunResults(runId: string, runsDir: string): ResultsJson {
   const runDir = ensureInsideRoot(runsDir, join(runsDir, runId));
   const resultsPath = ensureInsideRoot(runsDir, join(runDir, 'results.json'));
   if (!existsSync(resultsPath)) throw new Error(`Run not found: ${runId}`);
-  return JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+  return normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
 }
 
 export function selectScenarioIds(config: EvalConfig, requestedScenarioIds?: string[]): EvalConfig {

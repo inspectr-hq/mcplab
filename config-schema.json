@@ -388,6 +388,7 @@
                           "required": ["type", "pattern"],
                           "properties": {
                             "type": { "const": "regex" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "pattern": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -397,6 +398,7 @@
                           "required": ["type", "value"],
                           "properties": {
                             "type": { "const": "contains" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "value": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -406,6 +408,7 @@
                           "required": ["type", "value"],
                           "properties": {
                             "type": { "const": "not_contains" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "value": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -415,6 +418,7 @@
                           "required": ["type", "value"],
                           "properties": {
                             "type": { "const": "starts_with" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "value": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -424,6 +428,7 @@
                           "required": ["type", "value"],
                           "properties": {
                             "type": { "const": "ends_with" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "value": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -433,6 +438,7 @@
                           "required": ["type", "value"],
                           "properties": {
                             "type": { "const": "equals" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "value": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -442,6 +448,7 @@
                           "required": ["type", "path"],
                           "properties": {
                             "type": { "const": "jsonpath" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "path": { "type": "string", "minLength": 1 },
                             "equals": {
                               "oneOf": [
@@ -458,6 +465,7 @@
                           "required": ["type", "path"],
                           "properties": {
                             "type": { "const": "jsonpath_exists" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "path": { "type": "string", "minLength": 1 }
                           }
                         },
@@ -467,6 +475,7 @@
                           "required": ["type", "path"],
                           "properties": {
                             "type": { "const": "jsonpath_not_exists" },
+                            "severity": { "type": "string", "enum": ["error", "warning"] },
                             "path": { "type": "string", "minLength": 1 }
                           }
                         }

@@ -983,6 +983,7 @@ describe('loadConfig normalization', () => {
           '      response_assertions:',
           '        - type: contains',
           '          value: hello',
+          '          severity: error',
           '        - type: not_contains',
           '          value: error',
           '        - type: starts_with',
@@ -993,6 +994,7 @@ describe('loadConfig normalization', () => {
           '          value: exact',
           '        - type: regex',
           '          pattern: "foo|bar"',
+          '          severity: warning',
           '        - type: jsonpath',
           '          path: $.status',
           '          equals: active',
@@ -1011,12 +1013,12 @@ describe('loadConfig normalization', () => {
         { ref: string }
       >;
       expect(inlineScenario.eval?.response_assertions).toEqual([
-        { type: 'contains', value: 'hello' },
+        { type: 'contains', value: 'hello', severity: 'error' },
         { type: 'not_contains', value: 'error' },
         { type: 'starts_with', value: 'hi' },
         { type: 'ends_with', value: 'bye' },
         { type: 'equals', value: 'exact' },
-        { type: 'regex', pattern: 'foo|bar' },
+        { type: 'regex', pattern: 'foo|bar', severity: 'warning' },
         { type: 'jsonpath', path: '$.status', equals: 'active' },
         { type: 'jsonpath_exists', path: '$.data.id' },
         { type: 'jsonpath_not_exists', path: '$.error' }

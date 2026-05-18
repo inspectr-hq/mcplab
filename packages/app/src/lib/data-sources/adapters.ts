@@ -27,6 +27,7 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
+import { normalizeFailureEntry } from '@inspectr/mcplab-core/failures';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
@@ -38,26 +39,33 @@ function toUiEvalRule(assertion: {
   value?: string;
   path?: string;
   equals?: string;
+  severity?: 'error' | 'warning';
 }): EvalRule {
+  const severity = assertion.severity;
   switch (assertion.type) {
     case 'regex':
-      return { type: 'response_regex', value: assertion.pattern };
+      return { type: 'response_regex', value: assertion.pattern, severity };
     case 'contains':
-      return { type: 'response_contains', value: assertion.value };
+      return { type: 'response_contains', value: assertion.value, severity };
     case 'not_contains':
-      return { type: 'response_not_contains', value: assertion.value };
+      return { type: 'response_not_contains', value: assertion.value, severity };
     case 'starts_with':
-      return { type: 'response_starts_with', value: assertion.value };
+      return { type: 'response_starts_with', value: assertion.value, severity };
     case 'ends_with':
-      return { type: 'response_ends_with', value: assertion.value };
+      return { type: 'response_ends_with', value: assertion.value, severity };
     case 'equals':
-      return { type: 'response_equals', value: assertion.value };
+      return { type: 'response_equals', value: assertion.value, severity };
     case 'jsonpath':
-      return { type: 'response_jsonpath', path: assertion.path, equals: assertion.equals };
+      return {
+        type: 'response_jsonpath',
+        path: assertion.path,
+        equals: assertion.equals,
+        severity
+      };
     case 'jsonpath_exists':
-      return { type: 'response_jsonpath_exists', path: assertion.path };
+      return { type: 'response_jsonpath_exists', path: assertion.path, severity };
     case 'jsonpath_not_exists':
-      return { type: 'response_jsonpath_not_exists', path: assertion.path };
+      return { type: 'response_jsonpath_not_exists', path: assertion.path, severity };
     default:
       throw new Error(
         `Unsupported response assertion type in config: ${String(
@@ -70,46 +78,47 @@ function toUiEvalRule(assertion: {
 function toCoreResponseAssertion(
   rule: EvalRule
 ):
-  | { type: 'regex'; pattern: string }
-  | { type: 'contains'; value: string }
-  | { type: 'not_contains'; value: string }
-  | { type: 'starts_with'; value: string }
-  | { type: 'ends_with'; value: string }
-  | { type: 'equals'; value: string }
-  | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
-  | { type: 'jsonpath_exists'; path: string }
-  | { type: 'jsonpath_not_exists'; path: string }
+  | { type: 'regex'; pattern: string; severity?: 'error' | 'warning' }
+  | { type: 'contains'; value: string; severity?: 'error' | 'warning' }
+  | { type: 'not_contains'; value: string; severity?: 'error' | 'warning' }
+  | { type: 'starts_with'; value: string; severity?: 'error' | 'warning' }
+  | { type: 'ends_with'; value: string; severity?: 'error' | 'warning' }
+  | { type: 'equals'; value: string; severity?: 'error' | 'warning' }
+  | { type: 'jsonpath'; path: string; equals?: string | number | boolean; severity?: 'error' | 'warning' }
+  | { type: 'jsonpath_exists'; path: string; severity?: 'error' | 'warning' }
+  | { type: 'jsonpath_not_exists'; path: string; severity?: 'error' | 'warning' }
   | null {
+  const severity = rule.severity;
   if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') return null;
   if (rule.type === 'response_contains') {
-    return rule.value ? { type: 'contains', value: rule.value } : null;
+    return rule.value ? { type: 'contains', value: rule.value, severity } : null;
   }
   if (rule.type === 'response_not_contains') {
-    return rule.value ? { type: 'not_contains', value: rule.value } : null;
+    return rule.value ? { type: 'not_contains', value: rule.value, severity } : null;
   }
   if (rule.type === 'response_starts_with') {
-    return rule.value ? { type: 'starts_with', value: rule.value } : null;
+    return rule.value ? { type: 'starts_with', value: rule.value, severity } : null;
   }
   if (rule.type === 'response_ends_with') {
-    return rule.value ? { type: 'ends_with', value: rule.value } : null;
+    return rule.value ? { type: 'ends_with', value: rule.value, severity } : null;
   }
   if (rule.type === 'response_equals') {
-    return rule.value ? { type: 'equals', value: rule.value } : null;
+    return rule.value ? { type: 'equals', value: rule.value, severity } : null;
   }
   if (rule.type === 'response_regex') {
-    return rule.value ? { type: 'regex', pattern: rule.value } : null;
+    return rule.value ? { type: 'regex', pattern: rule.value, severity } : null;
   }
   if (rule.type === 'response_jsonpath') {
     if (!rule.path?.trim()) return null;
     return rule.equals !== undefined
-      ? { type: 'jsonpath', path: rule.path.trim(), equals: rule.equals }
-      : { type: 'jsonpath', path: rule.path.trim() };
+      ? { type: 'jsonpath', path: rule.path.trim(), equals: rule.equals, severity }
+      : { type: 'jsonpath', path: rule.path.trim(), severity };
   }
   if (rule.type === 'response_jsonpath_exists') {
-    return rule.path?.trim() ? { type: 'jsonpath_exists', path: rule.path.trim() } : null;
+    return rule.path?.trim() ? { type: 'jsonpath_exists', path: rule.path.trim(), severity } : null;
   }
   if (rule.type === 'response_jsonpath_not_exists') {
-    return rule.path?.trim() ? { type: 'jsonpath_not_exists', path: rule.path.trim() } : null;
+    return rule.path?.trim() ? { type: 'jsonpath_not_exists', path: rule.path.trim(), severity } : null;
   }
   return null;
 }
@@ -121,15 +130,15 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         forbidden_tools?: string[];
       };
       response_assertions?: Array<
-        | { type: 'regex'; pattern: string }
-        | { type: 'contains'; value: string }
-        | { type: 'not_contains'; value: string }
-        | { type: 'starts_with'; value: string }
-        | { type: 'ends_with'; value: string }
-        | { type: 'equals'; value: string }
-        | { type: 'jsonpath'; path: string; equals?: string | number | boolean }
-        | { type: 'jsonpath_exists'; path: string }
-        | { type: 'jsonpath_not_exists'; path: string }
+        | { type: 'regex'; pattern: string; severity?: 'error' | 'warning' }
+        | { type: 'contains'; value: string; severity?: 'error' | 'warning' }
+        | { type: 'not_contains'; value: string; severity?: 'error' | 'warning' }
+        | { type: 'starts_with'; value: string; severity?: 'error' | 'warning' }
+        | { type: 'ends_with'; value: string; severity?: 'error' | 'warning' }
+        | { type: 'equals'; value: string; severity?: 'error' | 'warning' }
+        | { type: 'jsonpath'; path: string; equals?: string | number | boolean; severity?: 'error' | 'warning' }
+        | { type: 'jsonpath_exists'; path: string; severity?: 'error' | 'warning' }
+        | { type: 'jsonpath_not_exists'; path: string; severity?: 'error' | 'warning' }
       >;
     }
   | undefined {
@@ -1190,6 +1199,7 @@ export function fromCoreResultsJson(
     const runs: ScenarioRun[] = scenario.runs.map((run, index) => {
       const record = runRecordByIndex.get(run.run_index) ?? runRecords[index];
       const tokenUsage = estimateRunTokenUsage(record);
+      const failures = (run.failures ?? []).map((failure) => normalizeFailureEntry(failure));
       return {
         runIndex: run.run_index,
         passed: run.pass,
@@ -1203,7 +1213,10 @@ export function fromCoreResultsJson(
         extractedValues: Object.fromEntries(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
         ),
-        failureReasons: run.failures
+        failureReasons: failures.map((failure) => failure.message),
+        failures,
+        errorFailureCount: failures.filter((failure) => failure.severity === 'error').length,
+        warningFailureCount: failures.filter((failure) => failure.severity === 'warning').length
       };
     });
 
@@ -1296,6 +1309,7 @@ export function fromCoreScenarioRunPreview(
   traceRecord?: ScenarioRunTraceRecord | null
 ): ScenarioRun {
   const tokenUsage = estimateRunTokenUsage(traceRecord ?? undefined);
+  const failures = (run.failures ?? []).map((failure) => normalizeFailureEntry(failure));
   return {
     runIndex: run.run_index,
     passed: run.pass,
@@ -1309,6 +1323,9 @@ export function fromCoreScenarioRunPreview(
     extractedValues: Object.fromEntries(
       Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
     ),
-    failureReasons: run.failures
+    failureReasons: failures.map((failure) => failure.message),
+    failures,
+    errorFailureCount: failures.filter((failure) => failure.severity === 'error').length,
+    warningFailureCount: failures.filter((failure) => failure.severity === 'warning').length
   };
 }

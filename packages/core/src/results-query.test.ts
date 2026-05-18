@@ -35,7 +35,9 @@ function fixture() {
           {
             run_index: 0,
             pass: false,
-            failures: ['failed'],
+            failures: [{ message: 'failed', severity: 'error' }],
+            error_failures: 1,
+            warning_failures: 0,
             tool_calls: ['search_tags'],
             tool_call_count: 1,
             tool_sequence: ['search_tags'],
@@ -92,6 +94,61 @@ function fixture() {
 }
 
 describe('results-query core', () => {
+  it('normalizes legacy string failures from results.json', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-core-rq-legacy-'));
+    const runsDir = join(root, 'runs');
+    const runId = '20260206-legacy';
+    const runDir = join(runsDir, runId);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(
+      join(runDir, 'results.json'),
+      JSON.stringify({
+        metadata: {
+          run_id: runId,
+          timestamp: '2026-02-06T21:22:39.000Z',
+          config_hash: 'abc',
+          cli_version: '1.0.0',
+          mcp_server_versions: {}
+        },
+        summary: {
+          total_scenarios: 1,
+          total_runs: 1,
+          pass_rate: 0,
+          avg_tool_calls_per_run: 0,
+          avg_tool_latency_ms: null
+        },
+        scenarios: [
+          {
+            scenario_id: 'legacy-scn',
+            agent: 'agent-a',
+            runs: [
+              {
+                run_index: 0,
+                pass: false,
+                failures: ['legacy assertion failed'],
+                tool_calls: [],
+                tool_call_count: 0,
+                tool_sequence: [],
+                tool_usage: {},
+                tool_durations_ms: [],
+                final_text: '',
+                extracted: {}
+              }
+            ],
+            pass_rate: 0,
+            distinct_sequences: {},
+            tool_usage_frequency: {},
+            extracted_values: {},
+            last_final_answer: ''
+          }
+        ]
+      }),
+      'utf8'
+    );
+    const docs = buildSearchIndex(runsDir);
+    expect(docs.some((doc) => doc.text.includes('legacy assertion failed'))).toBe(true);
+  });
+
   it('omits context_command for summary docs without scenario_id', () => {
     const { runsDir } = fixture();
     const docs = buildSearchIndex(runsDir);

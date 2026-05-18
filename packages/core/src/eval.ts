@@ -1,9 +1,17 @@
 import { JSONPath } from 'jsonpath-plus';
-import type { EvalRules, ResponseAssertion, ToolConstraints } from './types.js';
+import type {
+  CheckSeverity,
+  EvalRules,
+  FailureEntry,
+  ResponseAssertion,
+  ToolConstraints
+} from './types.js';
 
 export interface EvalResult {
   pass: boolean;
-  failures: string[];
+  failures: FailureEntry[];
+  error_failures: number;
+  warning_failures: number;
 }
 
 export function evaluateScenario(
@@ -11,7 +19,7 @@ export function evaluateScenario(
   toolSequence: string[],
   evalRules?: EvalRules
 ): EvalResult {
-  const failures: string[] = [];
+  const failures: FailureEntry[] = [];
   if (evalRules?.tool_constraints) {
     failures.push(...evaluateToolConstraints(toolSequence, evalRules.tool_constraints));
   }
@@ -21,42 +29,54 @@ export function evaluateScenario(
   if (evalRules?.response_assertions?.length) {
     failures.push(...evaluateResponseAssertions(finalText, evalRules.response_assertions));
   }
-  return { pass: failures.length === 0, failures };
+  const errorFailures = failures.filter((failure) => failure.severity === 'error').length;
+  const warningFailures = failures.filter((failure) => failure.severity === 'warning').length;
+  return {
+    pass: errorFailures === 0,
+    failures,
+    error_failures: errorFailures,
+    warning_failures: warningFailures
+  };
 }
 
-function evaluateToolConstraints(toolSequence: string[], constraints: ToolConstraints): string[] {
-  const failures: string[] = [];
+function toFailure(message: string, severity: CheckSeverity = 'error'): FailureEntry {
+  return { message, severity };
+}
+
+function evaluateToolConstraints(toolSequence: string[], constraints: ToolConstraints): FailureEntry[] {
+  const failures: FailureEntry[] = [];
   const unique = new Set(toolSequence);
   if (constraints.forbidden_tools) {
     for (const tool of constraints.forbidden_tools) {
       if (unique.has(tool)) {
-        failures.push(`Forbidden tool used: ${tool}`);
+        failures.push(toFailure(`Forbidden tool used: ${tool}`));
       }
     }
   }
   if (constraints.required_tools) {
     for (const tool of constraints.required_tools) {
       if (!unique.has(tool)) {
-        failures.push(`Required tool not used: ${tool}`);
+        failures.push(toFailure(`Required tool not used: ${tool}`));
       }
     }
   }
   return failures;
 }
 
-function evaluateToolSequence(actual: string[], allowed: string[][]): string[] {
+function evaluateToolSequence(actual: string[], allowed: string[][]): FailureEntry[] {
   const actualKey = JSON.stringify(actual);
   const allowedKeys = new Set(allowed.map((seq) => JSON.stringify(seq)));
   if (!allowedKeys.has(actualKey)) {
-    return ['Tool sequence did not match any allowed sequence'];
+    return [toFailure('Tool sequence did not match any allowed sequence')];
   }
   return [];
 }
 
-function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[]): string[] {
-  const failures: string[] = [];
+function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[]): FailureEntry[] {
+  const failures: FailureEntry[] = [];
   const normalizedText = text.toLowerCase();
   for (const assertion of assertions) {
+    const severity: CheckSeverity = assertion.severity ?? 'error';
     if (assertion.type === 'regex') {
       try {
         // Default text pattern checks to case-insensitive to reduce brittle LLM-output casing failures.
@@ -65,40 +85,40 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
         const sanitized = assertion.pattern.replace(/^\(\?[imsx]+\)/, '');
         const re = new RegExp(sanitized, 'i');
         if (!re.test(text)) {
-          failures.push(`Regex assertion failed: ${assertion.pattern}`);
+          failures.push(toFailure(`Regex assertion failed: ${assertion.pattern}`, severity));
         }
       } catch (err) {
-        failures.push(`Invalid regex: ${assertion.pattern}`);
+        failures.push(toFailure(`Invalid regex: ${assertion.pattern}`, severity));
       }
     }
 
     if (assertion.type === 'contains') {
       if (!normalizedText.includes(assertion.value.toLowerCase())) {
-        failures.push(`Contains assertion failed: ${assertion.value}`);
+        failures.push(toFailure(`Contains assertion failed: ${assertion.value}`, severity));
       }
     }
 
     if (assertion.type === 'not_contains') {
       if (normalizedText.includes(assertion.value.toLowerCase())) {
-        failures.push(`Not-contains assertion failed: ${assertion.value}`);
+        failures.push(toFailure(`Not-contains assertion failed: ${assertion.value}`, severity));
       }
     }
 
     if (assertion.type === 'starts_with') {
       if (!normalizedText.startsWith(assertion.value.toLowerCase())) {
-        failures.push(`Starts-with assertion failed: ${assertion.value}`);
+        failures.push(toFailure(`Starts-with assertion failed: ${assertion.value}`, severity));
       }
     }
 
     if (assertion.type === 'ends_with') {
       if (!normalizedText.endsWith(assertion.value.toLowerCase())) {
-        failures.push(`Ends-with assertion failed: ${assertion.value}`);
+        failures.push(toFailure(`Ends-with assertion failed: ${assertion.value}`, severity));
       }
     }
 
     if (assertion.type === 'equals') {
       if (normalizedText !== assertion.value.toLowerCase()) {
-        failures.push(`Equals assertion failed: ${assertion.value}`);
+        failures.push(toFailure(`Equals assertion failed: ${assertion.value}`, severity));
       }
     }
 
@@ -111,21 +131,25 @@ function evaluateResponseAssertions(text: string, assertions: ResponseAssertion[
       try {
         json = JSON.parse(text);
       } catch {
-        failures.push(`JSONPath assertion failed: invalid JSON for path ${assertion.path}`);
+        failures.push(
+          toFailure(`JSONPath assertion failed: invalid JSON for path ${assertion.path}`, severity)
+        );
         continue;
       }
       const result = JSONPath({ path: assertion.path, json });
       if (assertion.type === 'jsonpath' && assertion.equals !== undefined) {
         const matched = result.some((value: unknown) => value === assertion.equals);
         if (!matched) {
-          failures.push(`JSONPath equals assertion failed: ${assertion.path}`);
+          failures.push(toFailure(`JSONPath equals assertion failed: ${assertion.path}`, severity));
         }
       } else if (assertion.type === 'jsonpath_not_exists') {
         if (result && result.length > 0) {
-          failures.push(`JSONPath not-exists assertion failed: ${assertion.path}`);
+          failures.push(
+            toFailure(`JSONPath not-exists assertion failed: ${assertion.path}`, severity)
+          );
         }
       } else if (!result || result.length === 0) {
-        failures.push(`JSONPath assertion failed: ${assertion.path}`);
+        failures.push(toFailure(`JSONPath assertion failed: ${assertion.path}`, severity));
       }
     }
   }

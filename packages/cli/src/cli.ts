@@ -11,6 +11,7 @@ import {
   selectScenarios,
   runAll,
   renderSummaryMarkdown,
+  normalizeResultsJson,
   expandConfigForAgents,
   type EvalConfig,
   type SourceEvalConfig,
@@ -281,7 +282,9 @@ program
       .action((options) => {
         try {
           const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');
-          const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
+          const results = normalizeResultsJson(
+            JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson
+          );
           const snapshot = buildSnapshotFromRun(results, options.name);
           saveSnapshot(snapshot, resolve(options.snapshotsDir));
 

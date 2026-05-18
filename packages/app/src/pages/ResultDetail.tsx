@@ -1301,15 +1301,38 @@ const ResultDetail = () => {
                                           const checks = scenarioDef
                                             ? buildRunCheckItems(
                                                 scenarioDef.evalRules,
-                                                run.failureReasons
+                                                run.failureReasons,
+                                                run.failures
                                               )
                                             : [];
                                           const failedChecks = checks.filter(
                                             (c) => c.status === 'failed'
                                           );
+                                          const warningChecks = checks.filter(
+                                            (c) => c.status === 'warning'
+                                          );
                                           const passedChecks = checks.filter(
                                             (c) => c.status === 'passed'
                                           );
+                                          const structuredFailures =
+                                            run.failures?.map((failure) => ({
+                                              message: failure.message,
+                                              severity: failure.severity
+                                            })) ??
+                                            run.failureReasons.map((reason) => ({
+                                              message: reason,
+                                              severity: 'error' as const
+                                            }));
+                                          const warningCount =
+                                            run.warningFailureCount ??
+                                            structuredFailures.filter(
+                                              (failure) => failure.severity === 'warning'
+                                            ).length;
+                                          const errorCount =
+                                            run.errorFailureCount ??
+                                            structuredFailures.filter(
+                                              (failure) => failure.severity === 'error'
+                                            ).length;
                                           return (
                                             <>
                                               <div className="flex items-center gap-2 flex-wrap">
@@ -1339,17 +1362,26 @@ const ResultDetail = () => {
                                                     Failed
                                                   </Badge>
                                                 )}
+                                                {run.passed && warningCount > 0 && (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-amber-300/40 bg-amber-500/10 text-amber-700 text-[10px]"
+                                                  >
+                                                    Pass with warnings
+                                                  </Badge>
+                                                )}
                                               </div>
-                                              {run.failureReasons.length > 0 && (
-                                                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
-                                                  <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
-                                                    <XCircle className="h-3.5 w-3.5" />
-                                                    Failure reasons
+                                              {structuredFailures.length > 0 && (
+                                                <div className="rounded-md border border-muted bg-muted/20 p-2">
+                                                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                                    Failures · errors: {errorCount}, warnings:{' '}
+                                                    {warningCount}
                                                   </p>
-                                                  <ul className="space-y-1 text-xs text-destructive">
-                                                    {run.failureReasons.map((reason, index) => (
+                                                  <ul className="space-y-1 text-xs">
+                                                    {structuredFailures.map((failure, index) => (
                                                       <li key={index}>
-                                                        • {formatFailureReason(reason)}
+                                                        {failure.severity === 'warning' ? '⚠️' : '❌'}&nbsp;
+                                                        {formatFailureReason(failure.message)}
                                                       </li>
                                                     ))}
                                                   </ul>
@@ -1415,6 +1447,16 @@ const ResultDetail = () => {
                                                         >
                                                           {failedChecks.length} failed
                                                         </Badge>
+                                                        <Badge
+                                                          variant="outline"
+                                                          className={`h-5 text-[10px] ${
+                                                            warningChecks.length > 0
+                                                              ? 'border-amber-300/40 bg-amber-500/10 text-amber-700'
+                                                              : ''
+                                                          }`}
+                                                        >
+                                                          {warningChecks.length} warnings
+                                                        </Badge>
                                                       </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
@@ -1429,6 +1471,8 @@ const ResultDetail = () => {
                                                             className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
+                                                                : check.status === 'warning'
+                                                                ? 'border-amber-300/30 bg-amber-500/5'
                                                                 : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
@@ -1436,6 +1480,10 @@ const ResultDetail = () => {
                                                               <div className="flex items-center gap-2">
                                                                 {check.status === 'failed' ? (
                                                                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                                ) : check.status === 'warning' ? (
+                                                                  <span className="h-3.5 w-3.5 shrink-0 text-amber-700">
+                                                                    ⚠️
+                                                                  </span>
                                                                 ) : (
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                                                 )}
@@ -1444,7 +1492,13 @@ const ResultDetail = () => {
                                                                 </span>
                                                               </div>
                                                               {check.failureReason && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                                <p
+                                                                  className={`mt-1 pl-5 text-[11px] ${
+                                                                    check.status === 'warning'
+                                                                      ? 'text-amber-700'
+                                                                      : 'text-destructive'
+                                                                  }`}
+                                                                >
                                                                   {formatFailureReason(
                                                                     check.failureReason
                                                                   )}
@@ -1456,6 +1510,8 @@ const ResultDetail = () => {
                                                               className={`shrink-0 text-[10px] ${
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
+                                                                  : check.status === 'warning'
+                                                                  ? 'border-amber-300/50 text-amber-700'
                                                                   : 'border-success/30 text-success'
                                                               }`}
                                                             >
@@ -2754,12 +2810,24 @@ function ExpandableText({
   );
 }
 
-function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+function buildRunCheckItems(
+  evalRules: EvalRule[],
+  failureReasons: string[],
+  failures?: Array<{ message: string; severity: 'error' | 'warning' }>
+) {
   return evalRules.map((rule) => {
     const failureReason = matchFailureReasonForRule(rule, failureReasons);
+    const severity =
+      failureReason && failures
+        ? failures.find((failure) => failure.message === failureReason)?.severity
+        : undefined;
     return {
       rule,
-      status: failureReason ? ('failed' as const) : ('passed' as const),
+      status: failureReason
+        ? severity === 'warning'
+          ? ('warning' as const)
+          : ('failed' as const)
+        : ('passed' as const),
       failureReason
     };
   });

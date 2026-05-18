@@ -1,4 +1,49 @@
-import type { EvalRules, ResultsJson, ScenarioAggregate, ScenarioRunResult } from './types.js';
+import type {
+  EvalRules,
+  ResultsJson,
+  ScenarioAggregate,
+  ScenarioRunResult
+} from './types.js';
+import { normalizeFailureEntry } from './failures.js';
+
+export function normalizeResultsJson(input: ResultsJson): ResultsJson {
+  const scenarios = (input.scenarios ?? []).map((scenario) => {
+    const runs = (scenario.runs ?? []).map((run) => {
+      const normalizedFailures = (run.failures ?? []).map((failure) => normalizeFailureEntry(failure));
+      const hasStoredCounts =
+        typeof run.error_failures === 'number' && typeof run.warning_failures === 'number';
+      const errorFailures = hasStoredCounts
+        ? run.error_failures
+        : normalizedFailures.filter((failure) => failure.severity === 'error').length;
+      const warningFailures = hasStoredCounts
+        ? run.warning_failures
+        : normalizedFailures.filter((failure) => failure.severity === 'warning').length;
+      const pass = run.error ? false : hasStoredCounts ? run.pass : errorFailures === 0;
+      return {
+        ...run,
+        failures: normalizedFailures,
+        error_failures: errorFailures,
+        warning_failures: warningFailures,
+        pass
+      };
+    });
+    const passRate = runs.length === 0 ? 0 : runs.filter((run) => run.pass).length / runs.length;
+    return { ...scenario, runs, pass_rate: passRate };
+  });
+  const totalRuns = scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
+  const totalPasses = scenarios.reduce(
+    (sum, scenario) => sum + scenario.runs.filter((run) => run.pass).length,
+    0
+  );
+  return {
+    ...input,
+    scenarios,
+    summary: {
+      ...input.summary,
+      pass_rate: totalRuns === 0 ? 0 : totalPasses / totalRuns
+    }
+  };
+}
 
 export function aggregateResults(params: {
   runId: string;

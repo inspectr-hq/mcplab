@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aggregateResults, renderSummaryMarkdown } from './results.js';
+import { aggregateResults, normalizeResultsJson, renderSummaryMarkdown } from './results.js';
 import type { ScenarioRunResult, EvalRules } from './types.js';
 
 function makeRun(
@@ -11,7 +11,9 @@ function makeRun(
   return {
     run_index: 0,
     pass,
-    failures: pass ? [] : ['some failure'],
+    failures: pass ? [] : [{ message: 'some failure', severity: 'error' as const }],
+    error_failures: pass ? 0 : 1,
+    warning_failures: 0,
     tool_calls: tools,
     tool_call_count: tools.length,
     tool_sequence: tools,
@@ -257,5 +259,56 @@ describe('renderSummaryMarkdown', () => {
     expect(withVersionsMd).toContain('- api: 1.2.3');
     expect(withVersionsMd).toContain('- docs: unknown');
     expect(renderSummaryMarkdown(withoutVersions)).not.toContain('MCP server versions:');
+  });
+});
+
+describe('normalizeResultsJson', () => {
+  it('forces pass=false when run.error exists even if error_failures is 0', () => {
+    const normalized = normalizeResultsJson({
+      metadata: {
+        run_id: 'run-err',
+        timestamp: '2024-01-01T00:00:00Z',
+        config_hash: 'hash',
+        cli_version: '1.0.0',
+        mcp_server_versions: {}
+      },
+      summary: {
+        total_scenarios: 1,
+        total_runs: 1,
+        pass_rate: 1,
+        avg_tool_calls_per_run: 0,
+        avg_tool_latency_ms: null
+      },
+      scenarios: [
+        {
+          scenario_id: 's1',
+          agent: 'a1',
+          runs: [
+            {
+              run_index: 0,
+              pass: true,
+              error: 'boom',
+              failures: [],
+              error_failures: 0,
+              warning_failures: 0,
+              tool_calls: [],
+              tool_call_count: 0,
+              tool_sequence: [],
+              tool_usage: {},
+              tool_durations_ms: [],
+              final_text: '',
+              extracted: {}
+            }
+          ],
+          pass_rate: 1,
+          distinct_sequences: {},
+          tool_usage_frequency: {},
+          extracted_values: {},
+          last_final_answer: ''
+        }
+      ]
+    });
+    expect(normalized.scenarios[0]?.runs[0]?.pass).toBe(false);
+    expect(normalized.summary.pass_rate).toBe(0);
   });
 });

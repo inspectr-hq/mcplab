@@ -89,48 +89,54 @@ export interface ToolSequenceRules {
   allow?: string[][];
 }
 
-export interface ResponseAssertionRegex {
+export type CheckSeverity = 'error' | 'warning';
+
+export interface ResponseAssertionBase {
+  severity?: CheckSeverity;
+}
+
+export interface ResponseAssertionRegex extends ResponseAssertionBase {
   type: 'regex';
   pattern: string;
 }
 
-export interface ResponseAssertionContains {
+export interface ResponseAssertionContains extends ResponseAssertionBase {
   type: 'contains';
   value: string;
 }
 
-export interface ResponseAssertionNotContains {
+export interface ResponseAssertionNotContains extends ResponseAssertionBase {
   type: 'not_contains';
   value: string;
 }
 
-export interface ResponseAssertionStartsWith {
+export interface ResponseAssertionStartsWith extends ResponseAssertionBase {
   type: 'starts_with';
   value: string;
 }
 
-export interface ResponseAssertionEndsWith {
+export interface ResponseAssertionEndsWith extends ResponseAssertionBase {
   type: 'ends_with';
   value: string;
 }
 
-export interface ResponseAssertionEquals {
+export interface ResponseAssertionEquals extends ResponseAssertionBase {
   type: 'equals';
   value: string;
 }
 
-export interface ResponseAssertionJsonPath {
+export interface ResponseAssertionJsonPath extends ResponseAssertionBase {
   type: 'jsonpath';
   path: string;
   equals?: string | number | boolean;
 }
 
-export interface ResponseAssertionJsonPathExists {
+export interface ResponseAssertionJsonPathExists extends ResponseAssertionBase {
   type: 'jsonpath_exists';
   path: string;
 }
 
-export interface ResponseAssertionJsonPathNotExists {
+export interface ResponseAssertionJsonPathNotExists extends ResponseAssertionBase {
   type: 'jsonpath_not_exists';
   path: string;
 }
@@ -333,12 +339,19 @@ export type PersistedTraceRecord =
   | TraceFileLegacyMeta
   | Record<string, unknown>;
 
+export interface FailureEntry {
+  message: string;
+  severity: CheckSeverity;
+}
+
 export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
   pass: boolean;
   error?: string;
-  failures: string[];
+  failures: FailureEntry[];
+  error_failures: number;
+  warning_failures: number;
   tool_calls: string[];
   tool_call_count: number;
   tool_sequence: string[];
