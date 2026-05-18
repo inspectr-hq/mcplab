@@ -249,7 +249,10 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
       agent: sc.agent,
       pass_rate: sc.pass_rate,
       run_count: sc.runs.length,
-      sample_failures: sc.runs.flatMap((r) => r.failures).map(failureMessage).slice(0, 5)
+      sample_failures: sc.runs
+        .flatMap((r) => r.failures)
+        .map(failureMessage)
+        .slice(0, 5)
     })) ?? [];
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);

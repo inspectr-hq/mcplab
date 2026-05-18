@@ -207,7 +207,9 @@ function buildDocsFromResults(runId: string, runDir: string, results: ResultsJso
         pass_rate: scenario.pass_rate,
         tool_usage_frequency: scenario.tool_usage_frequency,
         last_final_answer: scenario.last_final_answer,
-        failures: scenario.runs.flatMap((r) => r.failures).map((failure) => failureMessage(failure)),
+        failures: scenario.runs
+          .flatMap((r) => r.failures)
+          .map((failure) => failureMessage(failure)),
         errors: scenario.runs.map((r) => r.error).filter(Boolean)
       }),
       tags: ['scenario', scenarioStatus, 'results', 'assertion']

@@ -84,7 +84,12 @@ function toCoreResponseAssertion(
   | { type: 'starts_with'; value: string; severity?: 'error' | 'warning' }
   | { type: 'ends_with'; value: string; severity?: 'error' | 'warning' }
   | { type: 'equals'; value: string; severity?: 'error' | 'warning' }
-  | { type: 'jsonpath'; path: string; equals?: string | number | boolean; severity?: 'error' | 'warning' }
+  | {
+      type: 'jsonpath';
+      path: string;
+      equals?: string | number | boolean;
+      severity?: 'error' | 'warning';
+    }
   | { type: 'jsonpath_exists'; path: string; severity?: 'error' | 'warning' }
   | { type: 'jsonpath_not_exists'; path: string; severity?: 'error' | 'warning' }
   | null {
@@ -118,7 +123,9 @@ function toCoreResponseAssertion(
     return rule.path?.trim() ? { type: 'jsonpath_exists', path: rule.path.trim(), severity } : null;
   }
   if (rule.type === 'response_jsonpath_not_exists') {
-    return rule.path?.trim() ? { type: 'jsonpath_not_exists', path: rule.path.trim(), severity } : null;
+    return rule.path?.trim()
+      ? { type: 'jsonpath_not_exists', path: rule.path.trim(), severity }
+      : null;
   }
   return null;
 }
@@ -136,7 +143,12 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         | { type: 'starts_with'; value: string; severity?: 'error' | 'warning' }
         | { type: 'ends_with'; value: string; severity?: 'error' | 'warning' }
         | { type: 'equals'; value: string; severity?: 'error' | 'warning' }
-        | { type: 'jsonpath'; path: string; equals?: string | number | boolean; severity?: 'error' | 'warning' }
+        | {
+            type: 'jsonpath';
+            path: string;
+            equals?: string | number | boolean;
+            severity?: 'error' | 'warning';
+          }
         | { type: 'jsonpath_exists'; path: string; severity?: 'error' | 'warning' }
         | { type: 'jsonpath_not_exists'; path: string; severity?: 'error' | 'warning' }
       >;

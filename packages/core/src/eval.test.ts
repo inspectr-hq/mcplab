@@ -68,7 +68,9 @@ describe('evaluateScenario — tool_sequence', () => {
       tool_sequence: { allow: [['search', 'fetch']] }
     });
     expect(result.pass).toBe(false);
-    expect(result.failures[0]?.message).toContain('Tool sequence did not match any allowed sequence');
+    expect(result.failures[0]?.message).toContain(
+      'Tool sequence did not match any allowed sequence'
+    );
   });
 
   it('passes when empty sequence is explicitly allowed', () => {

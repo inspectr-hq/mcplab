@@ -246,8 +246,12 @@ export function applySnapshotPolicyToRunResult(params: {
           if (!run.failures.some((failure) => failureMessage(failure) === reason)) {
             run.failures.push({ message: reason, severity: 'error' });
           }
-          run.error_failures = run.failures.filter((failure) => failure.severity === 'error').length;
-          run.warning_failures = run.failures.filter((failure) => failure.severity === 'warning').length;
+          run.error_failures = run.failures.filter(
+            (failure) => failure.severity === 'error'
+          ).length;
+          run.warning_failures = run.failures.filter(
+            (failure) => failure.severity === 'warning'
+          ).length;
         }
         scenario.pass_rate =
           scenario.runs.length === 0
@@ -255,7 +259,6 @@ export function applySnapshotPolicyToRunResult(params: {
             : scenario.runs.filter((run) => run.pass).length / scenario.runs.length;
       }
     }
-
   }
   const totalRuns = results.scenarios.reduce((sum, scenario) => sum + scenario.runs.length, 0);
   const totalPasses = results.scenarios.reduce(

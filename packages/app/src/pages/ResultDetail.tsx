@@ -1380,7 +1380,10 @@ const ResultDetail = () => {
                                                   <ul className="space-y-1 text-xs">
                                                     {structuredFailures.map((failure, index) => (
                                                       <li key={index}>
-                                                        {failure.severity === 'warning' ? '⚠️' : '❌'}&nbsp;
+                                                        {failure.severity === 'warning'
+                                                          ? '⚠️'
+                                                          : '❌'}
+                                                        &nbsp;
                                                         {formatFailureReason(failure.message)}
                                                       </li>
                                                     ))}

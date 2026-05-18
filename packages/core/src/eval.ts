@@ -43,7 +43,10 @@ function toFailure(message: string, severity: CheckSeverity = 'error'): FailureE
   return { message, severity };
 }
 
-function evaluateToolConstraints(toolSequence: string[], constraints: ToolConstraints): FailureEntry[] {
+function evaluateToolConstraints(
+  toolSequence: string[],
+  constraints: ToolConstraints
+): FailureEntry[] {
   const failures: FailureEntry[] = [];
   const unique = new Set(toolSequence);
   if (constraints.forbidden_tools) {

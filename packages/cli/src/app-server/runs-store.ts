@@ -31,7 +31,9 @@ export function listRuns(runsDir: string): RunSummary[] {
     const resultsPath = join(dir, 'results.json');
     if (!existsSync(resultsPath)) continue;
     try {
-      const results = normalizeResultsJson(JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson);
+      const results = normalizeResultsJson(
+        JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson
+      );
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,

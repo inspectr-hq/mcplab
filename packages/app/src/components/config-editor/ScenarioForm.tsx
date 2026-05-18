@@ -246,7 +246,9 @@ function ScenarioCard({
           ]
         });
       } else {
-        onUpdate({ evalRules: [...scenario.evalRules, { type: newRuleType, path, ...severityPatch }] });
+        onUpdate({
+          evalRules: [...scenario.evalRules, { type: newRuleType, path, ...severityPatch }]
+        });
       }
       setNewRulePath('');
       setNewRuleEquals('');

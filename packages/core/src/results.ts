@@ -1,15 +1,12 @@
-import type {
-  EvalRules,
-  ResultsJson,
-  ScenarioAggregate,
-  ScenarioRunResult
-} from './types.js';
+import type { EvalRules, ResultsJson, ScenarioAggregate, ScenarioRunResult } from './types.js';
 import { normalizeFailureEntry } from './failures.js';
 
 export function normalizeResultsJson(input: ResultsJson): ResultsJson {
   const scenarios = (input.scenarios ?? []).map((scenario) => {
     const runs = (scenario.runs ?? []).map((run) => {
-      const normalizedFailures = (run.failures ?? []).map((failure) => normalizeFailureEntry(failure));
+      const normalizedFailures = (run.failures ?? []).map((failure) =>
+        normalizeFailureEntry(failure)
+      );
       const hasStoredCounts =
         typeof run.error_failures === 'number' && typeof run.warning_failures === 'number';
       const errorFailures = hasStoredCounts
