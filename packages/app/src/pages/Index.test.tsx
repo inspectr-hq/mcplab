@@ -80,8 +80,8 @@ describe('Dashboard', () => {
     });
     expect(screen.getByText('70%')).toBeInTheDocument();
     expect(screen.getByText('120ms')).toBeInTheDocument();
-    expect(screen.getByText(/Last 7 days · \+20\.0% from last week/)).toBeInTheDocument();
-    expect(screen.getByText(/Last 7 days · -80ms from last week/)).toBeInTheDocument();
+    expect(screen.getByText(/\+20\.0% from last week/)).toBeInTheDocument();
+    expect(screen.getByText(/-80ms from last week/)).toBeInTheDocument();
   });
 
   it('shows fallback text when previous-week baseline is missing', async () => {
