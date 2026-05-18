@@ -1,6 +1,6 @@
 import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import { loadConfig, normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
@@ -135,9 +135,10 @@ export async function handleEvalsRoutes(params: {
     const nextFileName = String(body.fileName ?? '').trim();
     if (nextFileName) {
       const baseName = safeFileName(nextFileName);
+      const currentDir = dirname(currentPath);
       const desiredPath = ensureInsideRoot(
         settings.evalsDir,
-        join(settings.evalsDir, `${baseName}.yaml`)
+        join(currentDir, `${baseName}.yaml`)
       );
       if (desiredPath !== currentPath) {
         let uniquePath = desiredPath;
@@ -145,7 +146,7 @@ export async function handleEvalsRoutes(params: {
         while (existsSync(uniquePath)) {
           uniquePath = ensureInsideRoot(
             settings.evalsDir,
-            join(settings.evalsDir, `${baseName}-${suffix}.yaml`)
+            join(currentDir, `${baseName}-${suffix}.yaml`)
           );
           suffix += 1;
         }
