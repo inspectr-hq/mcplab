@@ -32,6 +32,19 @@ import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
+function displayConfigName(config: { configName?: string; name: string }): string {
+  return config.configName?.trim() || config.name;
+}
+
+function configSuiteLabel(config: { suitePath?: string; relativePath?: string }): string | null {
+  if (config.suitePath?.trim()) return config.suitePath.trim();
+  if (config.relativePath?.includes('/')) {
+    const idx = config.relativePath.lastIndexOf('/');
+    return config.relativePath.slice(0, idx);
+  }
+  return null;
+}
+
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState('');
@@ -594,7 +607,12 @@ const RunEvaluation = () => {
                   <SelectContent>
                     {configs.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name}
+                        <span>{displayConfigName(c)}</span>
+                        {configSuiteLabel(c) && (
+                          <span className="ml-2 text-muted-foreground">
+                            ({configSuiteLabel(c)})
+                          </span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
