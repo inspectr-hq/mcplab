@@ -115,6 +115,7 @@ function SafetyBadge({
 }
 
 const ToolAnalysisPage = () => {
+  const buildExportFilename = (ext: 'json' | 'md') => `tool-analysis-${Date.now()}.${ext}`;
   const { source } = useDataSource();
   const { servers, agents, loading: librariesLoading, reload: reloadLibraries } = useLibraries();
 
@@ -1087,7 +1088,7 @@ const ToolAnalysisPage = () => {
                 variant="outline"
                 onClick={() =>
                   downloadTextFile(
-                    `tool-analysis-${Date.now()}.json`,
+                    buildExportFilename('json'),
                     `${JSON.stringify(report, null, 2)}\n`,
                     'application/json'
                   )
@@ -1102,7 +1103,7 @@ const ToolAnalysisPage = () => {
                 variant="outline"
                 onClick={() =>
                   downloadTextFile(
-                    `tool-analysis-${Date.now()}.md`,
+                    buildExportFilename('md'),
                     toolAnalysisReportToMarkdown(report),
                     'text/markdown'
                   )

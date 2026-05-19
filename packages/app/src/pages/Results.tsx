@@ -546,6 +546,7 @@ const Results = () => {
                 variant="outline"
                 role="combobox"
                 aria-expanded={openScenarioFilterPicker}
+                aria-controls="results-scenario-command-list"
                 className="w-[260px] justify-between font-normal"
               >
                 <span className="truncate text-left">{selectedScenarioFilterLabel}</span>
@@ -555,7 +556,7 @@ const Results = () => {
             <PopoverContent className="w-[260px] p-0" align="start">
               <Command>
                 <CommandInput placeholder="Search scenarios..." />
-                <CommandList>
+                <CommandList id="results-scenario-command-list">
                   <CommandEmpty>No scenarios found.</CommandEmpty>
                   <CommandGroup>
                     <CommandItem
@@ -591,6 +592,7 @@ const Results = () => {
                 variant="outline"
                 role="combobox"
                 aria-expanded={openTimeFilterPicker}
+                aria-controls="results-time-command-list"
                 className="w-[320px] justify-between font-normal"
               >
                 <span className="flex min-w-0 items-center gap-2 truncate text-left">
@@ -605,7 +607,7 @@ const Results = () => {
                 <p className="text-sm font-medium">Date and time filter</p>
                 <p className="text-xs text-muted-foreground">Filter runs by timestamp.</p>
               </div>
-              <div className="grid gap-1 p-2">
+              <div id="results-time-command-list" className="grid gap-1 p-2">
                 <Button
                   type="button"
                   variant={timeFilterMode === 'all' ? 'secondary' : 'ghost'}

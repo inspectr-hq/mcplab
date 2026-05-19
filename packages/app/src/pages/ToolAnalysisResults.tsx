@@ -159,6 +159,7 @@ export default function ToolAnalysisResultsPage() {
                   variant="outline"
                   role="combobox"
                   aria-expanded={openServerFilterPicker}
+                  aria-controls="tool-analysis-server-command-list"
                   className="h-9 w-[240px] justify-between font-normal"
                 >
                   <span className="truncate text-left">
@@ -170,7 +171,7 @@ export default function ToolAnalysisResultsPage() {
               <PopoverContent className="w-[240px] p-0" align="start">
                 <Command>
                   <CommandInput placeholder="Search MCP servers..." />
-                  <CommandList>
+                  <CommandList id="tool-analysis-server-command-list">
                     <CommandEmpty>No servers found.</CommandEmpty>
                     <CommandGroup>
                       <CommandItem

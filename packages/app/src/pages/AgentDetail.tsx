@@ -372,6 +372,7 @@ const AgentDetail = () => {
                       variant="outline"
                       role="combobox"
                       aria-expanded={openModelPicker}
+                      aria-controls="agent-model-command-list"
                       className="h-9 flex-1 justify-between font-mono text-xs"
                     >
                       <span className="truncate text-left">{form.model || 'Select model...'}</span>
@@ -385,7 +386,7 @@ const AgentDetail = () => {
                           form.provider === 'azure' ? 'deployments' : 'models'
                         }...`}
                       />
-                      <CommandList>
+                      <CommandList id="agent-model-command-list">
                         <CommandEmpty>
                           No {form.provider === 'azure' ? 'deployments' : 'models'} found.
                         </CommandEmpty>

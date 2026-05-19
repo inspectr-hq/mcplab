@@ -1611,11 +1611,17 @@ export default function OAuthDebuggerPage() {
                         session.summary.accessTokenExpiresInSeconds
                       )} from issuance`
                     : 'No expiry advertised by token endpoint'}
-                  {session.summary?.accessTokenExpiresAt
-                    ? ` (until ${new Date(
-                        session.summary.accessTokenExpiresAt
-                      ).toLocaleTimeString()})`
-                    : ''}
+                  {session.summary?.accessTokenExpiresAt ? (
+                    <>
+                      {' (until '}
+                      <span>
+                        {new Date(session.summary.accessTokenExpiresAt).toLocaleTimeString()}
+                      </span>
+                      {')'}
+                    </>
+                  ) : (
+                    ''
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Source:{' '}
