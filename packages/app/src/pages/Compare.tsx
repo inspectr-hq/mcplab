@@ -530,6 +530,7 @@ const Compare = () => {
                   variant="outline"
                   role="combobox"
                   aria-expanded={openScenarioFilterPicker}
+                  aria-controls="compare-scenario-command-list"
                   className="w-[260px] justify-between font-normal"
                 >
                   <span className="truncate text-left">
@@ -541,7 +542,7 @@ const Compare = () => {
               <PopoverContent className="w-[260px] p-0" align="start">
                 <Command>
                   <CommandInput placeholder="Search scenarios..." />
-                  <CommandList>
+                  <CommandList id="compare-scenario-command-list">
                     <CommandEmpty>No scenarios found.</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
@@ -611,6 +612,7 @@ const Compare = () => {
                       variant="outline"
                       role="combobox"
                       aria-expanded={openWithinRunScenarioPicker}
+                      aria-controls="compare-within-run-scenario-command-list"
                       className="w-full justify-between font-normal"
                     >
                       <span className="truncate text-left">
@@ -627,7 +629,7 @@ const Compare = () => {
                   >
                     <Command>
                       <CommandInput placeholder="Search scenarios..." />
-                      <CommandList>
+                      <CommandList id="compare-within-run-scenario-command-list">
                         <CommandEmpty>No scenarios found.</CommandEmpty>
                         <CommandGroup>
                           <CommandItem

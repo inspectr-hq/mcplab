@@ -824,15 +824,21 @@ const ConfigEditor = () => {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{title}</h1>
           <p className="text-sm text-muted-foreground">
-            {isNew
-              ? 'Create a new MCP evaluation'
-              : loading
-              ? 'Loading configuration...'
-              : existing
-              ? existing.loadError
-                ? 'MCP evaluation could not be fully loaded'
-                : `Last updated ${new Date(config.updatedAt).toLocaleDateString()}`
-              : 'MCP evaluation not found'}
+            {isNew ? (
+              'Create a new MCP evaluation'
+            ) : loading ? (
+              'Loading configuration...'
+            ) : existing ? (
+              existing.loadError ? (
+                'MCP evaluation could not be fully loaded'
+              ) : (
+                <>
+                  Last updated <span>{new Date(config.updatedAt).toLocaleDateString()}</span>
+                </>
+              )
+            ) : (
+              'MCP evaluation not found'
+            )}
           </p>
         </div>
         <div className="flex gap-2 shrink-0">

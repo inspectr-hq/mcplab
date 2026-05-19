@@ -409,6 +409,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                     variant="outline"
                     role="combobox"
                     aria-expanded={openToolFilterPicker}
+                    aria-controls="tool-filter-command-list"
                     className="h-8 w-[320px] max-w-full justify-between text-xs font-normal"
                   >
                     <span className="truncate text-left">{toolFilter || 'All tools'}</span>
@@ -418,7 +419,7 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                 <PopoverContent className="w-[320px] p-0" align="end">
                   <Command>
                     <CommandInput placeholder="Search tools..." />
-                    <CommandList>
+                    <CommandList id="tool-filter-command-list">
                       <CommandEmpty>No tools found.</CommandEmpty>
                       <CommandGroup>
                         <CommandItem

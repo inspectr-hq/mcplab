@@ -45,6 +45,10 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
   return null;
 }
 
+function nowTime(): string {
+  return new Date().toLocaleTimeString();
+}
+
 const RunEvaluation = () => {
   const [searchParams] = useSearchParams();
   const [configId, setConfigId] = useState('');
@@ -169,28 +173,19 @@ const RunEvaluation = () => {
 
   const startWorkspaceRun = async () => {
     if (!selectedConfig?.sourcePath) {
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Missing source path for selected config.`
-      ]);
+      setLogs((prev) => [...prev, `[${nowTime()}] Missing source path for selected config.`]);
       return;
     }
     const selectedAgents = availableAgents.filter((agent) => selectedAgentIds.includes(agent.id));
     if (selectedAgents.length === 0) {
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Select at least one agent.`
-      ]);
+      setLogs((prev) => [...prev, `[${nowTime()}] Select at least one agent.`]);
       return;
     }
     const selectedScenarios = availableScenarios.filter((scenario) =>
       selectedScenarioIds.includes(scenario.id)
     );
     if (selectedScenarios.length === 0) {
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Select at least one test.`
-      ]);
+      setLogs((prev) => [...prev, `[${nowTime()}] Select at least one test.`]);
       return;
     }
     const oauthServerNames = Array.from(
@@ -216,20 +211,20 @@ const RunEvaluation = () => {
           onServerAuthStart: (serverName) => {
             setLogs((prev) => [
               ...prev,
-              `[${new Date().toLocaleTimeString()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`
+              `[${nowTime()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`
             ]);
           }
         });
         setLogs((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] OAuth login completed for required server(s): ${oauthServerNames.join(
+          `[${nowTime()}] OAuth login completed for required server(s): ${oauthServerNames.join(
             ', '
           )}.`
         ]);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] OAuth error: ${message}`]);
+      setLogs((prev) => [...prev, `[${nowTime()}] OAuth error: ${message}`]);
       setOauthAuthInProgress(false);
       return;
     } finally {
@@ -247,10 +242,8 @@ const RunEvaluation = () => {
         ? 'refs-composed'
         : 'single-file/inline';
     setLogs([
-      `[${new Date().toLocaleTimeString()}] Starting evaluation run...`,
-      `[${new Date().toLocaleTimeString()}] Config=${
-        selectedConfig.name
-      } mode=${compositionMode} agents=${selectedAgents
+      `[${nowTime()}] Starting evaluation run...`,
+      `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents
         .map((a) => a.name || a.id)
         .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
         varianceRuns
@@ -277,10 +270,7 @@ const RunEvaluation = () => {
       const extraHint = message.includes('Anthropic model not found')
         ? ' Hint: this usually means the API key works but the model ID is not enabled for that Anthropic account. Change the agent model in Manage Agents (library) or inline config.'
         : '';
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] Error: ${message}${extraHint}`
-      ]);
+      setLogs((prev) => [...prev, `[${nowTime()}] Error: ${message}${extraHint}`]);
       setRunning(false);
       setProgress(0);
       setActiveJobId(null);
@@ -303,7 +293,7 @@ const RunEvaluation = () => {
     setRunning(false);
     setDone(false);
     setStopped(true);
-    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] Run aborted by user.`]);
+    setLogs((prev) => [...prev, `[${nowTime()}] Run aborted by user.`]);
     void refreshQueue();
   };
 
@@ -355,9 +345,7 @@ const RunEvaluation = () => {
     setDone(false);
     setStopped(false);
     setLogs((prev) =>
-      prev.length > 0
-        ? prev
-        : [`[${new Date().toLocaleTimeString()}] Reattached to in-progress evaluation run...`]
+      prev.length > 0 ? prev : [`[${nowTime()}] Reattached to in-progress evaluation run...`]
     );
     attachRunJob(storedJobId);
     return () => {
@@ -834,7 +822,7 @@ const RunEvaluation = () => {
                       onServerAuthStart: (serverName) => {
                         setLogs((prev) => [
                           ...prev,
-                          `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`
+                          `[${nowTime()}] OAuth sign-in opened for '${serverName}'...`
                         ]);
                       }
                     })
@@ -843,7 +831,7 @@ const RunEvaluation = () => {
                         const jobId = oauthRequired?.jobId;
                         setLogs((prev) => [
                           ...prev,
-                          `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`
+                          `[${nowTime()}] OAuth complete. Resuming run...`
                         ]);
                         if (jobId) {
                           setActiveJobId(jobId);
@@ -855,10 +843,7 @@ const RunEvaluation = () => {
                       })
                       .catch((err: unknown) => {
                         const msg = err instanceof Error ? err.message : String(err);
-                        setLogs((prev) => [
-                          ...prev,
-                          `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`
-                        ]);
+                        setLogs((prev) => [...prev, `[${nowTime()}] OAuth error: ${msg}`]);
                         oauthConnectingRef.current = false;
                       })
                       .finally(() => {
@@ -914,6 +899,8 @@ const RunEvaluation = () => {
             <div className="space-y-2">
               {activeQueueEntry && (
                 <div
+                  role="button"
+                  tabIndex={0}
                   className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${
                     activeJobId === activeQueueEntry.jobId ? 'ring-2 ring-primary/40' : ''
                   }`}
@@ -925,9 +912,22 @@ const RunEvaluation = () => {
                     setDone(false);
                     setStopped(false);
                     setLogs([
-                      `[${new Date().toLocaleTimeString()}] Attached to running job ${
-                        activeQueueEntry.jobId
-                      }...`
+                      `[${nowTime()}] Attached to running job ${activeQueueEntry.jobId}...`
+                    ]);
+                    setProgress(10);
+                    attachRunJob(activeQueueEntry.jobId);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    if (activeJobId === activeQueueEntry.jobId) return;
+                    e.preventDefault();
+                    setActiveJobId(activeQueueEntry.jobId);
+                    setActiveRunJob(activeQueueEntry.jobId);
+                    setRunning(true);
+                    setDone(false);
+                    setStopped(false);
+                    setLogs([
+                      `[${nowTime()}] Attached to running job ${activeQueueEntry.jobId}...`
                     ]);
                     setProgress(10);
                     attachRunJob(activeQueueEntry.jobId);
@@ -1049,7 +1049,7 @@ const RunEvaluation = () => {
                               onServerAuthStart: (serverName) => {
                                 setLogs((prev) => [
                                   ...prev,
-                                  `[${new Date().toLocaleTimeString()}] OAuth sign-in opened for '${serverName}'...`
+                                  `[${nowTime()}] OAuth sign-in opened for '${serverName}'...`
                                 ]);
                               }
                             })
@@ -1057,7 +1057,7 @@ const RunEvaluation = () => {
                               .then(() => {
                                 setLogs((prev) => [
                                   ...prev,
-                                  `[${new Date().toLocaleTimeString()}] OAuth complete. Resuming run...`
+                                  `[${nowTime()}] OAuth complete. Resuming run...`
                                 ]);
                                 setActiveJobId(entry.jobId);
                                 setActiveRunJob(entry.jobId);
@@ -1067,10 +1067,7 @@ const RunEvaluation = () => {
                               })
                               .catch((err: unknown) => {
                                 const msg = err instanceof Error ? err.message : String(err);
-                                setLogs((prev) => [
-                                  ...prev,
-                                  `[${new Date().toLocaleTimeString()}] OAuth error: ${msg}`
-                                ]);
+                                setLogs((prev) => [...prev, `[${nowTime()}] OAuth error: ${msg}`]);
                                 oauthConnectingRef.current = false;
                               })
                               .finally(() => {
