@@ -457,6 +457,7 @@ paths:
                   maxLength: 500
                 serverOverrideAll:
                   type: array
+                  minItems: 1
                   items: { type: string }
                   description: Runtime server refs applied to all selected scenarios for this run.
                 scenarioServerOverrides:

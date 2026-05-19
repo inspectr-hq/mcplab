@@ -21,6 +21,7 @@ import {
   type OAuthSessionManager
 } from './oauth-session-manager.js';
 import { selectScenarioIds } from './runs-store.js';
+import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 
 export type RunsRouteDeps = Pick<
   AppRouteDeps,
@@ -793,7 +794,7 @@ function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] 
   if (job.runParams.oauthServerNames !== undefined) return job.runParams.oauthServerNames;
   try {
     const loaded = loadConfig(job.runParams.configPath, { bundleRoot: librariesDir });
-    const libraries = readLibraries(librariesDir);
+    const libraries = readLibrariesFromStore(librariesDir);
     applyLibraryEntries(loaded, libraries.agents, libraries.servers);
     const selected = job.runParams.scenarioIds?.length
       ? selectScenarioIds(loaded.config, job.runParams.scenarioIds)
@@ -813,7 +814,12 @@ function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] 
     });
     job.runParams.oauthServerNames = names;
     return names;
-  } catch {
+  } catch (error) {
+    console.warn(
+      `[mcplab] Failed to resolve OAuth servers for queued job '${job.id}': ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return [];
   }
 }

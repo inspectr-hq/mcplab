@@ -161,10 +161,6 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
   }, [selectedConfig?.servers, libraryServers]);
-  const availableServerIds = useMemo(
-    () => availableServers.map((server) => server.id),
-    [availableServers]
-  );
   useEffect(() => {
     if (!requestedConfigId) return;
     if (!configs.some((config) => config.id === requestedConfigId)) return;

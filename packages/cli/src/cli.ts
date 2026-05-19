@@ -970,8 +970,12 @@ async function executeSingleConfigRun(params: {
 }): Promise<{ runDir: string; runId: string; passed: boolean; shouldFailOnDrift: boolean }> {
   const { configPath, options, resolvedOptions } = params;
   const loaded = loadConfig(resolve(configPath));
-  const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
-  loaded.config = { ...loaded.config, agents: { ...libraryAgents, ...loaded.config.agents } };
+  const { agents: libraryAgents, servers: libraryServers } = readLibraries(loaded.bundleRoot);
+  loaded.config = {
+    ...loaded.config,
+    agents: { ...libraryAgents, ...loaded.config.agents },
+    servers: { ...libraryServers, ...loaded.config.servers }
+  };
   loaded.hash = hashConfig(loaded.config);
   const { config, hash, warnings } = loaded;
   for (const warning of warnings) {
