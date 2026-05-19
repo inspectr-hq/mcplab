@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and CLI usage. Use when users need help writing or debugging MCPLab eval YAML, running `mcplab run/app/report/results`, troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and execution workflows. Use when users need help writing or debugging MCPLab eval YAML, running scenarios (prefer MCP tool `mcplab_run_eval` when available; CLI fallback `mcplab run/app/report/results`), troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
 ---
 
 # MCPLab Assistant
@@ -9,6 +9,12 @@ description: Operator guide for MCPLab config authoring and CLI usage. Use when 
 
 Use this skill to operate MCPLab evaluations end-to-end: create or update configs, run scenarios, diagnose failures, and analyze outputs.
 Stay in operator scope only. Do not include repository build/setup instructions.
+
+## Execution Policy
+
+1. When MCP tools are available, execute scenarios with `mcplab_run_eval` first.
+2. Use CLI commands (`mcplab run`) as fallback when MCP tool execution is unavailable.
+3. Keep config authoring and validation in MCP flow when possible (`mcplab_generate_*`, `mcplab_validate_config`).
 
 ## Workflow Router
 
@@ -96,6 +102,8 @@ When the request is about analyzing results, the assistant must:
 9. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
+
+Use this workflow when MCP execution tools are not available or when the user explicitly asks for shell commands.
 
 1. Choose command by intent:
 - Execute evaluations -> `mcplab run`
