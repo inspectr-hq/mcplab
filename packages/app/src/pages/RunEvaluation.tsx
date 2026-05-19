@@ -890,15 +890,16 @@ const RunEvaluation = () => {
                                     className={`cursor-pointer text-xs ${
                                       selected ? '' : 'opacity-60 hover:opacity-100'
                                     }`}
-                                    onClick={() =>
+                                    onClick={(event) => {
+                                      event.stopPropagation();
                                       setScenarioServerOverrideMap((prev) => {
                                         const current = prev[scenario.id] ?? [];
                                         const next = current.includes(serverId)
                                           ? current.filter((id) => id !== serverId)
                                           : [...current, serverId];
                                         return { ...prev, [scenario.id]: next };
-                                      })
-                                    }
+                                      });
+                                    }}
                                   >
                                     {server.name?.trim() ? server.name : serverId}
                                   </Badge>
