@@ -5,12 +5,17 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ArrowLeftRight,
-  Clock
+  Clock,
+  CalendarRange,
+  X
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -52,6 +57,14 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
+type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterMode = 'all' | 'last' | 'custom';
+type TimeFilterQueryState = {
+  mode: TimeFilterMode;
+  preset: TimeFilterPreset;
+  start: string;
+  end: string;
+};
 
 type AgentSummary = {
   agentId: string;
@@ -70,6 +83,80 @@ type WithinRunScenarioRow = {
   displayLabel: string;
   byAgent: Record<string, ScenarioResult | undefined>;
 };
+
+type CompareTableItem =
+  | { type: 'day-separator'; dayKey: string; dayLabel: string }
+  | { type: 'run'; run: EvalResult };
+
+const COMPARE_RUNS_TABLE_COLUMN_COUNT = 8;
+const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
+
+const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
+  { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
+  { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
+  { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
+  { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
+  { value: '30d', label: 'Last 30 days', durationMs: 30 * 24 * 60 * 60 * 1000 }
+];
+
+function parseLocalDateTime(value: string) {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatLocalDateTime(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return '';
+  return parsed.toLocaleString();
+}
+
+function getLocalDayKey(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return value;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatLocalDayLabel(value: string) {
+  const parsed = parseLocalDateTime(value);
+  if (!parsed) return 'Unknown day';
+  return parsed.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+}
+
+function isTimeFilterMode(value: string | null): value is TimeFilterMode {
+  return value === 'all' || value === 'last' || value === 'custom';
+}
+
+function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
+  return (
+    value === '15min' ||
+    value === '1h' ||
+    value === '24h' ||
+    value === '7d' ||
+    value === '14d' ||
+    value === '30d'
+  );
+}
+
+function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQueryState {
+  const modeParam = searchParams.get('time_filter');
+  const presetParam = searchParams.get('time_preset');
+  return {
+    mode: isTimeFilterMode(modeParam) ? modeParam : 'all',
+    preset: isTimeFilterPreset(presetParam) ? presetParam : '15min',
+    start: searchParams.get('time_start') ?? '',
+    end: searchParams.get('time_end') ?? ''
+  };
+}
 
 function isSameStringArray(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
@@ -91,6 +178,7 @@ function getRepresentativeScenarioMetadata(
 const Compare = () => {
   const { source } = useDataSource();
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialTimeFilter = getTimeFilterQueryState(searchParams);
   const mode: CompareMode = searchParams.get('mode') === 'within-run' ? 'within-run' : 'runs';
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,6 +187,21 @@ const Compare = () => {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [scenarioFilter, setScenarioFilter] = useState('all');
   const [openScenarioFilterPicker, setOpenScenarioFilterPicker] = useState(false);
+  const [showDaySeparators, setShowDaySeparators] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(COMPARE_DAY_SEPARATOR_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [timeFilterMode, setTimeFilterMode] = useState<TimeFilterMode>(initialTimeFilter.mode);
+  const [timeFilterPreset, setTimeFilterPreset] = useState<TimeFilterPreset>(
+    initialTimeFilter.preset
+  );
+  const [timeFilterStart, setTimeFilterStart] = useState(initialTimeFilter.start);
+  const [timeFilterEnd, setTimeFilterEnd] = useState(initialTimeFilter.end);
+  const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
 
   const initialWithinRunId = searchParams.get('runId') ?? '';
   const initialWithinRunAgents = (searchParams.get('agents') ?? '')
@@ -183,16 +286,55 @@ const Compare = () => {
   }, [results]);
 
   const filteredResults = useMemo(() => {
-    if (scenarioFilter === 'all') return results;
-    return results.filter((run) =>
-      run.scenarios.some((scenario) => {
-        const scenarioName = String(scenario.scenarioName ?? '').trim();
-        const scenarioId = String(scenario.scenarioId ?? '').trim();
-        const label = scenarioName || scenarioId;
-        return label === scenarioFilter;
-      })
-    );
-  }, [results, scenarioFilter]);
+    const scenarioFiltered =
+      scenarioFilter === 'all'
+        ? results
+        : results.filter((run) =>
+            run.scenarios.some((scenario) => {
+              const scenarioName = String(scenario.scenarioName ?? '').trim();
+              const scenarioId = String(scenario.scenarioId ?? '').trim();
+              const label = scenarioName || scenarioId;
+              return label === scenarioFilter;
+            })
+          );
+
+    if (mode !== 'runs') return scenarioFiltered;
+    if (timeFilterMode === 'all') return scenarioFiltered;
+
+    const now = Date.now();
+
+    if (timeFilterMode === 'last') {
+      const preset =
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
+        TIME_FILTER_PRESETS[0]!;
+      const minTimestamp = now - preset.durationMs;
+      return scenarioFiltered.filter((run) => {
+        const timestamp = new Date(run.timestamp).getTime();
+        return timestamp >= minTimestamp && timestamp <= now;
+      });
+    }
+
+    const start = parseLocalDateTime(timeFilterStart)?.getTime() ?? null;
+    const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
+    const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
+    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
+
+    return scenarioFiltered.filter((run) => {
+      const timestamp = new Date(run.timestamp).getTime();
+      if (Number.isNaN(timestamp)) return false;
+      if (rangeStart !== null && timestamp < rangeStart) return false;
+      if (rangeEnd !== null && timestamp > rangeEnd) return false;
+      return true;
+    });
+  }, [
+    mode,
+    results,
+    scenarioFilter,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
 
   const sortedResults = useMemo(() => {
     return [...filteredResults].sort((a, b) => {
@@ -210,6 +352,34 @@ const Compare = () => {
     () => sortedResults.filter((r) => selected.has(r.id)),
     [sortedResults, selected]
   );
+  const sortedResultsWithDaySeparators = useMemo<CompareTableItem[]>(() => {
+    if (!showDaySeparators) return sortedResults.map((run) => ({ type: 'run', run }));
+    const items: CompareTableItem[] = [];
+    let currentDayKey: string | null = null;
+    for (const run of sortedResults) {
+      const dayKey = getLocalDayKey(run.timestamp);
+      if (dayKey !== currentDayKey) {
+        items.push({
+          type: 'day-separator',
+          dayKey,
+          dayLabel: formatLocalDayLabel(run.timestamp)
+        });
+        currentDayKey = dayKey;
+      }
+      items.push({ type: 'run', run });
+    }
+    return items;
+  }, [showDaySeparators, sortedResults]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(COMPARE_DAY_SEPARATOR_STORAGE_KEY, showDaySeparators ? '1' : '0');
+    } catch {
+      // ignore localStorage failures (private mode/quota)
+    }
+  }, [showDaySeparators]);
+
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
     return sortDir === 'asc' ? (
@@ -368,11 +538,33 @@ const Compare = () => {
       else next.delete('agents');
       if (withinRunScenarioFilter !== 'all') next.set('scenario', withinRunScenarioFilter);
       else next.delete('scenario');
+      next.delete('time_filter');
+      next.delete('time_preset');
+      next.delete('time_start');
+      next.delete('time_end');
     } else {
       next.delete('mode');
       next.delete('runId');
       next.delete('agents');
       next.delete('scenario');
+      if (timeFilterMode === 'all') {
+        next.delete('time_filter');
+        next.delete('time_preset');
+        next.delete('time_start');
+        next.delete('time_end');
+      } else if (timeFilterMode === 'last') {
+        next.set('time_filter', 'last');
+        next.set('time_preset', timeFilterPreset);
+        next.delete('time_start');
+        next.delete('time_end');
+      } else {
+        next.set('time_filter', 'custom');
+        next.delete('time_preset');
+        if (timeFilterStart.trim()) next.set('time_start', timeFilterStart.trim());
+        else next.delete('time_start');
+        if (timeFilterEnd.trim()) next.set('time_end', timeFilterEnd.trim());
+        else next.delete('time_end');
+      }
     }
     const currentString = searchParams.toString();
     const nextString = next.toString();
@@ -381,12 +573,40 @@ const Compare = () => {
     }
   }, [
     mode,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart,
     withinRunId,
     withinRunAgentIds,
     withinRunScenarioFilter,
     searchParams,
     setSearchParams
   ]);
+
+  const selectedTimeFilterLabel = useMemo(() => {
+    if (timeFilterMode === 'all') return 'All time';
+    if (timeFilterMode === 'last') {
+      return (
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset)?.label ?? 'Last range'
+      );
+    }
+    const hasStart = Boolean(timeFilterStart.trim());
+    const hasEnd = Boolean(timeFilterEnd.trim());
+    if (!hasStart && !hasEnd) return 'Custom range';
+    if (hasStart && hasEnd)
+      return `${formatLocalDateTime(timeFilterStart)} - ${formatLocalDateTime(timeFilterEnd)}`;
+    return hasStart
+      ? `From ${formatLocalDateTime(timeFilterStart)}`
+      : `Until ${formatLocalDateTime(timeFilterEnd)}`;
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
+
+  const resetTimeFilter = () => {
+    setTimeFilterMode('all');
+    setTimeFilterPreset('15min');
+    setTimeFilterStart('');
+    setTimeFilterEnd('');
+  };
 
   const withinRunScenarioRows = useMemo<WithinRunScenarioRow[]>(() => {
     if (!withinRun) return [];
@@ -523,55 +743,173 @@ const Compare = () => {
             </Button>
           )}
           {mode === 'runs' && (
-            <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openScenarioFilterPicker}
-                  aria-controls="compare-scenario-command-list"
-                  className="w-[260px] justify-between font-normal"
-                >
-                  <span className="truncate text-left">
-                    {scenarioFilter === 'all' ? 'All scenarios' : scenarioFilter}
-                  </span>
-                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[260px] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search scenarios..." />
-                  <CommandList id="compare-scenario-command-list">
-                    <CommandEmpty>No scenarios found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="all scenarios"
-                        onSelect={() => {
-                          setScenarioFilter('all');
-                          setOpenScenarioFilterPicker(false);
-                        }}
-                      >
-                        All scenarios
-                      </CommandItem>
-                      {scenarioFilterOptions.map((label) => (
+            <>
+              <Popover open={openScenarioFilterPicker} onOpenChange={setOpenScenarioFilterPicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openScenarioFilterPicker}
+                    aria-controls="compare-scenario-command-list"
+                    className="w-[260px] justify-between font-normal"
+                  >
+                    <span className="truncate text-left">
+                      {scenarioFilter === 'all' ? 'All scenarios' : scenarioFilter}
+                    </span>
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[260px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search scenarios..." />
+                    <CommandList id="compare-scenario-command-list">
+                      <CommandEmpty>No scenarios found.</CommandEmpty>
+                      <CommandGroup>
                         <CommandItem
-                          key={label}
-                          value={label}
+                          value="all scenarios"
                           onSelect={() => {
-                            setScenarioFilter(label);
+                            setScenarioFilter('all');
                             setOpenScenarioFilterPicker(false);
                           }}
                         >
-                          {label}
+                          All scenarios
                         </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+                        {scenarioFilterOptions.map((label) => (
+                          <CommandItem
+                            key={label}
+                            value={label}
+                            onSelect={() => {
+                              setScenarioFilter(label);
+                              setOpenScenarioFilterPicker(false);
+                            }}
+                          >
+                            {label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <Popover open={openTimeFilterPicker} onOpenChange={setOpenTimeFilterPicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openTimeFilterPicker}
+                    aria-controls="compare-time-command-list"
+                    className="w-[320px] justify-between font-normal"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 truncate text-left">
+                      <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{selectedTimeFilterLabel}</span>
+                    </span>
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[360px] p-0" align="start">
+                  <div className="border-b px-3 py-2">
+                    <p className="text-sm font-medium">Date and time filter</p>
+                    <p className="text-xs text-muted-foreground">Filter runs by timestamp.</p>
+                  </div>
+                  <div id="compare-time-command-list" className="grid gap-1 p-2">
+                    <Button
+                      type="button"
+                      variant={timeFilterMode === 'all' ? 'secondary' : 'ghost'}
+                      className="justify-start"
+                      onClick={() => {
+                        resetTimeFilter();
+                        setOpenTimeFilterPicker(false);
+                      }}
+                    >
+                      All time
+                    </Button>
+                    {TIME_FILTER_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.value}
+                        type="button"
+                        variant={
+                          timeFilterMode === 'last' && timeFilterPreset === preset.value
+                            ? 'secondary'
+                            : 'ghost'
+                        }
+                        className="justify-start"
+                        onClick={() => {
+                          setTimeFilterMode('last');
+                          setTimeFilterPreset(preset.value);
+                          setOpenTimeFilterPicker(false);
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                    <Button
+                      type="button"
+                      variant={timeFilterMode === 'custom' ? 'secondary' : 'ghost'}
+                      className="justify-start"
+                      onClick={() => setTimeFilterMode('custom')}
+                    >
+                      Custom date time range
+                    </Button>
+                  </div>
+                  {timeFilterMode === 'custom' && (
+                    <div className="space-y-3 border-t p-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="compare-time-filter-start">Start</Label>
+                        <Input
+                          id="compare-time-filter-start"
+                          type="datetime-local"
+                          value={timeFilterStart}
+                          onChange={(event) => setTimeFilterStart(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="compare-time-filter-end">End</Label>
+                        <Input
+                          id="compare-time-filter-end"
+                          type="datetime-local"
+                          value={timeFilterEnd}
+                          onChange={(event) => setTimeFilterEnd(event.target.value)}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="px-2"
+                          onClick={resetTimeFilter}
+                        >
+                          <X className="mr-1.5 h-3.5 w-3.5" />
+                          Clear
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => setOpenTimeFilterPicker(false)}
+                        >
+                          Done
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            </>
           )}
+          <div className="inline-flex items-center gap-2 rounded-md border px-3 py-2">
+            <Label htmlFor="compare-day-separators-switch" className="text-sm font-medium">
+              Group by day
+            </Label>
+            <Switch
+              id="compare-day-separators-switch"
+              checked={showDaySeparators}
+              onCheckedChange={setShowDaySeparators}
+              aria-label="Group by day"
+            />
+          </div>
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
@@ -737,70 +1075,87 @@ const Compare = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedResults.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selected.has(r.id)}
-                        onCheckedChange={() => toggle(r.id)}
-                        disabled={!selected.has(r.id) && selected.size >= 5}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{r.id}</TableCell>
-                    <TableCell className="text-[11px] text-muted-foreground">
-                      {(() => {
-                        const scope = runScopesById.get(r.id) ?? {
-                          scenarioCount: 0,
-                          agentCount: 0,
-                          scopePreview: 'n/a',
-                          modelSummary: ''
-                        };
-                        return (
-                          <div className="space-y-0.5">
-                            <div>
-                              Evaluated: {scope.scenarioCount} scenario
-                              {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
-                              {scope.agentCount === 1 ? '' : 's'}
-                              {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
+                {sortedResultsWithDaySeparators.map((item, index) =>
+                  item.type === 'day-separator' ? (
+                    <TableRow
+                      key={`day-${item.dayKey}-${index}`}
+                      className="bg-muted/30 hover:bg-muted/30"
+                    >
+                      <TableCell colSpan={COMPARE_RUNS_TABLE_COLUMN_COUNT} className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-border/70" />
+                          <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {item.dayLabel}
+                          </span>
+                          <div className="h-px flex-1 bg-border/70" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow key={item.run.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(item.run.id)}
+                          onCheckedChange={() => toggle(item.run.id)}
+                          disabled={!selected.has(item.run.id) && selected.size >= 5}
+                        />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{item.run.id}</TableCell>
+                      <TableCell className="text-[11px] text-muted-foreground">
+                        {(() => {
+                          const scope = runScopesById.get(item.run.id) ?? {
+                            scenarioCount: 0,
+                            agentCount: 0,
+                            scopePreview: 'n/a',
+                            modelSummary: ''
+                          };
+                          return (
+                            <div className="space-y-0.5">
+                              <div>
+                                Evaluated: {scope.scenarioCount} scenario
+                                {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
+                                {scope.agentCount === 1 ? '' : 's'}
+                                {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
+                              </div>
+                              <div className="font-mono text-xs text-foreground/80">
+                                {scope.scopePreview}
+                              </div>
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">
-                              {scope.scopePreview}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {new Date(r.timestamp).toLocaleString()}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <PassRateBadge rate={r.overallPassRate} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {r.totalScenarios}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {runScopesById.get(r.id)?.agentCount ?? 0}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {(runScopesById.get(r.id)?.agentCount ?? 0) > 1 ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startWithinRunFromRun(r)}
-                        >
-                          Compare agents
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {new Date(item.run.timestamp).toLocaleString()}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <PassRateBadge rate={item.run.overallPassRate} />
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {item.run.totalScenarios}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {runScopesById.get(item.run.id)?.agentCount ?? 0}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {(runScopesById.get(item.run.id)?.agentCount ?? 0) > 1 ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startWithinRunFromRun(item.run)}
+                          >
+                            Compare agents
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -864,16 +1219,21 @@ const Compare = () => {
                         style={{ color: colors[i] }}
                         className="font-mono text-xs"
                       >
-                        {r.id}
+                        <div>{r.id}</div>
+                        {r.configPath?.trim() ? (
+                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
+                            {r.configPath.trim()}
+                          </div>
+                        ) : null}
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
+                    <TableCell className="font-medium">Pass Rate</TableCell>
                     {selectedRuns.map((r) => (
-                      <TableCell key={r.id} className="text-right">
+                      <TableCell key={r.id}>
                         <PassRateBadge rate={r.overallPassRate} />
                       </TableCell>
                     ))}
@@ -922,7 +1282,12 @@ const Compare = () => {
                         style={{ color: colors[i] }}
                         className="font-mono text-xs"
                       >
-                        {r.id}
+                        <div>{r.id}</div>
+                        {r.configPath?.trim() ? (
+                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
+                            {r.configPath.trim()}
+                          </div>
+                        ) : null}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -936,7 +1301,7 @@ const Compare = () => {
                       {selectedRuns.map((r) => {
                         const sc = r.scenarios.find((s) => s.scenarioId === sid);
                         return (
-                          <TableCell key={r.id} className="text-right">
+                          <TableCell key={r.id}>
                             {sc ? (
                               <PassRateBadge rate={sc.passRate} />
                             ) : (
@@ -1050,9 +1415,9 @@ const Compare = () => {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="font-medium text-right">Pass Rate</TableCell>
+                    <TableCell className="font-medium">Pass Rate</TableCell>
                     {withinRunAgentSummary.map((summary) => (
-                      <TableCell key={summary.agentId} className="text-right">
+                      <TableCell key={summary.agentId}>
                         <PassRateBadge rate={summary.passRate} />
                       </TableCell>
                     ))}

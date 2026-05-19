@@ -65,7 +65,7 @@ import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import type { EvalResult } from '@/types/eval';
 
-type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '30d';
+type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -84,6 +84,7 @@ const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durat
   { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
   { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
   { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
   { value: '30d', label: 'Last 30 days', durationMs: 30 * 24 * 60 * 60 * 1000 }
 ];
 
@@ -125,7 +126,12 @@ function isTimeFilterMode(value: string | null): value is TimeFilterMode {
 
 function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
   return (
-    value === '15min' || value === '1h' || value === '24h' || value === '7d' || value === '30d'
+    value === '15min' ||
+    value === '1h' ||
+    value === '24h' ||
+    value === '7d' ||
+    value === '14d' ||
+    value === '30d'
   );
 }
 
@@ -775,114 +781,127 @@ const Results = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedWithDaySeparators.map((item, index) =>
-                  item.type === 'day-separator' ? (
-                    <TableRow
-                      key={`day-${item.dayKey}-${index}`}
-                      className="bg-muted/30 hover:bg-muted/30"
+                {sortedWithDaySeparators.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={RESULTS_TABLE_COLUMN_COUNT}
+                      className="px-4 py-10 text-center text-sm text-muted-foreground"
                     >
-                      <TableCell colSpan={RESULTS_TABLE_COLUMN_COUNT} className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-px flex-1 bg-border/70" />
-                          <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {item.dayLabel}
-                          </span>
-                          <div className="h-px flex-1 bg-border/70" />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    <TableRow key={item.run.id}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <Link
-                            to={`/results/${item.run.id}`}
-                            className="font-mono text-xs text-primary hover:underline"
-                          >
-                            {item.run.id}
-                          </Link>
-                          {item.run.runNote ? (
-                            <div className="text-[11px] text-muted-foreground break-words">
-                              Note: {item.run.runNote}
-                            </div>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground">
-                        {(() => {
-                          const scope = runScopesById.get(item.run.id) ?? {
-                            scenarioCount: 0,
-                            agentCount: 0,
-                            scopePreview: 'n/a',
-                            modelSummary: ''
-                          };
-                          return (
-                            <div className="space-y-0.5">
-                              <div>
-                                Evaluated: {scope.scenarioCount} scenario
-                                {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
-                                {scope.agentCount === 1 ? '' : 's'}
-                                {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
-                              </div>
-                              <div className="font-mono text-xs text-foreground/80">
-                                {scope.scopePreview}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(item.run.timestamp).toLocaleString()}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <PassRateBadge rate={item.run.overallPassRate} />
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {item.run.totalScenarios}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {item.run.avgToolCalls.toFixed(0)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {formatToolTokenTotal(item.run)}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link to={`/results/${item.run.id}`}>
-                                <Eye className="mr-2 h-3.5 w-3.5" />
-                                View
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Download className="mr-2 h-3.5 w-3.5" />
-                              Export JSON
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                const active = document.activeElement;
-                                if (active instanceof HTMLElement) active.blur();
-                                setPendingDeleteRunId(item.run.id);
-                              }}
+                      {timeFilterMode === 'all' && scenarioFilter === 'all'
+                        ? 'No runs yet.'
+                        : 'No runs match current filters.'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedWithDaySeparators.map((item, index) =>
+                    item.type === 'day-separator' ? (
+                      <TableRow
+                        key={`day-${item.dayKey}-${index}`}
+                        className="bg-muted/30 hover:bg-muted/30"
+                      >
+                        <TableCell colSpan={RESULTS_TABLE_COLUMN_COUNT} className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-px flex-1 bg-border/70" />
+                            <span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {item.dayLabel}
+                            </span>
+                            <div className="h-px flex-1 bg-border/70" />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      <TableRow key={item.run.id}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Link
+                              to={`/results/${item.run.id}`}
+                              className="font-mono text-xs text-primary hover:underline"
                             >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                              {item.run.id}
+                            </Link>
+                            {item.run.runNote ? (
+                              <div className="text-[11px] text-muted-foreground break-words">
+                                Note: {item.run.runNote}
+                              </div>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-[11px] text-muted-foreground">
+                          {(() => {
+                            const scope = runScopesById.get(item.run.id) ?? {
+                              scenarioCount: 0,
+                              agentCount: 0,
+                              scopePreview: 'n/a',
+                              modelSummary: ''
+                            };
+                            return (
+                              <div className="space-y-0.5">
+                                <div>
+                                  Evaluated: {scope.scenarioCount} scenario
+                                  {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
+                                  {scope.agentCount === 1 ? '' : 's'}
+                                  {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
+                                </div>
+                                <div className="font-mono text-xs text-foreground/80">
+                                  {scope.scopePreview}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(item.run.timestamp).toLocaleString()}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <PassRateBadge rate={item.run.overallPassRate} />
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {item.run.totalScenarios}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {item.run.avgToolCalls.toFixed(0)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {formatToolTokenTotal(item.run)}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link to={`/results/${item.run.id}`}>
+                                  <Eye className="mr-2 h-3.5 w-3.5" />
+                                  View
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Download className="mr-2 h-3.5 w-3.5" />
+                                Export JSON
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  const active = document.activeElement;
+                                  if (active instanceof HTMLElement) active.blur();
+                                  setPendingDeleteRunId(item.run.id);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
                   )
                 )}
               </TableBody>
