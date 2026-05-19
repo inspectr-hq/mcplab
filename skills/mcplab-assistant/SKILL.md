@@ -112,7 +112,11 @@ Use this workflow when MCP execution tools are not available or when the user ex
 - Query run artifacts in LLM-friendly format -> `mcplab results`
 2. Use only documented flags from CLI source.
 3. For model comparison, use `mcplab run --agents ...`.
-4. If a run fails, capture exact error and switch to troubleshooting workflow.
+4. For runtime environment switching without YAML edits, prefer:
+- `mcplab run ... --server-override-all <serverRef[,serverRef...]>`
+- Add per-test exceptions with repeatable `--server-override <scenarioId>=<serverRef[,serverRef...]>`
+5. Runtime server overrides are ephemeral (current run only) and do not persist to eval files.
+6. If a run fails, capture exact error and switch to troubleshooting workflow.
 
 ## Troubleshooting Workflow
 

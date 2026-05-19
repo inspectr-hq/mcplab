@@ -9,6 +9,7 @@ import {
   hashConfig,
   runAll,
   renderSummaryMarkdown,
+  applyRuntimeServerOverrides,
   type EvalConfig,
   type RunProgressEvent
 } from '@inspectr/mcplab-core';
@@ -19,6 +20,7 @@ import {
   OAuthAuthorizationRequiredError,
   type OAuthSessionManager
 } from './oauth-session-manager.js';
+import { selectScenarioIds } from './runs-store.js';
 
 export type RunsRouteDeps = Pick<
   AppRouteDeps,
@@ -50,6 +52,8 @@ type RunParams = {
   applySnapshotEval: boolean;
   runNote?: string;
   oauthServerNames?: string[]; // cached at enqueue time to avoid re-parsing config
+  serverOverrideAll?: string[];
+  scenarioServerOverrides?: Record<string, string[]>;
 };
 
 type RunJob = {
@@ -62,19 +66,40 @@ type RunJob = {
   blockedAuthServers?: string[]; // actual missing-token subset set when blocked
 };
 
+export function mergeLibraryEntriesIntoConfig(
+  config: EvalConfig,
+  libraryAgents: EvalConfig['agents'],
+  libraryServers: EvalConfig['servers']
+): EvalConfig {
+  return {
+    ...config,
+    agents: { ...libraryAgents, ...config.agents },
+    servers: { ...libraryServers, ...config.servers }
+  };
+}
+
+export function applyLibraryEntries(
+  loaded: { config: EvalConfig; hash: string },
+  libraryAgents: EvalConfig['agents'],
+  libraryServers: EvalConfig['servers']
+): void {
+  loaded.config = mergeLibraryEntriesIntoConfig(loaded.config, libraryAgents, libraryServers);
+  loaded.hash = hashConfig(loaded.config);
+}
+
+// Backward-compatible exports used by existing tests/imports.
 export function mergeLibraryAgentsIntoConfig(
   config: EvalConfig,
   libraryAgents: EvalConfig['agents']
 ): EvalConfig {
-  return { ...config, agents: { ...libraryAgents, ...config.agents } };
+  return mergeLibraryEntriesIntoConfig(config, libraryAgents, {});
 }
 
 export function applyLibraryAgents(
   loaded: { config: EvalConfig; hash: string },
   libraryAgents: EvalConfig['agents']
 ): void {
-  loaded.config = mergeLibraryAgentsIntoConfig(loaded.config, libraryAgents);
-  loaded.hash = hashConfig(loaded.config);
+  applyLibraryEntries(loaded, libraryAgents, {});
 }
 
 type RunRequestBody = {
@@ -85,6 +110,8 @@ type RunRequestBody = {
   agents?: unknown;
   applySnapshotEval?: unknown;
   runNote?: unknown;
+  serverOverrideAll?: unknown;
+  scenarioServerOverrides?: unknown;
 };
 
 type PreviewRunRequestBody = {
@@ -234,7 +261,9 @@ export async function handleRunsRoutes(params: {
           runsPerScenario: j.runParams.runsPerScenario,
           scenarioIds: j.runParams.scenarioIds ?? null,
           agents: j.runParams.requestedAgents ?? null,
-          runNote: j.runParams.runNote ?? null
+          runNote: j.runParams.runNote ?? null,
+          serverOverrideAll: j.runParams.serverOverrideAll ?? null,
+          scenarioServerOverrides: j.runParams.scenarioServerOverrides ?? null
         }
       }));
     asJson(res, 200, {
@@ -247,7 +276,9 @@ export async function handleRunsRoutes(params: {
               runsPerScenario: activeJob.runParams.runsPerScenario,
               scenarioIds: activeJob.runParams.scenarioIds ?? null,
               agents: activeJob.runParams.requestedAgents ?? null,
-              runNote: activeJob.runParams.runNote ?? null
+              runNote: activeJob.runParams.runNote ?? null,
+              serverOverrideAll: activeJob.runParams.serverOverrideAll ?? null,
+              scenarioServerOverrides: activeJob.runParams.scenarioServerOverrides ?? null
             }
           }
         : null,
@@ -313,6 +344,31 @@ export async function handleRunsRoutes(params: {
     const applySnapshotEval = body.applySnapshotEval !== false;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+    const serverOverrideAll = Array.isArray(body.serverOverrideAll)
+      ? body.serverOverrideAll.map((id: unknown) => String(id).trim()).filter(Boolean)
+      : undefined;
+    if (
+      Array.isArray(body.serverOverrideAll) &&
+      (!serverOverrideAll || serverOverrideAll.length === 0)
+    ) {
+      asJson(res, 400, { error: 'serverOverrideAll must include at least one server id' });
+      return true;
+    }
+    const scenarioServerOverrides =
+      body.scenarioServerOverrides &&
+      typeof body.scenarioServerOverrides === 'object' &&
+      !Array.isArray(body.scenarioServerOverrides)
+        ? Object.fromEntries(
+            Object.entries(body.scenarioServerOverrides as Record<string, unknown>).map(
+              ([scenarioId, serverIds]) => [
+                String(scenarioId).trim(),
+                Array.isArray(serverIds)
+                  ? serverIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+                  : []
+              ]
+            )
+          )
+        : undefined;
     if (!configPathRaw) {
       asJson(res, 400, { error: 'configPath is required' });
       return true;
@@ -330,18 +386,8 @@ export async function handleRunsRoutes(params: {
       return true;
     }
 
-    // Eagerly cache OAuth server names to avoid re-parsing config in advanceQueue
-    let oauthServerNames: string[] | undefined;
-    try {
-      const loaded = loadConfig(configPath);
-      oauthServerNames = Object.entries(loaded.config.servers ?? {})
-        .filter(
-          ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
-        )
-        .map(([name]) => name);
-    } catch {
-      // Will be resolved lazily in advanceQueue if needed
-    }
+    // Resolve lazily in advanceQueue so runtime overrides are always reflected.
+    const oauthServerNames: string[] | undefined = undefined;
 
     const jobId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const runParamsObj: RunParams = {
@@ -352,7 +398,9 @@ export async function handleRunsRoutes(params: {
       requestedAgents,
       applySnapshotEval,
       runNote,
-      oauthServerNames
+      oauthServerNames,
+      serverOverrideAll,
+      scenarioServerOverrides
     };
     const job: RunJob = {
       id: jobId,
@@ -377,6 +425,8 @@ export async function handleRunsRoutes(params: {
           scenarioIds: scenarioIds ?? null,
           agents: requestedAgents ?? null,
           runNote: runNote ?? null,
+          serverOverrideAll: serverOverrideAll ?? null,
+          scenarioServerOverrides: scenarioServerOverrides ?? null,
           position: runQueueState.queue.length
         }
       });
@@ -739,17 +789,28 @@ function toCoreExtractRules(
   return rules;
 }
 
-function resolveOAuthServersForJob(job: RunJob): string[] {
-  if (job.runParams.oauthServerNames !== undefined) {
-    return job.runParams.oauthServerNames;
-  }
+function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] {
+  if (job.runParams.oauthServerNames !== undefined) return job.runParams.oauthServerNames;
   try {
-    const loaded = loadConfig(job.runParams.configPath);
-    const names = Object.entries(loaded.config.servers ?? {})
-      .filter(
-        ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
-      )
-      .map(([name]) => name);
+    const loaded = loadConfig(job.runParams.configPath, { bundleRoot: librariesDir });
+    const libraries = readLibraries(librariesDir);
+    applyLibraryEntries(loaded, libraries.agents, libraries.servers);
+    const selected = job.runParams.scenarioIds?.length
+      ? selectScenarioIds(loaded.config, job.runParams.scenarioIds)
+      : job.runParams.scenarioId
+      ? selectScenarioIds(loaded.config, [job.runParams.scenarioId])
+      : loaded.config;
+    const withOverrides = applyRuntimeServerOverrides(selected, {
+      serverOverrideAll: job.runParams.serverOverrideAll,
+      scenarioServerOverrides: job.runParams.scenarioServerOverrides
+    });
+    const effectiveServers = new Set(
+      withOverrides.scenarios.flatMap((scenario) => scenario.servers)
+    );
+    const names = Array.from(effectiveServers).filter((name) => {
+      const config = withOverrides.servers?.[name];
+      return config?.auth?.type === 'oauth_authorization_code';
+    });
     job.runParams.oauthServerNames = names;
     return names;
   } catch {
@@ -777,7 +838,7 @@ async function advanceQueue(
       }
 
       // Pre-check OAuth before starting
-      const oauthServers = resolveOAuthServersForJob(nextJob);
+      const oauthServers = resolveOAuthServersForJob(nextJob, settings.librariesDir);
       if (oauthServers.length > 0) {
         const authStatus = oauthSessionManager.checkServersAuthStatus(oauthServers);
         const needsAuth = authStatus.filter((s) => s.status === 'auth_required');
@@ -813,7 +874,9 @@ async function advanceQueue(
           scenarioId: nextJob.runParams.scenarioId ?? null,
           scenarioIds: nextJob.runParams.scenarioIds ?? null,
           agents: nextJob.runParams.requestedAgents ?? null,
-          runNote: nextJob.runParams.runNote ?? null
+          runNote: nextJob.runParams.runNote ?? null,
+          serverOverrideAll: nextJob.runParams.serverOverrideAll ?? null,
+          scenarioServerOverrides: nextJob.runParams.scenarioServerOverrides ?? null
         }
       });
       void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
@@ -850,7 +913,9 @@ async function executeRunJob(
     scenarioIds,
     requestedAgents,
     applySnapshotEval,
-    runNote
+    runNote,
+    serverOverrideAll,
+    scenarioServerOverrides
   } = job.runParams;
   try {
     addJobEvent(job, {
@@ -859,8 +924,8 @@ async function executeRunJob(
       payload: { message: `Loading MCP Evaluation config: ${configPath}` }
     });
     const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
-    const { agents: libraryAgents } = readLibraries(settings.librariesDir);
-    applyLibraryAgents(loaded, libraryAgents);
+    const { agents: libraryAgents, servers: libraryServers } = readLibraries(settings.librariesDir);
+    applyLibraryEntries(loaded, libraryAgents, libraryServers);
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -900,7 +965,30 @@ async function executeRunJob(
         message: `Selected ${selectedBaseScenarios.scenarios.length} base scenario(s)`
       }
     });
-    const resolvedAgents = resolveRunSelectedAgents(selectedBaseScenarios, requestedAgents);
+    const runtimeOverriddenConfig = applyRuntimeServerOverrides(selectedBaseScenarios, {
+      serverOverrideAll,
+      scenarioServerOverrides
+    });
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Applied runtime server overrides: global=${
+          serverOverrideAll?.length ?? 0
+        } scenario-specific=${Object.keys(scenarioServerOverrides ?? {}).length}`
+      }
+    });
+    const effectiveScenarioServers = runtimeOverriddenConfig.scenarios
+      .map((scenario) => `${scenario.id}=[${scenario.servers.join(', ')}]`)
+      .join('; ');
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Effective MCP servers per scenario: ${effectiveScenarioServers || '(none)'}`
+      }
+    });
+    const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents);
     const resolvedAgentList = Array.isArray(resolvedAgents) ? resolvedAgents : [];
     addJobEvent(job, {
       type: 'log',
@@ -912,7 +1000,7 @@ async function executeRunJob(
             : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
       }
     });
-    const expandedConfig = expandConfigForAgents(selectedBaseScenarios, resolvedAgents);
+    const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -920,9 +1008,12 @@ async function executeRunJob(
         message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
       }
     });
-    const oauthServers = Object.entries(expandedConfig.servers)
-      .filter(([, serverConfig]) => serverConfig.auth?.type === 'oauth_authorization_code')
-      .map(([serverName]) => serverName);
+    const usedServerNames = new Set(
+      expandedConfig.scenarios.flatMap((scenario) => scenario.servers)
+    );
+    const oauthServers = Array.from(usedServerNames).filter(
+      (serverName) => expandedConfig.servers[serverName]?.auth?.type === 'oauth_authorization_code'
+    );
     const mcpServerAuthHeaders =
       oauthServers.length > 0
         ? await oauthSessionManager.getAuthHeadersForServers(oauthServers)
@@ -1159,9 +1250,11 @@ function formatRunProgressMessage(event: RunProgressEvent): string | null {
     case 'run_started':
       return `Run initialized (id: ${event.runId}, ${event.totalScenarioRuns} scenario run(s))`;
     case 'mcp_connect_started':
-      return `Connecting to ${event.serverCount} MCP server(s) ...`;
+      return `Connecting to ${event.serverCount} MCP server(s): ${event.serverNames.join(
+        ', '
+      )} ...`;
     case 'mcp_connect_finished':
-      return `Connected to ${event.serverCount} MCP server(s)`;
+      return `Connected to ${event.serverCount} MCP server(s): ${event.serverNames.join(', ')}`;
     case 'scenario_run_started':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId

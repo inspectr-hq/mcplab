@@ -14,6 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -63,6 +65,14 @@ const RunEvaluation = () => {
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [applySnapshotEval, setApplySnapshotEval] = useState(true);
+  const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
+  const [globalServerOverrideIds, setGlobalServerOverrideIds] = useState<string[]>([]);
+  const [scenarioServerOverrideEnabledMap, setScenarioServerOverrideEnabledMap] = useState<
+    Record<string, boolean>
+  >({});
+  const [scenarioServerOverrideMap, setScenarioServerOverrideMap] = useState<
+    Record<string, string[]>
+  >({});
   const [runNote, setRunNote] = useState('');
   const [snapshotName, setSnapshotName] = useState('');
   const [savingSnapshot, setSavingSnapshot] = useState(false);
@@ -141,6 +151,20 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
+  const availableServers = useMemo(() => {
+    const byId = new Map<string, { id: string; name?: string }>();
+    for (const server of libraryServers) {
+      if (!byId.has(server.id)) byId.set(server.id, { id: server.id, name: server.name });
+    }
+    for (const server of selectedConfig?.servers ?? []) {
+      byId.set(server.id, { id: server.id, name: server.name });
+    }
+    return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
+  }, [selectedConfig?.servers, libraryServers]);
+  const availableServerIds = useMemo(
+    () => availableServers.map((server) => server.id),
+    [availableServers]
+  );
   useEffect(() => {
     if (!requestedConfigId) return;
     if (!configs.some((config) => config.id === requestedConfigId)) return;
@@ -157,6 +181,10 @@ const RunEvaluation = () => {
     if (!selectedConfig) {
       setSelectedAgentIds([]);
       setSelectedScenarioIds([]);
+      setGlobalServerOverrideEnabled(false);
+      setGlobalServerOverrideIds([]);
+      setScenarioServerOverrideEnabledMap({});
+      setScenarioServerOverrideMap({});
       return;
     }
     const configuredDefaultAgentIds = availableAgents
@@ -169,6 +197,10 @@ const RunEvaluation = () => {
     );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setApplySnapshotEval(true);
+    setGlobalServerOverrideEnabled(false);
+    setGlobalServerOverrideIds([]);
+    setScenarioServerOverrideEnabledMap({});
+    setScenarioServerOverrideMap({});
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
   const startWorkspaceRun = async () => {
@@ -184,14 +216,45 @@ const RunEvaluation = () => {
     const selectedScenarios = availableScenarios.filter((scenario) =>
       selectedScenarioIds.includes(scenario.id)
     );
+    const selectedScenarioSet = new Set(selectedScenarios.map((scenario) => scenario.id));
+    const runtimeOverridesEnabled =
+      globalServerOverrideEnabled || Object.values(scenarioServerOverrideEnabledMap).some(Boolean);
+    const filteredScenarioServerOverrides = Object.fromEntries(
+      Object.entries(scenarioServerOverrideMap).filter(
+        ([scenarioId]) =>
+          selectedScenarioSet.has(scenarioId) && scenarioServerOverrideEnabledMap[scenarioId]
+      )
+    );
+    const effectiveScenarioServerSummary = selectedScenarios
+      .map((scenario) => {
+        const serverIds =
+          filteredScenarioServerOverrides[scenario.id] ??
+          (globalServerOverrideEnabled ? globalServerOverrideIds : scenario.serverIds || []);
+        return `${scenario.id}=[${serverIds.join(', ')}]`;
+      })
+      .join('; ');
     if (selectedScenarios.length === 0) {
       setLogs((prev) => [...prev, `[${nowTime()}] Select at least one test.`]);
+      return;
+    }
+    if (globalServerOverrideEnabled && globalServerOverrideIds.length === 0) {
+      setLogs((prev) => [
+        ...prev,
+        `[${nowTime()}] Select at least one server for "Override MCP Servers For Selected Tests", or turn that override off.`
+      ]);
       return;
     }
     const oauthServerNames = Array.from(
       new Set(
         selectedScenarios
-          .flatMap((scenario) => scenario.serverIds || [])
+          .flatMap((scenario) => {
+            if (!runtimeOverridesEnabled) return scenario.serverIds || [];
+            if (filteredScenarioServerOverrides[scenario.id]) {
+              return filteredScenarioServerOverrides[scenario.id] ?? [];
+            }
+            if (globalServerOverrideEnabled) return globalServerOverrideIds;
+            return scenario.serverIds || [];
+          })
           .filter((serverName) => {
             const fromConfig = (selectedConfig.servers ?? []).find(
               (server) => server.id === serverName
@@ -249,6 +312,9 @@ const RunEvaluation = () => {
         varianceRuns
       )} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? 'on' : 'off'}${
         runNote.trim() ? ` note=${runNote.trim()}` : ''
+      }`,
+      `[${nowTime()}] Effective MCP servers per selected test: ${
+        effectiveScenarioServerSummary || '(none)'
       }`
     ]);
     setProgress(10);
@@ -258,6 +324,12 @@ const RunEvaluation = () => {
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
+        ...(runtimeOverridesEnabled && globalServerOverrideEnabled
+          ? { serverOverrideAll: globalServerOverrideIds }
+          : {}),
+        ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
+          ? { scenarioServerOverrides: filteredScenarioServerOverrides }
+          : {}),
         applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
         runNote: runNote.trim() ? runNote.trim() : undefined
       });
@@ -731,31 +803,159 @@ const RunEvaluation = () => {
               <div className="grid gap-2 sm:grid-cols-2">
                 {availableScenarios.map((scenario) => {
                   const checked = selectedScenarioIds.includes(scenario.id);
+                  const perScenarioOverride = scenarioServerOverrideMap[scenario.id];
+                  const scenarioOverrideEnabled = Boolean(
+                    scenarioServerOverrideEnabledMap[scenario.id]
+                  );
+                  const hasOverride = scenarioOverrideEnabled && Array.isArray(perScenarioOverride);
                   return (
-                    <label
+                    <div
                       key={scenario.id}
-                      className="flex items-start gap-2 text-sm rounded-md border p-2"
+                      className="flex flex-col gap-2 text-sm rounded-md border p-2 cursor-pointer"
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement | null;
+                        if (!target) return;
+                        if (target.closest("button, a, input, select, textarea, [role='button']")) {
+                          return;
+                        }
+                        setSelectedScenarioIds((prev) =>
+                          checked ? prev.filter((id) => id !== scenario.id) : [...prev, scenario.id]
+                        );
+                      }}
                     >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(value) => {
-                          const isChecked = value === true;
-                          setSelectedScenarioIds((prev) =>
-                            isChecked
-                              ? [...prev, scenario.id]
-                              : prev.filter((id) => id !== scenario.id)
-                          );
-                        }}
-                      />
-                      <span className="min-w-0">
-                        <span className="block font-medium">{scenario.name || scenario.id}</span>
-                        <span className="block font-mono text-xs text-muted-foreground truncate">
-                          {scenario.id}
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(value) => {
+                            const isChecked = value === true;
+                            setSelectedScenarioIds((prev) =>
+                              isChecked
+                                ? [...prev, scenario.id]
+                                : prev.filter((id) => id !== scenario.id)
+                            );
+                          }}
+                        />
+                        <span className="min-w-0">
+                          <span className="block font-medium">
+                            {scenario.name || scenario.id}{' '}
+                            {hasOverride && (
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                                Override
+                              </span>
+                            )}
+                          </span>
+                          <span className="block font-mono text-xs text-muted-foreground truncate">
+                            {scenario.id}
+                          </span>
                         </span>
-                      </span>
-                    </label>
+                      </div>
+                      {checked && (
+                        <div className="pl-6">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] text-muted-foreground">
+                              Per-scenario: "Override MCP Servers"
+                            </Label>
+                            <Switch
+                              checked={scenarioOverrideEnabled}
+                              onCheckedChange={(enabled) => {
+                                setScenarioServerOverrideEnabledMap((prev) => ({
+                                  ...prev,
+                                  [scenario.id]: enabled
+                                }));
+                                if (!enabled) {
+                                  setScenarioServerOverrideMap((prev) => {
+                                    const next = { ...prev };
+                                    delete next[scenario.id];
+                                    return next;
+                                  });
+                                } else if (!scenarioServerOverrideMap[scenario.id]) {
+                                  const inheritedServers =
+                                    globalServerOverrideEnabled &&
+                                    globalServerOverrideIds.length > 0
+                                      ? [...globalServerOverrideIds]
+                                      : [...(scenario.serverIds || [])];
+                                  setScenarioServerOverrideMap((prev) => ({
+                                    ...prev,
+                                    [scenario.id]: inheritedServers
+                                  }));
+                                }
+                              }}
+                            />
+                          </div>
+                          {scenarioOverrideEnabled && (
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              {availableServers.map((server) => {
+                                const serverId = server.id;
+                                const selected = (perScenarioOverride ?? []).includes(serverId);
+                                return (
+                                  <Badge
+                                    key={serverId}
+                                    variant={selected ? 'default' : 'outline'}
+                                    className={`cursor-pointer text-xs ${
+                                      selected ? '' : 'opacity-60 hover:opacity-100'
+                                    }`}
+                                    onClick={() =>
+                                      setScenarioServerOverrideMap((prev) => {
+                                        const current = prev[scenario.id] ?? [];
+                                        const next = current.includes(serverId)
+                                          ? current.filter((id) => id !== serverId)
+                                          : [...current, serverId];
+                                        return { ...prev, [scenario.id]: next };
+                                      })
+                                    }
+                                  >
+                                    {server.name?.trim() ? server.name : serverId}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
+              </div>
+              <div className="space-y-1 rounded-md border p-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs">
+                    <span>Override MCP Servers For Selected Tests </span>
+                    <span className="text-muted-foreground">
+                      Selected tests run against the servers you choose here. Applies only to this
+                      run.
+                    </span>
+                  </div>
+                  <Switch
+                    checked={globalServerOverrideEnabled}
+                    onCheckedChange={setGlobalServerOverrideEnabled}
+                  />
+                </div>
+                {globalServerOverrideEnabled && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableServers.map((server) => {
+                      const serverId = server.id;
+                      const selected = globalServerOverrideIds.includes(serverId);
+                      return (
+                        <Badge
+                          key={serverId}
+                          variant={selected ? 'default' : 'outline'}
+                          className={`cursor-pointer text-xs ${
+                            selected ? '' : 'opacity-60 hover:opacity-100'
+                          }`}
+                          onClick={() =>
+                            setGlobalServerOverrideIds((prev) =>
+                              prev.includes(serverId)
+                                ? prev.filter((id) => id !== serverId)
+                                : [...prev, serverId]
+                            )
+                          }
+                        >
+                          {server.name?.trim() ? server.name : serverId}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -29,6 +29,7 @@ import {
   resolveRunArtifactPath,
   searchDocs,
   getContext,
+  applyRuntimeServerOverrides,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -1284,6 +1285,7 @@ export function registerTools(server: McpServer): void {
             tool_usage_frequency: z.record(z.number())
           })
         ),
+        effective_server_overrides: z.record(z.array(z.string())),
         report_html_preview: z.string()
       },
       inputSchema: {
@@ -1294,16 +1296,37 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe('Runs per scenario (default 1).')
+          .describe('Runs per scenario (default 1).'),
+        server_override_all: z
+          .array(z.string())
+          .optional()
+          .describe('Optional MCP server refs to apply to all selected scenarios for this run.'),
+        scenario_server_overrides: z
+          .record(z.array(z.string()))
+          .optional()
+          .describe('Optional per-scenario MCP server ref overrides for this run.')
       }
     },
-    async ({ config_path, scenario_id, runs_per_scenario }) => {
+    async ({
+      config_path,
+      scenario_id,
+      runs_per_scenario,
+      server_override_all,
+      scenario_server_overrides
+    }) => {
       return withToolHandling(async () => {
         const loaded = loadConfig(resolve(config_path), {
           bundleRoot: resolveBundleRoot()
         });
         const selected = selectScenarios(loaded.config, scenario_id);
-        const executable = expandConfigForAgents(selected, selected.run_defaults?.selected_agents);
+        const runtimeOverridden = applyRuntimeServerOverrides(selected, {
+          serverOverrideAll: server_override_all,
+          scenarioServerOverrides: scenario_server_overrides
+        });
+        const executable = expandConfigForAgents(
+          runtimeOverridden,
+          runtimeOverridden.run_defaults?.selected_agents
+        );
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
@@ -1346,6 +1369,9 @@ export function registerTools(server: McpServer): void {
             pass_rate: scenario.pass_rate,
             tool_usage_frequency: scenario.tool_usage_frequency
           })),
+          effective_server_overrides: Object.fromEntries(
+            runtimeOverridden.scenarios.map((scenario) => [scenario.id, [...scenario.servers]])
+          ),
           report_html_preview: truncate(reportHtml, 4000)
         });
       });

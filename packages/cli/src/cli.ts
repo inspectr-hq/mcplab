@@ -12,6 +12,7 @@ import {
   runAll,
   renderSummaryMarkdown,
   expandConfigForAgents,
+  applyRuntimeServerOverrides,
   type EvalConfig,
   type SourceEvalConfig,
   type ExecutableEvalConfig,
@@ -76,6 +77,8 @@ interface RunCommandOptions {
   snapshotsDir: string;
   oauthToken: string[];
   openBrowser: boolean;
+  serverOverrideAll?: string;
+  serverOverride: string[];
 }
 
 program
@@ -105,6 +108,16 @@ program
   .option(
     '--open-browser',
     'Open browser to mcplab serve UI when OAuth is required (default: print URL only)'
+  )
+  .option(
+    '--server-override-all <serverRef[,serverRef...]>',
+    'Override MCP server refs for all selected scenarios for this run only'
+  )
+  .option(
+    '--server-override <scenarioId=serverRef[,serverRef...]>',
+    'Override MCP server refs for one scenario (repeatable, higher priority than --server-override-all)',
+    (val: string, acc: string[]) => [...acc, val],
+    [] as string[]
   )
   .action(async (options: RunCommandOptions) => {
     try {
@@ -907,6 +920,49 @@ function openBrowserUrl(url: string): void {
   }
 }
 
+function parseRuntimeServerOverrides(options: RunCommandOptions): {
+  serverOverrideAll?: string[];
+  scenarioServerOverrides?: Record<string, string[]>;
+} {
+  const serverOverrideAll = options.serverOverrideAll
+    ? options.serverOverrideAll
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+    : undefined;
+  if (
+    options.serverOverrideAll !== undefined &&
+    (!serverOverrideAll || serverOverrideAll.length === 0)
+  ) {
+    throw new Error('serverOverrideAll must include at least one server id');
+  }
+  const scenarioServerOverrides: Record<string, string[]> = {};
+  for (const rawEntry of options.serverOverride) {
+    const entry = String(rawEntry ?? '').trim();
+    const eqIdx = entry.indexOf('=');
+    if (eqIdx < 1) {
+      throw new Error(
+        `Invalid --server-override format '${entry}'. Expected: <scenarioId>=<serverRef[,serverRef...]>`
+      );
+    }
+    const scenarioId = entry.slice(0, eqIdx).trim();
+    const csv = entry.slice(eqIdx + 1);
+    if (!scenarioId) {
+      throw new Error(`Invalid --server-override '${entry}': scenario id cannot be empty`);
+    }
+    const parsedServerIds = csv
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    scenarioServerOverrides[scenarioId] = parsedServerIds;
+  }
+  return {
+    serverOverrideAll,
+    scenarioServerOverrides:
+      Object.keys(scenarioServerOverrides).length > 0 ? scenarioServerOverrides : undefined
+  };
+}
+
 async function executeSingleConfigRun(params: {
   configPath: string;
   options: RunCommandOptions;
@@ -933,9 +989,12 @@ async function executeSingleConfigRun(params: {
     : requestedAgentsFromCsv.length > 0
     ? requestedAgentsFromCsv
     : undefined;
-  const beforeExpandCount = config.scenarios.length;
-  const effectiveAgents = requestedAgents ?? config.run_defaults?.selected_agents;
-  const expanded = expandConfigForAgents(config, effectiveAgents);
+  const runtimeOverrides = parseRuntimeServerOverrides(options);
+  const selectedBaseConfig = options.scenario ? selectScenarios(config, options.scenario) : config;
+  const runtimeOverriddenConfig = applyRuntimeServerOverrides(selectedBaseConfig, runtimeOverrides);
+  const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
+  const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
+  const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
   if (expanded.scenarios.length !== beforeExpandCount || effectiveAgents?.length) {
     const agentCount = effectiveAgents?.length ?? Object.keys(config.agents).length;
     console.log(
@@ -945,7 +1004,7 @@ async function executeSingleConfigRun(params: {
     );
   }
 
-  const selected = selectScenarios(expanded, options.scenario);
+  const selected = expanded;
   const runsPerScenario = Number(options.runs);
   if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
     throw new Error('Runs must be a positive number');
@@ -970,11 +1029,11 @@ async function executeSingleConfigRun(params: {
   }
 
   // Detect OAuth servers missing a token and fail early with a helpful message
-  const oauthServers = Object.entries(config.servers ?? {})
-    .filter(
-      ([, v]) => (v as { auth?: { type?: string } }).auth?.type === 'oauth_authorization_code'
-    )
-    .map(([name]) => name);
+  const effectiveServerIds = new Set(selected.scenarios.flatMap((scenario) => scenario.servers));
+  const oauthServers = Array.from(effectiveServerIds).filter((name) => {
+    const cfg = selected.servers?.[name];
+    return cfg?.auth?.type === 'oauth_authorization_code';
+  });
   const missingTokenServers = oauthServers.filter((name) => !oauthTokens[name]);
   if (missingTokenServers.length > 0) {
     for (const name of missingTokenServers) {
@@ -1105,9 +1164,9 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
     case 'run_started':
       return `Run started (${event.totalScenarioRuns} scenario run(s), ${event.runsPerScenario} run(s) each).`;
     case 'mcp_connect_started':
-      return `Connecting MCP servers (${event.serverCount})...`;
+      return `Connecting MCP servers (${event.serverCount}): ${event.serverNames.join(', ')}...`;
     case 'mcp_connect_finished':
-      return `Connected MCP servers (${event.serverCount}).`;
+      return `Connected MCP servers (${event.serverCount}): ${event.serverNames.join(', ')}.`;
     case 'scenario_run_started':
       return `Scenario ${event.scenarioRunIndex}/${event.totalScenarioRuns} started: ${
         event.scenarioId

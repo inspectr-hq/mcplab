@@ -452,6 +452,19 @@ paths:
                 agents:
                   type: array
                   items: { type: string }
+                runNote:
+                  type: string
+                  maxLength: 500
+                serverOverrideAll:
+                  type: array
+                  items: { type: string }
+                  description: Runtime server refs applied to all selected scenarios for this run.
+                scenarioServerOverrides:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items: { type: string }
+                  description: Runtime per-scenario server ref overrides for this run.
                 applySnapshotEval:
                   type: boolean
                   default: true

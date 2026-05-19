@@ -377,6 +377,14 @@ mcplab run -c mcplab/evals/eval.yaml -s basic-test
 
 # Run with variance testing (5 iterations)
 mcplab run -c mcplab/evals/eval.yaml -n 5
+
+# Runtime MCP server override for all selected scenarios
+mcplab run -c mcplab/evals/eval.yaml --server-override-all kpi-api-stage
+
+# Runtime per-scenario override (wins over --server-override-all)
+mcplab run -c mcplab/evals/eval.yaml \
+  --server-override-all kpi-api-stage \
+  --server-override add-calculations=kpi-api-dev
 ```
 
 ### App Mode

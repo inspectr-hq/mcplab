@@ -79,3 +79,57 @@ describe('applyLibraryAgents', () => {
     expect(loaded.hash).toBe(hashConfig(loaded.config));
   });
 });
+
+describe('run request validation', () => {
+  it('returns 400 when serverOverrideAll is an empty array', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const req = {
+      url: '/api/runs',
+      headers: {},
+      on: () => undefined
+    } as any;
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const deps: any = {
+      parseBody: async () => ({
+        configPath: '/tmp/eval.yaml',
+        serverOverrideAll: []
+      }),
+      asJson: (_res: unknown, status: number, payload: unknown) => {
+        responses.push({ status, payload });
+      }
+    };
+    const handled = await handleRunsRoutes({
+      req,
+      res: {} as any,
+      pathname: '/api/runs',
+      method: 'POST',
+      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      jobs: new Map(),
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      oauthSessionManager: {} as any,
+      deps: {
+        ...deps,
+        addJobEvent: () => undefined,
+        sendSseEvent: () => undefined,
+        ensureInsideRoot: (_root: string, path: string) => path,
+        listRuns: () => [],
+        getRunResults: () => ({}),
+        getScenarioRunTraceRecords: () => [],
+        selectScenarioIds: (c: any) => c,
+        expandConfigForAgents: (c: any) => c,
+        resolveRunSelectedAgents: () => [],
+        loadSnapshot: () => ({}),
+        compareRunToSnapshot: () => ({}),
+        applySnapshotPolicyToRunResult: () => ({}),
+        readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
+        pickDefaultAssistantAgentName: () => undefined,
+        pkgVersion: 'test'
+      }
+    } as any);
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(400);
+    expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
+      'serverOverrideAll must include at least one server id'
+    );
+  });
+});

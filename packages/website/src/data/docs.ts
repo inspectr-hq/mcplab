@@ -565,6 +565,26 @@ const cliRunning: DocPage = {
       ]
     },
     {
+      id: 'runtime-server-overrides',
+      title: 'Runtime Server Overrides',
+      paragraphs: [
+        'Switch MCP targets at run-time without editing eval YAML. Use --server-override-all for a fast environment switch (dev/stage/prod), then refine specific tests with --server-override.',
+        'Precedence is: config defaults < --server-override-all < --server-override <scenarioId=...>. Overrides are ephemeral and apply only to the current run.'
+      ],
+      codeBlocks: [
+        {
+          title: 'switch all selected tests to staging',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml --server-override-all kpi-api-stage'
+        },
+        {
+          title: 'global switch plus one per-test exception',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c eval.yaml --server-override-all kpi-api-stage --server-override add-calculations=kpi-api-dev'
+        }
+      ]
+    },
+    {
       id: 'variance-runs',
       title: 'Variance Runs',
       paragraphs: [
@@ -1108,6 +1128,8 @@ const cliCommandReference: DocPage = {
         '--runs-dir <path> — Output directory for run artifacts. Default: mcplab/results/evaluation-runs.',
         '--snapshots-dir <path> — Directory for snapshot files. Default: mcplab/snapshots.',
         '--oauth-token <server=token> — Pre-obtained OAuth bearer token for a named server. Repeatable.',
+        '--server-override-all <serverRef[,serverRef...]> — Override MCP server refs for all selected scenarios (runtime only).',
+        '--server-override <scenarioId=serverRef[,serverRef...]> — Override MCP server refs for one scenario. Repeatable. Higher priority than --server-override-all.',
         '--open-browser — Open browser to the MCPLab UI when OAuth authentication is required.',
         '--snapshot-eval — Apply the snapshot_eval policy defined in the config.',
         '--compare-snapshot <snapshotId> — Compare the completed run against a snapshot after it finishes.'

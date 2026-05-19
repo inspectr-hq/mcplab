@@ -121,6 +121,15 @@ function getLocalDayKey(value: string) {
   return `${year}-${month}-${day}`;
 }
 
+function formatMcpServersWithVersions(mcpServerVersions: Record<string, string | null>): string {
+  const entries = Object.entries(mcpServerVersions ?? {});
+  if (entries.length === 0) return '—';
+  return entries
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([server, version]) => `${server}@${version ?? 'unknown'}`)
+    .join(', ');
+}
+
 function formatLocalDayLabel(value: string) {
   const parsed = parseLocalDateTime(value);
   if (!parsed) return 'Unknown day';
@@ -1289,6 +1298,9 @@ const Compare = () => {
                             {r.configPath.trim()}
                           </div>
                         ) : null}
+                        <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">
+                          MCP: {formatMcpServersWithVersions(r.mcpServerVersions)}
+                        </div>
                       </TableHead>
                     ))}
                   </TableRow>

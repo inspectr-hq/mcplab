@@ -146,6 +146,8 @@ export interface QueueEntry {
     scenarioIds: string[] | null;
     agents: string[] | null;
     runNote: string | null;
+    serverOverrideAll: string[] | null;
+    scenarioServerOverrides: Record<string, string[]> | null;
   };
 }
 
@@ -723,6 +725,8 @@ export interface EvalDataSource {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
+    serverOverrideAll?: string[];
+    scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
