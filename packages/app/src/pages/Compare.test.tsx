@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import Compare from './Compare';
 import type { EvalResult } from '@/types/eval';
@@ -35,6 +35,64 @@ function makeRun(id: string, scenarios: EvalResult['scenarios']): EvalResult {
     avgToolCalls: 1,
     avgLatency: 100
   };
+}
+
+function makeRunAt(
+  id: string,
+  timestamp: string,
+  scenarios: EvalResult['scenarios'] = [
+    {
+      scenarioId: 'scn-1',
+      scenarioName: 'Scenario 1',
+      agentId: 'agent-a',
+      agentName: 'Agent A',
+      passRate: 1,
+      avgToolCalls: 1,
+      avgDuration: 100,
+      runs: [
+        {
+          runIndex: 0,
+          passed: true,
+          toolCalls: [],
+          finalAnswer: 'ok',
+          conversation: [],
+          duration: 100,
+          extractedValues: {},
+          failureReasons: []
+        }
+      ]
+    }
+  ]
+): EvalResult {
+  return {
+    ...makeRun(id, scenarios),
+    timestamp
+  };
+}
+
+function toDatetimeLocalValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    '-',
+    pad(date.getMonth() + 1),
+    '-',
+    pad(date.getDate()),
+    'T',
+    pad(date.getHours()),
+    ':',
+    pad(date.getMinutes())
+  ].join('');
+}
+
+function formatDayLabel(timestamp: string) {
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC'
+  });
 }
 
 const baseResults: EvalResult[] = [
@@ -167,6 +225,10 @@ const mixedAgentCountResults: EvalResult[] = [
 ];
 
 describe('Compare', () => {
+  const LocationProbe = () => {
+    const location = useLocation();
+    return <div data-testid="location-search">{location.search}</div>;
+  };
   it('switches to Within One Run mode and renders side-by-side comparison', async () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
@@ -409,5 +471,174 @@ describe('Compare', () => {
     await screen.findByText('Agent Summary');
     expect(screen.getAllByText(/OpenAI · gpt-4/)).toHaveLength(2);
     expect(screen.queryByText(/Anthropic · gpt-4/)).not.toBeInTheDocument();
+  });
+
+  it('filters runs mode by Last 15min preset', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:15:00.000Z').getTime());
+    sourceMock.listResults.mockResolvedValue([
+      makeRunAt('run-fresh', '2026-03-10T10:10:00.000Z'),
+      makeRunAt('run-old', '2026-03-10T09:30:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/compare?time_filter=last&time_preset=15min']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-fresh');
+    expect(screen.queryByText('run-old')).not.toBeInTheDocument();
+    expect(screen.getByText('Last 15min')).toBeInTheDocument();
+  });
+
+  it('filters runs mode by custom datetime range', async () => {
+    const insideTimestamp = new Date('2026-03-10T10:10:00.000Z');
+    const start = new Date(insideTimestamp.getTime() - 5 * 60 * 1000);
+    const end = new Date(insideTimestamp.getTime() + 5 * 60 * 1000);
+    sourceMock.listResults.mockResolvedValue([
+      makeRunAt('run-inside', insideTimestamp.toISOString()),
+      makeRunAt('run-outside', '2026-03-10T09:30:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          `/compare?time_filter=custom&time_start=${toDatetimeLocalValue(
+            start
+          )}&time_end=${toDatetimeLocalValue(end)}`
+        ]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-inside');
+    fireEvent.click(screen.getAllByRole('combobox')[1]!);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe(
+        toDatetimeLocalValue(start)
+      );
+      expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe(
+        toDatetimeLocalValue(end)
+      );
+    });
+    expect(screen.queryByText('run-outside')).not.toBeInTheDocument();
+  });
+
+  it('clears time filter query params when reset to all time', async () => {
+    sourceMock.listResults.mockResolvedValue(baseResults);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/compare?time_filter=last&time_preset=24h']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route
+            path="/compare"
+            element={
+              <>
+                <Compare />
+                <LocationProbe />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getAllByRole('combobox')[1]!);
+    fireEvent.click(screen.getByRole('button', { name: 'All time' }));
+
+    await waitFor(() => {
+      const search = screen.getByTestId('location-search').textContent ?? '';
+      expect(search).not.toContain('time_filter=');
+      expect(search).not.toContain('time_preset=');
+      expect(search).not.toContain('time_start=');
+      expect(search).not.toContain('time_end=');
+    });
+  });
+
+  it('ignores time params in within-run mode and keeps within-run UI', async () => {
+    sourceMock.listResults.mockResolvedValue(baseResults);
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/compare?mode=within-run&runId=run-1&agents=agent-a,agent-b&time_filter=last&time_preset=15min'
+        ]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Within One Run Controls');
+    expect(screen.queryByText('Date and time filter')).not.toBeInTheDocument();
+    expect(screen.getByText('Scenario × Agent Matrix')).toBeInTheDocument();
+  });
+
+  it('toggles day separators in runs table', async () => {
+    sourceMock.listResults.mockResolvedValue([
+      makeRunAt('run-new', '2026-03-10T10:10:00.000Z'),
+      makeRunAt('run-old', '2026-03-09T10:10:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/compare']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-new');
+    expect(screen.queryByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Group by day' }));
+
+    expect(screen.getByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).toBeInTheDocument();
+    expect(screen.getByText(formatDayLabel('2026-03-09T10:10:00.000Z'))).toBeInTheDocument();
+  });
+
+  it('restores day separator toggle state from localStorage', async () => {
+    window.localStorage.setItem('mcplab.compare.showDaySeparators', '1');
+    sourceMock.listResults.mockResolvedValue([
+      makeRunAt('run-new', '2026-03-10T10:10:00.000Z'),
+      makeRunAt('run-old', '2026-03-09T10:10:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/compare']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-new');
+    expect(screen.getByRole('switch', { name: 'Group by day' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    expect(screen.getByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).toBeInTheDocument();
   });
 });

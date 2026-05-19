@@ -65,7 +65,8 @@ function formatDayLabel(timestamp: string) {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'UTC'
   });
 }
 
@@ -278,5 +279,28 @@ describe('Results', () => {
         .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
       expect(runLinks.map((link) => link.textContent)).toEqual(['run-inside']);
     });
+  });
+
+  it('shows empty state when no runs match active time filter', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:15:00.000Z').getTime());
+    sourceMock.listResults.mockResolvedValue([makeRun('run-old', 900, '2026-03-10T09:30:00.000Z')]);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/results?time_filter=last&time_preset=15min']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Results');
+    expect(screen.getByText('No runs match current filters.')).toBeInTheDocument();
+    const runLinks = screen
+      .queryAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
+    expect(runLinks).toHaveLength(0);
   });
 });

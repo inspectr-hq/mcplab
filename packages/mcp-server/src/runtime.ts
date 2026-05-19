@@ -2297,6 +2297,7 @@ export function registerPrompts(server: McpServer): void {
                 `2. Draft a scenario with mcplab_generate_scenario_entry.\n` +
                 `3. Suggest exact eval rules (required tools / regex assertions / extract rules).\n` +
                 `4. Validate the final config with mcplab_validate_config when a config path is available.\n` +
+                `5. If execution is requested, run scenarios with mcplab_run_eval (instead of suggesting shell commands).\n` +
                 `Prefer reusable scenario files when possible.`
             }
           }
