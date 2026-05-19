@@ -90,7 +90,8 @@ function formatDayLabel(timestamp: string) {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'UTC'
   });
 }
 
@@ -609,7 +610,7 @@ describe('Compare', () => {
     await screen.findByText('run-new');
     expect(screen.queryByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Day separators' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Group by day' }));
 
     expect(screen.getByText(formatDayLabel('2026-03-10T10:10:00.000Z'))).toBeInTheDocument();
     expect(screen.getByText(formatDayLabel('2026-03-09T10:10:00.000Z'))).toBeInTheDocument();
@@ -634,7 +635,7 @@ describe('Compare', () => {
     );
 
     await screen.findByText('run-new');
-    expect(screen.getByRole('switch', { name: 'Day separators' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: 'Group by day' })).toHaveAttribute(
       'aria-checked',
       'true'
     );

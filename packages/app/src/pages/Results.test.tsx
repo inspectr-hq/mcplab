@@ -65,7 +65,8 @@ function formatDayLabel(timestamp: string) {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'UTC'
   });
 }
 
