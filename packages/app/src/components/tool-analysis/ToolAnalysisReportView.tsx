@@ -15,9 +15,10 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronDown, Lightbulb } from 'lucide-react';
+import { ChevronDown, Copy, Lightbulb } from 'lucide-react';
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification, safeJsonStringify } from '@/lib/tool-analysis-utils';
+import { toast } from '@/hooks/use-toast';
 
 const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -59,6 +60,20 @@ function toSafeId(value: string): string {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'tool'
   );
+}
+
+async function copyToClipboard(label: string, value: unknown): Promise<void> {
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  try {
+    await navigator.clipboard.writeText(text);
+    toast({ title: `${label} copied` });
+  } catch (error: unknown) {
+    toast({
+      title: `Could not copy ${label.toLowerCase()}`,
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive'
+    });
+  }
 }
 
 function SuggestionCallout({ text }: { text: string }) {
@@ -672,6 +687,62 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                             </div>
                           </summary>
                           <div className="mt-3 space-y-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() =>
+                                  void copyToClipboard('Tool info', {
+                                    server: server.serverName,
+                                    name: tool.publicToolName,
+                                    title: tool.title,
+                                    description: tool.description
+                                  })
+                                }
+                              >
+                                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                Copy Tool Info
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() =>
+                                  void copyToClipboard('Schemas', {
+                                    server: server.serverName,
+                                    name: tool.publicToolName,
+                                    inputSchema: tool.inputSchema,
+                                    outputSchema: tool.outputSchema
+                                  })
+                                }
+                                disabled={
+                                  tool.inputSchema === undefined && tool.outputSchema === undefined
+                                }
+                              >
+                                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                Copy Schemas
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px]"
+                                onClick={() =>
+                                  void copyToClipboard('Metadata review', {
+                                    server: server.serverName,
+                                    name: tool.publicToolName,
+                                    metadataReview: tool.metadataReview
+                                  })
+                                }
+                                disabled={!tool.metadataReview}
+                              >
+                                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                                Copy Metadata Review
+                              </Button>
+                            </div>
                             {(tool.inputSchema !== undefined ||
                               tool.outputSchema !== undefined) && (
                               <details className="group/schema rounded border bg-muted/10 p-2">
