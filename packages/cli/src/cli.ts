@@ -133,10 +133,13 @@ program
               promptAgentSelection: needsAgentPrompt,
               loadConfigForValidation: (path: string) => {
                 const loaded = loadConfig(path);
-                const { agents: libraryAgents } = readLibraries(loaded.bundleRoot);
+                const { agents: libraryAgents, servers: libraryServers } = readLibraries(
+                  loaded.bundleRoot
+                );
                 loaded.config = {
                   ...loaded.config,
-                  agents: { ...libraryAgents, ...loaded.config.agents }
+                  agents: { ...libraryAgents, ...loaded.config.agents },
+                  servers: { ...libraryServers, ...loaded.config.servers }
                 };
                 return loaded;
               }
