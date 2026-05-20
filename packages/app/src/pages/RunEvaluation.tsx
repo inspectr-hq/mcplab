@@ -240,6 +240,18 @@ const RunEvaluation = () => {
       ]);
       return;
     }
+    const emptyPerScenarioOverrides = Object.entries(filteredScenarioServerOverrides)
+      .filter(([, serverIds]) => !Array.isArray(serverIds) || serverIds.length === 0)
+      .map(([scenarioId]) => scenarioId);
+    if (emptyPerScenarioOverrides.length > 0) {
+      setLogs((prev) => [
+        ...prev,
+        `[${nowTime()}] Select at least one server for per-scenario overrides on: ${emptyPerScenarioOverrides.join(
+          ', '
+        )}, or turn those overrides off.`
+      ]);
+      return;
+    }
     const oauthServerNames = Array.from(
       new Set(
         selectedScenarios
