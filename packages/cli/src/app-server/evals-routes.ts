@@ -2,7 +2,7 @@ import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { loadConfig, normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
+import { normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 export type EvalsRouteDeps = Pick<
@@ -75,46 +75,6 @@ export async function handleEvalsRoutes(params: {
     const id = pathname.replace('/api/evals/', '');
     const filePath = decodeEvalId(id, settings.evalsDir);
     asJson(res, 200, readConfigRecordOrInvalid(filePath, settings.evalsDir, settings.librariesDir));
-    return true;
-  }
-
-  if (
-    pathname.startsWith('/api/evals/') &&
-    pathname.endsWith('/snapshot-policy') &&
-    method === 'POST'
-  ) {
-    const id = pathname.replace('/api/evals/', '').replace('/snapshot-policy', '');
-    const filePath = decodeEvalId(id, settings.evalsDir);
-    if (!existsSync(filePath)) {
-      asJson(res, 404, { error: 'Config not found' });
-      return true;
-    }
-    const body = await parseBody(req);
-    const enabled = Boolean(body.enabled);
-    const mode = String(body.mode ?? 'warn');
-    if (mode !== 'warn' && mode !== 'fail_on_drift') {
-      asJson(res, 400, { error: 'mode must be warn or fail_on_drift' });
-      return true;
-    }
-    const { sourceConfig } = loadConfig(filePath, { bundleRoot: settings.librariesDir });
-    const nextSnapshotEval: NonNullable<SourceEvalConfig['snapshot_eval']> = {
-      enabled,
-      mode,
-      baseline_snapshot_id:
-        body.baselineSnapshotId !== undefined
-          ? String(body.baselineSnapshotId || '')
-          : sourceConfig.snapshot_eval?.baseline_snapshot_id,
-      baseline_source_run_id:
-        body.baselineSourceRunId !== undefined
-          ? String(body.baselineSourceRunId || '')
-          : sourceConfig.snapshot_eval?.baseline_source_run_id,
-      last_updated_at: new Date().toISOString()
-    };
-    if (!nextSnapshotEval.baseline_snapshot_id) delete nextSnapshotEval.baseline_snapshot_id;
-    if (!nextSnapshotEval.baseline_source_run_id) delete nextSnapshotEval.baseline_source_run_id;
-    const nextConfig: SourceEvalConfig = { ...sourceConfig, snapshot_eval: nextSnapshotEval };
-    writeFileSync(filePath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-    asJson(res, 200, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
     return true;
   }
 

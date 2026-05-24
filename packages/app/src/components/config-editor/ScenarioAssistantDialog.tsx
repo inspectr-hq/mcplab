@@ -58,13 +58,6 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     prompt:
       "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
   },
-  // Commented out for now, as the snapshot is still WIP
-  // {
-  //   label: "Explain Snapshot Drift Risk",
-  //   description: "Assess likely causes of drift and stabilization options.",
-  //   prompt:
-  //     "Assess this scenario for snapshot drift risk. Which parts of the expected output are most likely to change as the underlying model or tool evolves? Explain the root cause for each risk and suggest whether to stabilize via tighter prompting, value capture rules, or more flexible checks."
-  // },
   {
     label: 'Generate Scenario Draft',
     description: 'Create a draft scenario from the current context.',

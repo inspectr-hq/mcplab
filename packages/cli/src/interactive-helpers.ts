@@ -14,7 +14,6 @@ export interface AppInteractiveOptions {
   port: string;
   evalsDir: string;
   runsDir: string;
-  snapshotsDir: string;
   toolAnalysisResultsDir: string;
   librariesDir: string;
 }
@@ -76,7 +75,6 @@ export async function promptAppOptionsInteractive(
     const port = await askValidPort(ask.question, current.port);
     const evalsDir = await askWithDefault(ask.question, 'Evals dir', current.evalsDir);
     const runsDir = await askWithDefault(ask.question, 'Runs dir', current.runsDir);
-    const snapshotsDir = await askWithDefault(ask.question, 'Snapshots dir', current.snapshotsDir);
     const toolAnalysisResultsDir = await askWithDefault(
       ask.question,
       'Tool analysis dir',
@@ -89,7 +87,6 @@ export async function promptAppOptionsInteractive(
     console.log(`port: ${port}`);
     console.log(`evals-dir: ${evalsDir}`);
     console.log(`runs-dir: ${runsDir}`);
-    console.log(`snapshots-dir: ${snapshotsDir}`);
     console.log(`tool-analysis-results-dir: ${toolAnalysisResultsDir}`);
     console.log(`libraries-dir: ${librariesDir}`);
 
@@ -105,7 +102,6 @@ export async function promptAppOptionsInteractive(
       port,
       evalsDir,
       runsDir,
-      snapshotsDir,
       toolAnalysisResultsDir,
       librariesDir
     };

@@ -32,15 +32,6 @@ import {
 } from './run-interactive.js';
 import { promptAppOptionsInteractive, selectRunDirInteractive } from './interactive-helpers.js';
 import { deriveConfigRelativePath, resolveRunConfigSelection } from './eval-config-files.js';
-import {
-  applySnapshotPolicyToRunResult,
-  buildSnapshotFromRun,
-  compareRunToSnapshot,
-  formatSnapshotComparisonTable,
-  listSnapshots,
-  loadSnapshot,
-  saveSnapshot
-} from './snapshot.js';
 import { loadOrBuildSearchIndex } from './results/indexer.js';
 import { searchDocs } from './results/search.js';
 import {
@@ -69,12 +60,9 @@ interface RunCommandOptions {
   agents?: string;
   agentsAll: boolean;
   interactive: boolean;
-  snapshotEval: boolean;
-  compareSnapshot?: string;
   bail: boolean;
   runNote?: string;
   runsDir: string;
-  snapshotsDir: string;
   oauthToken: string[];
   openBrowser: boolean;
   serverOverrideAll?: string;
@@ -93,12 +81,9 @@ program
   )
   .option('--agents-all', 'Run all configured agents for the selected scenarios')
   .option('--interactive', 'Prompt for required inputs')
-  .option('--snapshot-eval', 'Apply snapshot eval policy configured in the config')
-  .option('--compare-snapshot <snapshotId>', 'Compare completed run against snapshot id')
   .option('--bail', 'Stop after first failed config when --config points to a folder')
   .option('--run-note <text>', 'Optional note attached to the run metadata (max 500 chars)')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
-  .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
   .option(
     '--oauth-token <server=token>',
     'Pre-obtained OAuth Bearer token for a server (repeatable, format: server-name=token)',
@@ -159,10 +144,6 @@ program
       const requestedPath = selection.requestedPath;
       const requestedPathIsDirectory = selection.requestedPathIsDirectory;
       const isBatch = requestedPathIsDirectory;
-
-      if (isBatch && options.compareSnapshot) {
-        throw new Error('--compare-snapshot is not supported when running a config folder');
-      }
 
       if (!isBatch) {
         const outcome = await executeSingleConfigRun({
@@ -261,243 +242,6 @@ program
       process.exit(1);
     }
   });
-
-program
-  .command('snapshot')
-  .description('Manage evaluation snapshots')
-  .addCommand(
-    new Command('create')
-      .description('Create snapshot from a run (only fully passing runs)')
-      .requiredOption('--run <runId>', 'Run id from runs/<runId>')
-      .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
-      .action((options) => {
-        try {
-          const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');
-          const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
-          const snapshot = buildSnapshotFromRun(results, options.name);
-          const path = saveSnapshot(snapshot, resolve(options.snapshotsDir));
-          console.log(kleur.green(`Snapshot created: ${snapshot.id}`));
-          console.log(kleur.gray(`Path: ${path}`));
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('eval-init')
-      .description('Create baseline snapshot from a run and link it to config snapshot_eval policy')
-      .requiredOption('--run <runId>', 'Run id from runs/<runId>')
-      .requiredOption('--config <path>', 'Path to eval.yaml')
-      .option('--name <name>', 'Snapshot name')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
-      .action((options) => {
-        try {
-          const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');
-          const results = JSON.parse(readFileSync(resultsPath, 'utf8')) as ResultsJson;
-          const snapshot = buildSnapshotFromRun(results, options.name);
-          saveSnapshot(snapshot, resolve(options.snapshotsDir));
-
-          const configPath = resolve(String(options.config));
-          const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: SourceEvalConfig = {
-            ...sourceConfig,
-            snapshot_eval: {
-              enabled: true,
-              mode: sourceConfig.snapshot_eval?.mode ?? 'warn',
-              baseline_snapshot_id: snapshot.id,
-              baseline_source_run_id: results.metadata.run_id,
-              last_updated_at: new Date().toISOString()
-            }
-          };
-          writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-
-          console.log(kleur.green(`Snapshot eval baseline linked: ${snapshot.id}`));
-          console.log(kleur.gray(`Config updated: ${configPath}`));
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('eval-policy')
-      .description('Update snapshot_eval policy in a config')
-      .requiredOption('--config <path>', 'Path to eval.yaml')
-      .requiredOption('--enabled <true|false>', 'Whether snapshot eval is enabled')
-      .requiredOption('--mode <warn|fail_on_drift>', 'Snapshot eval mode')
-      .option('--baseline-snapshot <snapshotId>', 'Baseline snapshot id')
-      .option('--baseline-source-run <runId>', 'Source run id used to create baseline')
-      .action((options) => {
-        try {
-          const enabled = String(options.enabled).toLowerCase() === 'true';
-          const mode = String(options.mode) as 'warn' | 'fail_on_drift';
-          if (mode !== 'warn' && mode !== 'fail_on_drift') {
-            throw new Error('mode must be warn or fail_on_drift');
-          }
-          const configPath = resolve(String(options.config));
-          const { sourceConfig } = loadConfig(configPath);
-          const nextConfig: SourceEvalConfig = {
-            ...sourceConfig,
-            snapshot_eval: {
-              enabled,
-              mode,
-              baseline_snapshot_id:
-                options.baselineSnapshot ?? sourceConfig.snapshot_eval?.baseline_snapshot_id,
-              baseline_source_run_id:
-                options.baselineSourceRun ?? sourceConfig.snapshot_eval?.baseline_source_run_id,
-              last_updated_at: new Date().toISOString()
-            }
-          };
-          writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-          console.log(kleur.green(`Snapshot eval policy updated: ${configPath}`));
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('eval-set-scenario')
-      .description('Set or clear a scenario-level snapshot baseline override in a config')
-      .requiredOption('--config <path>', 'Path to eval.yaml')
-      .requiredOption('--scenario <id>', 'Scenario id')
-      .option('--snapshot <snapshotId>', 'Override baseline snapshot id (omit to clear override)')
-      .option('--source-run <runId>', 'Source run id used to create the scenario baseline')
-      .option('--enabled <true|false>', 'Scenario snapshot eval enabled override')
-      .action((options) => {
-        try {
-          const configPath = resolve(String(options.config));
-          const scenarioId = String(options.scenario).trim();
-          if (!scenarioId) throw new Error('scenario is required');
-          const { sourceConfig } = loadConfig(configPath);
-          const scenarios = [...(sourceConfig.scenarios ?? [])];
-          const scenarioIndex = scenarios.findIndex(
-            (s) => typeof s === 'object' && s !== null && !('ref' in s) && s.id === scenarioId
-          );
-          if (scenarioIndex < 0) {
-            throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
-          }
-          const current = scenarios[scenarioIndex];
-          if (!current || typeof current !== 'object' || 'ref' in current) {
-            throw new Error(`Scenario not found in config.scenarios (inline only): ${scenarioId}`);
-          }
-          const nextScenarioSnapshotEval = {
-            ...(current.snapshot_eval ?? {}),
-            ...(options.snapshot !== undefined
-              ? { baseline_snapshot_id: String(options.snapshot || '') || undefined }
-              : {}),
-            ...(options.sourceRun !== undefined
-              ? { baseline_source_run_id: String(options.sourceRun || '') || undefined }
-              : {}),
-            ...(options.enabled !== undefined
-              ? { enabled: String(options.enabled).toLowerCase() === 'true' }
-              : {}),
-            last_updated_at: new Date().toISOString()
-          };
-          if (!nextScenarioSnapshotEval.baseline_snapshot_id) {
-            delete (nextScenarioSnapshotEval as any).baseline_snapshot_id;
-          }
-          if (!nextScenarioSnapshotEval.baseline_source_run_id) {
-            delete (nextScenarioSnapshotEval as any).baseline_source_run_id;
-          }
-          if (
-            nextScenarioSnapshotEval.enabled === undefined &&
-            !nextScenarioSnapshotEval.baseline_snapshot_id &&
-            !nextScenarioSnapshotEval.baseline_source_run_id
-          ) {
-            scenarios[scenarioIndex] = {
-              ...current,
-              snapshot_eval: undefined
-            };
-          } else {
-            scenarios[scenarioIndex] = {
-              ...current,
-              snapshot_eval: nextScenarioSnapshotEval
-            };
-          }
-          const nextConfig: SourceEvalConfig = {
-            ...sourceConfig,
-            scenarios
-          };
-          writeFileSync(configPath, `${stringifyYaml(nextConfig)}\n`, 'utf8');
-          console.log(
-            kleur.green(
-              `Scenario snapshot baseline ${options.snapshot ? 'set' : 'updated'}: ${scenarioId}`
-            )
-          );
-          console.log(kleur.gray(`Config updated: ${configPath}`));
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('list')
-      .description('List snapshots')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
-      .action((options) => {
-        try {
-          const snapshots = listSnapshots(resolve(options.snapshotsDir));
-          if (snapshots.length === 0) {
-            console.log('No snapshots found.');
-            return;
-          }
-          for (const snapshot of snapshots) {
-            console.log(
-              `${snapshot.id}  ${snapshot.name}  (run=${snapshot.source_run_id}, created=${snapshot.created_at})`
-            );
-          }
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('show')
-      .description('Show snapshot JSON')
-      .requiredOption('--id <snapshotId>', 'Snapshot id')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
-      .action((options) => {
-        try {
-          const snapshot = loadSnapshot(String(options.id), resolve(options.snapshotsDir));
-          console.log(JSON.stringify(snapshot, null, 2));
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command('compare')
-      .description('Compare run against snapshot')
-      .requiredOption('--id <snapshotId>', 'Snapshot id')
-      .requiredOption('--run <runId>', 'Run id from runs/<runId>')
-      .option('--format <format>', 'Output format: table|json', 'table')
-      .option('--runs-dir <path>', 'Directory with run artifacts', 'mcplab/results/evaluation-runs')
-      .option('--snapshots-dir <path>', 'Directory for snapshots', 'mcplab/snapshots')
-      .action((options) => {
-        try {
-          const snapshot = loadSnapshot(String(options.id), resolve(options.snapshotsDir));
-          const resultsPath = resolve(options.runsDir, String(options.run), 'results.json');
-          const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
-          const comparison = compareRunToSnapshot(results, snapshot);
-          if (String(options.format) === 'json') {
-            console.log(JSON.stringify(comparison, null, 2));
-          } else {
-            console.log(formatSnapshotComparisonTable(comparison));
-          }
-        } catch (err: any) {
-          console.error(kleur.red(`Error: ${err?.message ?? String(err)}`));
-          process.exit(1);
-        }
-      })
-  );
 
 program
   .command('results')
@@ -854,7 +598,6 @@ program
   .description('Serve MCPLab app frontend and local API bridge')
   .option('--evals-dir <path>', 'Directory for YAML evals', 'mcplab/evals')
   .option('--runs-dir <path>', 'Directory for run artifacts', 'mcplab/results/evaluation-runs')
-  .option('--snapshots-dir <path>', 'Directory for snapshot artifacts', 'mcplab/snapshots')
   .option(
     '--tool-analysis-results-dir <path>',
     'Directory for saved tool analysis reports',
@@ -874,7 +617,6 @@ program
             port: String(options.port),
             evalsDir: String(options.evalsDir),
             runsDir: String(options.runsDir),
-            snapshotsDir: String(options.snapshotsDir),
             toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
             librariesDir: String(options.librariesDir)
           })
@@ -883,7 +625,6 @@ program
             port: String(options.port),
             evalsDir: String(options.evalsDir),
             runsDir: String(options.runsDir),
-            snapshotsDir: String(options.snapshotsDir),
             toolAnalysisResultsDir: String(options.toolAnalysisResultsDir),
             librariesDir: String(options.librariesDir)
           };
@@ -897,7 +638,6 @@ program
         port,
         evalsDir: resolve(resolvedAppOptions.evalsDir),
         runsDir: resolve(resolvedAppOptions.runsDir),
-        snapshotsDir: resolve(resolvedAppOptions.snapshotsDir),
         toolAnalysisResultsDir: resolve(resolvedAppOptions.toolAnalysisResultsDir),
         librariesDir: resolve(resolvedAppOptions.librariesDir),
         dev: Boolean(options.dev),
@@ -1118,44 +858,6 @@ async function executeSingleConfigRun(params: {
       }
     }
   });
-  let shouldFailOnDrift = false;
-  const useSnapshotEval =
-    Boolean(options.snapshotEval) || Boolean(runtimeOverriddenConfig.snapshot_eval?.enabled);
-
-  if (useSnapshotEval) {
-    const policy = runtimeOverriddenConfig.snapshot_eval;
-    if (!policy?.baseline_snapshot_id) {
-      console.log(kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.'));
-    } else {
-      const snapshot = loadSnapshot(
-        String(policy.baseline_snapshot_id),
-        resolve(options.snapshotsDir)
-      );
-      const comparison = compareRunToSnapshot(results, snapshot);
-      const enabledScenarioIds = new Set(
-        expanded.scenarios
-          .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
-          .map((scenario) => scenario.id)
-      );
-      const applied = applySnapshotPolicyToRunResult({
-        results,
-        comparisons: [comparison],
-        policy,
-        enabledScenarioIds
-      });
-      console.log('');
-      console.log(kleur.cyan('📸 Snapshot Eval Policy'));
-      console.log(
-        `${applied.mode} · baseline=${applied.baseline_snapshot_id} · overall=${applied.overall_score} · status=${applied.status}`
-      );
-      if (applied.impacted_scenarios.length > 0) {
-        console.log(kleur.yellow(`Impacted scenarios: ${applied.impacted_scenarios.join(', ')}`));
-      }
-      console.log(formatSnapshotComparisonTable(comparison));
-      shouldFailOnDrift = policy.mode === 'fail_on_drift' && applied.impacted_scenarios.length > 0;
-    }
-  }
-
   const reportPath = join(runDir, 'report.html');
   const resultsPath = join(runDir, 'results.json');
   const summaryPath = join(runDir, 'summary.md');
@@ -1163,14 +865,6 @@ async function executeSingleConfigRun(params: {
   writeFileSync(reportPath, renderReport(results), 'utf8');
   writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
   console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
-
-  if (options.compareSnapshot) {
-    const snapshot = loadSnapshot(String(options.compareSnapshot), resolve(options.snapshotsDir));
-    const comparison = compareRunToSnapshot(results, snapshot);
-    console.log('');
-    console.log(kleur.cyan('📸 Snapshot Comparison'));
-    console.log(formatSnapshotComparisonTable(comparison));
-  }
 
   const failedRuns = results.scenarios.reduce(
     (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,
@@ -1181,7 +875,7 @@ async function executeSingleConfigRun(params: {
     runDir,
     runId: results.metadata.run_id,
     passed: failedRuns === 0,
-    shouldFailOnDrift
+    shouldFailOnDrift: false
   };
 }
 

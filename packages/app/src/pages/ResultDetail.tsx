@@ -89,7 +89,6 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import { isUiFeatureEnabled } from '@/lib/feature-flags';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { formatProvider } from '@/components/ProviderBadge';
 import type {
@@ -100,9 +99,7 @@ import type {
 } from '@/types/eval';
 import type {
   MarkdownReportContent,
-  MarkdownReportSummary,
-  SnapshotComparison,
-  SnapshotRecord
+  MarkdownReportSummary
 } from '@/lib/data-sources/types';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
@@ -149,7 +146,6 @@ const ResultDetail = () => {
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
   const isEmbedded = searchParams.get('embed') === '1';
-  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
@@ -159,13 +155,8 @@ const ResultDetail = () => {
   const [savingRunNote, setSavingRunNote] = useState(false);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
-  const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
-  const [comparing, setComparing] = useState(false);
   const [targetConfigId, setTargetConfigId] = useState('');
-  const [acceptSnapshotName, setAcceptSnapshotName] = useState('');
-  const [acceptingBaseline, setAcceptingBaseline] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [contextPanelTab, setContextPanelTab] = useState<'assistant' | 'reports' | 'note'>(
@@ -263,10 +254,6 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source, resetAssistantSession]);
-
-  useEffect(() => {
-    setSnapshots([]);
-  }, [source]);
 
   useEffect(() => {
     if (!result?.id) {
@@ -382,19 +369,7 @@ const ResultDetail = () => {
     }
     return map;
   }, [activeConfig, libraryScenarios]);
-  const inferredConfigId = useMemo(() => {
-    if (!result?.snapshotEval?.baselineSnapshotId) return '';
-    const matches = configs.filter(
-      (config) =>
-        config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
-    );
-    return matches.length === 1 ? matches[0].id : '';
-  }, [configs, result?.snapshotEval?.baselineSnapshotId]);
-
-  useEffect(() => {
-    if (!result?.snapshotEval?.baselineSnapshotId) return;
-    setSelectedSnapshotId((prev) => prev || result.snapshotEval!.baselineSnapshotId);
-  }, [result?.snapshotEval?.baselineSnapshotId]);
+  const inferredConfigId = useMemo(() => '', []);
 
   useEffect(() => {
     if (requestedConfigId && configs.some((config) => config.id === requestedConfigId)) {
@@ -514,51 +489,14 @@ const ResultDetail = () => {
     const defaultOpen = !key.endsWith(':conversation');
     return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
   };
-  const comparisonByScenario = new Map(
-    (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
-  );
-
-  const compareWithSnapshot = async () => {
-    if (!result || !selectedSnapshotId) return;
-    toast({
-      title: 'Snapshot removed',
-      description: 'Snapshot comparison is no longer supported.'
-    });
-  };
-
-  const reviewDrift = async (baselineIdOverride?: string) => {
-    const baselineId = baselineIdOverride || result.snapshotEval?.baselineSnapshotId;
-    if (!baselineId) return;
-    setSelectedSnapshotId(baselineId);
-    toast({
-      title: 'Snapshot removed',
-      description: 'Snapshot drift review is no longer supported.'
-    });
-  };
-
-  const acceptAsNewBaseline = async () => {
-    if (!targetConfigId) {
-      toast({
-        title: 'Select a configuration',
-        description: 'Choose which config should receive the new baseline.',
-        variant: 'destructive'
-      });
-      return;
-    }
-    setAcceptingBaseline(true);
-    toast({
-      title: 'Snapshot removed',
-      description: 'Baseline acceptance is no longer supported.'
-    });
-    setAcceptingBaseline(false);
-  };
+  const comparisonByScenario = new Map<string, never>();
 
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
     setContextPanelTab('assistant');
     setAssistantOpen(true);
     setAssistantContextScenarioId(options?.scenarioId ?? null);
     ensureIntroMessage(
-      'Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result.'
+      'Ask me to explain failures, tool usage, or suggest what to inspect next in this result.'
     );
     if (prompt) {
       setAssistantInput(prompt);

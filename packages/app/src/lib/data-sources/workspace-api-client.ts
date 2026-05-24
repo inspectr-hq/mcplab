@@ -151,7 +151,6 @@ export const workspaceApiClient = {
       workspaceRoot: string;
       evalsDir: string;
       runsDir: string;
-      snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
     }>('/api/settings'),
@@ -160,7 +159,6 @@ export const workspaceApiClient = {
       workspaceRoot: string;
       evalsDir: string;
       runsDir: string;
-      snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
     }>('/api/settings', {
@@ -295,7 +293,6 @@ export const workspaceApiClient = {
     scenarioId?: string;
     scenarioIds?: string[];
     agents?: string[];
-    applySnapshotEval?: boolean;
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;

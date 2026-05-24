@@ -21,7 +21,6 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { toast } from '@/hooks/use-toast';
-import { isUiFeatureEnabled } from '@/lib/feature-flags';
 import {
   buildEvalNameBySourcePath,
   buildRelativePathBySourcePath,
@@ -73,8 +72,6 @@ const RunEvaluation = () => {
     Record<string, string[]>
   >({});
   const [runNote, setRunNote] = useState('');
-  const [snapshotName, setSnapshotName] = useState('');
-  const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
@@ -86,7 +83,6 @@ const RunEvaluation = () => {
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
-  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const {
     agents: libraryAgents,
     scenarios: libraryScenarios,
@@ -375,16 +371,6 @@ const RunEvaluation = () => {
     void refreshQueue();
   };
 
-  const saveSnapshot = async () => {
-    if (!runId) return;
-    setSavingSnapshot(true);
-    toast({
-      title: 'Snapshot removed',
-      description: 'Use Auto Checks in test cases and Ask Assistant for check refinement.'
-    });
-    setSavingSnapshot(false);
-  };
-
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logs]);
@@ -569,12 +555,6 @@ const RunEvaluation = () => {
               return Math.max(prev, 50 + Math.round((current / total) * 25));
             }
             if (lower.startsWith('evaluation execution finished')) return Math.max(prev, 78);
-            if (lower.startsWith('applying snapshot evaluation policy')) return Math.max(prev, 82);
-            if (
-              lower.includes('snapshot evaluation applied') ||
-              lower.includes('snapshot evaluation enabled')
-            )
-              return Math.max(prev, 88);
             if (lower.startsWith('writing results to ')) return Math.max(prev, 94);
             if (lower.startsWith('run finished:')) return Math.max(prev, 98);
             return prev;
@@ -589,20 +569,6 @@ const RunEvaluation = () => {
           const line = `[${ts}] Run completed.`;
           return prev.includes(line) ? prev : [...prev, line];
         });
-        if (event.payload.snapshotEval && typeof event.payload.snapshotEval === 'object') {
-          const snapshotEval = event.payload.snapshotEval as {
-            mode?: string;
-            baseline_snapshot_id?: string;
-            overall_score?: number;
-            status?: string;
-          };
-          setLogs((prev) => {
-            const line = `[${ts}] Snapshot eval (${snapshotEval.mode ?? 'warn'}) baseline=${
-              snapshotEval.baseline_snapshot_id ?? '-'
-            } score=${snapshotEval.overall_score ?? '-'} status=${snapshotEval.status ?? '-'}`;
-            return prev.includes(line) ? prev : [...prev, line];
-          });
-        }
         setProgress(100);
         setRunning(false);
         setDone(true);
@@ -710,14 +676,6 @@ const RunEvaluation = () => {
           </div>
           {selectedConfig && (
             <div className="space-y-2">
-              {snapshotsUiEnabled && selectedConfig.snapshotEval?.enabled && (
-                <div className="rounded-md border bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
-                  Snapshot eval active ({selectedConfig.snapshotEval.mode}) · baseline:{' '}
-                  <span className="font-mono">
-                    {selectedConfig.snapshotEval.baselineSnapshotId ?? 'none'}
-                  </span>
-                </div>
-              )}
               <div className="flex items-center justify-between">
                 <Label>Agents</Label>
                 <div className="flex items-center gap-3 text-xs">
@@ -1339,28 +1297,6 @@ const RunEvaluation = () => {
                 <Link to={resultsHref}>{normalizedRunId ? 'View Results' : 'View Runs'}</Link>
               </Button>
             </div>
-            {snapshotsUiEnabled && normalizedRunId && (
-              <div className="mt-4 flex flex-wrap items-end gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Snapshot name (optional)</Label>
-                  <Input
-                    value={snapshotName}
-                    onChange={(e) => setSnapshotName(e.target.value)}
-                    placeholder="e.g. baseline-v1"
-                    className="h-8 w-64"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void saveSnapshot()}
-                  disabled={savingSnapshot}
-                >
-                  {savingSnapshot ? 'Saving...' : 'Save Snapshot'}
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}

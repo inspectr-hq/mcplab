@@ -7,7 +7,6 @@ export interface AppServerOptions {
   port: number;
   evalsDir: string;
   runsDir: string;
-  snapshotsDir: string;
   toolAnalysisResultsDir: string;
   librariesDir: string;
   dev: boolean;
@@ -18,7 +17,6 @@ export interface AppSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
-  snapshotsDir: string;
   toolAnalysisResultsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;

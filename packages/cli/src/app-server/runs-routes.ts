@@ -36,9 +36,6 @@ export type RunsRouteDeps = Pick<
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
   | 'resolveRunSelectedAgents'
-  | 'loadSnapshot'
-  | 'compareRunToSnapshot'
-  | 'applySnapshotPolicyToRunResult'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'pkgVersion'
@@ -50,7 +47,6 @@ type RunParams = {
   scenarioId?: string;
   scenarioIds?: string[];
   requestedAgents?: string[];
-  applySnapshotEval: boolean;
   runNote?: string;
   oauthServerNames?: string[]; // cached at enqueue time to avoid re-parsing config
   serverOverrideAll?: string[];
@@ -166,9 +162,6 @@ export async function handleRunsRoutes(params: {
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
-    loadSnapshot,
-    compareRunToSnapshot,
-    applySnapshotPolicyToRunResult,
     readLibraries,
     pickDefaultAssistantAgentName,
     pkgVersion
@@ -361,7 +354,6 @@ export async function handleRunsRoutes(params: {
       });
       return true;
     }
-    const applySnapshotEval = false;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -454,7 +446,6 @@ export async function handleRunsRoutes(params: {
       scenarioId,
       scenarioIds,
       requestedAgents,
-      applySnapshotEval,
       runNote,
       oauthServerNames,
       serverOverrideAll,
@@ -987,9 +978,6 @@ async function executeRunJob(
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
-    loadSnapshot,
-    compareRunToSnapshot,
-    applySnapshotPolicyToRunResult,
     readLibraries,
     pkgVersion
   } = deps;
@@ -999,7 +987,6 @@ async function executeRunJob(
     scenarioId,
     scenarioIds,
     requestedAgents,
-    applySnapshotEval,
     runNote,
     serverOverrideAll,
     scenarioServerOverrides
@@ -1168,16 +1155,6 @@ async function executeRunJob(
           message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
         }
       });
-      if (applySnapshotEval) {
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message:
-              'Snapshot evaluation option is no longer supported and is ignored. Use scenario checks and Ask Assistant flows instead.'
-          }
-        });
-      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),

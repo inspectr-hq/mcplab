@@ -31,14 +31,6 @@ import type {
   ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 import type {
-  listSnapshots,
-  buildSnapshotFromRun,
-  saveSnapshot,
-  loadSnapshot,
-  compareRunToSnapshot,
-  applySnapshotPolicyToRunResult
-} from '../snapshot.js';
-import type {
   getRunResults,
   listRuns,
   getScenarioRunTraceRecords,
@@ -140,17 +132,6 @@ export interface OAuthDebuggerDeps extends LibraryDeps {
   oauthDebuggerExportRawTrace: typeof oauthDebuggerExportRawTrace;
 }
 
-export interface SnapshotDeps {
-  listSnapshots: typeof listSnapshots;
-  buildSnapshotFromRun: typeof buildSnapshotFromRun;
-  saveSnapshot: typeof saveSnapshot;
-  loadSnapshot: typeof loadSnapshot;
-  compareRunToSnapshot: typeof compareRunToSnapshot;
-  getRunResults: typeof getRunResults;
-  decodeEvalId: typeof decodeEvalId;
-  readConfigRecord: typeof readConfigRecord;
-}
-
 export interface ConfigDeps {
   listConfigs: typeof listConfigs;
   safeFileName: typeof safeFileName;
@@ -171,9 +152,6 @@ export interface RunDeps {
     config: EvalConfig,
     requestedAgents?: string[]
   ) => string[] | undefined;
-  loadSnapshot: typeof loadSnapshot;
-  compareRunToSnapshot: typeof compareRunToSnapshot;
-  applySnapshotPolicyToRunResult: typeof applySnapshotPolicyToRunResult;
   readLibraries: typeof readLibraries;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;
@@ -188,7 +166,6 @@ export interface AppRouteDeps
     OAuthDebuggerDeps,
     ResultAssistantDeps,
     ScenarioAssistantDeps,
-    SnapshotDeps,
     ConfigDeps,
     RunDeps {}
 

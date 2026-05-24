@@ -93,42 +93,6 @@ export interface SnapshotItem {
   };
 }
 
-export interface SnapshotRecord {
-  schema_version: 2;
-  id: string;
-  name: string;
-  created_at: string;
-  source_run_id: string;
-  config_hash: string;
-  source_summary: {
-    total_scenarios: number;
-    total_runs: number;
-    pass_rate: number;
-  };
-  items: SnapshotItem[];
-}
-
-export interface SnapshotScenarioComparison {
-  scenario_id: string;
-  baseline_agents: string[];
-  observed_agents: string[];
-  score: number;
-  status: 'Match' | 'Warn' | 'Drift';
-  components: {
-    tools: number;
-    extracts: number;
-    semantics: number;
-  };
-  reasons: string[];
-}
-
-export interface SnapshotComparison {
-  snapshot_id: string;
-  run_id: string;
-  overall_score: number;
-  scenario_results: SnapshotScenarioComparison[];
-}
-
 export interface RunJobEvent {
   type: 'started' | 'log' | 'completed' | 'error' | 'queued' | 'oauth_required' | (string & {});
   ts: string;
@@ -174,7 +138,6 @@ export interface WorkspaceSettings {
   workspaceRoot: string;
   evalsDir: string;
   runsDir: string;
-  snapshotsDir: string;
   librariesDir: string;
   scenarioAssistantAgentName?: string;
 }
@@ -716,7 +679,6 @@ export interface EvalDataSource {
     scenarioId?: string;
     scenarioIds?: string[];
     agents?: string[];
-    applySnapshotEval?: boolean;
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;

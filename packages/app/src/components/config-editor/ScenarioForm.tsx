@@ -566,7 +566,7 @@ function ScenarioCard({
       const generationPrompt = [
         'Generate checks for this scenario from preview run context.',
         'Return structured suggestions with evalRules replacement only.',
-        'No prose fallback. Do not suggest snapshot settings.',
+        'No prose fallback.',
         'Quality-first: create measurable, non-duplicative checks with good coverage.',
         'Choose adaptive count by complexity, min 3 max 8, target around 5.'
       ].join(' ');
