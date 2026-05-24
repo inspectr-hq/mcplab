@@ -741,9 +741,6 @@ export interface EvalDataSource {
         };
         availableServers: Array<{ name: string; url?: string }>;
         availableAgents: Array<{ name: string; provider: string; model: string }>;
-        autoChecks?: {
-          previewRun?: unknown;
-        };
       };
     },
     signal?: AbortSignal
