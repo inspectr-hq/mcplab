@@ -1377,9 +1377,6 @@ describe('config adapters round-trip', () => {
           name: 'Order',
           serverIds: ['srv-a'],
           prompt: 'test',
-          snapshotEval: {
-            enabled: true
-          },
           evalRules: [
             { type: 'required_tool', value: 'get_tag_data' },
             { type: 'forbidden_tool', value: 'delete_all' },
@@ -1399,7 +1396,6 @@ describe('config adapters round-trip', () => {
       'name',
       'mcp_servers',
       'prompt',
-      'snapshot_eval',
       'eval',
       'extract'
     ]);
@@ -1416,7 +1412,6 @@ describe('config adapters round-trip', () => {
       '"name":',
       '"mcp_servers":',
       '"prompt":',
-      '"snapshot_eval":',
       '"eval":',
       '"extract":'
     ];

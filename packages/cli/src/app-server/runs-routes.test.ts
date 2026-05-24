@@ -122,9 +122,6 @@ describe('run request validation', () => {
           ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
-        loadSnapshot: () => ({}),
-        compareRunToSnapshot: () => ({}),
-        applySnapshotPolicyToRunResult: () => ({}),
         readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
         pickDefaultAssistantAgentName: () => undefined,
         pkgVersion: 'test'
@@ -175,9 +172,6 @@ describe('run request validation', () => {
           ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
-        loadSnapshot: () => ({}),
-        compareRunToSnapshot: () => ({}),
-        applySnapshotPolicyToRunResult: () => ({}),
         readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
         pickDefaultAssistantAgentName: () => undefined,
         pkgVersion: 'test'
@@ -228,9 +222,6 @@ describe('run request validation', () => {
           ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
-        loadSnapshot: () => ({}),
-        compareRunToSnapshot: () => ({}),
-        applySnapshotPolicyToRunResult: () => ({}),
         readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
         pickDefaultAssistantAgentName: () => undefined,
         pkgVersion: 'test'
@@ -301,9 +292,6 @@ describe('run request validation', () => {
           ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
-        loadSnapshot: () => ({}),
-        compareRunToSnapshot: () => ({}),
-        applySnapshotPolicyToRunResult: () => ({}),
         readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
         pickDefaultAssistantAgentName: () => undefined,
         pkgVersion: 'test'

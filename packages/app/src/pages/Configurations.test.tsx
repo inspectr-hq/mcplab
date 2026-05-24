@@ -164,8 +164,7 @@ describe('Configurations suites', () => {
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/trendminer/tags/tag-search.yaml',
-      runsPerScenario: 1,
-      applySnapshotEval: true
+      runsPerScenario: 1
     });
   });
 });

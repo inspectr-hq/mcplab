@@ -117,7 +117,6 @@ type RunRequestBody = {
   scenarioId?: unknown;
   scenarioIds?: unknown;
   agents?: unknown;
-  applySnapshotEval?: unknown;
   runNote?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
@@ -347,13 +346,6 @@ export async function handleRunsRoutes(params: {
     const requestedAgents = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
-    if (body.applySnapshotEval !== undefined) {
-      asJson(res, 400, {
-        error:
-          'applySnapshotEval is no longer supported. Snapshot evaluation has been removed from the run pipeline.'
-      });
-      return true;
-    }
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -1178,8 +1170,7 @@ async function executeRunJob(
         payload: {
           runId: results.metadata.run_id,
           runDir,
-          summary: results.summary,
-          snapshotEval: null
+          summary: results.summary
         }
       });
       job.status = 'completed';

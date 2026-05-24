@@ -80,19 +80,6 @@ export interface MarkdownReportContent {
   content: string;
 }
 
-export interface SnapshotItem {
-  scenario_id: string;
-  baseline_agents: string[];
-  required_tools: string[];
-  forbidden_tools: string[];
-  allowed_sequences: string[][];
-  baseline_tools: string[];
-  extracted_values: Record<string, string | number | boolean | null>;
-  final_answer_features: {
-    token_set: string[];
-  };
-}
-
 export interface RunJobEvent {
   type: 'started' | 'log' | 'completed' | 'error' | 'queued' | 'oauth_required' | (string & {});
   ts: string;

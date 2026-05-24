@@ -21,8 +21,7 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
         subscribeRunJob: vi.fn(() => () => {}),
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
-        startRun: vi.fn(),
-        createSnapshotFromRun: vi.fn()
+        startRun: vi.fn()
       }
     };
   });

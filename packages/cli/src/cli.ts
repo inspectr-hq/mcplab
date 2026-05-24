@@ -146,15 +146,11 @@ program
       const isBatch = requestedPathIsDirectory;
 
       if (!isBatch) {
-        const outcome = await executeSingleConfigRun({
+        await executeSingleConfigRun({
           configPath: configPaths[0]!,
           options,
           resolvedOptions
         });
-        if (outcome.shouldFailOnDrift) {
-          console.error(kleur.red('Snapshot eval drift detected in fail_on_drift mode.'));
-          process.exit(2);
-        }
         console.log(kleur.gray('Process exiting.'));
         return;
       }

@@ -54,7 +54,6 @@ import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
-import { handleSnapshotsRoutes } from './snapshots-routes.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import { fetchProviderModels } from './provider-models.js';
@@ -446,19 +445,6 @@ export async function startAppServer(options: AppServerOptions) {
           settings,
           assistantSessions,
           oauthSessionManager,
-          deps: routeDeps
-        })
-      ) {
-        return;
-      }
-
-      if (
-        await handleSnapshotsRoutes({
-          req,
-          res,
-          pathname,
-          method,
-          settings,
           deps: routeDeps
         })
       ) {

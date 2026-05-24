@@ -187,7 +187,6 @@ const RunEvaluation = () => {
         : availableAgents.map((agent) => agent.id)
     );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
-    setApplySnapshotEval(true);
     setGlobalServerOverrideEnabled(false);
     setGlobalServerOverrideIds([]);
     setScenarioServerOverrideEnabledMap({});
