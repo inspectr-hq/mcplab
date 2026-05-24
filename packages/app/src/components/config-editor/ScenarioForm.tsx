@@ -387,9 +387,11 @@ function ScenarioCard({
     if (!previewResult) return;
     const checkItems = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
     const finalAnswer = previewResult.run.finalAnswer || '(empty)';
-    const finalAnswerPreview = finalAnswer.length > 4000 ? `${finalAnswer.slice(0, 4000)}...` : finalAnswer;
+    const finalAnswerPreview =
+      finalAnswer.length > 4000 ? `${finalAnswer.slice(0, 4000)}...` : finalAnswer;
     const firstToolName = previewResult.run.toolCalls[0]?.name;
-    const totalMatch = finalAnswer.match(/all\s+\*{0,2}(\d+)\b/i) ?? finalAnswer.match(/\b(\d+)\s+tags\b/i);
+    const totalMatch =
+      finalAnswer.match(/all\s+\*{0,2}(\d+)\b/i) ?? finalAnswer.match(/\b(\d+)\s+tags\b/i);
     const analogMatch = finalAnswer.match(/\bANALOG\*{0,2}\s*[—-]\s*(\d+)/i);
     const stringMatch = finalAnswer.match(/\bSTRING\*{0,2}\s*[—-]\s*(\d+)/i);
     const discreteMatch = finalAnswer.match(/\bDISCRETE\*{0,2}\s*[—-]\s*(\d+)/i);
@@ -463,7 +465,11 @@ function ScenarioCard({
         ? `Starter Checks scaffold (adapt as needed):\n${JSON.stringify(starterEvalRules, null, 2)}`
         : '',
       Object.keys(previewResult.run.extractedValues).length === 0
-        ? `Starter Value Capture scaffold (adapt as needed):\n${JSON.stringify(starterExtractRules, null, 2)}`
+        ? `Starter Value Capture scaffold (adapt as needed):\n${JSON.stringify(
+            starterExtractRules,
+            null,
+            2
+          )}`
         : ''
     ].join('\n');
     setPreviewAssistantPrompt(prompt);
