@@ -25,12 +25,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from '@/types/eval';
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
-import type { ScenarioAssistantSessionView } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {
@@ -196,24 +195,6 @@ function ScenarioCard({
   const [previewResult, setPreviewResult] = useState<Awaited<
     ReturnType<typeof source.runScenarioPreview>
   > | null>(null);
-  const [autoChecksLoading, setAutoChecksLoading] = useState(false);
-  const [autoChecksStage, setAutoChecksStage] = useState<
-    | 'idle'
-    | 'preview'
-    | 'assistant_session'
-    | 'prepare_prompt'
-    | 'waiting_model'
-    | 'processing_response'
-    | 'quality_checks'
-    | 'approve_tools'
-    | 'finalize'
-  >('idle');
-  const [autoChecksProgressLog, setAutoChecksProgressLog] = useState<string[]>([]);
-  const latestEvalRulesRef = useRef<EvalRule[]>(scenario.evalRules);
-
-  useEffect(() => {
-    latestEvalRulesRef.current = scenario.evalRules;
-  }, [scenario.evalRules]);
   const [expanded, setExpanded] = useState(!readOnly);
   const toggleFromHeaderClick = (event: MouseEvent<HTMLElement>) => {
     const target = event.target as HTMLElement | null;
@@ -387,348 +368,6 @@ function ScenarioCard({
       setPreviewError(error instanceof Error ? error.message : String(error));
     } finally {
       setPreviewLoading(false);
-    }
-  };
-
-  const extractSuggestedEvalRules = (
-    session: Awaited<ReturnType<typeof source.getScenarioAssistantSession>>['session'] | null
-  ): EvalRule[] => {
-    if (!session) return [];
-    for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-      const suggestions = session.messages[i]?.suggestions;
-      if (!suggestions?.evalRules?.replacement) continue;
-      return suggestions.evalRules.replacement as EvalRule[];
-    }
-    return [];
-  };
-
-  const normalizeAutoChecks = (rules: EvalRule[]): EvalRule[] => {
-    const seen = new Set<string>();
-    const deduped: EvalRule[] = [];
-    for (const rule of rules) {
-      const key = JSON.stringify(rule);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(rule);
-    }
-    return deduped.slice(0, 8);
-  };
-
-  const scoreAutoChecksQuality = (rules: EvalRule[], previewToolCallCount: number) => {
-    const issues: string[] = [];
-    if (rules.length < 3) issues.push('Need at least 3 checks.');
-    const responseChecks = rules.filter((rule) => rule.type.startsWith('response_'));
-    const toolChecks = rules.filter(
-      (rule) => rule.type === 'required_tool' || rule.type === 'forbidden_tool'
-    );
-    if (responseChecks.length === 0) issues.push('Missing response checks.');
-    if (previewToolCallCount > 0 && toolChecks.length === 0) issues.push('Missing tool checks.');
-
-    const weakLiterals = new Set(['good', 'nice', 'appropriate', 'correct', 'looks good', 'ok']);
-    for (const rule of responseChecks) {
-      const text = String(rule.value ?? '')
-        .trim()
-        .toLowerCase();
-      if (text && weakLiterals.has(text)) {
-        issues.push(`Vague literal check: "${text}"`);
-      }
-      if ('value' in rule && typeof rule.value === 'string' && rule.value.trim().length < 2) {
-        issues.push(`Too-short literal check: "${rule.value}"`);
-      }
-    }
-    const uniqueTypes = new Set(rules.map((rule) => rule.type));
-    if (uniqueTypes.size < 2) issues.push('Low check diversity (single check type).');
-    return { ok: issues.length === 0, issues };
-  };
-
-  const generateAutoChecks = async () => {
-    if (scenario.evalRules.length > 0) {
-      toast({
-        title: 'Checks already exist',
-        description: 'Auto Checks only runs when checks are empty. Use Ask Assistant to refine.',
-        variant: 'default'
-      });
-      return;
-    }
-    if (!scenario.prompt.trim()) {
-      toast({ title: 'Prompt required', description: 'Add a prompt before generating checks.' });
-      return;
-    }
-    if (!previewAgentName) {
-      toast({ title: 'Agent required', description: 'Select an agent for generation.' });
-      return;
-    }
-    if (scenario.serverIds.length === 0) {
-      toast({
-        title: 'Server required',
-        description: 'Select at least one server before generating checks.'
-      });
-      return;
-    }
-
-    setAutoChecksLoading(true);
-    setAutoChecksStage('preview');
-    setAutoChecksProgressLog(['Running prompt preview...']);
-    setPreviewError(null);
-    let sessionId: string | null = null;
-    let unsubscribeSessionEvents: (() => void) | null = null;
-    const pushProgress = (line: string) => {
-      setAutoChecksProgressLog((prev) => {
-        const next = [...prev, line];
-        return next.slice(-8);
-      });
-    };
-    try {
-      const selectedOauthServers = Array.from(
-        new Set(
-          scenario.serverIds.filter((serverId) => {
-            const server = servers.find((entry) => entry.id === serverId);
-            return server?.authType === 'oauth2';
-          })
-        )
-      );
-      await ensureOAuthForServers({ serverNames: selectedOauthServers, source });
-
-      const preview = await source.runScenarioPreview({
-        selectedAgentName: previewAgentName,
-        scenario: {
-          id: scenario.id,
-          name: scenario.name,
-          prompt: scenario.prompt,
-          serverNames: scenario.serverIds,
-          evalRules: [],
-          extractRules: scenario.extractRules.map((rule) => ({
-            name: rule.name,
-            pattern: rule.pattern
-          }))
-        }
-      });
-      setPreviewResult(preview);
-      pushProgress('Prompt preview completed.');
-
-      setAutoChecksStage('assistant_session');
-      pushProgress('Starting assistant session...');
-      const createResp = await source.createScenarioAssistantSession({
-        configId,
-        configPath,
-        scenarioId: scenario.id,
-        selectedAssistantAgentName: previewAgentName,
-        context: {
-          scenario: {
-            id: scenario.id,
-            name: scenario.name,
-            prompt: scenario.prompt,
-            serverNames: scenario.serverIds,
-            evalRules: [],
-            extractRules: scenario.extractRules
-          },
-          availableServers: servers.map((server) => ({
-            name: server.name || server.id,
-            url: server.url
-          })),
-          availableAgents: agents.map((agent) => ({
-            name: agent.name || agent.id,
-            provider: agent.provider,
-            model: agent.model
-          })),
-          autoChecks: {
-            previewRun: preview.run
-          }
-        }
-      });
-      sessionId = createResp.sessionId;
-      unsubscribeSessionEvents = source.subscribeScenarioAssistantSessionEvents(
-        sessionId,
-        (event) => {
-          const pendingCount = event.payload.session.pendingToolCalls.filter(
-            (call) => call.status === 'pending'
-          ).length;
-          if (event.type === 'tool_call_requested') {
-            pushProgress(`Tool call requested (${pendingCount} pending).`);
-            return;
-          }
-          if (event.type === 'tool_call_resolved') {
-            pushProgress(`Tool call resolved (${pendingCount} pending).`);
-            return;
-          }
-          if (event.type === 'assistant_message_completed') {
-            pushProgress('Assistant produced structured suggestions.');
-            return;
-          }
-          if (event.type === 'turn_started') {
-            pushProgress('Assistant turn started...');
-          }
-        }
-      );
-
-      setAutoChecksStage('prepare_prompt');
-      pushProgress('Preparing generation prompt...');
-      setAutoChecksStage('waiting_model');
-      pushProgress('Waiting for model response...');
-      const generationPrompt = [
-        'Generate checks for this scenario from preview run context.',
-        'Return structured suggestions with evalRules replacement only.',
-        'No prose fallback.',
-        'Quality-first: create measurable, non-duplicative checks with good coverage.',
-        'Choose adaptive count by complexity, min 3 max 8, target around 5.'
-      ].join(' ');
-      let resolved = false;
-      let settled = false;
-      let approving = false;
-      let completionResolve: ((session: ScenarioAssistantSessionView) => void) | null = null;
-      let completionReject: ((error: Error) => void) | null = null;
-      const completionPromise = new Promise<ScenarioAssistantSessionView>((resolve, reject) => {
-        completionResolve = resolve;
-        completionReject = reject;
-      });
-      const watchdog = window.setTimeout(() => {
-        if (resolved || settled) return;
-        resolved = true;
-        settled = true;
-        completionReject?.(
-          new Error('Auto Checks timed out while waiting for assistant response.')
-        );
-      }, 120_000);
-
-      if (unsubscribeSessionEvents) unsubscribeSessionEvents();
-      unsubscribeSessionEvents = source.subscribeScenarioAssistantSessionEvents(
-        sessionId,
-        (event) => {
-          if (resolved || settled) return;
-          const session = event.payload.session;
-          const pending = session.pendingToolCalls.filter((call) => call.status === 'pending');
-
-          if (event.type === 'tool_call_requested' && pending.length > 0) {
-            if (resolved || settled) return;
-            setAutoChecksStage('approve_tools');
-            pushProgress(`Approving tool calls (${pending.length} pending)...`);
-            if (!approving) {
-              approving = true;
-              void source
-                .approveAllScenarioAssistantToolCalls(sessionId!)
-                .catch((error) => {
-                  pushProgress(
-                    `Tool approval error: ${error instanceof Error ? error.message : String(error)}`
-                  );
-                })
-                .finally(() => {
-                  approving = false;
-                  if (!resolved && !settled) {
-                    setAutoChecksStage('waiting_model');
-                  }
-                });
-            }
-          }
-
-          if (event.type === 'session_error') {
-            if (resolved || settled) return;
-            const message = String(
-              (event.payload as { message?: unknown }).message ??
-                'Scenario Assistant session error.'
-            );
-            resolved = true;
-            settled = true;
-            window.clearTimeout(watchdog);
-            completionReject?.(new Error(message));
-            return;
-          }
-
-          if (event.type === 'assistant_message_completed' || event.type === 'session_finished') {
-            const hasEvalSuggestions = session.messages.some((message) =>
-              Array.isArray(message.suggestions?.evalRules?.replacement)
-            );
-            if (hasEvalSuggestions && !resolved && !settled) {
-              resolved = true;
-              settled = true;
-              window.clearTimeout(watchdog);
-              completionResolve?.(session);
-            }
-          }
-        }
-      );
-
-      const sendStartedAt = Date.now();
-      void source
-        .sendScenarioAssistantMessage(sessionId, generationPrompt)
-        .then((resp) => {
-          if (resolved || settled) return;
-          // Model returned a tool_call_request — SSE subscriber drives the approval loop.
-          if (resp.response?.type === 'tool_call_request') return;
-          const hasEvalSuggestions = resp.session.messages.some((message) =>
-            Array.isArray(message.suggestions?.evalRules?.replacement)
-          );
-          if (hasEvalSuggestions) {
-            pushProgress('Assistant response received (HTTP fallback).');
-            resolved = true;
-            settled = true;
-            window.clearTimeout(watchdog);
-            completionResolve?.(resp.session);
-          } else {
-            resolved = true;
-            settled = true;
-            window.clearTimeout(watchdog);
-            completionReject?.(
-              new Error(
-                Date.now() - sendStartedAt > 20_000
-                  ? 'Assistant finished without structured check suggestions.'
-                  : 'Assistant response did not include structured check suggestions.'
-              )
-            );
-          }
-        })
-        .catch((error) => {
-          if (resolved || settled) return;
-          resolved = true;
-          settled = true;
-          window.clearTimeout(watchdog);
-          completionReject?.(error instanceof Error ? error : new Error(String(error)));
-        });
-
-      const session = await completionPromise;
-      window.clearTimeout(watchdog);
-
-      setAutoChecksStage('processing_response');
-      pushProgress('Processing assistant response...');
-      setAutoChecksStage('finalize');
-      pushProgress('Finalizing checks...');
-      const suggested = normalizeAutoChecks(extractSuggestedEvalRules(session));
-      setAutoChecksStage('quality_checks');
-      pushProgress('Running quality checks...');
-      const quality = scoreAutoChecksQuality(suggested, preview.run.toolCalls.length);
-      if (!quality.ok) {
-        throw new Error(
-          `Could not generate high-confidence checks: ${quality.issues.slice(0, 3).join(' ')}`
-        );
-      }
-
-      if (latestEvalRulesRef.current.length > 0) {
-        throw new Error(
-          'Checks changed while generating. Auto Checks cancelled to avoid overwriting manual edits.'
-        );
-      }
-
-      onUpdate({ evalRules: suggested });
-      pushProgress(`Generated ${suggested.length} checks.`);
-      toast({
-        title: 'Checks generated',
-        description: `Generated ${suggested.length} checks.`
-      });
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setPreviewError(message);
-      toast({
-        title: 'Auto Checks failed',
-        description: message,
-        variant: 'destructive'
-      });
-    } finally {
-      if (sessionId) {
-        void source.closeScenarioAssistantSession(sessionId).catch(() => {});
-      }
-      if (unsubscribeSessionEvents) unsubscribeSessionEvents();
-      setAutoChecksLoading(false);
-      setAutoChecksStage('idle');
-      setAutoChecksProgressLog([]);
     }
   };
 
@@ -1071,10 +710,10 @@ function ScenarioCard({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-6 gap-1.5 px-2 text-[11px]"
+                          className="ml-auto h-6 gap-1.5 px-2 text-[11px]"
                           onClick={sendPreviewToAssistant}
                         >
-                          <Sparkles className="h-3 w-3" />
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           Send to Assistant
                         </Button>
                       </div>
@@ -1206,47 +845,6 @@ function ScenarioCard({
               </Card>
             )}
 
-            {!readOnly && (autoChecksLoading || autoChecksProgressLog.length > 0) && (
-              <Card className="border bg-sky-50/40">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Generate Checks Progress</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Auto Checks runs preview + assistant analysis + tool resolution before saving.
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs">
-                    {autoChecksLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-700" />
-                    ) : (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                    )}
-                    <span className="font-medium">
-                      {autoChecksStage === 'preview' && 'Running prompt preview...'}
-                      {autoChecksStage === 'assistant_session' && 'Starting assistant session...'}
-                      {autoChecksStage === 'prepare_prompt' && 'Preparing generation prompt...'}
-                      {autoChecksStage === 'waiting_model' && 'Waiting for model response...'}
-                      {autoChecksStage === 'processing_response' &&
-                        'Processing assistant response...'}
-                      {autoChecksStage === 'quality_checks' && 'Running quality checks...'}
-                      {autoChecksStage === 'approve_tools' && 'Resolving tool calls...'}
-                      {autoChecksStage === 'finalize' && 'Finalizing checks...'}
-                      {autoChecksStage === 'idle' && autoChecksProgressLog.length > 0 && 'Done.'}
-                    </span>
-                  </div>
-                  <div className="rounded-md border bg-background/70 px-2 py-2">
-                    <ul className="space-y-1 text-[11px] text-muted-foreground">
-                      {autoChecksProgressLog.map((line, idx) => (
-                        <li key={`${line}-${idx}`} className="font-mono">
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             <div className="grid gap-3 lg:grid-cols-2">
               <Card className="border bg-muted/20">
                 <CardHeader className="pb-2">
@@ -1260,24 +858,6 @@ function ScenarioCard({
                     </div>
                     {!readOnly && (
                       <div className="flex items-center gap-2">
-                        {scenario.evalRules.length === 0 && (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            className="h-7 gap-1.5 px-2 text-xs shrink-0"
-                            onClick={() => void generateAutoChecks()}
-                            disabled={autoChecksLoading}
-                            title="Generate initial checks from prompt preview"
-                          >
-                            {autoChecksLoading ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-3.5 w-3.5" />
-                            )}
-                            Generate Checks
-                          </Button>
-                        )}
                         <Button
                           type="button"
                           variant="outline"

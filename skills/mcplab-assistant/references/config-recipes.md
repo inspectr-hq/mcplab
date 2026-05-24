@@ -8,7 +8,7 @@ Source of truth: `config-schema.json`.
 ### Root Object
 
 - Required keys: `agents`, `scenarios`
-- Optional keys: `name`, `servers` (deprecated pool), `snapshot_eval`
+- Optional keys: `name`, `servers` (deprecated pool)
 
 ### `agents`
 
@@ -31,7 +31,7 @@ Source of truth: `config-schema.json`.
   - library ref: `{ ref: "<scenario-id>" }`
   - inline config
 - Inline required keys: `id`, `servers`, `prompt`
-- Optional: `agent`, `mcp_servers`, `eval`, `extract`, `snapshot_eval`
+- Optional: `agent`, `mcp_servers`, `eval`, `extract`
 - `id` best practice: kebab-case and unique.
 - `servers`: string array of server labels the scenario can use.
 - `mcp_servers`: optional array of MCP server entries:
