@@ -324,7 +324,11 @@ export async function handleResultAssistantRoutes(params: {
     const llmMessagesBefore = session.llmMessages.length;
     const pendingToolCallsBefore = session.pendingToolCalls.length;
     const abortController = new AbortController();
-    const handleClose = () => abortController.abort();
+    const handleClose = () => {
+      if (req.complete) return;
+      if (res.writableEnded) return;
+      abortController.abort();
+    };
     req.on('close', handleClose);
     try {
       const body = await parseBody(req);

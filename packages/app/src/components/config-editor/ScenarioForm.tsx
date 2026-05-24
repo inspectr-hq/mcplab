@@ -386,48 +386,91 @@ function ScenarioCard({
   const sendPreviewToAssistant = () => {
     if (!previewResult) return;
     const checkItems = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
-    const checkSummary = checkItems.length
-      ? checkItems
-          .map(
-            (item) =>
-              `${item.status.toUpperCase()} - ${renderEvalRulePreview(item.rule)}${
-                item.failureReason ? ` (${item.failureReason})` : ''
-              }`
-          )
-          .join('\n')
-      : 'No checks configured.';
-    const extractedSummary =
-      Object.keys(previewResult.run.extractedValues).length > 0
-        ? Object.entries(previewResult.run.extractedValues)
-            .map(([key, value]) => `${key}: ${String(value)}`)
-            .join('\n')
-        : 'No extracted values.';
-    const toolSummary =
-      previewResult.run.toolCalls.length > 0
-        ? previewResult.run.toolCalls
-            .map((call, idx) => `${idx + 1}. ${call.name} (${call.duration}ms)`)
-            .join('\n')
-        : 'No tool calls.';
+    const finalAnswer = previewResult.run.finalAnswer || '(empty)';
+    const finalAnswerPreview =
+      finalAnswer.length > 4000 ? `${finalAnswer.slice(0, 4000)}...` : finalAnswer;
+    const firstToolName = previewResult.run.toolCalls[0]?.name;
+    const totalMatch =
+      finalAnswer.match(/all\s+\*{0,2}(\d+)\b/i) ?? finalAnswer.match(/\b(\d+)\s+tags\b/i);
+    const analogMatch = finalAnswer.match(/\bANALOG\*{0,2}\s*[—-]\s*(\d+)/i);
+    const stringMatch = finalAnswer.match(/\bSTRING\*{0,2}\s*[—-]\s*(\d+)/i);
+    const discreteMatch = finalAnswer.match(/\bDISCRETE\*{0,2}\s*[—-]\s*(\d+)/i);
+    const hints = {
+      totalTagCount: totalMatch ? Number.parseInt(totalMatch[1], 10) : null,
+      countsByType: {
+        ANALOG: analogMatch ? Number.parseInt(analogMatch[1], 10) : null,
+        STRING: stringMatch ? Number.parseInt(stringMatch[1], 10) : null,
+        DISCRETE: discreteMatch ? Number.parseInt(discreteMatch[1], 10) : null
+      }
+    };
+    const starterEvalRules = [
+      firstToolName ? { type: 'required_tool', value: firstToolName } : null,
+      hints.totalTagCount !== null
+        ? { type: 'response_contains', value: `${hints.totalTagCount} tags` }
+        : { type: 'response_contains', value: '<expected key phrase>' },
+      { type: 'response_not_contains', value: 'Would you like to' },
+      hints.countsByType.ANALOG !== null ||
+      hints.countsByType.STRING !== null ||
+      hints.countsByType.DISCRETE !== null
+        ? { type: 'response_contains', value: 'Summary by' }
+        : null
+    ].filter(Boolean);
+    const starterExtractRules = [
+      { name: 'primary_count', pattern: '(?<value>\\d+)' },
+      { name: 'primary_label', pattern: '"(?<value>[^"]+)"' }
+    ];
+    const scenarioContext = {
+      scenarioId: scenario.id,
+      scenarioPrompt: scenario.prompt || '(empty)',
+      runId: previewResult.runId,
+      agent: previewResult.agentName,
+      outcome: previewResult.run.passed ? 'passed' : 'failed',
+      durationMs: previewResult.run.duration,
+      currentChecks: checkItems.length
+        ? checkItems.map((item) => ({
+            status: item.status,
+            rule: item.rule,
+            failureReason: item.failureReason
+          }))
+        : [],
+      toolSequence: previewResult.run.toolCalls.map((call) => ({
+        name: call.name,
+        durationMs: call.duration
+      })),
+      extractedValues: previewResult.run.extractedValues,
+      finalAnswerSummary: {
+        rawPreview: finalAnswerPreview,
+        hints
+      }
+    };
     const prompt = [
-      `I ran a prompt preview for scenario '${scenario.id}' and want you to suggest concrete updates.`,
-      `Run ID: ${previewResult.runId}`,
-      `Agent: ${previewResult.agentName}`,
-      `Outcome: ${previewResult.run.passed ? 'passed' : 'failed'}`,
-      `Duration: ${previewResult.run.duration}ms`,
+      'You are improving one scenario from a preview run.',
+      'Task: propose updates to Prompt, Checks, and Value Capture Rules.',
       '',
-      'Current check outcomes:',
-      checkSummary,
+      'Return ONLY one JSON envelope (no markdown, no text outside JSON):',
+      '{"type":"assistant_message","text":"short rationale","suggestions":{"prompt":{"replacement":"..."},"evalRules":{"replacement":[...]}, "extractRules":{"replacement":[...]}}}',
       '',
-      'Tool sequence:',
-      toolSummary,
+      'Rules:',
+      '- If recommending checks, include suggestions.evalRules.',
+      '- If recommending value capture, include suggestions.extractRules.',
+      '- Prefer deterministic checks and concise capture patterns.',
+      '- Prefer required_tool from observed tool sequence when applicable.',
+      '- Avoid follow-up questions.',
       '',
-      'Extracted values:',
-      extractedSummary,
+      '<scenario_context_json>',
+      JSON.stringify(scenarioContext, null, 2),
+      '</scenario_context_json>',
       '',
-      'Final answer:',
-      previewResult.run.finalAnswer || '(empty)',
-      '',
-      'Please propose concrete updates to the Prompt, Checks, and/or Value Capture Rules based on this preview.'
+      checkItems.length === 0
+        ? `Starter Checks scaffold (adapt as needed):\n${JSON.stringify(starterEvalRules, null, 2)}`
+        : '',
+      Object.keys(previewResult.run.extractedValues).length === 0
+        ? `Starter Value Capture scaffold (adapt as needed):\n${JSON.stringify(
+            starterExtractRules,
+            null,
+            2
+          )}`
+        : ''
     ].join('\n');
     setPreviewAssistantPrompt(prompt);
     setAssistantOpen(true);
@@ -731,10 +774,10 @@ function ScenarioCard({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-6 gap-1.5 px-2 text-[11px]"
+                          className="ml-auto h-6 gap-1.5 px-2 text-[11px]"
                           onClick={sendPreviewToAssistant}
                         >
-                          <Sparkles className="h-3 w-3" />
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           Send to Assistant
                         </Button>
                       </div>

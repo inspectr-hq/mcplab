@@ -315,6 +315,4 @@ describe('run request validation', () => {
       'Unknown server refs in scenarioServerOverrides.s1: missing-server'
     );
   });
-
-  
 });

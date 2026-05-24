@@ -41,6 +41,18 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
       'Analyze the expected tool calls and outputs in this scenario and suggest value capture rules that extract the most meaningful structured data. For each rule, explain which field to capture, why it matters for evaluation, and what a good vs. bad captured value looks like.'
   },
   {
+    label: 'Generate Structured Updates',
+    description: 'Return apply-ready Checks and Value Capture suggestions.',
+    prompt: [
+      'Propose concrete scenario updates and include structured suggestions that can be applied directly.',
+      'Return ONLY valid JSON envelope and no markdown.',
+      'Required shape:',
+      '{"type":"assistant_message","text":"short rationale","suggestions":{"evalRules":{"replacement":[...]}, "extractRules":{"replacement":[...]}}}',
+      'If tool usage is clear, include at least one required_tool check.',
+      'Prefer deterministic checks and concise capture patterns.'
+    ].join('\n')
+  },
+  {
     label: 'Improve Prompt Determinism',
     description: 'Reduce ambiguity and improve reproducibility.',
     prompt:
@@ -360,13 +372,14 @@ export function ScenarioAssistantDialog({
 
   useEffect(() => {
     if (!open || !sessionId || !session) return;
-    if (!canUseAssistant || loading) return;
+    if (!canUseAssistant) return;
+    if (assistantTurnRef.current) return;
     const handoffMessage = String(initialUserMessage ?? '').trim();
     if (!handoffMessage) return;
     if (initialMessageSentRef.current === handoffMessage) return;
     initialMessageSentRef.current = handoffMessage;
     void sendMessage(handoffMessage);
-  }, [open, sessionId, session, canUseAssistant, loading, initialUserMessage]);
+  }, [open, sessionId, session, canUseAssistant, initialUserMessage]);
 
   useEffect(() => {
     if (!open || !sessionId || !session) return;
