@@ -387,6 +387,8 @@ mcplab run -c mcplab/evals/eval.yaml \
   --server-override add-calculations=kpi-api-dev
 ```
 
+Runtime override server refs are resolved against the effective server set (eval config + `mcplab/servers.yaml`) consistently across CLI, app-server API, and MCP tools.
+
 ### App Mode
 
 Serve the web app and local API in one process:

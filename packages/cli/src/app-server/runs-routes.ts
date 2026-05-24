@@ -355,21 +355,38 @@ export async function handleRunsRoutes(params: {
       asJson(res, 400, { error: 'serverOverrideAll must include at least one server id' });
       return true;
     }
-    const scenarioServerOverrides =
-      body.scenarioServerOverrides &&
-      typeof body.scenarioServerOverrides === 'object' &&
-      !Array.isArray(body.scenarioServerOverrides)
-        ? Object.fromEntries(
-            Object.entries(body.scenarioServerOverrides as Record<string, unknown>).map(
-              ([scenarioId, serverIds]) => [
-                String(scenarioId).trim(),
-                Array.isArray(serverIds)
-                  ? serverIds.map((id: unknown) => String(id).trim()).filter(Boolean)
-                  : []
-              ]
-            )
-          )
-        : undefined;
+    if (
+      body.scenarioServerOverrides !== undefined &&
+      (typeof body.scenarioServerOverrides !== 'object' ||
+        body.scenarioServerOverrides === null ||
+        Array.isArray(body.scenarioServerOverrides))
+    ) {
+      asJson(res, 400, {
+        error: 'scenarioServerOverrides must be an object of scenarioId -> string[]'
+      });
+      return true;
+    }
+    let scenarioServerOverrides: Record<string, string[]> | undefined;
+    if (body.scenarioServerOverrides && typeof body.scenarioServerOverrides === 'object') {
+      const normalizedEntries: Array<[string, string[]]> = [];
+      for (const [rawScenarioId, rawServerIds] of Object.entries(
+        body.scenarioServerOverrides as Record<string, unknown>
+      )) {
+        const scenarioOverrideId = String(rawScenarioId).trim();
+        if (!scenarioOverrideId) continue;
+        if (!Array.isArray(rawServerIds)) {
+          asJson(res, 400, {
+            error: `scenarioServerOverrides.${scenarioOverrideId} must be an array of server ids`
+          });
+          return true;
+        }
+        normalizedEntries.push([
+          scenarioOverrideId,
+          rawServerIds.map((id: unknown) => String(id).trim()).filter(Boolean)
+        ]);
+      }
+      scenarioServerOverrides = Object.fromEntries(normalizedEntries);
+    }
     if (!configPathRaw) {
       asJson(res, 400, { error: 'configPath is required' });
       return true;
@@ -975,6 +992,7 @@ async function executeRunJob(
       serverOverrideAll,
       scenarioServerOverrides
     });
+    const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -1054,7 +1072,7 @@ async function executeRunJob(
         runsPerScenario,
         scenarioId,
         runNote,
-        configHash: loaded.hash,
+        configHash: effectiveConfigHash,
         cliVersion: pkgVersion,
         runsDir: settings.runsDir,
         mcpServerAuthHeaders,

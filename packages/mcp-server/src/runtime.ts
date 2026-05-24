@@ -21,6 +21,7 @@ import {
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
   loadConfig,
+  hashConfig,
   runAll,
   selectScenarios,
   loadOrBuildSearchIndex,
@@ -30,6 +31,7 @@ import {
   searchDocs,
   getContext,
   applyRuntimeServerOverrides,
+  readLibraryAgentsAndServers,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -1246,10 +1248,12 @@ export function registerTools(server: McpServer): void {
     },
     async ({ config_path, scenario_id }) => {
       return withToolHandling(async () => {
+        const bundleRoot = resolveBundleRoot();
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: resolveBundleRoot()
+          bundleRoot
         });
-        const selected = selectScenarios(loaded.config, scenario_id);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const selected = selectScenarios(mergedConfig, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
           configPath: resolve(config_path),
@@ -1315,14 +1319,17 @@ export function registerTools(server: McpServer): void {
       scenario_server_overrides
     }) => {
       return withToolHandling(async () => {
+        const bundleRoot = resolveBundleRoot();
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: resolveBundleRoot()
+          bundleRoot
         });
-        const selected = selectScenarios(loaded.config, scenario_id);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const selected = selectScenarios(mergedConfig, scenario_id);
         const runtimeOverridden = applyRuntimeServerOverrides(selected, {
           serverOverrideAll: server_override_all,
           scenarioServerOverrides: scenario_server_overrides
         });
+        const effectiveConfigHash = hashConfig(runtimeOverridden);
         const executable = expandConfigForAgents(
           runtimeOverridden,
           runtimeOverridden.run_defaults?.selected_agents
@@ -1330,7 +1337,7 @@ export function registerTools(server: McpServer): void {
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
-          configHash: loaded.hash,
+          configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir()
         });
@@ -2476,6 +2483,15 @@ function resolveServerOwnedRoots(): ServerOwnedRoots {
 
 function resolveBundleRoot(): string {
   return SERVER_OWNED_ROOTS.bundleRoot;
+}
+
+function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): EvalConfig {
+  const libraries = readLibraryAgentsAndServers(bundleRoot);
+  return {
+    ...config,
+    agents: { ...libraries.agents, ...config.agents },
+    servers: { ...libraries.servers, ...config.servers }
+  };
 }
 
 function readLibrary(

@@ -5,6 +5,7 @@ export {
   selectScenarios,
   expandConfigForAgents,
   normalizeSourceConfig,
+  readLibraryAgentsAndServers,
   normalizeLibraryServers,
   normalizeLibraryAgents
 } from './config.js';

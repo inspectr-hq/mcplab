@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { expandConfigForAgents, loadConfig } from './config.js';
+import { expandConfigForAgents, loadConfig, readLibraryAgentsAndServers } from './config.js';
 import type { EvalConfig } from './types.js';
 
 const BASE_CONFIG: EvalConfig = {
@@ -1021,6 +1021,42 @@ describe('loadConfig normalization', () => {
         { type: 'jsonpath_exists', path: '$.data.id' },
         { type: 'jsonpath_not_exists', path: '$.error' }
       ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('readLibraryAgentsAndServers', () => {
+  it('reads and normalizes library agents/servers from bundle root', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-libs-'));
+    try {
+      writeFileSync(
+        join(dir, 'servers.yaml'),
+        ['weather:', '  transport: http', '  url: http://localhost:3300/mcp'].join('\n'),
+        'utf8'
+      );
+      writeFileSync(
+        join(dir, 'agents.yaml'),
+        ['mini:', '  provider: openai', '  model: gpt-5-mini'].join('\n'),
+        'utf8'
+      );
+
+      const loaded = readLibraryAgentsAndServers(dir);
+      expect(loaded.servers.weather?.url).toBe('http://localhost:3300/mcp');
+      expect(loaded.agents.mini?.model).toBe('gpt-5-mini');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty maps when library files are missing or malformed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-libs-'));
+    try {
+      writeFileSync(join(dir, 'servers.yaml'), '{not: [valid', 'utf8');
+      const loaded = readLibraryAgentsAndServers(dir);
+      expect(loaded.servers).toEqual({});
+      expect(loaded.agents).toEqual({});
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

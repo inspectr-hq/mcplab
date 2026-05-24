@@ -77,12 +77,8 @@ function resolveReferences(
     ? resolve(bundleRootOverride)
     : detectBundleRoot(configPath);
   const warnings: string[] = [];
-  const libraryServers = normalizeLibraryServers(
-    readYaml<unknown>(join(bundleRoot, 'servers.yaml'), {})
-  );
-  const libraryAgents = normalizeLibraryAgents(
-    readYaml<unknown>(join(bundleRoot, 'agents.yaml'), {})
-  );
+  const { servers: libraryServers, agents: libraryAgents } =
+    readLibraryAgentsAndServers(bundleRoot);
   const resolvedScenarioLibrary = resolveScenarioLibraryDir(bundleRoot);
   if (resolvedScenarioLibrary.usedLegacy) {
     warnings.push("Using legacy library folder 'scenarios'; migrate to 'test-cases'.");
@@ -323,6 +319,17 @@ function resolveReferences(
       scenarios
     },
     warnings
+  };
+}
+
+export function readLibraryAgentsAndServers(bundleRoot: string): {
+  servers: EvalConfig['servers'];
+  agents: EvalConfig['agents'];
+} {
+  const root = resolve(bundleRoot);
+  return {
+    servers: normalizeLibraryServers(readYaml<unknown>(join(root, 'servers.yaml'), {})),
+    agents: normalizeLibraryAgents(readYaml<unknown>(join(root, 'agents.yaml'), {}))
   };
 }
 

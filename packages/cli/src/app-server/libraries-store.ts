@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { EvalConfig } from '@inspectr/mcplab-core';
-import { normalizeLibraryAgents, normalizeLibraryServers } from '@inspectr/mcplab-core';
+import { readLibraryAgentsAndServers } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 
 const TEST_CASES_DIR_NAME = 'test-cases';
@@ -34,8 +34,7 @@ export function readLibraries(librariesDir: string): {
 } {
   const root = resolve(librariesDir);
   const { testCasesDir, legacyScenariosDir } = ensureTestCasesDir(root);
-  const servers = normalizeLibraryServers(readYamlFile<unknown>(join(root, 'servers.yaml'), {}));
-  const agents = normalizeLibraryAgents(readYamlFile<unknown>(join(root, 'agents.yaml'), {}));
+  const { servers, agents } = readLibraryAgentsAndServers(root);
   const scenarios: EvalConfig['scenarios'] = [];
   const sourceDir = existsSync(testCasesDir)
     ? testCasesDir

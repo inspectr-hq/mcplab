@@ -999,6 +999,7 @@ async function executeSingleConfigRun(params: {
   const runtimeOverrides = parseRuntimeServerOverrides(options);
   const selectedBaseConfig = options.scenario ? selectScenarios(config, options.scenario) : config;
   const runtimeOverriddenConfig = applyRuntimeServerOverrides(selectedBaseConfig, runtimeOverrides);
+  const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
   const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
@@ -1011,7 +1012,6 @@ async function executeSingleConfigRun(params: {
     );
   }
 
-  const selected = expanded;
   const runsPerScenario = Number(options.runs);
   if (Number.isNaN(runsPerScenario) || runsPerScenario <= 0) {
     throw new Error('Runs must be a positive number');
@@ -1036,9 +1036,9 @@ async function executeSingleConfigRun(params: {
   }
 
   // Detect OAuth servers missing a token and fail early with a helpful message
-  const effectiveServerIds = new Set(selected.scenarios.flatMap((scenario) => scenario.servers));
+  const effectiveServerIds = new Set(expanded.scenarios.flatMap((scenario) => scenario.servers));
   const oauthServers = Array.from(effectiveServerIds).filter((name) => {
-    const cfg = selected.servers?.[name];
+    const cfg = expanded.servers?.[name];
     return cfg?.auth?.type === 'oauth_authorization_code';
   });
   const missingTokenServers = oauthServers.filter((name) => !oauthTokens[name]);
@@ -1067,11 +1067,11 @@ async function executeSingleConfigRun(params: {
     );
   }
 
-  const { runDir, results } = await runAll(selected, {
+  const { runDir, results } = await runAll(expanded, {
     runsPerScenario,
     scenarioId: options.scenario,
     runNote,
-    configHash: hash,
+    configHash: effectiveConfigHash,
     gitCommit: getGitCommit(),
     cliVersion: pkgVersion,
     runsDir: String(options.runsDir),
@@ -1097,7 +1097,7 @@ async function executeSingleConfigRun(params: {
       );
       const comparison = compareRunToSnapshot(results, snapshot);
       const enabledScenarioIds = new Set(
-        selected.scenarios
+        expanded.scenarios
           .filter((scenario) => scenario.snapshot_eval?.enabled !== false)
           .map((scenario) => scenario.id)
       );
