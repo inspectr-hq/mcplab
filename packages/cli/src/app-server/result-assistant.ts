@@ -325,6 +325,7 @@ export async function handleResultAssistantRoutes(params: {
     const pendingToolCallsBefore = session.pendingToolCalls.length;
     const abortController = new AbortController();
     const handleClose = () => {
+      if (req.complete) return;
       if (res.writableEnded) return;
       abortController.abort();
     };

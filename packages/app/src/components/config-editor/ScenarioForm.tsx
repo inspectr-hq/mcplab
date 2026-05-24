@@ -405,7 +405,7 @@ function ScenarioCard({
       firstToolName ? { type: 'required_tool', value: firstToolName } : null,
       hints.totalTagCount !== null
         ? { type: 'response_contains', value: `${hints.totalTagCount} tags` }
-        : { type: 'response_contains', value: 'tags' },
+        : { type: 'response_contains', value: '<expected key phrase>' },
       { type: 'response_not_contains', value: 'Would you like to' },
       hints.countsByType.ANALOG !== null ||
       hints.countsByType.STRING !== null ||
