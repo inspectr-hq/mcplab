@@ -1,5 +1,20 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.4.0
+
+### Minor Changes
+
+- feat: Override MCP server at runtime
+- chore: Improve skill & MCP tool descriptions
+- refactor: Remove snapshot logic
+- refactor: Remove auto-check logic
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.12.0
+  - @inspectr/mcplab-reporting@1.1.13
+
 ## 1.3.2
 
 ### Patch Changes

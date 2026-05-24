@@ -1,5 +1,28 @@
 # @inspectr/mcplab
 
+## 1.16.0
+
+### Minor Changes
+
+- feat: Override MCP server at runtime
+- feat: Copy & Download MCP info
+- feat: Add copy option on the tool list
+- feat: Filter Compare list by date
+- feat: Group Compare list by day
+- feat: structured check suggestions and safe request abort handling
+- chore: Add filter by "Last 14 days"
+- chore: Show path in compare mode
+- chore: Improve skill & MCP tool descriptions
+- refactor: Remove snapshot logic
+- refactor: Remove auto-check logic
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.12.0
+  - @inspectr/mcplab-mcp-server@1.4.0
+  - @inspectr/mcplab-reporting@1.1.13
+
 ## 1.15.0
 
 ### Minor Changes

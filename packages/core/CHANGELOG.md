@@ -1,5 +1,13 @@
 # @inspectr/mcplab-core
 
+## 1.12.0
+
+### Minor Changes
+
+- feat: Override MCP server at runtime
+- refactor: Remove snapshot logic
+- refactor: Remove auto-check logic
+
 ## 1.11.1
 
 ### Patch Changes
