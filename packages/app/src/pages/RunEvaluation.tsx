@@ -312,9 +312,7 @@ const RunEvaluation = () => {
         .map((a) => a.name || a.id)
         .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
         varianceRuns
-      )}${
-        runNote.trim() ? ` note=${runNote.trim()}` : ''
-      }`,
+      )}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
         effectiveScenarioServerSummary || '(none)'
       }`

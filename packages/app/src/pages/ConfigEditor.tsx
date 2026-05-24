@@ -96,7 +96,6 @@ const ConfigEditor = () => {
     if (tabParam === 'edit' && !isNew) setEditing(true);
   }, [tabParam, isNew]);
 
-
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
   const serverEntries = useMemo<ServerEntry[]>(() => {
@@ -149,7 +148,6 @@ const ConfigEditor = () => {
 
   const readOnly = !editing;
   const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
-
 
   const handleSave = async () => {
     if (!config.name.trim()) {

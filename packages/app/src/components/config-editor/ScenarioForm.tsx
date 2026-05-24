@@ -426,7 +426,9 @@ function ScenarioCard({
 
     const weakLiterals = new Set(['good', 'nice', 'appropriate', 'correct', 'looks good', 'ok']);
     for (const rule of responseChecks) {
-      const text = String(rule.value ?? '').trim().toLowerCase();
+      const text = String(rule.value ?? '')
+        .trim()
+        .toLowerCase();
       if (text && weakLiterals.has(text)) {
         issues.push(`Vague literal check: "${text}"`);
       }
@@ -589,57 +591,61 @@ function ScenarioCard({
       }, 120_000);
 
       if (unsubscribeSessionEvents) unsubscribeSessionEvents();
-      unsubscribeSessionEvents = source.subscribeScenarioAssistantSessionEvents(sessionId, (event) => {
-        if (resolved || settled) return;
-        const session = event.payload.session;
-        const pending = session.pendingToolCalls.filter((call) => call.status === 'pending');
-
-        if (event.type === 'tool_call_requested' && pending.length > 0) {
+      unsubscribeSessionEvents = source.subscribeScenarioAssistantSessionEvents(
+        sessionId,
+        (event) => {
           if (resolved || settled) return;
-          setAutoChecksStage('approve_tools');
-          pushProgress(`Approving tool calls (${pending.length} pending)...`);
-          if (!approving) {
-            approving = true;
-            void source
-              .approveAllScenarioAssistantToolCalls(sessionId!)
-              .catch((error) => {
-                pushProgress(
-                  `Tool approval error: ${error instanceof Error ? error.message : String(error)}`
-                );
-              })
-              .finally(() => {
-                approving = false;
-                if (!resolved && !settled) {
-                  setAutoChecksStage('waiting_model');
-                }
-              });
+          const session = event.payload.session;
+          const pending = session.pendingToolCalls.filter((call) => call.status === 'pending');
+
+          if (event.type === 'tool_call_requested' && pending.length > 0) {
+            if (resolved || settled) return;
+            setAutoChecksStage('approve_tools');
+            pushProgress(`Approving tool calls (${pending.length} pending)...`);
+            if (!approving) {
+              approving = true;
+              void source
+                .approveAllScenarioAssistantToolCalls(sessionId!)
+                .catch((error) => {
+                  pushProgress(
+                    `Tool approval error: ${error instanceof Error ? error.message : String(error)}`
+                  );
+                })
+                .finally(() => {
+                  approving = false;
+                  if (!resolved && !settled) {
+                    setAutoChecksStage('waiting_model');
+                  }
+                });
+            }
           }
-        }
 
-        if (event.type === 'session_error') {
-          if (resolved || settled) return;
-          const message = String(
-            (event.payload as { message?: unknown }).message ?? 'Scenario Assistant session error.'
-          );
-          resolved = true;
-          settled = true;
-          window.clearTimeout(watchdog);
-          completionReject?.(new Error(message));
-          return;
-        }
-
-        if (event.type === 'assistant_message_completed' || event.type === 'session_finished') {
-          const hasEvalSuggestions = session.messages.some((message) =>
-            Array.isArray(message.suggestions?.evalRules?.replacement)
-          );
-          if (hasEvalSuggestions && !resolved && !settled) {
+          if (event.type === 'session_error') {
+            if (resolved || settled) return;
+            const message = String(
+              (event.payload as { message?: unknown }).message ??
+                'Scenario Assistant session error.'
+            );
             resolved = true;
             settled = true;
             window.clearTimeout(watchdog);
-            completionResolve?.(session);
+            completionReject?.(new Error(message));
+            return;
+          }
+
+          if (event.type === 'assistant_message_completed' || event.type === 'session_finished') {
+            const hasEvalSuggestions = session.messages.some((message) =>
+              Array.isArray(message.suggestions?.evalRules?.replacement)
+            );
+            if (hasEvalSuggestions && !resolved && !settled) {
+              resolved = true;
+              settled = true;
+              window.clearTimeout(watchdog);
+              completionResolve?.(session);
+            }
           }
         }
-      });
+      );
 
       const sendStartedAt = Date.now();
       void source

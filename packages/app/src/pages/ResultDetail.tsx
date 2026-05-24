@@ -95,10 +95,7 @@ import type {
   EvalConfig as UiEvalConfig,
   EvalRule
 } from '@/types/eval';
-import type {
-  MarkdownReportContent,
-  MarkdownReportSummary
-} from '@/lib/data-sources/types';
+import type { MarkdownReportContent, MarkdownReportSummary } from '@/lib/data-sources/types';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 const RESULT_ASSISTANT_SNIPPETS = [
@@ -798,7 +795,6 @@ const ResultDetail = () => {
             assistantOpen ? 'xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2' : ''
           }`}
         >
-
           <div
             className={`grid gap-4 ${
               assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-6'
