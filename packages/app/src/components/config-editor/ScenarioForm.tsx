@@ -387,7 +387,7 @@ function ScenarioCard({
     if (!previewResult) return;
     const checkItems = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
     const finalAnswer = previewResult.run.finalAnswer || '(empty)';
-    const finalAnswerPreview = finalAnswer.length > 2000 ? `${finalAnswer.slice(0, 2000)}...` : finalAnswer;
+    const finalAnswerPreview = finalAnswer.length > 4000 ? `${finalAnswer.slice(0, 4000)}...` : finalAnswer;
     const firstToolName = previewResult.run.toolCalls[0]?.name;
     const totalMatch = finalAnswer.match(/all\s+\*{0,2}(\d+)\b/i) ?? finalAnswer.match(/\b(\d+)\s+tags\b/i);
     const analogMatch = finalAnswer.match(/\bANALOG\*{0,2}\s*[—-]\s*(\d+)/i);
