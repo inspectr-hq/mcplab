@@ -236,7 +236,7 @@ const RunEvaluation = () => {
     if (globalServerOverrideEnabled && globalServerOverrideIds.length === 0) {
       setLogs((prev) => [
         ...prev,
-        `[${nowTime()}] Select at least one server for "Override MCP Servers For Selected Tests", or turn that override off.`
+        `[${nowTime()}] Select at least one server for "Override MCP Servers for Selected Tests", or turn that override off.`
       ]);
       return;
     }
@@ -816,6 +816,7 @@ const RunEvaluation = () => {
                     scenarioServerOverrideEnabledMap[scenario.id]
                   );
                   const hasOverride = scenarioOverrideEnabled && Array.isArray(perScenarioOverride);
+                  const defaultScenarioServerSet = new Set(scenario.serverIds || []);
                   return (
                     <div
                       key={scenario.id}
@@ -895,6 +896,7 @@ const RunEvaluation = () => {
                               {availableServers.map((server) => {
                                 const serverId = server.id;
                                 const selected = (perScenarioOverride ?? []).includes(serverId);
+                                const isDefaultForScenario = defaultScenarioServerSet.has(serverId);
                                 return (
                                   <Badge
                                     key={serverId}
@@ -902,6 +904,11 @@ const RunEvaluation = () => {
                                     className={`cursor-pointer text-xs ${
                                       selected ? '' : 'opacity-60 hover:opacity-100'
                                     }`}
+                                    style={
+                                      !selected && isDefaultForScenario
+                                        ? { borderColor: 'hsl(var(--primary))' }
+                                        : undefined
+                                    }
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       setScenarioServerOverrideMap((prev) => {
@@ -928,7 +935,7 @@ const RunEvaluation = () => {
               <div className="space-y-1 rounded-md border p-2">
                 <div className="flex items-center justify-between">
                   <div className="text-xs">
-                    <span>Override MCP Servers For Selected Tests </span>
+                    <span>Override MCP Servers for selected Tests </span>
                     <span className="text-muted-foreground">
                       Selected tests run against the servers you choose here. Applies only to this
                       run.
