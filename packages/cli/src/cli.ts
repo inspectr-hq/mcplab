@@ -957,12 +957,40 @@ function parseRuntimeServerOverrides(options: RunCommandOptions): {
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean);
+    if (parsedServerIds.length === 0) {
+      throw new Error(
+        `Invalid --server-override '${entry}': must include at least one server id after '='`
+      );
+    }
     scenarioServerOverrides[scenarioId] = parsedServerIds;
   }
   return {
     serverOverrideAll,
     scenarioServerOverrides:
       Object.keys(scenarioServerOverrides).length > 0 ? scenarioServerOverrides : undefined
+  };
+}
+
+function filterRuntimeOverridesToSelectedScenarios(
+  selectedConfig: EvalConfig,
+  overrides: {
+    serverOverrideAll?: string[];
+    scenarioServerOverrides?: Record<string, string[]>;
+  }
+): {
+  serverOverrideAll?: string[];
+  scenarioServerOverrides?: Record<string, string[]>;
+} {
+  if (!overrides.scenarioServerOverrides) return overrides;
+  const selectedIds = new Set(selectedConfig.scenarios.map((scenario) => scenario.id));
+  const filtered = Object.fromEntries(
+    Object.entries(overrides.scenarioServerOverrides).filter(([scenarioId]) =>
+      selectedIds.has(scenarioId)
+    )
+  );
+  return {
+    ...overrides,
+    scenarioServerOverrides: Object.keys(filtered).length > 0 ? filtered : undefined
   };
 }
 
@@ -980,7 +1008,7 @@ async function executeSingleConfigRun(params: {
     servers: { ...libraryServers, ...loaded.config.servers }
   };
   loaded.hash = hashConfig(loaded.config);
-  const { config, hash, warnings } = loaded;
+  const { config, warnings } = loaded;
   for (const warning of warnings) {
     console.log(kleur.yellow(`⚠ ${warning}`));
   }
@@ -998,7 +1026,14 @@ async function executeSingleConfigRun(params: {
     : undefined;
   const runtimeOverrides = parseRuntimeServerOverrides(options);
   const selectedBaseConfig = options.scenario ? selectScenarios(config, options.scenario) : config;
-  const runtimeOverriddenConfig = applyRuntimeServerOverrides(selectedBaseConfig, runtimeOverrides);
+  const selectedOverrides = filterRuntimeOverridesToSelectedScenarios(
+    selectedBaseConfig,
+    runtimeOverrides
+  );
+  const runtimeOverriddenConfig = applyRuntimeServerOverrides(
+    selectedBaseConfig,
+    selectedOverrides
+  );
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
   const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
@@ -1084,10 +1119,11 @@ async function executeSingleConfigRun(params: {
     }
   });
   let shouldFailOnDrift = false;
-  const useSnapshotEval = Boolean(options.snapshotEval) || Boolean(config.snapshot_eval?.enabled);
+  const useSnapshotEval =
+    Boolean(options.snapshotEval) || Boolean(runtimeOverriddenConfig.snapshot_eval?.enabled);
 
   if (useSnapshotEval) {
-    const policy = config.snapshot_eval;
+    const policy = runtimeOverriddenConfig.snapshot_eval;
     if (!policy?.baseline_snapshot_id) {
       console.log(kleur.yellow('⚠ Snapshot eval enabled but no baseline snapshot is configured.'));
     } else {

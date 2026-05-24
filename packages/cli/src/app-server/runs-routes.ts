@@ -88,6 +88,18 @@ export function applyLibraryEntries(
   loaded.hash = hashConfig(loaded.config);
 }
 
+function filterScenarioOverridesToSelectedScenarios(
+  selectedConfig: EvalConfig,
+  scenarioServerOverrides?: Record<string, string[]>
+): Record<string, string[]> | undefined {
+  if (!scenarioServerOverrides) return undefined;
+  const selectedIds = new Set(selectedConfig.scenarios.map((scenario) => scenario.id));
+  const filtered = Object.fromEntries(
+    Object.entries(scenarioServerOverrides).filter(([scenarioId]) => selectedIds.has(scenarioId))
+  );
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
+}
+
 // Backward-compatible exports used by existing tests/imports.
 export function mergeLibraryAgentsIntoConfig(
   config: EvalConfig,
@@ -401,6 +413,27 @@ export async function handleRunsRoutes(params: {
       : ensureInsideRoot(settings.evalsDir, join(settings.evalsDir, configPathRaw));
     if (!existsSync(configPath)) {
       asJson(res, 404, { error: `Config not found: ${configPath}` });
+      return true;
+    }
+    try {
+      const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
+      const libraries = readLibraries(settings.librariesDir);
+      applyLibraryEntries(loaded, libraries.agents, libraries.servers);
+      const selected = scenarioIds?.length
+        ? deps.selectScenarioIds(loaded.config, scenarioIds)
+        : scenarioId
+        ? deps.selectScenarioIds(loaded.config, [scenarioId])
+        : loaded.config;
+      const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
+        selected,
+        scenarioServerOverrides
+      );
+      applyRuntimeServerOverrides(selected, {
+        serverOverrideAll,
+        scenarioServerOverrides: filteredScenarioOverrides
+      });
+    } catch (error) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
     }
 
@@ -818,9 +851,13 @@ function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] 
       : job.runParams.scenarioId
       ? selectScenarioIds(loaded.config, [job.runParams.scenarioId])
       : loaded.config;
+    const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
+      selected,
+      job.runParams.scenarioServerOverrides
+    );
     const withOverrides = applyRuntimeServerOverrides(selected, {
       serverOverrideAll: job.runParams.serverOverrideAll,
-      scenarioServerOverrides: job.runParams.scenarioServerOverrides
+      scenarioServerOverrides: filteredScenarioOverrides
     });
     const effectiveServers = new Set(
       withOverrides.scenarios.flatMap((scenario) => scenario.servers)
@@ -832,11 +869,15 @@ function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] 
     job.runParams.oauthServerNames = names;
     return names;
   } catch (error) {
-    console.warn(
-      `[mcplab] Failed to resolve OAuth servers for queued job '${job.id}': ${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes('Unknown server refs') ||
+      message.includes('Unknown scenarios in scenarioServerOverrides') ||
+      message.includes('serverOverrideAll must include at least one server id')
+    ) {
+      throw error;
+    }
+    console.warn(`[mcplab] Failed to resolve OAuth servers for queued job '${job.id}': ${message}`);
     return [];
   }
 }
@@ -861,7 +902,23 @@ async function advanceQueue(
       }
 
       // Pre-check OAuth before starting
-      const oauthServers = resolveOAuthServersForJob(nextJob, settings.librariesDir);
+      let oauthServers: string[] = [];
+      try {
+        oauthServers = resolveOAuthServersForJob(nextJob, settings.librariesDir);
+      } catch (error) {
+        runQueueState.queue.shift();
+        nextJob.status = 'error';
+        deps.addJobEvent(nextJob, {
+          type: 'error',
+          ts: new Date().toISOString(),
+          payload: {
+            message: error instanceof Error ? error.message : String(error)
+          }
+        });
+        for (const client of nextJob.clients) client.end();
+        nextJob.clients.clear();
+        continue;
+      }
       if (oauthServers.length > 0) {
         const authStatus = oauthSessionManager.checkServersAuthStatus(oauthServers);
         const needsAuth = authStatus.filter((s) => s.status === 'auth_required');
@@ -988,9 +1045,13 @@ async function executeRunJob(
         message: `Selected ${selectedBaseScenarios.scenarios.length} base scenario(s)`
       }
     });
+    const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
+      selectedBaseScenarios,
+      scenarioServerOverrides
+    );
     const runtimeOverriddenConfig = applyRuntimeServerOverrides(selectedBaseScenarios, {
       serverOverrideAll,
-      scenarioServerOverrides
+      scenarioServerOverrides: filteredScenarioOverrides
     });
     const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
     addJobEvent(job, {
@@ -999,7 +1060,7 @@ async function executeRunJob(
       payload: {
         message: `Applied runtime server overrides: global=${
           serverOverrideAll?.length ?? 0
-        } scenario-specific=${Object.keys(scenarioServerOverrides ?? {}).length}`
+        } scenario-specific=${Object.keys(filteredScenarioOverrides ?? {}).length}`
       }
     });
     const effectiveScenarioServers = runtimeOverriddenConfig.scenarios

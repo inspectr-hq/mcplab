@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { mergeLibraryAgentsIntoConfig, applyLibraryAgents } from './runs-routes.js';
 import { hashConfig } from '@inspectr/mcplab-core';
 import type { EvalConfig } from '@inspectr/mcplab-core';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const baseAgent = (id: string): EvalConfig['agents'][string] => ({
   provider: 'openai' as const,
@@ -115,7 +118,8 @@ describe('run request validation', () => {
         listRuns: () => [],
         getRunResults: () => ({}),
         getScenarioRunTraceRecords: () => [],
-        selectScenarioIds: (c: any) => c,
+        selectScenarioIds: (c: any, ids?: string[]) =>
+          ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
         loadSnapshot: () => ({}),
@@ -167,7 +171,8 @@ describe('run request validation', () => {
         listRuns: () => [],
         getRunResults: () => ({}),
         getScenarioRunTraceRecords: () => [],
-        selectScenarioIds: (c: any) => c,
+        selectScenarioIds: (c: any, ids?: string[]) =>
+          ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
         loadSnapshot: () => ({}),
@@ -219,7 +224,8 @@ describe('run request validation', () => {
         listRuns: () => [],
         getRunResults: () => ({}),
         getScenarioRunTraceRecords: () => [],
-        selectScenarioIds: (c: any) => c,
+        selectScenarioIds: (c: any, ids?: string[]) =>
+          ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
         expandConfigForAgents: (c: any) => c,
         resolveRunSelectedAgents: () => [],
         loadSnapshot: () => ({}),
@@ -236,4 +242,79 @@ describe('run request validation', () => {
       'scenarioServerOverrides.scenario-a must be an array of server ids'
     );
   });
+
+  it('returns 400 when scenarioServerOverrides references unknown server ids', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-route-'));
+    const evalsDir = join(root, 'evals');
+    const librariesDir = join(root, 'libs');
+    mkdirSync(evalsDir, { recursive: true });
+    mkdirSync(librariesDir, { recursive: true });
+    const configPath = join(evalsDir, 'eval.yaml');
+    writeFileSync(
+      configPath,
+      [
+        'servers:',
+        '  - id: weather',
+        '    transport: http',
+        '    url: http://localhost:3300/mcp',
+        'agents:',
+        '  - id: mini',
+        '    provider: openai',
+        '    model: gpt-5-mini',
+        'scenarios:',
+        '  - id: s1',
+        '    prompt: test',
+        '    servers: [weather]'
+      ].join('\n'),
+      'utf8'
+    );
+    const req = { url: '/api/runs', headers: {}, on: () => undefined } as any;
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const deps: any = {
+      parseBody: async () => ({
+        configPath,
+        scenarioServerOverrides: { s1: ['missing-server'] }
+      }),
+      asJson: (_res: unknown, status: number, payload: unknown) => {
+        responses.push({ status, payload });
+      }
+    };
+    const handled = await handleRunsRoutes({
+      req,
+      res: {} as any,
+      pathname: '/api/runs',
+      method: 'POST',
+      settings: { evalsDir, runsDir: join(root, 'runs'), librariesDir, workspaceRoot: root },
+      jobs: new Map(),
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      oauthSessionManager: {} as any,
+      deps: {
+        ...deps,
+        addJobEvent: () => undefined,
+        sendSseEvent: () => undefined,
+        ensureInsideRoot: (_root: string, path: string) => path,
+        listRuns: () => [],
+        getRunResults: () => ({}),
+        getScenarioRunTraceRecords: () => [],
+        selectScenarioIds: (c: any, ids?: string[]) =>
+          ids?.length ? { ...c, scenarios: c.scenarios.filter((s: any) => ids.includes(s.id)) } : c,
+        expandConfigForAgents: (c: any) => c,
+        resolveRunSelectedAgents: () => [],
+        loadSnapshot: () => ({}),
+        compareRunToSnapshot: () => ({}),
+        applySnapshotPolicyToRunResult: () => ({}),
+        readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
+        pickDefaultAssistantAgentName: () => undefined,
+        pkgVersion: 'test'
+      }
+    } as any);
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(400);
+    expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
+      'Unknown server refs in scenarioServerOverrides.s1: missing-server'
+    );
+  });
+
+  
 });
