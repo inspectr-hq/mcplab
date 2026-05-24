@@ -404,16 +404,18 @@ function ScenarioCard({
     const starterEvalRules = [
       firstToolName ? { type: 'required_tool', value: firstToolName } : null,
       hints.totalTagCount !== null
-        ? { type: 'response_contains', value: `${hints.totalTagCount} TM5-BP` }
-        : { type: 'response_contains', value: 'TM5-BP' },
+        ? { type: 'response_contains', value: `${hints.totalTagCount} tags` }
+        : { type: 'response_contains', value: 'tags' },
       { type: 'response_not_contains', value: 'Would you like to' },
-      hints.countsByType.ANALOG !== null
-        ? { type: 'response_contains', value: `ANALOG` }
+      hints.countsByType.ANALOG !== null ||
+      hints.countsByType.STRING !== null ||
+      hints.countsByType.DISCRETE !== null
+        ? { type: 'response_contains', value: 'Summary by' }
         : null
     ].filter(Boolean);
     const starterExtractRules = [
-      { name: 'total_tags', pattern: '(?<value>\\d+)\\s+TM5-BP' },
-      { name: 'analog_count', pattern: 'ANALOG\\*{0,2}\\s*[—-]\\s*(?<value>\\d+)' }
+      { name: 'primary_count', pattern: '(?<value>\\d+)' },
+      { name: 'primary_label', pattern: '"(?<value>[^"]+)"' }
     ];
     const scenarioContext = {
       scenarioId: scenario.id,

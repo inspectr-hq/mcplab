@@ -367,8 +367,11 @@ export async function handleScenarioAssistantRoutes(params: {
     const llmMessagesBefore = session.llmMessages.length;
     const pendingToolCallsBefore = session.pendingToolCalls.length;
     const abortController = new AbortController();
-    const handleAbort = () => abortController.abort();
-    req.on('aborted', handleAbort);
+    const handleClose = () => {
+      if (res.writableEnded) return;
+      abortController.abort();
+    };
+    req.on('close', handleClose);
     try {
       const body = await parseBody(req);
       const message = String(body.message ?? '').trim();
@@ -398,7 +401,7 @@ export async function handleScenarioAssistantRoutes(params: {
       }
       throw error;
     } finally {
-      req.off('aborted', handleAbort);
+      req.off('close', handleClose);
     }
   }
 

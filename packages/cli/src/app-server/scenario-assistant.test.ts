@@ -288,7 +288,7 @@ describe('POST /api/scenario-assistant/sessions/:id/messages cancellation', () =
     });
 
     const handlerPromise = Promise.resolve(handled);
-    req.emit('aborted');
+    req.emit('close');
     resolveTurn({
       response: {
         type: 'assistant_message',

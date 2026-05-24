@@ -115,7 +115,7 @@ describe('POST /api/result-assistant/sessions/:id/messages cancellation', () => 
     });
 
     const handlerPromise = Promise.resolve(handled);
-    req.emit('aborted');
+    req.emit('close');
     resolveTurn({
       response: {
         type: 'assistant_message',
