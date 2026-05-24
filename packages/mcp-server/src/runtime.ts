@@ -21,6 +21,7 @@ import {
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import {
   loadConfig,
+  hashConfig,
   runAll,
   selectScenarios,
   loadOrBuildSearchIndex,
@@ -29,6 +30,8 @@ import {
   resolveRunArtifactPath,
   searchDocs,
   getContext,
+  applyRuntimeServerOverrides,
+  readLibraryAgentsAndServers,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -1245,10 +1248,12 @@ export function registerTools(server: McpServer): void {
     },
     async ({ config_path, scenario_id }) => {
       return withToolHandling(async () => {
+        const bundleRoot = resolveBundleRoot();
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: resolveBundleRoot()
+          bundleRoot
         });
-        const selected = selectScenarios(loaded.config, scenario_id);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const selected = selectScenarios(mergedConfig, scenario_id);
         const summary = summarizeConfig(selected);
         return ok(`Validated config ${config_path}`, {
           configPath: resolve(config_path),
@@ -1284,6 +1289,7 @@ export function registerTools(server: McpServer): void {
             tool_usage_frequency: z.record(z.number())
           })
         ),
+        effective_server_overrides: z.record(z.array(z.string())),
         report_html_preview: z.string()
       },
       inputSchema: {
@@ -1294,20 +1300,44 @@ export function registerTools(server: McpServer): void {
           .int()
           .positive()
           .optional()
-          .describe('Runs per scenario (default 1).')
+          .describe('Runs per scenario (default 1).'),
+        server_override_all: z
+          .array(z.string())
+          .optional()
+          .describe('Optional MCP server refs to apply to all selected scenarios for this run.'),
+        scenario_server_overrides: z
+          .record(z.array(z.string()))
+          .optional()
+          .describe('Optional per-scenario MCP server ref overrides for this run.')
       }
     },
-    async ({ config_path, scenario_id, runs_per_scenario }) => {
+    async ({
+      config_path,
+      scenario_id,
+      runs_per_scenario,
+      server_override_all,
+      scenario_server_overrides
+    }) => {
       return withToolHandling(async () => {
+        const bundleRoot = resolveBundleRoot();
         const loaded = loadConfig(resolve(config_path), {
-          bundleRoot: resolveBundleRoot()
+          bundleRoot
         });
-        const selected = selectScenarios(loaded.config, scenario_id);
-        const executable = expandConfigForAgents(selected, selected.run_defaults?.selected_agents);
+        const mergedConfig = mergeLibraryServersAndAgents(loaded.config, bundleRoot);
+        const selected = selectScenarios(mergedConfig, scenario_id);
+        const runtimeOverridden = applyRuntimeServerOverrides(selected, {
+          serverOverrideAll: server_override_all,
+          scenarioServerOverrides: scenario_server_overrides
+        });
+        const effectiveConfigHash = hashConfig(runtimeOverridden);
+        const executable = expandConfigForAgents(
+          runtimeOverridden,
+          runtimeOverridden.run_defaults?.selected_agents
+        );
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
           scenarioId: scenario_id,
-          configHash: loaded.hash,
+          configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir()
         });
@@ -1346,6 +1376,9 @@ export function registerTools(server: McpServer): void {
             pass_rate: scenario.pass_rate,
             tool_usage_frequency: scenario.tool_usage_frequency
           })),
+          effective_server_overrides: Object.fromEntries(
+            runtimeOverridden.scenarios.map((scenario) => [scenario.id, [...scenario.servers]])
+          ),
           report_html_preview: truncate(reportHtml, 4000)
         });
       });
@@ -2450,6 +2483,15 @@ function resolveServerOwnedRoots(): ServerOwnedRoots {
 
 function resolveBundleRoot(): string {
   return SERVER_OWNED_ROOTS.bundleRoot;
+}
+
+function mergeLibraryServersAndAgents(config: EvalConfig, bundleRoot: string): EvalConfig {
+  const libraries = readLibraryAgentsAndServers(bundleRoot);
+  return {
+    ...config,
+    agents: { ...libraries.agents, ...config.agents },
+    servers: { ...libraries.servers, ...config.servers }
+  };
 }
 
 function readLibrary(

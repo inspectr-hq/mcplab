@@ -19,7 +19,7 @@ import { toast } from '@/hooks/use-toast';
 import type { RunJobEvent, ToolAnalysisReport } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { CircleHelp, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
+import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -59,6 +59,19 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function copyTextToClipboard(label: string, content: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(content);
+    toast({ title: `${label} copied` });
+  } catch (error: unknown) {
+    toast({
+      title: `Could not copy ${label.toLowerCase()}`,
+      description: error instanceof Error ? error.message : String(error),
+      variant: 'destructive'
+    });
+  }
 }
 
 function ModeInfo({ text }: { text: string }) {
@@ -690,6 +703,31 @@ const ToolAnalysisPage = () => {
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <div className="font-medium">{server.serverName}</div>
                           <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                void copyTextToClipboard(
+                                  'Tool list',
+                                  `${JSON.stringify(
+                                    {
+                                      server: server.serverName,
+                                      tools: server.tools.map((tool) => ({
+                                        name: tool.name,
+                                        title: tool.title,
+                                        description: tool.description
+                                      }))
+                                    },
+                                    null,
+                                    2
+                                  )}\n`
+                                )
+                              }
+                            >
+                              <Copy className="mr-1.5 h-3.5 w-3.5" />
+                              Copy
+                            </Button>
                             <Button
                               type="button"
                               size="sm"

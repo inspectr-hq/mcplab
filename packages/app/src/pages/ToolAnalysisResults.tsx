@@ -41,6 +41,7 @@ import { toast } from '@/hooks/use-toast';
 import type { ToolAnalysisResultSummary } from '@/lib/data-sources/types';
 import { Clock, Download, MoreHorizontal, Trash2, NotebookTabs, ChevronDown } from 'lucide-react';
 import { toolAnalysisReportToMarkdown } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -120,11 +121,17 @@ export default function ToolAnalysisResultsPage() {
     }
   };
 
-  const exportReport = async (id: string, format: 'json' | 'markdown') => {
+  const exportReport = async (id: string, format: 'json' | 'markdown' | 'tool_schemas') => {
     try {
       const record = await source.getToolAnalysisSavedResult(id);
       if (format === 'json') {
         downloadTextFile(`${id}.json`, `${JSON.stringify(record, null, 2)}\n`, 'application/json');
+      } else if (format === 'tool_schemas') {
+        downloadTextFile(
+          `${id}-tool-schemas.json`,
+          `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
+          'application/json'
+        );
       } else {
         downloadTextFile(`${id}.md`, toolAnalysisReportToMarkdown(record.report), 'text/markdown');
       }
@@ -340,6 +347,11 @@ export default function ToolAnalysisResultsPage() {
                                 }}
                               >
                                 <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => void exportReport(item.reportId, 'tool_schemas')}
+                              >
+                                <Download className="mr-2 h-3.5 w-3.5" /> Export MCP Info
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

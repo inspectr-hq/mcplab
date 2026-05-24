@@ -332,6 +332,8 @@ export const workspaceApiClient = {
     agents?: string[];
     applySnapshotEval?: boolean;
     runNote?: string;
+    serverOverrideAll?: string[];
+    scenarioServerOverrides?: Record<string, string[]>;
   }) =>
     request<{ jobId: string }>('/api/runs', {
       method: 'POST',

@@ -9,6 +9,24 @@ function makeTempLibrariesDir(): string {
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('loads servers and agents from library yaml files', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(
+      join(librariesDir, 'servers.yaml'),
+      'weather:\n  transport: http\n  url: http://localhost:3300/mcp\n',
+      'utf8'
+    );
+    writeFileSync(
+      join(librariesDir, 'agents.yaml'),
+      'mini:\n  provider: openai\n  model: gpt-5-mini\n',
+      'utf8'
+    );
+
+    const loaded = readLibraries(librariesDir);
+    expect(loaded.servers.weather?.url).toBe('http://localhost:3300/mcp');
+    expect(loaded.agents.mini?.model).toBe('gpt-5-mini');
+  });
+
   it('writes scenario library files into test-cases directory', () => {
     const librariesDir = makeTempLibrariesDir();
     writeLibraries(librariesDir, {

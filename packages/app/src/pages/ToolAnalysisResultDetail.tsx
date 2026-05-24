@@ -19,6 +19,7 @@ import {
   toolAnalysisReportToMarkdown
 } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { Clock, Download, Trash2 } from 'lucide-react';
+import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -163,6 +164,21 @@ export default function ToolAnalysisResultDetailPage() {
           >
             <Download className="mr-2 h-4 w-4" />
             Export Markdown
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              downloadTextFile(
+                `${record.reportId}-tool-schemas.json`,
+                `${JSON.stringify(buildToolSchemaExport(record), null, 2)}\n`,
+                'application/json'
+              )
+            }
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export MCP info
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="mr-2 h-4 w-4" />

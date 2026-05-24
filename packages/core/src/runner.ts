@@ -36,8 +36,8 @@ export type RunProgressEvent =
       totalScenarioRuns: number;
       runsPerScenario: number;
     }
-  | { type: 'mcp_connect_started'; serverCount: number }
-  | { type: 'mcp_connect_finished'; serverCount: number }
+  | { type: 'mcp_connect_started'; serverCount: number; serverNames: string[] }
+  | { type: 'mcp_connect_finished'; serverCount: number; serverNames: string[] }
   | {
       type: 'scenario_run_started';
       scenarioId: string;
@@ -113,16 +113,32 @@ export async function runAll(
 
   const mcp = new McpClientManager();
   try {
+    const usedServerIds = Array.from(
+      new Set(config.scenarios.flatMap((scenario) => scenario.servers))
+    );
+    const usedServers = Object.fromEntries(
+      usedServerIds.map((id) => {
+        const server = config.servers[id];
+        if (!server) {
+          throw new Error(
+            `Scenario references unknown MCP server '${id}'. Ensure override/config server refs exist in resolved config.servers.`
+          );
+        }
+        return [id, server];
+      })
+    );
     await emitProgress({
       type: 'mcp_connect_started',
-      serverCount: Object.keys(config.servers).length
+      serverCount: usedServerIds.length,
+      serverNames: usedServerIds
     });
-    await mcp.connectAll(config.servers, options.signal, {
+    await mcp.connectAll(usedServers, options.signal, {
       serverAuthHeaders: buildMcpServerAuthHeaders(options)
     });
     await emitProgress({
       type: 'mcp_connect_finished',
-      serverCount: Object.keys(config.servers).length
+      serverCount: usedServerIds.length,
+      serverNames: usedServerIds
     });
     const mcpServerVersions = mcp.getServerVersions();
 
