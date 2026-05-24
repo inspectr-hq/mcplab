@@ -768,10 +768,10 @@ function ScenarioCard({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-6 gap-1.5 px-2 text-[11px]"
+                          className="ml-auto h-6 gap-1.5 px-2 text-[11px]"
                           onClick={sendPreviewToAssistant}
                         >
-                          <Sparkles className="h-3 w-3" />
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           Send to Assistant
                         </Button>
                       </div>
