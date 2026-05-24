@@ -265,18 +265,7 @@ const ResultDetail = () => {
   }, [id, source, resetAssistantSession]);
 
   useEffect(() => {
-    let active = true;
-    source
-      .listSnapshots()
-      .then((records) => {
-        if (active) setSnapshots(records);
-      })
-      .catch(() => {
-        if (active) setSnapshots([]);
-      });
-    return () => {
-      active = false;
-    };
+    setSnapshots([]);
   }, [source]);
 
   useEffect(() => {
@@ -531,32 +520,20 @@ const ResultDetail = () => {
 
   const compareWithSnapshot = async () => {
     if (!result || !selectedSnapshotId) return;
-    setComparing(true);
-    try {
-      const comparison = await source.compareSnapshot(selectedSnapshotId, result.id);
-      setSnapshotComparison(comparison);
-    } finally {
-      setComparing(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Snapshot comparison is no longer supported.'
+    });
   };
 
   const reviewDrift = async (baselineIdOverride?: string) => {
     const baselineId = baselineIdOverride || result.snapshotEval?.baselineSnapshotId;
     if (!baselineId) return;
     setSelectedSnapshotId(baselineId);
-    setComparing(true);
-    try {
-      const comparison = await source.compareSnapshot(baselineId, result.id);
-      setSnapshotComparison(comparison);
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not review drift',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setComparing(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Snapshot drift review is no longer supported.'
+    });
   };
 
   const acceptAsNewBaseline = async () => {
@@ -569,36 +546,11 @@ const ResultDetail = () => {
       return;
     }
     setAcceptingBaseline(true);
-    try {
-      const response = await source.generateSnapshotEvalBaseline(
-        result.id,
-        targetConfigId,
-        acceptSnapshotName.trim() || undefined
-      );
-      setSnapshots((prev) => [
-        response.snapshot,
-        ...prev.filter((item) => item.id !== response.snapshot.id)
-      ]);
-      setSelectedSnapshotId(response.snapshot.id);
-      toast({
-        title: 'Baseline updated',
-        description: `${response.snapshot.name} is now linked to the selected config.`
-      });
-      if (!acceptSnapshotName.trim()) {
-        setAcceptSnapshotName(response.snapshot.name);
-      }
-      if (result.snapshotEval?.applied) {
-        void reviewDrift(response.snapshot.id);
-      }
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not accept new baseline',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setAcceptingBaseline(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Baseline acceptance is no longer supported.'
+    });
+    setAcceptingBaseline(false);
   };
 
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {

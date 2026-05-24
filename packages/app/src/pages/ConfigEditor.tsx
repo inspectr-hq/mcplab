@@ -107,18 +107,7 @@ const ConfigEditor = () => {
   }, [tabParam, isNew]);
 
   useEffect(() => {
-    let active = true;
-    source
-      .listSnapshots()
-      .then((next) => {
-        if (active) setSnapshots(next);
-      })
-      .catch(() => {
-        if (active) setSnapshots([]);
-      });
-    return () => {
-      active = false;
-    };
+    setSnapshots([]);
   }, [source]);
 
   useEffect(() => {
@@ -220,49 +209,21 @@ const ConfigEditor = () => {
       return;
     }
     setUpdatingSnapshotPolicy(true);
-    try {
-      const updated = await source.updateSnapshotPolicy(config.id, nextPolicy);
-      setConfig(updated);
-      toast({ title: 'Snapshot policy updated' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not update snapshot policy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdatingSnapshotPolicy(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Snapshot policy updates are no longer supported.'
+    });
+    setUpdatingSnapshotPolicy(false);
   };
 
   const generateBaseline = async () => {
     if (!config.id || !snapshotRunId.trim()) return;
     setGeneratingBaseline(true);
-    try {
-      const response = await source.generateSnapshotEvalBaseline(
-        snapshotRunId.trim(),
-        config.id,
-        snapshotName.trim() || undefined
-      );
-      setConfig(response.config);
-      setSnapshotBaselineId(response.snapshot.id);
-      setSnapshots((prev) => [
-        response.snapshot,
-        ...prev.filter((item) => item.id !== response.snapshot.id)
-      ]);
-      toast({
-        title: 'Snapshot baseline generated',
-        description: `${response.snapshot.name} (${response.snapshot.id})`
-      });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not generate baseline',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setGeneratingBaseline(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Baseline generation is no longer supported.'
+    });
+    setGeneratingBaseline(false);
   };
 
   const handleSave = async () => {
@@ -1791,7 +1752,6 @@ const ConfigEditor = () => {
                               defaultAssistantAgentName={
                                 config.runDefaults?.selectedAgentNames?.[0]
                               }
-                              snapshotEval={config.snapshotEval}
                               onChange={(scenarios) => {
                                 const nextScenario = scenarios[0];
                                 if (!nextScenario) return;
@@ -1888,7 +1848,6 @@ const ConfigEditor = () => {
                   configId={config.id}
                   configPath={config.sourcePath}
                   defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-                  snapshotEval={config.snapshotEval}
                   onChange={() => {}}
                   readOnly
                 />

@@ -18,11 +18,6 @@ import { readLibraries } from './libraries-store.js';
 export { truncateJson } from './assistant-common.js';
 
 interface ScenarioAssistantContextInput {
-  configSnapshotPolicy?: {
-    enabled?: boolean;
-    mode?: 'warn' | 'fail_on_drift';
-    baselineSnapshotId?: string;
-  };
   scenario: {
     id: string;
     name?: string;
@@ -35,10 +30,6 @@ interface ScenarioAssistantContextInput {
       equals?: string | number | boolean;
     }>;
     extractRules: Array<{ name: string; pattern: string }>;
-    snapshotEval?: {
-      enabled?: boolean;
-      baselineSnapshotId?: string;
-    };
   };
   availableServers?: Array<{ name: string; url?: string }>;
   availableAgents?: Array<{ name: string; provider: string; model: string }>;
@@ -57,13 +48,6 @@ interface ScenarioAssistantSuggestionBundle {
   };
   extractRules?: {
     replacement: Array<{ name: string; pattern: string }>;
-    rationale?: string;
-  };
-  snapshotEval?: {
-    patch: {
-      enabled?: boolean;
-      baselineSnapshotId?: string;
-    };
     rationale?: string;
   };
   notes?: string[];
@@ -166,7 +150,7 @@ export function assistantSessionView(session: ScenarioAssistantSession) {
 
 function assistantSystemPrompt(session: ScenarioAssistantSession): string {
   if (session.systemPromptCache) return session.systemPromptCache;
-  const { scenario, configSnapshotPolicy } = session.context;
+  const { scenario } = session.context;
   const toolLines = session.tools.map((tool) => {
     const mapping = session.toolPublicMap.get(tool.name);
     const schemaText = tool.inputSchema ? truncateJson(tool.inputSchema, 500) : '{}';
@@ -176,7 +160,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
   });
   const prompt = [
     'You are a Scenario Authoring Assistant for MCP evaluation scenarios.',
-    'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), Value Capture Rules, and snapshot settings.',
+    'Goal: help the user author deterministic scenario prompt, Checks (pass/fail), and Value Capture Rules.',
     'Use the available MCP tools and schemas to ground suggestions.',
     'If you need live MCP information, call a tool and wait for approval.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
@@ -184,12 +168,11 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'Respond ONLY as JSON with one of these envelopes:',
     `{"type":"assistant_message","text":"...","suggestions":{...optional...}}`,
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
-    'For suggestions, use keys: prompt, evalRules, extractRules, snapshotEval, notes.',
+    'For suggestions, use keys: prompt, evalRules, extractRules, notes.',
     'prompt: { replacement: string, rationale?: string }',
     'evalRules: { replacement: [{ type, value?, path?, equals? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
-    'snapshotEval: { patch: { enabled?: boolean, baselineSnapshotId?: string }, rationale?: string }',
-    'If you propose any edits to the scenario (prompt, Checks, Value Capture Rules, or snapshot settings), you MUST include the corresponding structured suggestions payload.',
+    'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
     'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
@@ -204,9 +187,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
       prompt: scenario.prompt,
       serverNames: scenario.serverNames,
       evalRules: scenario.evalRules,
-      extractRules: scenario.extractRules,
-      snapshotEval: scenario.snapshotEval ?? null,
-      configSnapshotPolicy: configSnapshotPolicy ?? null
+      extractRules: scenario.extractRules
     })}`,
     toolLines.length > 0
       ? `Available MCP tools:\n${toolLines.join('\n')}`

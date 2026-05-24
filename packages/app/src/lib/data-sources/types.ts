@@ -206,13 +206,6 @@ export interface ScenarioAssistantSuggestionBundle {
     replacement: Array<{ name: string; pattern: string }>;
     rationale?: string;
   };
-  snapshotEval?: {
-    patch: {
-      enabled?: boolean;
-      baselineSnapshotId?: string;
-    };
-    rationale?: string;
-  };
   notes?: string[];
 }
 
@@ -733,10 +726,6 @@ export interface EvalDataSource {
   removeQueuedRun: (jobId: string) => Promise<void>;
   resumeQueue: () => Promise<{ ok: boolean }>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;
-  listSnapshots: () => Promise<SnapshotRecord[]>;
-  createSnapshotFromRun: (runId: string, name?: string) => Promise<SnapshotRecord>;
-  getSnapshot: (id: string) => Promise<SnapshotRecord | undefined>;
-  compareSnapshot: (snapshotId: string, runId: string) => Promise<SnapshotComparison>;
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;
@@ -772,20 +761,6 @@ export interface EvalDataSource {
     sessionId: string,
     onEvent: (event: ResultAssistantSseEvent) => void
   ) => () => void;
-  generateSnapshotEvalBaseline: (
-    runId: string,
-    configId: string,
-    name?: string
-  ) => Promise<{ snapshot: SnapshotRecord; config: EvalConfig }>;
-  updateSnapshotPolicy: (
-    configId: string,
-    policy: {
-      enabled: boolean;
-      mode: 'warn' | 'fail_on_drift';
-      baselineSnapshotId?: string;
-      baselineSourceRunId?: string;
-    }
-  ) => Promise<EvalConfig>;
   getLibraries: () => Promise<LibraryBundle>;
   saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
@@ -802,11 +777,6 @@ export interface EvalDataSource {
       scenarioId: string;
       selectedAssistantAgentName: string;
       context: {
-        configSnapshotPolicy?: {
-          enabled: boolean;
-          mode: 'warn' | 'fail_on_drift';
-          baselineSnapshotId?: string;
-        };
         scenario: {
           id: string;
           name: string;
@@ -819,13 +789,12 @@ export interface EvalDataSource {
             equals?: string | number | boolean;
           }>;
           extractRules: Array<{ name: string; pattern: string }>;
-          snapshotEval?: {
-            enabled?: boolean;
-            baselineSnapshotId?: string;
-          };
         };
         availableServers: Array<{ name: string; url?: string }>;
         availableAgents: Array<{ name: string; provider: string; model: string }>;
+        autoChecks?: {
+          previewRun?: unknown;
+        };
       };
     },
     signal?: AbortSignal

@@ -64,7 +64,6 @@ const RunEvaluation = () => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
-  const [applySnapshotEval, setApplySnapshotEval] = useState(true);
   const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
   const [globalServerOverrideIds, setGlobalServerOverrideIds] = useState<string[]>([]);
   const [scenarioServerOverrideEnabledMap, setScenarioServerOverrideEnabledMap] = useState<
@@ -318,7 +317,7 @@ const RunEvaluation = () => {
         .map((a) => a.name || a.id)
         .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
         varianceRuns
-      )} snapshotEval=${snapshotsUiEnabled && applySnapshotEval ? 'on' : 'off'}${
+      )}${
         runNote.trim() ? ` note=${runNote.trim()}` : ''
       }`,
       `[${nowTime()}] Effective MCP servers per selected test: ${
@@ -338,7 +337,6 @@ const RunEvaluation = () => {
         ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
           ? { scenarioServerOverrides: filteredScenarioServerOverrides }
           : {}),
-        applySnapshotEval: snapshotsUiEnabled ? applySnapshotEval : false,
         runNote: runNote.trim() ? runNote.trim() : undefined
       });
       setActiveJobId(jobId);
@@ -380,24 +378,11 @@ const RunEvaluation = () => {
   const saveSnapshot = async () => {
     if (!runId) return;
     setSavingSnapshot(true);
-    try {
-      const record = await source.createSnapshotFromRun(runId, snapshotName.trim() || undefined);
-      toast({
-        title: 'Snapshot saved',
-        description: `Created ${record.name} (${record.id})`
-      });
-      if (!snapshotName.trim()) {
-        setSnapshotName(record.name);
-      }
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not save snapshot',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingSnapshot(false);
-    }
+    toast({
+      title: 'Snapshot removed',
+      description: 'Use Auto Checks in test cases and Ask Assistant for check refinement.'
+    });
+    setSavingSnapshot(false);
   };
 
   useEffect(() => {
@@ -974,15 +959,6 @@ const RunEvaluation = () => {
                 )}
               </div>
             </div>
-          )}
-          {snapshotsUiEnabled && (
-            <label className="flex items-center gap-2 text-sm rounded-md border p-2">
-              <Checkbox
-                checked={applySnapshotEval}
-                onCheckedChange={(v) => setApplySnapshotEval(v === true)}
-              />
-              <span>Apply snapshot evaluation policy (if configured)</span>
-            </label>
           )}
           <div className="flex gap-2">
             <Button
