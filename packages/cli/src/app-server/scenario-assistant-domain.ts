@@ -579,6 +579,21 @@ function normalizeEvalRuleSuggestions(
   );
 }
 
+function textImpliesStructuredScenarioUpdates(text: string): boolean {
+  const normalized = text.toLowerCase();
+  const updateIntent =
+    normalized.includes('suggest') ||
+    normalized.includes('propose') ||
+    normalized.includes('update') ||
+    normalized.includes('recommended');
+  const checksIntent =
+    normalized.includes('checks') ||
+    normalized.includes('check ') ||
+    normalized.includes('value capture') ||
+    normalized.includes('extract rules');
+  return updateIntent && checksIntent;
+}
+
 function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   const cleaned = text.trim();
   let parsed: unknown;
@@ -610,6 +625,15 @@ function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
     if (typeof parsedObj.toolCall.name !== 'string' || !parsedObj.toolCall.name.trim()) {
       throw new Error('Assistant toolCall.name must be a non-empty string');
     }
+  }
+  if (
+    parsedObj.type === 'assistant_message' &&
+    !parsedObj.suggestions &&
+    textImpliesStructuredScenarioUpdates(parsedObj.text)
+  ) {
+    throw new Error(
+      'Assistant suggested scenario updates without structured suggestions payload'
+    );
   }
   return parsedObj as ParsedAssistantModelOutput;
 }
