@@ -21,7 +21,6 @@ tags:
   - name: Providers
   - name: Evals
   - name: Runs
-  - name: Snapshots
   - name: Result Assistant
   - name: Scenario Assistant
   - name: Markdown Reports
@@ -116,7 +115,6 @@ paths:
               properties:
                 evalsDir: { type: string }
                 runsDir: { type: string }
-                snapshotsDir: { type: string }
                 librariesDir: { type: string }
                 scenarioAssistantAgentName:
                   oneOf:
@@ -257,157 +255,6 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
-  /api/evals/{configId}/snapshot-policy:
-    parameters:
-      - $ref: "#/components/parameters/ConfigId"
-    post:
-      tags: [Evals]
-      summary: Update snapshot-eval policy embedded in a config file
-      operationId: updateEvalSnapshotPolicy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [enabled, mode]
-              properties:
-                enabled:
-                  type: boolean
-                mode:
-                  type: string
-                  enum: [warn, fail_on_drift]
-                baselineSnapshotId:
-                  type: string
-                baselineSourceRunId:
-                  type: string
-      responses:
-        "200":
-          description: Updated config record
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WorkspaceConfigRecord"
-        "400":
-          $ref: "#/components/responses/Error400"
-        "404":
-          $ref: "#/components/responses/Error404"
-
-  /api/snapshots:
-    get:
-      tags: [Snapshots]
-      summary: List saved snapshots
-      operationId: listSnapshots
-      responses:
-        "200":
-          description: Snapshot records
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/SnapshotRecord"
-    post:
-      tags: [Snapshots]
-      summary: Create a snapshot from a run
-      operationId: createSnapshotFromRun
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [runId]
-              properties:
-                runId: { type: string }
-                name: { type: string }
-      responses:
-        "201":
-          description: Created snapshot
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SnapshotRecord"
-        "400":
-          $ref: "#/components/responses/Error400"
-
-  /api/snapshots/generate-eval:
-    post:
-      tags: [Snapshots]
-      summary: Create snapshot from run and update a config snapshot policy baseline
-      operationId: generateSnapshotEvalBaseline
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [runId, configId]
-              properties:
-                runId: { type: string }
-                configId: { type: string }
-                name: { type: string }
-      responses:
-        "201":
-          description: Snapshot + updated config
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [snapshot, config]
-                properties:
-                  snapshot:
-                    $ref: "#/components/schemas/SnapshotRecord"
-                  config:
-                    $ref: "#/components/schemas/WorkspaceConfigRecord"
-        "400":
-          $ref: "#/components/responses/Error400"
-
-  /api/snapshots/{snapshotId}:
-    parameters:
-      - $ref: "#/components/parameters/SnapshotId"
-    get:
-      tags: [Snapshots]
-      summary: Read snapshot by id
-      operationId: getSnapshot
-      responses:
-        "200":
-          description: Snapshot record
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SnapshotRecord"
-        "404":
-          $ref: "#/components/responses/Error404"
-
-  /api/snapshots/{snapshotId}/compare:
-    parameters:
-      - $ref: "#/components/parameters/SnapshotId"
-    post:
-      tags: [Snapshots]
-      summary: Compare a run to a snapshot baseline
-      operationId: compareRunToSnapshot
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [runId]
-              properties:
-                runId: { type: string }
-      responses:
-        "200":
-          description: Snapshot comparison result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SnapshotComparison"
-        "400":
-          $ref: "#/components/responses/Error400"
-        "404":
-          $ref: "#/components/responses/Error404"
-
   /api/runs:
     get:
       tags: [Runs]
@@ -466,9 +313,6 @@ paths:
                     type: array
                     items: { type: string }
                   description: Runtime per-scenario server ref overrides for this run.
-                applySnapshotEval:
-                  type: boolean
-                  default: true
       responses:
         "202":
           description: Job accepted
@@ -1471,11 +1315,6 @@ components:
       in: path
       required: true
       schema: { type: string }
-    SnapshotId:
-      name: snapshotId
-      in: path
-      required: true
-      schema: { type: string }
     JobId:
       name: jobId
       in: path
@@ -1552,12 +1391,11 @@ components:
           type: string
     WorkspaceSettings:
       type: object
-      required: [workspaceRoot, evalsDir, runsDir, snapshotsDir, librariesDir]
+      required: [workspaceRoot, evalsDir, runsDir, librariesDir]
       properties:
         workspaceRoot: { type: string }
         evalsDir: { type: string }
         runsDir: { type: string }
-        snapshotsDir: { type: string }
         librariesDir: { type: string }
         toolAnalysisResultsDir: { type: string }
         scenarioAssistantAgentName: { type: string }
@@ -1630,38 +1468,6 @@ components:
             type: object
             additionalProperties: true
       additionalProperties: true
-    SnapshotRecord:
-      type: object
-      description: Snapshot baseline record (schema_version 2)
-      required: [schema_version, id, name, created_at, source_run_id, config_hash, source_summary, items]
-      properties:
-        schema_version: { type: integer }
-        id: { type: string }
-        name: { type: string }
-        created_at: { type: string, format: date-time }
-        source_run_id: { type: string }
-        config_hash: { type: string }
-        source_summary:
-          type: object
-          additionalProperties: true
-        items:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-      additionalProperties: true
-    SnapshotComparison:
-      type: object
-      required: [snapshot_id, run_id, overall_score, scenario_results]
-      properties:
-        snapshot_id: { type: string }
-        run_id: { type: string }
-        overall_score: { type: number }
-        scenario_results:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
     ScenarioRunTraceRecord:
       type: object
       description: Persisted run-level trace record (`type=scenario_run`, trace_version=3)
@@ -1790,14 +1596,6 @@ components:
           type: object
           required: [scenario]
           properties:
-            configSnapshotPolicy:
-              type: object
-              properties:
-                enabled: { type: boolean }
-                mode:
-                  type: string
-                  enum: [warn, fail_on_drift]
-                baselineSnapshotId: { type: string }
             scenario:
               type: object
               required: [id, name, prompt, serverNames, evalRules, extractRules]
@@ -1824,9 +1622,6 @@ components:
                       name: { type: string }
                       pattern: { type: string }
                     additionalProperties: true
-                snapshotEval:
-                  type: object
-                  additionalProperties: true
             availableServers:
               type: array
               items:
