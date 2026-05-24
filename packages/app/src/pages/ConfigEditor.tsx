@@ -32,7 +32,6 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
 import { toast } from '@/hooks/use-toast';
-import { isUiFeatureEnabled } from '@/lib/feature-flags';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import type {
   AgentConfig,
@@ -43,7 +42,6 @@ import type {
   ServerConfig,
   ServerEntry
 } from '@/types/eval';
-import type { SnapshotRecord } from '@/lib/data-sources/types';
 
 const emptyConfig = (): EvalConfig => ({
   id: `cfg-${Date.now()}`,
@@ -66,7 +64,6 @@ const ConfigEditor = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
   const { source } = useDataSource();
-  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const { servers: libServers, agents: libAgents, scenarios: libScenarios } = useLibraries();
 
   const isNew = id === 'new';
@@ -77,13 +74,6 @@ const ConfigEditor = () => {
   const [config, setConfig] = useState<EvalConfig>(() =>
     existing ? structuredClone(existing) : emptyConfig()
   );
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
-  const [snapshotRunId, setSnapshotRunId] = useState('');
-  const [snapshotName, setSnapshotName] = useState('');
-  const [snapshotBaselineId, setSnapshotBaselineId] = useState('');
-  const [snapshotRunIsFullyPassing, setSnapshotRunIsFullyPassing] = useState<boolean | null>(null);
-  const [updatingSnapshotPolicy, setUpdatingSnapshotPolicy] = useState(false);
-  const [generatingBaseline, setGeneratingBaseline] = useState(false);
   const [selectedLibraryScenarioId, setSelectedLibraryScenarioId] = useState('');
   const [selectedLibraryAgentId, setSelectedLibraryAgentId] = useState('');
   const [expandedInlineAgentIds, setExpandedInlineAgentIds] = useState<Record<string, boolean>>({});
@@ -105,48 +95,6 @@ const ConfigEditor = () => {
   useEffect(() => {
     if (tabParam === 'edit' && !isNew) setEditing(true);
   }, [tabParam, isNew]);
-
-  useEffect(() => {
-    let active = true;
-    source
-      .listSnapshots()
-      .then((next) => {
-        if (active) setSnapshots(next);
-      })
-      .catch(() => {
-        if (active) setSnapshots([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [source]);
-
-  useEffect(() => {
-    if (!snapshotRunId.trim()) {
-      setSnapshotRunIsFullyPassing(null);
-      return;
-    }
-    let active = true;
-    source
-      .getResult(snapshotRunId.trim())
-      .then((result) => {
-        if (!active) return;
-        if (!result) {
-          setSnapshotRunIsFullyPassing(false);
-          return;
-        }
-        const fullyPassing =
-          result.overallPassRate === 1 &&
-          result.scenarios.every((scenario) => scenario.runs.every((run) => run.passed));
-        setSnapshotRunIsFullyPassing(fullyPassing);
-      })
-      .catch(() => {
-        if (active) setSnapshotRunIsFullyPassing(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [snapshotRunId, source]);
 
   const patch = (updates: Partial<EvalConfig>) => setConfig((c) => ({ ...c, ...updates }));
 
@@ -200,70 +148,6 @@ const ConfigEditor = () => {
 
   const readOnly = !editing;
   const defaultRunAgentNames = config.runDefaults?.selectedAgentNames ?? [];
-
-  const persistSnapshotPolicy = async (nextPolicy: {
-    enabled: boolean;
-    mode: 'warn' | 'fail_on_drift';
-    baselineSnapshotId?: string;
-    baselineSourceRunId?: string;
-  }) => {
-    if (!config.id || readOnly === false) {
-      patch({
-        snapshotEval: {
-          enabled: nextPolicy.enabled,
-          mode: nextPolicy.mode,
-          baselineSnapshotId: nextPolicy.baselineSnapshotId,
-          baselineSourceRunId: nextPolicy.baselineSourceRunId,
-          lastUpdatedAt: new Date().toISOString()
-        }
-      });
-      return;
-    }
-    setUpdatingSnapshotPolicy(true);
-    try {
-      const updated = await source.updateSnapshotPolicy(config.id, nextPolicy);
-      setConfig(updated);
-      toast({ title: 'Snapshot policy updated' });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not update snapshot policy',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setUpdatingSnapshotPolicy(false);
-    }
-  };
-
-  const generateBaseline = async () => {
-    if (!config.id || !snapshotRunId.trim()) return;
-    setGeneratingBaseline(true);
-    try {
-      const response = await source.generateSnapshotEvalBaseline(
-        snapshotRunId.trim(),
-        config.id,
-        snapshotName.trim() || undefined
-      );
-      setConfig(response.config);
-      setSnapshotBaselineId(response.snapshot.id);
-      setSnapshots((prev) => [
-        response.snapshot,
-        ...prev.filter((item) => item.id !== response.snapshot.id)
-      ]);
-      toast({
-        title: 'Snapshot baseline generated',
-        description: `${response.snapshot.name} (${response.snapshot.id})`
-      });
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not generate baseline',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setGeneratingBaseline(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!config.name.trim()) {
@@ -1026,157 +910,6 @@ const ConfigEditor = () => {
         </CardContent>
       </Card>
 
-      {snapshotsUiEnabled && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold">Snapshot Evaluation</p>
-                <p className="text-xs text-muted-foreground">
-                  Config baseline versioning. One active baseline is selected; scenarios can opt
-                  in/out below.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Enable snapshot baseline</Label>
-                <Switch
-                  checked={config.snapshotEval?.enabled ?? false}
-                  disabled={updatingSnapshotPolicy}
-                  onCheckedChange={(checked) => {
-                    const current = config.snapshotEval;
-                    void persistSnapshotPolicy({
-                      enabled: checked,
-                      mode: current?.mode ?? 'warn',
-                      baselineSnapshotId: current?.baselineSnapshotId,
-                      baselineSourceRunId: current?.baselineSourceRunId
-                    });
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Drift mode</Label>
-                <Select
-                  value={config.snapshotEval?.mode ?? 'warn'}
-                  onValueChange={(modeValue) => {
-                    const current = config.snapshotEval;
-                    void persistSnapshotPolicy({
-                      enabled: current?.enabled ?? false,
-                      mode: modeValue as 'warn' | 'fail_on_drift',
-                      baselineSnapshotId: current?.baselineSnapshotId,
-                      baselineSourceRunId: current?.baselineSourceRunId
-                    });
-                  }}
-                >
-                  <SelectTrigger className="h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="warn">Warn</SelectItem>
-                    <SelectItem value="fail_on_drift">Fail on drift</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Active baseline</Label>
-                <p className="rounded-md border bg-muted/20 px-2 py-2 text-xs font-mono">
-                  {config.snapshotEval?.baselineSnapshotId ?? 'No baseline linked'}
-                </p>
-              </div>
-            </div>
-
-            {config.id && (
-              <div className="grid gap-2 rounded-md border bg-muted/20 p-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Generate baseline from passing run</Label>
-                  <Input
-                    value={snapshotRunId}
-                    onChange={(e) => setSnapshotRunId(e.target.value)}
-                    placeholder="Run id (e.g. 20260208-140213)"
-                    className="h-8 font-mono text-xs"
-                  />
-                  {snapshotRunIsFullyPassing === false && (
-                    <p className="text-[11px] text-destructive">
-                      Run is missing or not fully passing.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Snapshot name (optional)</Label>
-                  <Input
-                    value={snapshotName}
-                    onChange={(e) => setSnapshotName(e.target.value)}
-                    placeholder="e.g. config-baseline-v1"
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Switch baseline</Label>
-                  <Select
-                    value={snapshotBaselineId || config.snapshotEval?.baselineSnapshotId || ''}
-                    onValueChange={(value) => {
-                      setSnapshotBaselineId(value);
-                      void persistSnapshotPolicy({
-                        enabled: config.snapshotEval?.enabled ?? true,
-                        mode: config.snapshotEval?.mode ?? 'warn',
-                        baselineSnapshotId: value || undefined,
-                        baselineSourceRunId: config.snapshotEval?.baselineSourceRunId
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue placeholder="Select snapshot" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {snapshots.map((snapshot) => (
-                        <SelectItem key={snapshot.id} value={snapshot.id}>
-                          {snapshot.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    onClick={() => void generateBaseline()}
-                    disabled={
-                      generatingBaseline ||
-                      !snapshotRunId.trim() ||
-                      snapshotRunIsFullyPassing !== true
-                    }
-                  >
-                    {generatingBaseline ? 'Generating...' : 'Generate Baseline'}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    onClick={() =>
-                      void persistSnapshotPolicy({
-                        enabled: config.snapshotEval?.enabled ?? false,
-                        mode: config.snapshotEval?.mode ?? 'warn',
-                        baselineSnapshotId: undefined,
-                        baselineSourceRunId: undefined
-                      })
-                    }
-                    disabled={updatingSnapshotPolicy}
-                  >
-                    Clear Baseline
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Tabbed sections */}
       <Tabs
         value={activeTab}
@@ -1791,7 +1524,6 @@ const ConfigEditor = () => {
                               defaultAssistantAgentName={
                                 config.runDefaults?.selectedAgentNames?.[0]
                               }
-                              snapshotEval={config.snapshotEval}
                               onChange={(scenarios) => {
                                 const nextScenario = scenarios[0];
                                 if (!nextScenario) return;
@@ -1888,7 +1620,6 @@ const ConfigEditor = () => {
                   configId={config.id}
                   configPath={config.sourcePath}
                   defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
-                  snapshotEval={config.snapshotEval}
                   onChange={() => {}}
                   readOnly
                 />

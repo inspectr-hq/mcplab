@@ -36,9 +36,6 @@ export type RunsRouteDeps = Pick<
   | 'selectScenarioIds'
   | 'expandConfigForAgents'
   | 'resolveRunSelectedAgents'
-  | 'loadSnapshot'
-  | 'compareRunToSnapshot'
-  | 'applySnapshotPolicyToRunResult'
   | 'readLibraries'
   | 'pickDefaultAssistantAgentName'
   | 'pkgVersion'
@@ -50,7 +47,6 @@ type RunParams = {
   scenarioId?: string;
   scenarioIds?: string[];
   requestedAgents?: string[];
-  applySnapshotEval: boolean;
   runNote?: string;
   oauthServerNames?: string[]; // cached at enqueue time to avoid re-parsing config
   serverOverrideAll?: string[];
@@ -121,7 +117,6 @@ type RunRequestBody = {
   scenarioId?: unknown;
   scenarioIds?: unknown;
   agents?: unknown;
-  applySnapshotEval?: unknown;
   runNote?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
@@ -166,9 +161,6 @@ export async function handleRunsRoutes(params: {
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
-    loadSnapshot,
-    compareRunToSnapshot,
-    applySnapshotPolicyToRunResult,
     readLibraries,
     pickDefaultAssistantAgentName,
     pkgVersion
@@ -354,7 +346,6 @@ export async function handleRunsRoutes(params: {
     const requestedAgents = Array.isArray(body.agents)
       ? body.agents.map((agent: unknown) => String(agent).trim()).filter(Boolean)
       : undefined;
-    const applySnapshotEval = body.applySnapshotEval !== false;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
@@ -447,7 +438,6 @@ export async function handleRunsRoutes(params: {
       scenarioId,
       scenarioIds,
       requestedAgents,
-      applySnapshotEval,
       runNote,
       oauthServerNames,
       serverOverrideAll,
@@ -980,9 +970,6 @@ async function executeRunJob(
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
-    loadSnapshot,
-    compareRunToSnapshot,
-    applySnapshotPolicyToRunResult,
     readLibraries,
     pkgVersion
   } = deps;
@@ -992,7 +979,6 @@ async function executeRunJob(
     scenarioId,
     scenarioIds,
     requestedAgents,
-    applySnapshotEval,
     runNote,
     serverOverrideAll,
     scenarioServerOverrides
@@ -1161,102 +1147,6 @@ async function executeRunJob(
           message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
         }
       });
-      if (applySnapshotEval && expandedConfig.snapshot_eval?.enabled) {
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: { message: 'Applying snapshot evaluation policy ...' }
-        });
-        const policy = expandedConfig.snapshot_eval;
-        const enabledScenarioIds = new Set(
-          selectedBaseScenarios.scenarios
-            .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
-            .map((scenario: ConfigScenario) => scenario.id)
-        );
-        const scenarioBaselineMap = new Map<string, string>();
-        for (const scenario of selectedBaseScenarios.scenarios) {
-          if (scenario.snapshot_eval?.enabled === false) continue;
-          const baselineId =
-            scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id;
-          if (baselineId) scenarioBaselineMap.set(scenario.id, baselineId);
-        }
-        const scenariosWithoutBaseline = selectedBaseScenarios.scenarios
-          .filter((scenario: ConfigScenario) => scenario.snapshot_eval?.enabled !== false)
-          .filter(
-            (scenario: ConfigScenario) =>
-              !(scenario.snapshot_eval?.baseline_snapshot_id ?? policy.baseline_snapshot_id)
-          )
-          .map((scenario: ConfigScenario) => scenario.id);
-        if (scenariosWithoutBaseline.length > 0) {
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Snapshot eval enabled but no baseline configured for scenarios: ${scenariosWithoutBaseline.join(
-                ', '
-              )}`
-            }
-          });
-        }
-        const comparisons: ReturnType<RunsRouteDeps['compareRunToSnapshot']>[] = [];
-        const scenarioIdsByBaseline = new Map<string, string[]>();
-        for (const [scenarioIdItem, baselineId] of scenarioBaselineMap) {
-          const list = scenarioIdsByBaseline.get(baselineId) ?? [];
-          list.push(scenarioIdItem);
-          scenarioIdsByBaseline.set(baselineId, list);
-        }
-        for (const [baselineId, scenarioIdsForBaseline] of scenarioIdsByBaseline) {
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Comparing ${scenarioIdsForBaseline.length} scenario(s) to snapshot baseline '${baselineId}'`
-            }
-          });
-          const snapshot = loadSnapshot(baselineId, settings.snapshotsDir);
-          const fullComparison = compareRunToSnapshot(results, snapshot);
-          comparisons.push({
-            ...fullComparison,
-            scenario_results: fullComparison.scenario_results.filter((row) =>
-              scenarioIdsForBaseline.includes(row.scenario_id)
-            )
-          });
-        }
-        if (comparisons.length > 0) {
-          applySnapshotPolicyToRunResult({ results, comparisons, policy, enabledScenarioIds });
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `Snapshot evaluation applied (${comparisons.length} baseline comparison group(s))`
-            }
-          });
-        } else {
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: 'Snapshot evaluation enabled, but no baseline comparisons were applied'
-            }
-          });
-        }
-      } else if (applySnapshotEval) {
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message: 'Snapshot evaluation requested, but config snapshot evaluation is disabled'
-          }
-        });
-      } else {
-        addJobEvent(job, {
-          type: 'log',
-          ts: new Date().toISOString(),
-          payload: {
-            message: 'Snapshot evaluation skipped for this run (disabled in run request)'
-          }
-        });
-      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),
@@ -1280,8 +1170,7 @@ async function executeRunJob(
         payload: {
           runId: results.metadata.run_id,
           runDir,
-          summary: results.summary,
-          snapshotEval: results.metadata.snapshot_eval ?? null
+          summary: results.summary
         }
       });
       job.status = 'completed';

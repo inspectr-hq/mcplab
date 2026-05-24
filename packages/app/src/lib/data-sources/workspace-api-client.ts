@@ -7,8 +7,6 @@ import type {
   ScenarioAssistantTurnResponse,
   RunJobEvent,
   QueueResponse,
-  SnapshotComparison,
-  SnapshotRecord,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
   OAuthDebuggerSessionEvent,
@@ -153,7 +151,6 @@ export const workspaceApiClient = {
       workspaceRoot: string;
       evalsDir: string;
       runsDir: string;
-      snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
     }>('/api/settings'),
@@ -162,7 +159,6 @@ export const workspaceApiClient = {
       workspaceRoot: string;
       evalsDir: string;
       runsDir: string;
-      snapshotsDir: string;
       librariesDir: string;
       scenarioAssistantAgentName?: string;
     }>('/api/settings', {
@@ -216,18 +212,6 @@ export const workspaceApiClient = {
     }).then(() => undefined),
   getRunTrace: (runId: string) =>
     request<{ runId: string; records: ScenarioRunTraceRecord[] }>(`/api/runs/${runId}/trace`),
-  listSnapshots: () => request<SnapshotRecord[]>('/api/snapshots'),
-  createSnapshotFromRun: (runId: string, name?: string) =>
-    request<SnapshotRecord>('/api/snapshots', {
-      method: 'POST',
-      body: JSON.stringify({ runId, name })
-    }),
-  getSnapshot: (id: string) => request<SnapshotRecord>(`/api/snapshots/${id}`),
-  compareSnapshot: (snapshotId: string, runId: string) =>
-    request<SnapshotComparison>(`/api/snapshots/${snapshotId}/compare`, {
-      method: 'POST',
-      body: JSON.stringify({ runId })
-    }),
   applyResultAssistantReport: (params: {
     runId: string;
     markdown: string;
@@ -297,27 +281,6 @@ export const workspaceApiClient = {
     onEvent: (event: ResultAssistantSseEvent) => void
   ) =>
     subscribeAssistantSessionEvents(`/api/result-assistant/sessions/${sessionId}/events`, onEvent),
-  generateSnapshotEvalBaseline: (runId: string, configId: string, name?: string) =>
-    request<{ snapshot: SnapshotRecord; config: WorkspaceConfigRecord }>(
-      '/api/snapshots/generate-eval',
-      {
-        method: 'POST',
-        body: JSON.stringify({ runId, configId, name })
-      }
-    ),
-  updateSnapshotPolicy: (
-    configId: string,
-    policy: {
-      enabled: boolean;
-      mode: 'warn' | 'fail_on_drift';
-      baselineSnapshotId?: string;
-      baselineSourceRunId?: string;
-    }
-  ) =>
-    request<WorkspaceConfigRecord>(`/api/evals/${configId}/snapshot-policy`, {
-      method: 'POST',
-      body: JSON.stringify(policy)
-    }),
   getLibraries: () => request<CoreLibraryBundle>('/api/libraries'),
   saveLibraries: (libraries: CoreLibraryBundle) =>
     request<{ ok: boolean }>('/api/libraries', {
@@ -330,7 +293,6 @@ export const workspaceApiClient = {
     scenarioId?: string;
     scenarioIds?: string[];
     agents?: string[];
-    applySnapshotEval?: boolean;
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;

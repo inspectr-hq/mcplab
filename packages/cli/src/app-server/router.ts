@@ -54,7 +54,6 @@ import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
-import { handleSnapshotsRoutes } from './snapshots-routes.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import { fetchProviderModels } from './provider-models.js';
@@ -97,14 +96,6 @@ import {
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import { OAuthSessionManager } from './oauth-session-manager.js';
-import {
-  applySnapshotPolicyToRunResult,
-  buildSnapshotFromRun,
-  compareRunToSnapshot,
-  listSnapshots,
-  loadSnapshot,
-  saveSnapshot
-} from '../snapshot.js';
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   ?.version as string;
@@ -139,7 +130,6 @@ interface RunJob {
     scenarioId?: string;
     scenarioIds?: string[];
     requestedAgents?: string[];
-    applySnapshotEval: boolean;
   };
 }
 
@@ -185,13 +175,11 @@ export async function startAppServer(options: AppServerOptions) {
     workspaceRoot,
     evalsDir: resolve(options.evalsDir),
     runsDir: resolve(options.runsDir),
-    snapshotsDir: resolve(options.snapshotsDir),
     toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
     librariesDir: resolve(options.librariesDir)
   };
   mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
-  mkdirSync(settings.snapshotsDir, { recursive: true });
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
@@ -246,11 +234,6 @@ export async function startAppServer(options: AppServerOptions) {
     continueAssistantTurn,
     executeAssistantToolCall,
     summarizeToolResultForAssistant,
-    listSnapshots,
-    buildSnapshotFromRun,
-    saveSnapshot,
-    loadSnapshot,
-    compareRunToSnapshot,
     getRunResults,
     decodeEvalId,
     readConfigRecord,
@@ -262,7 +245,6 @@ export async function startAppServer(options: AppServerOptions) {
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
-    applySnapshotPolicyToRunResult,
     chatWithAgent,
     pkgVersion
   };
@@ -349,10 +331,6 @@ export async function startAppServer(options: AppServerOptions) {
         if (body.runsDir) {
           settings.runsDir = resolve(String(body.runsDir));
           mkdirSync(settings.runsDir, { recursive: true });
-        }
-        if (body.snapshotsDir) {
-          settings.snapshotsDir = resolve(String(body.snapshotsDir));
-          mkdirSync(settings.snapshotsDir, { recursive: true });
         }
         if (body.librariesDir) {
           settings.librariesDir = resolve(String(body.librariesDir));
@@ -467,19 +445,6 @@ export async function startAppServer(options: AppServerOptions) {
           settings,
           assistantSessions,
           oauthSessionManager,
-          deps: routeDeps
-        })
-      ) {
-        return;
-      }
-
-      if (
-        await handleSnapshotsRoutes({
-          req,
-          res,
-          pathname,
-          method,
-          settings,
           deps: routeDeps
         })
       ) {

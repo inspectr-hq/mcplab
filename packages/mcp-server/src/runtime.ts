@@ -245,7 +245,6 @@ const ScenarioEntrySchema = z.object({
   agent: z.string().optional(),
   servers: z.array(z.string()),
   prompt: z.string(),
-  snapshot_eval_enabled: z.boolean().optional(),
   eval: GenericObjectSchema.optional(),
   extract: z
     .array(
@@ -1171,10 +1170,6 @@ export function registerTools(server: McpServer): void {
           .min(1)
           .max(4000)
           .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
-        snapshot_eval_enabled: z
-          .boolean()
-          .optional()
-          .describe('Per-scenario baseline drift evaluation toggle.'),
         required_tools: z.array(z.string()).optional().describe('Tools that must be called.'),
         forbidden_tools: z.array(z.string()).optional().describe('Tools that must not be called.'),
         allowed_tool_sequences: z
@@ -2665,7 +2660,6 @@ function buildScenario(input: {
   agent?: string;
   servers: string[];
   prompt: string;
-  snapshot_eval_enabled?: boolean;
   required_tools?: string[];
   forbidden_tools?: string[];
   allowed_tool_sequences?: string[][];
@@ -2682,7 +2676,6 @@ function buildScenario(input: {
     agent: input.agent?.trim() || undefined,
     servers: input.servers,
     prompt: input.prompt,
-    snapshot_eval_enabled: input.snapshot_eval_enabled,
     eval: buildEvalRules(input),
     extract: input.extract_rules?.map((rule) => ({
       name: rule.name,

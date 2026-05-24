@@ -1126,13 +1126,10 @@ const cliCommandReference: DocPage = {
         '--bail — Stop after the first failed config when --config points to a directory.',
         '--run-note <text> — Human-readable note attached to run metadata. Max 500 chars.',
         '--runs-dir <path> — Output directory for run artifacts. Default: mcplab/results/evaluation-runs.',
-        '--snapshots-dir <path> — Directory for snapshot files. Default: mcplab/snapshots.',
         '--oauth-token <server=token> — Pre-obtained OAuth bearer token for a named server. Repeatable.',
         '--server-override-all <serverRef[,serverRef...]> — Override MCP server refs for all selected scenarios (runtime only).',
         '--server-override <scenarioId=serverRef[,serverRef...]> — Override MCP server refs for one scenario. Repeatable. Higher priority than --server-override-all.',
-        '--open-browser — Open browser to the MCPLab UI when OAuth authentication is required.',
-        '--snapshot-eval — Apply the snapshot_eval policy defined in the config.',
-        '--compare-snapshot <snapshotId> — Compare the completed run against a snapshot after it finishes.'
+        '--open-browser — Open browser to the MCPLab UI when OAuth authentication is required.'
       ]
     },
     {
@@ -1186,7 +1183,6 @@ const cliCommandReference: DocPage = {
       bullets: [
         '--evals-dir <path> — Directory for eval YAML files. Default: mcplab/evals.',
         '--runs-dir <path> — Directory for run artifacts. Default: mcplab/results/evaluation-runs.',
-        '--snapshots-dir <path> — Directory for snapshot files. Default: mcplab/snapshots.',
         '--tool-analysis-results-dir <path> — Directory for tool analysis reports. Default: mcplab/results/tool-analysis.',
         '--libraries-dir <path> — Bundle root for shared servers, agents, and test cases. Default: mcplab.',
         '--port <number> — Port to bind the server to. Default: 8787.',

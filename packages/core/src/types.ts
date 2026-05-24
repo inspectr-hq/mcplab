@@ -164,12 +164,6 @@ export interface Scenario {
   mcp_servers?: ServerListEntry[]; // source field: scenario-owned server definitions
   servers: string[]; // runtime IDs (computed by resolveReferences)
   prompt: string;
-  snapshot_eval?: {
-    enabled?: boolean;
-    baseline_snapshot_id?: string;
-    baseline_source_run_id?: string;
-    last_updated_at?: string;
-  };
   eval?: EvalRules;
   extract?: ExtractRule[];
 }
@@ -182,14 +176,6 @@ export interface ScenarioRefEntry {
 export type ScenarioInlineEntry = Scenario;
 export type ScenarioListEntry = ScenarioInlineEntry | ScenarioRefEntry;
 
-export interface SnapshotEvalPolicy {
-  enabled: boolean;
-  mode: 'warn' | 'fail_on_drift';
-  baseline_snapshot_id?: string;
-  baseline_source_run_id?: string;
-  last_updated_at?: string;
-}
-
 export interface EvalConfig {
   name?: string;
   servers: Record<string, ServerConfig>;
@@ -198,7 +184,6 @@ export interface EvalConfig {
   run_defaults?: {
     selected_agents?: string[];
   };
-  snapshot_eval?: SnapshotEvalPolicy;
 }
 
 export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
@@ -398,15 +383,6 @@ export interface ResultsJson {
     config_name?: string;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
-    snapshot_eval?: {
-      applied: boolean;
-      mode: 'warn' | 'fail_on_drift';
-      baseline_snapshot_id: string;
-      baseline_source_run_id?: string;
-      overall_score: number;
-      status: 'Match' | 'Warn' | 'Drift';
-      impacted_scenarios: string[];
-    };
   };
   summary: {
     total_scenarios: number;

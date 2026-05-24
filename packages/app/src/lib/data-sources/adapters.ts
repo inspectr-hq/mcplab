@@ -182,14 +182,6 @@ function buildCoreScenarioEntry(
     | Array<{ ref: string } | NonNullable<CoreSourceEvalConfig['servers']>[number]>
     | undefined
 ): NonNullable<CoreSourceEvalConfig['scenarios']>[number] {
-  const snapshotEval = scenario.snapshotEval
-    ? {
-        enabled: scenario.snapshotEval.enabled,
-        baseline_snapshot_id: scenario.snapshotEval.baselineSnapshotId,
-        baseline_source_run_id: scenario.snapshotEval.baselineSourceRunId,
-        last_updated_at: scenario.snapshotEval.lastUpdatedAt
-      }
-    : undefined;
   const evalBlock = buildCoreEvalBlock(scenario.evalRules);
   const extract = buildCoreExtractBlock(scenario.extractRules);
 
@@ -198,7 +190,6 @@ function buildCoreScenarioEntry(
     name: scenario.name || undefined,
     mcp_servers: mcpServers,
     prompt: scenario.prompt,
-    snapshot_eval: snapshotEval,
     eval: evalBlock,
     extract
   };
@@ -440,14 +431,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         return [];
       })(),
       prompt: scenario.prompt,
-      snapshotEval: scenario.snapshot_eval
-        ? {
-            enabled: scenario.snapshot_eval.enabled,
-            baselineSnapshotId: scenario.snapshot_eval.baseline_snapshot_id,
-            baselineSourceRunId: scenario.snapshot_eval.baseline_source_run_id,
-            lastUpdatedAt: scenario.snapshot_eval.last_updated_at
-          }
-        : undefined,
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,
@@ -480,15 +463,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
             selectedAgentNames: [...record.config.run_defaults.selected_agents]
           }
         : undefined,
-    snapshotEval: record.config.snapshot_eval
-      ? {
-          enabled: record.config.snapshot_eval.enabled,
-          mode: record.config.snapshot_eval.mode,
-          baselineSnapshotId: record.config.snapshot_eval.baseline_snapshot_id,
-          baselineSourceRunId: record.config.snapshot_eval.baseline_source_run_id,
-          lastUpdatedAt: record.config.snapshot_eval.last_updated_at
-        }
-      : undefined,
     createdAt: record.mtime,
     updatedAt: record.mtime,
     sourcePath: record.path
@@ -690,16 +664,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
         ? {
             selected_agents: [...config.runDefaults.selectedAgentNames]
           }
-        : undefined,
-    snapshot_eval: config.snapshotEval
-      ? {
-          enabled: config.snapshotEval.enabled,
-          mode: config.snapshotEval.mode,
-          baseline_snapshot_id: config.snapshotEval.baselineSnapshotId,
-          baseline_source_run_id: config.snapshotEval.baselineSourceRunId,
-          last_updated_at: config.snapshotEval.lastUpdatedAt
-        }
-      : undefined
+        : undefined
   };
 }
 
@@ -1276,18 +1241,7 @@ export function fromCoreResultsJson(
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
-    avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
-    snapshotEval: results.metadata.snapshot_eval
-      ? {
-          applied: results.metadata.snapshot_eval.applied,
-          mode: results.metadata.snapshot_eval.mode,
-          baselineSnapshotId: results.metadata.snapshot_eval.baseline_snapshot_id,
-          baselineSourceRunId: results.metadata.snapshot_eval.baseline_source_run_id,
-          overallScore: results.metadata.snapshot_eval.overall_score,
-          status: results.metadata.snapshot_eval.status,
-          impactedScenarios: results.metadata.snapshot_eval.impacted_scenarios
-        }
-      : undefined
+    avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0)
   };
 }
 

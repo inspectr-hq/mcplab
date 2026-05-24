@@ -299,8 +299,7 @@ const Configurations = () => {
     try {
       await source.startRun({
         configPath: sourcePath,
-        runsPerScenario: 1,
-        applySnapshotEval: true
+        runsPerScenario: 1
       });
       setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
       window.setTimeout(() => {
@@ -357,8 +356,7 @@ const Configurations = () => {
         runnable.map((cfg) =>
           source.startRun({
             configPath: String(cfg.sourcePath),
-            runsPerScenario: 1,
-            applySnapshotEval: true
+            runsPerScenario: 1
           })
         )
       );

@@ -8,9 +8,7 @@ const { sourceMock } = vi.hoisted(() => {
   const listResults = vi.fn();
   return {
     sourceMock: {
-      listResults,
-      listSnapshots: vi.fn().mockResolvedValue([]),
-      compareSnapshot: vi.fn()
+      listResults
     }
   };
 });

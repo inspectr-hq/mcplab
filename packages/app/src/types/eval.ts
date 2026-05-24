@@ -70,12 +70,6 @@ export interface Scenario {
   mcpServers?: ServerEntry[]; // scenario-owned server definitions (new model)
   serverIds: string[]; // runtime resolved IDs (computed)
   prompt: string;
-  snapshotEval?: {
-    enabled?: boolean;
-    baselineSnapshotId?: string;
-    baselineSourceRunId?: string;
-    lastUpdatedAt?: string;
-  };
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
 }
@@ -87,14 +81,6 @@ export type ScenarioEntry =
 export type AgentEntry =
   | { kind: 'inline'; agent: AgentConfig }
   | { kind: 'referenced'; ref: string };
-
-export interface SnapshotEvalPolicy {
-  enabled: boolean;
-  mode: 'warn' | 'fail_on_drift';
-  baselineSnapshotId?: string;
-  baselineSourceRunId?: string;
-  lastUpdatedAt?: string;
-}
 
 export interface EvalConfig {
   id: string;
@@ -115,7 +101,6 @@ export interface EvalConfig {
   runDefaults?: {
     selectedAgentNames?: string[];
   };
-  snapshotEval?: SnapshotEvalPolicy;
   createdAt: string;
   updatedAt: string;
 }
@@ -195,15 +180,6 @@ export interface EvalResult {
   totalRuns: number;
   avgToolCalls: number;
   avgLatency: number;
-  snapshotEval?: {
-    applied: boolean;
-    mode: 'warn' | 'fail_on_drift';
-    baselineSnapshotId: string;
-    baselineSourceRunId?: string;
-    overallScore: number;
-    status: 'Match' | 'Warn' | 'Drift';
-    impactedScenarios: string[];
-  };
 }
 
 // App state

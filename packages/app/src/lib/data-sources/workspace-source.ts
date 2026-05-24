@@ -116,22 +116,6 @@ export const workspaceSource: EvalDataSource = {
   subscribeRunJob(jobId, onEvent) {
     return workspaceApiClient.subscribeRunJob(jobId, onEvent);
   },
-  async listSnapshots() {
-    return workspaceApiClient.listSnapshots();
-  },
-  async createSnapshotFromRun(runId, name) {
-    return workspaceApiClient.createSnapshotFromRun(runId, name);
-  },
-  async getSnapshot(id) {
-    try {
-      return await workspaceApiClient.getSnapshot(id);
-    } catch {
-      return undefined;
-    }
-  },
-  async compareSnapshot(snapshotId, runId) {
-    return workspaceApiClient.compareSnapshot(snapshotId, runId);
-  },
   async applyResultAssistantReport(params) {
     return workspaceApiClient.applyResultAssistantReport(params);
   },
@@ -155,17 +139,6 @@ export const workspaceSource: EvalDataSource = {
   },
   subscribeResultAssistantSessionEvents(sessionId, onEvent) {
     return workspaceApiClient.subscribeResultAssistantSessionEvents(sessionId, onEvent);
-  },
-  async generateSnapshotEvalBaseline(runId, configId, name) {
-    const response = await workspaceApiClient.generateSnapshotEvalBaseline(runId, configId, name);
-    return {
-      snapshot: response.snapshot,
-      config: fromCoreConfigYaml(response.config)
-    };
-  },
-  async updateSnapshotPolicy(configId, policy) {
-    const record = await workspaceApiClient.updateSnapshotPolicy(configId, policy);
-    return fromCoreConfigYaml(record);
   },
   async getLibraries(): Promise<LibraryBundle> {
     const libraries = await workspaceApiClient.getLibraries();

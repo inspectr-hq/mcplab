@@ -481,10 +481,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       normalizedScenarios.push(normalizedRefScenario);
       continue;
     }
-    const rawScenario = scenario as Scenario & {
-      agent?: unknown;
-      snapshot_eval_enabled?: unknown;
-    };
+    const rawScenario = scenario as Scenario & { agent?: unknown };
     const nextScenario: Scenario = {
       id: rawScenario.id,
       name: rawScenario.name,
@@ -495,16 +492,6 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
     };
     const legacyAgent = typeof rawScenario.agent === 'string' ? rawScenario.agent.trim() : '';
     if (legacyAgent) legacyPinnedAgents.add(legacyAgent);
-    const legacySnapshotEnabled =
-      typeof rawScenario.snapshot_eval_enabled === 'boolean'
-        ? rawScenario.snapshot_eval_enabled
-        : undefined;
-    if (rawScenario.snapshot_eval || legacySnapshotEnabled !== undefined) {
-      nextScenario.snapshot_eval = {
-        ...(rawScenario.snapshot_eval ?? {}),
-        ...(legacySnapshotEnabled !== undefined ? { enabled: legacySnapshotEnabled } : {})
-      };
-    }
     // Propagate mcp_servers if present in raw YAML
     const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
     if (Array.isArray(rawMcpServers)) {
@@ -559,17 +546,6 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       ).join(', ')}`
     );
   }
-  if (
-    normalized.scenarios.some(
-      (s) => !isScenarioRefEntry(s) && s.snapshot_eval && 'enabled' in (s.snapshot_eval ?? {})
-    ) &&
-    scenariosInput.some((s: any) => s?.snapshot_eval_enabled !== undefined)
-  ) {
-    warnings.push(
-      'Legacy scenario.snapshot_eval_enabled was migrated to scenario.snapshot_eval.enabled.'
-    );
-  }
-
   if (normalized.run_defaults?.selected_agents) {
     normalized.run_defaults.selected_agents = normalized.run_defaults.selected_agents
       .map((v) => String(v).trim())

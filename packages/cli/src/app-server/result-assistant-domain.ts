@@ -260,7 +260,7 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
   });
   const prompt = [
     'You are the MCP Labs Result Assistant.',
-    'Help the user understand MCP evaluation run results, failures, tool behavior, and snapshot drift.',
+    'Help the user understand MCP evaluation run results, failures, and tool behavior.',
     'Be concise and practical.',
     'You may call MCPLab MCP tools for grounded follow-up actions (e.g. write a markdown report) when useful, but only when it improves the answer.',
     'Tool selection policy: prefer search_* tools first for retrieval; fall back to list_* tools when the query is unknown, broad, or full coverage is required.',
@@ -279,7 +279,6 @@ function resultAssistantSystemPrompt(session: ResultAssistantSession): string {
           run_note: session.resultSummary?.metadata.run_note ?? null,
           config_hash: session.resultSummary?.metadata.config_hash,
           summary: session.resultSummary?.summary,
-          snapshot_eval: session.resultSummary?.metadata.snapshot_eval ?? null,
           scenario_count_total: totalScenarioCount,
           scenario_count_included: scenarioSummaries.length,
           scenario_count_omitted: omittedScenarioCount,

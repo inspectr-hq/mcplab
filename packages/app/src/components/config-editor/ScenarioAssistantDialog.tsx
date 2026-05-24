@@ -58,13 +58,6 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
     prompt:
       "Identify parts of this scenario's prompt or context that are ambiguous, open-ended, or likely to produce different results across runs. Suggest specific rewrites that make the expected behavior more deterministic — without changing the intent of what is being tested."
   },
-  // Commented out for now, as the snapshot is still WIP
-  // {
-  //   label: "Explain Snapshot Drift Risk",
-  //   description: "Assess likely causes of drift and stabilization options.",
-  //   prompt:
-  //     "Assess this scenario for snapshot drift risk. Which parts of the expected output are most likely to change as the underlying model or tool evolves? Explain the root cause for each risk and suggest whether to stabilize via tighter prompting, value capture rules, or more flexible checks."
-  // },
   {
     label: 'Generate Scenario Draft',
     description: 'Create a draft scenario from the current context.',
@@ -81,18 +74,12 @@ interface ScenarioAssistantDialogProps {
   scenario: Scenario;
   agents: AgentConfig[];
   servers: ServerConfig[];
-  snapshotEval?: {
-    enabled: boolean;
-    mode: 'warn' | 'fail_on_drift';
-    baselineSnapshotId?: string;
-  };
   defaultAssistantAgentName?: string;
   initialUserMessage?: string;
   onApplyPatch: (patch: {
     prompt?: string;
     evalRules?: Scenario['evalRules'];
     extractRules?: Scenario['extractRules'];
-    snapshotEval?: Partial<NonNullable<Scenario['snapshotEval']>>;
   }) => void;
 }
 
@@ -104,7 +91,6 @@ export function ScenarioAssistantDialog({
   scenario,
   agents,
   servers,
-  snapshotEval,
   defaultAssistantAgentName,
   initialUserMessage,
   onApplyPatch
@@ -160,26 +146,13 @@ export function ScenarioAssistantDialog({
         scenarioId: scenario.id,
         selectedAssistantAgentName: resolvedAssistantAgentName,
         context: {
-          configSnapshotPolicy: snapshotEval
-            ? {
-                enabled: snapshotEval.enabled,
-                mode: snapshotEval.mode,
-                baselineSnapshotId: snapshotEval.baselineSnapshotId
-              }
-            : undefined,
           scenario: {
             id: scenario.id,
             name: scenario.name,
             prompt: scenario.prompt,
             serverNames: scenario.serverIds,
             evalRules: scenario.evalRules,
-            extractRules: scenario.extractRules,
-            snapshotEval: scenario.snapshotEval
-              ? {
-                  enabled: scenario.snapshotEval.enabled,
-                  baselineSnapshotId: scenario.snapshotEval.baselineSnapshotId
-                }
-              : undefined
+            extractRules: scenario.extractRules
           },
           availableServers: servers.map((server) => ({
             name: server.name || server.id,
@@ -219,7 +192,6 @@ export function ScenarioAssistantDialog({
     configId,
     configPath,
     scenario,
-    snapshotEval,
     agents,
     servers,
     resolvedAssistantAgentName
@@ -442,7 +414,7 @@ export function ScenarioAssistantDialog({
   const applySuggestions = (
     messageId: string | undefined,
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
-    key: 'prompt' | 'evalRules' | 'extractRules' | 'snapshotEval'
+    key: 'prompt' | 'evalRules' | 'extractRules'
   ) => {
     if (!suggestions) return;
     if (key === 'prompt' && suggestions.prompt) {
@@ -461,14 +433,6 @@ export function ScenarioAssistantDialog({
     if (key === 'extractRules' && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });
     }
-    if (key === 'snapshotEval' && suggestions.snapshotEval) {
-      onApplyPatch({
-        snapshotEval: {
-          enabled: suggestions.snapshotEval.patch.enabled,
-          baselineSnapshotId: suggestions.snapshotEval.patch.baselineSnapshotId
-        }
-      });
-    }
     if (messageId) {
       const composite = `${messageId}:${key}`;
       setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
@@ -476,8 +440,7 @@ export function ScenarioAssistantDialog({
     const labelByKey: Record<typeof key, string> = {
       prompt: 'Prompt',
       evalRules: 'Checks',
-      extractRules: 'Value Capture Rules',
-      snapshotEval: 'Snapshot Settings'
+      extractRules: 'Value Capture Rules'
     };
     toast({ title: 'Applied suggestion', description: `Updated ${labelByKey[key]}` });
   };
@@ -709,21 +672,6 @@ export function ScenarioAssistantDialog({
                               applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
                               onApply={() =>
                                 applySuggestions(message.id, message.suggestions, 'extractRules')
-                              }
-                            />
-                          )}
-                          {message.suggestions.snapshotEval && (
-                            <SuggestionCard
-                              title="Snapshot Settings"
-                              rationale={message.suggestions.snapshotEval.rationale}
-                              preview={JSON.stringify(
-                                message.suggestions.snapshotEval.patch,
-                                null,
-                                2
-                              )}
-                              applied={appliedSuggestionKeys.has(`${message.id}:snapshotEval`)}
-                              onApply={() =>
-                                applySuggestions(message.id, message.suggestions, 'snapshotEval')
                               }
                             />
                           )}

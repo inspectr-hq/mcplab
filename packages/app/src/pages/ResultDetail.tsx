@@ -13,8 +13,6 @@ import {
   User,
   Bot,
   Wrench,
-  GitCompare,
-  RefreshCw,
   Sparkles,
   Loader2,
   PanelRightOpen,
@@ -89,7 +87,6 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
-import { isUiFeatureEnabled } from '@/lib/feature-flags';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { formatProvider } from '@/components/ProviderBadge';
 import type {
@@ -98,12 +95,7 @@ import type {
   EvalConfig as UiEvalConfig,
   EvalRule
 } from '@/types/eval';
-import type {
-  MarkdownReportContent,
-  MarkdownReportSummary,
-  SnapshotComparison,
-  SnapshotRecord
-} from '@/lib/data-sources/types';
+import type { MarkdownReportContent, MarkdownReportSummary } from '@/lib/data-sources/types';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 const RESULT_ASSISTANT_SNIPPETS = [
@@ -149,7 +141,6 @@ const ResultDetail = () => {
   const [searchParams] = useSearchParams();
   const { source } = useDataSource();
   const isEmbedded = searchParams.get('embed') === '1';
-  const snapshotsUiEnabled = isUiFeatureEnabled('snapshots', false);
   const { configs } = useConfigs();
   const { scenarios: libraryScenarios } = useLibraries();
   const [result, setResult] = useState<EvalResult | undefined>(undefined);
@@ -159,13 +150,7 @@ const ResultDetail = () => {
   const [savingRunNote, setSavingRunNote] = useState(false);
   const [openScenarios, setOpenScenarios] = useState<Set<string>>(new Set());
   const [collapsedRunSections, setCollapsedRunSections] = useState<Set<string>>(new Set());
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState('');
-  const [snapshotComparison, setSnapshotComparison] = useState<SnapshotComparison | null>(null);
-  const [comparing, setComparing] = useState(false);
   const [targetConfigId, setTargetConfigId] = useState('');
-  const [acceptSnapshotName, setAcceptSnapshotName] = useState('');
-  const [acceptingBaseline, setAcceptingBaseline] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
   const [contextPanelTab, setContextPanelTab] = useState<'assistant' | 'reports' | 'note'>(
@@ -263,21 +248,6 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source, resetAssistantSession]);
-
-  useEffect(() => {
-    let active = true;
-    source
-      .listSnapshots()
-      .then((records) => {
-        if (active) setSnapshots(records);
-      })
-      .catch(() => {
-        if (active) setSnapshots([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [source]);
 
   useEffect(() => {
     if (!result?.id) {
@@ -393,19 +363,7 @@ const ResultDetail = () => {
     }
     return map;
   }, [activeConfig, libraryScenarios]);
-  const inferredConfigId = useMemo(() => {
-    if (!result?.snapshotEval?.baselineSnapshotId) return '';
-    const matches = configs.filter(
-      (config) =>
-        config.snapshotEval?.baselineSnapshotId === result.snapshotEval?.baselineSnapshotId
-    );
-    return matches.length === 1 ? matches[0].id : '';
-  }, [configs, result?.snapshotEval?.baselineSnapshotId]);
-
-  useEffect(() => {
-    if (!result?.snapshotEval?.baselineSnapshotId) return;
-    setSelectedSnapshotId((prev) => prev || result.snapshotEval!.baselineSnapshotId);
-  }, [result?.snapshotEval?.baselineSnapshotId]);
+  const inferredConfigId = useMemo(() => '', []);
 
   useEffect(() => {
     if (requestedConfigId && configs.some((config) => config.id === requestedConfigId)) {
@@ -525,88 +483,12 @@ const ResultDetail = () => {
     const defaultOpen = !key.endsWith(':conversation');
     return collapsedRunSections.has(key) ? !defaultOpen : defaultOpen;
   };
-  const comparisonByScenario = new Map(
-    (snapshotComparison?.scenario_results ?? []).map((item) => [item.scenario_id, item])
-  );
-
-  const compareWithSnapshot = async () => {
-    if (!result || !selectedSnapshotId) return;
-    setComparing(true);
-    try {
-      const comparison = await source.compareSnapshot(selectedSnapshotId, result.id);
-      setSnapshotComparison(comparison);
-    } finally {
-      setComparing(false);
-    }
-  };
-
-  const reviewDrift = async (baselineIdOverride?: string) => {
-    const baselineId = baselineIdOverride || result.snapshotEval?.baselineSnapshotId;
-    if (!baselineId) return;
-    setSelectedSnapshotId(baselineId);
-    setComparing(true);
-    try {
-      const comparison = await source.compareSnapshot(baselineId, result.id);
-      setSnapshotComparison(comparison);
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not review drift',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setComparing(false);
-    }
-  };
-
-  const acceptAsNewBaseline = async () => {
-    if (!targetConfigId) {
-      toast({
-        title: 'Select a configuration',
-        description: 'Choose which config should receive the new baseline.',
-        variant: 'destructive'
-      });
-      return;
-    }
-    setAcceptingBaseline(true);
-    try {
-      const response = await source.generateSnapshotEvalBaseline(
-        result.id,
-        targetConfigId,
-        acceptSnapshotName.trim() || undefined
-      );
-      setSnapshots((prev) => [
-        response.snapshot,
-        ...prev.filter((item) => item.id !== response.snapshot.id)
-      ]);
-      setSelectedSnapshotId(response.snapshot.id);
-      toast({
-        title: 'Baseline updated',
-        description: `${response.snapshot.name} is now linked to the selected config.`
-      });
-      if (!acceptSnapshotName.trim()) {
-        setAcceptSnapshotName(response.snapshot.name);
-      }
-      if (result.snapshotEval?.applied) {
-        void reviewDrift(response.snapshot.id);
-      }
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not accept new baseline',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    } finally {
-      setAcceptingBaseline(false);
-    }
-  };
-
   const openAssistantWithPrompt = (prompt?: string, options?: { scenarioId?: string }) => {
     setContextPanelTab('assistant');
     setAssistantOpen(true);
     setAssistantContextScenarioId(options?.scenarioId ?? null);
     ensureIntroMessage(
-      'Ask me to explain failures, tool usage, snapshot drift, or suggest what to inspect next in this result.'
+      'Ask me to explain failures, tool usage, or suggest what to inspect next in this result.'
     );
     if (prompt) {
       setAssistantInput(prompt);
@@ -797,11 +679,6 @@ const ResultDetail = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold font-mono">{result.id}</h1>
                 <PassRateBadge rate={displayPassRate} />
-                {snapshotsUiEnabled && result.snapshotEval?.applied && (
-                  <Badge variant="outline" className="text-xs">
-                    Snapshot policy · {result.snapshotEval.mode} · {result.snapshotEval.status}
-                  </Badge>
-                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1 align-middle">
@@ -834,13 +711,6 @@ const ResultDetail = () => {
                   </span>
                 ) : null}
               </p>
-              {snapshotsUiEnabled && result.snapshotEval?.applied && (
-                <p className="text-xs text-muted-foreground">
-                  Baseline:{' '}
-                  <span className="font-mono">{result.snapshotEval.baselineSnapshotId}</span> ·
-                  score: {result.snapshotEval.overallScore}
-                </p>
-              )}
             </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
@@ -851,19 +721,6 @@ const ResultDetail = () => {
               </span>
             ) : null}
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-              {snapshotsUiEnabled && result.snapshotEval?.applied && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="max-w-full gap-1.5"
-                  onClick={() => void reviewDrift()}
-                  disabled={comparing}
-                >
-                  <GitCompare className="h-3.5 w-3.5" />
-                  {comparing ? 'Reviewing drift...' : 'Review Drift'}
-                </Button>
-              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -938,93 +795,6 @@ const ResultDetail = () => {
             assistantOpen ? 'xl:h-full xl:min-h-0 xl:overflow-y-auto xl:pr-2' : ''
           }`}
         >
-          {snapshotsUiEnabled && result.snapshotEval?.applied && (
-            <Card className="border-amber-500/30">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Snapshot Drift Review</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="outline">Mode: {result.snapshotEval.mode}</Badge>
-                  <Badge variant="outline">Status: {result.snapshotEval.status}</Badge>
-                  <Badge variant="outline">Overall score: {result.snapshotEval.overallScore}</Badge>
-                  <Badge variant="outline" className="font-mono">
-                    Baseline: {result.snapshotEval.baselineSnapshotId}
-                  </Badge>
-                </div>
-                {result.snapshotEval.impactedScenarios.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Impacted scenarios: {result.snapshotEval.impactedScenarios.join(', ')}
-                  </p>
-                )}
-                <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_auto] items-end">
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Target config for baseline update
-                    </p>
-                    <Select value={targetConfigId} onValueChange={setTargetConfigId}>
-                      <SelectTrigger className="h-8">
-                        <SelectValue placeholder="Select config to update" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {configs.map((config) => (
-                          <SelectItem key={config.id} value={config.id}>
-                            {config.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {!targetConfigId && (
-                      <p className="text-[11px] text-muted-foreground">
-                        Tip: open results from the Run page to prefill the config automatically.
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      New snapshot name (optional)
-                    </p>
-                    <div className="relative">
-                      <input
-                        value={acceptSnapshotName}
-                        onChange={(e) => setAcceptSnapshotName(e.target.value)}
-                        placeholder={`Snapshot ${result.id}`}
-                        className="h-8 w-full rounded-md border bg-background px-2 text-xs"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5"
-                      onClick={() => void reviewDrift()}
-                      disabled={comparing}
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${comparing ? 'animate-spin' : ''}`} />
-                      Review Drift
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8"
-                      onClick={() => void acceptAsNewBaseline()}
-                      disabled={acceptingBaseline || displayPassRate !== 1}
-                    >
-                      {acceptingBaseline ? 'Accepting...' : 'Accept as New Baseline'}
-                    </Button>
-                  </div>
-                </div>
-                {displayPassRate !== 1 && (
-                  <p className="text-xs text-muted-foreground">
-                    Baseline updates require a fully passing run (same rule as snapshot creation).
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
           <div
             className={`grid gap-4 ${
               assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-6'
@@ -1121,39 +891,6 @@ const ResultDetail = () => {
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              {snapshotsUiEnabled && (
-                <div className="flex flex-wrap items-end gap-2 border-b p-3">
-                  <div className="min-w-60 space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Snapshot</p>
-                    <Select value={selectedSnapshotId} onValueChange={setSelectedSnapshotId}>
-                      <SelectTrigger className="h-8">
-                        <SelectValue placeholder="Select snapshot" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {snapshots.map((snapshot) => (
-                          <SelectItem key={snapshot.id} value={snapshot.id}>
-                            {snapshot.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!selectedSnapshotId || comparing}
-                    onClick={() => void compareWithSnapshot()}
-                  >
-                    {comparing ? 'Comparing...' : 'Compare Snapshot'}
-                  </Button>
-                  {snapshotComparison && (
-                    <Badge variant="outline" className="h-8 px-2 py-0 text-xs">
-                      Overall snapshot score: {snapshotComparison.overall_score}
-                    </Badge>
-                  )}
-                </div>
-              )}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1164,7 +901,6 @@ const ResultDetail = () => {
                     <TableHead>Pass Rate</TableHead>
                     <TableHead>Tool Calls</TableHead>
                     <TableHead>Tool Tokens</TableHead>
-                    <TableHead>Snapshot</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1211,29 +947,11 @@ const ResultDetail = () => {
                               <TableCell className="font-mono text-sm">
                                 {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
                               </TableCell>
-                              <TableCell>
-                                {(() => {
-                                  const row = comparisonByScenario.get(sc.scenarioId);
-                                  if (!row)
-                                    return <span className="text-xs text-muted-foreground">—</span>;
-                                  const className =
-                                    row.status === 'Match'
-                                      ? 'bg-success/15 text-success'
-                                      : row.status === 'Warn'
-                                      ? 'bg-amber-500/15 text-amber-600'
-                                      : 'bg-destructive/15 text-destructive';
-                                  return (
-                                    <Badge variant="outline" className={`text-xs ${className}`}>
-                                      {row.status} · {row.score}
-                                    </Badge>
-                                  );
-                                })()}
-                              </TableCell>
                             </TableRow>
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={8} className="p-0">
+                              <td colSpan={7} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">
@@ -1261,26 +979,6 @@ const ResultDetail = () => {
                                       Ask Assistant
                                     </Button>
                                   </div>
-                                  {(() => {
-                                    const row = comparisonByScenario.get(sc.scenarioId);
-                                    if (!row || row.reasons.length === 0) return null;
-                                    return (
-                                      <div className="rounded-md border bg-card p-2">
-                                        <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                                          Snapshot reasons
-                                        </p>
-                                        <p className="mb-1 text-[11px] text-muted-foreground">
-                                          Baseline agents: {row.baseline_agents.join(', ') || '—'} ·
-                                          observed agents: {row.observed_agents.join(', ') || '—'}
-                                        </p>
-                                        <ul className="space-y-1 text-xs text-muted-foreground">
-                                          {row.reasons.map((reason, index) => (
-                                            <li key={index}>• {reason}</li>
-                                          ))}
-                                        </ul>
-                                      </div>
-                                    );
-                                  })()}
                                   {sc.runs.map((run) => (
                                     <div
                                       key={run.runIndex}
@@ -1928,7 +1626,7 @@ const ResultDetail = () => {
             {contextPanelTab === 'assistant' ? (
               <ResultAssistantPanel
                 title="MCP Lab Assistant"
-                description="Ask questions about this run result, failures, tool usage, and snapshot drift."
+                description="Ask questions about this run result, failures, and tool usage."
                 expanded={assistantExpanded}
                 onToggleExpanded={() => setAssistantExpanded((prev) => !prev)}
                 onHide={() => setAssistantOpen(false)}

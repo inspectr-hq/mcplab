@@ -10,8 +10,6 @@ import type {
 
 const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() => {
   const getResult = vi.fn();
-  const listSnapshots = vi.fn().mockResolvedValue([]);
-  const compareSnapshot = vi.fn();
   const listMarkdownReports = vi.fn().mockResolvedValue([]);
   const updateRunNote = vi.fn().mockResolvedValue(undefined);
   const assistantState = {
@@ -31,7 +29,7 @@ const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() =>
   };
   return {
     getResultMock: getResult,
-    sourceMock: { getResult, listSnapshots, compareSnapshot, listMarkdownReports, updateRunNote },
+    sourceMock: { getResult, listMarkdownReports, updateRunNote },
     mockResultAssistantState: assistantState
   };
 });
