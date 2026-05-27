@@ -260,15 +260,35 @@ paths:
       tags: [Runs]
       summary: List saved evaluation runs
       operationId: listRuns
+      parameters:
+        - in: query
+          name: since
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: until
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: last_days
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: scenario
+          required: false
+          schema: { type: string }
+          description: Filter runs that include a matching scenario id or scenario name.
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListOffset"
       responses:
         "200":
           description: Run summaries
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/WorkspaceRunSummary"
+                $ref: "#/components/schemas/WorkspaceRunSummaryListEnvelope"
     post:
       tags: [Runs]
       summary: Start an evaluation run job
@@ -809,21 +829,46 @@ paths:
       tags: [Markdown Reports]
       summary: List markdown reports under `mcplab/reports`
       operationId: listMarkdownReports
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListOffset"
+        - in: query
+          name: server
+          required: false
+          schema: { type: string }
+          description: Filter reports that include this MCP server name.
       responses:
         "200":
           description: Markdown report listing
           content:
             application/json:
               schema:
-                type: object
-                required: [root, exists, items]
-                properties:
-                  root: { type: string }
-                  exists: { type: boolean }
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/MarkdownReportSummary"
+                $ref: "#/components/schemas/MarkdownReportSummaryListEnvelope"
+
+  /api/markdown-reports/{reportId}:
+    get:
+      tags: [Markdown Reports]
+      summary: Read markdown report content by report id
+      operationId: getMarkdownReportById
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: Markdown report content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkdownReportContent"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "413":
+          description: Report too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/markdown-reports/content:
     get:
@@ -1005,19 +1050,16 @@ paths:
       tags: [Tool Analysis]
       summary: List saved tool analysis reports
       operationId: listToolAnalysisResults
+      parameters:
+        - $ref: "#/components/parameters/ListLimit"
+        - $ref: "#/components/parameters/ListOffset"
       responses:
         "200":
           description: Saved report summaries
           content:
             application/json:
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/ToolAnalysisResultSummary"
+                $ref: "#/components/schemas/ToolAnalysisResultSummaryListEnvelope"
 
   /api/tool-analysis-results/{reportId}:
     parameters:
@@ -1320,6 +1362,23 @@ components:
       in: path
       required: true
       schema: { type: string }
+    ListLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    ListOffset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
     SessionId:
       name: sessionId
       in: path
@@ -1446,12 +1505,44 @@ components:
         runId: { type: string }
         path: { type: string }
         timestamp: { type: string, format: date-time }
+        runNote: { type: string }
         configHash: { type: string }
+        configPath: { type: string }
+        configName: { type: string }
+        toolTokensTotal:
+          type: integer
+          nullable: true
+        scenarioIds:
+          type: array
+          items: { type: string }
+        scenarioNames:
+          type: array
+          items: { type: string }
         totalScenarios: { type: integer }
         totalRuns: { type: integer }
         passRate: { type: number }
         avgToolCalls: { type: number }
         avgLatencyMs: { type: number }
+    WorkspaceRunSummaryListEnvelope:
+      type: object
+      required: [object, url, data, has_more, total_count, next_offset, prev_offset]
+      properties:
+        object:
+          type: string
+          const: list
+        url: { type: string }
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceRunSummary"
+        has_more: { type: boolean }
+        total_count: { type: integer }
+        next_offset:
+          type: integer
+          nullable: true
+        prev_offset:
+          type: integer
+          nullable: true
     ResultsJson:
       type: object
       description: Core `results.json` payload from `@inspectr/mcplab-core`.
@@ -1713,17 +1804,39 @@ components:
           $ref: "#/components/schemas/ScenarioAssistantTurnResponse"
     MarkdownReportSummary:
       type: object
-      required: [path, relativePath, name, sizeBytes, mtime]
+      required: [reportId, path, relativePath, name, sizeBytes, mtime]
       properties:
+        reportId: { type: string }
         path: { type: string }
         relativePath: { type: string }
         name: { type: string }
         sizeBytes: { type: integer }
         mtime: { type: string, format: date-time }
+    MarkdownReportSummaryListEnvelope:
+      type: object
+      required: [object, url, data, has_more, total_count, next_offset, prev_offset]
+      properties:
+        object:
+          type: string
+          const: list
+        url: { type: string }
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarkdownReportSummary"
+        has_more: { type: boolean }
+        total_count: { type: integer }
+        next_offset:
+          type: integer
+          nullable: true
+        prev_offset:
+          type: integer
+          nullable: true
     MarkdownReportContent:
       type: object
-      required: [root, path, relativePath, name, sizeBytes, mtime, content]
+      required: [reportId, root, path, relativePath, name, sizeBytes, mtime, content]
       properties:
+        reportId: { type: string }
         root: { type: string }
         path: { type: string }
         relativePath: { type: string }
@@ -1865,6 +1978,26 @@ components:
               enum: [expires_in, jwt_exp, none]
             refreshTokenAvailable: { type: boolean }
       additionalProperties: true
+    ToolAnalysisResultSummaryListEnvelope:
+      type: object
+      required: [object, url, data, has_more, total_count, next_offset, prev_offset]
+      properties:
+        object:
+          type: string
+          const: list
+        url: { type: string }
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolAnalysisResultSummary"
+        has_more: { type: boolean }
+        total_count: { type: integer }
+        next_offset:
+          type: integer
+          nullable: true
+        prev_offset:
+          type: integer
+          nullable: true
     OAuthDebuggerSessionConfigInput:
       type: object
       required: [profile, target, registrationMethod, clientConfig, runtime]

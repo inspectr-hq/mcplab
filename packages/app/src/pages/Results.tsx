@@ -63,6 +63,7 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
+import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 import type { EvalResult } from '@/types/eval';
 
 type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
@@ -173,6 +174,46 @@ const RESULT_ASSISTANT_SNIPPETS = [
       'Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out.'
   }
 ] as const;
+const PAGE_LIMIT = 25;
+
+function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
+  const toolTokensTotal =
+    typeof summary.toolTokensTotal === 'number' ? summary.toolTokensTotal : null;
+  return {
+    id: summary.runId,
+    configId: '',
+    configHash: summary.configHash,
+    configPath: summary.configPath,
+    configName: summary.configName,
+    timestamp: summary.timestamp,
+    runNote: summary.runNote,
+    mcpServerVersions: {},
+    scenarios: (summary.scenarioIds ?? []).map((scenarioId, index) => ({
+      scenarioId,
+      scenarioName: summary.scenarioNames?.[index] ?? scenarioId,
+      agentId: '',
+      agentName: '',
+      runs: [],
+      passRate: 0,
+      avgToolCalls: 0,
+      avgDuration: 0
+    })),
+    assistantTokenUsage: null,
+    toolTokenUsage:
+      toolTokensTotal === null
+        ? null
+        : {
+            inputTokens: null,
+            outputTokens: null,
+            totalTokens: toolTokensTotal
+          },
+    overallPassRate: summary.passRate,
+    totalScenarios: summary.totalScenarios,
+    totalRuns: summary.totalRuns,
+    avgToolCalls: summary.avgToolCalls,
+    avgLatency: Math.round(summary.avgLatencyMs ?? 0)
+  };
+}
 
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -197,6 +238,31 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
+  const apiTimeFilter = useMemo(() => {
+    if (timeFilterMode === 'all') return {};
+    if (timeFilterMode === 'last') {
+      const preset =
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
+        TIME_FILTER_PRESETS[0]!;
+      const now = new Date();
+      const since = new Date(now.getTime() - preset.durationMs);
+      return { since: since.toISOString(), until: now.toISOString() };
+    }
+    const start = parseLocalDateTime(timeFilterStart);
+    const end = parseLocalDateTime(timeFilterEnd);
+    if (start && end) {
+      return start.getTime() <= end.getTime()
+        ? { since: start.toISOString(), until: end.toISOString() }
+        : { since: end.toISOString(), until: start.toISOString() };
+    }
+    if (start) return { since: start.toISOString() };
+    if (end) return { until: end.toISOString() };
+    return {};
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -209,7 +275,31 @@ const Results = () => {
   const loadResults = async () => {
     setRefreshing(true);
     try {
-      setResults(await source.listResults());
+      if (source.listRunSummariesPage) {
+        const page = await source.listRunSummariesPage({
+          ...apiTimeFilter,
+          scenario: apiScenarioFilter,
+          limit: PAGE_LIMIT,
+          offset
+        });
+        setTotalCount(page.total_count);
+        setHasMore(page.has_more);
+        setResults(page.data.map(summaryToResult));
+      } else if (source.listRunSummaries) {
+        const summaries = await source.listRunSummaries({
+          ...apiTimeFilter,
+          scenario: apiScenarioFilter,
+          limit: PAGE_LIMIT,
+          offset
+        });
+        setTotalCount(summaries.length);
+        setHasMore(false);
+        setResults(summaries.map(summaryToResult));
+      } else {
+        setTotalCount(0);
+        setHasMore(false);
+        setResults(await source.listResults());
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -224,8 +314,38 @@ const Results = () => {
   useEffect(() => {
     let active = true;
     setRefreshing(true);
-    source
-      .listResults()
+    const loadPromise = source.listRunSummariesPage
+      ? source
+          .listRunSummariesPage({
+            ...apiTimeFilter,
+            scenario: apiScenarioFilter,
+            limit: PAGE_LIMIT,
+            offset
+          })
+          .then((page) => {
+          if (active) {
+            setTotalCount(page.total_count);
+            setHasMore(page.has_more);
+          }
+          return page.data.map(summaryToResult);
+        })
+      : source.listRunSummaries
+      ? source
+          .listRunSummaries({
+            ...apiTimeFilter,
+            scenario: apiScenarioFilter,
+            limit: PAGE_LIMIT,
+            offset
+          })
+          .then((summaries) => {
+          if (active) {
+            setTotalCount(summaries.length);
+            setHasMore(false);
+          }
+          return summaries.map(summaryToResult);
+        })
+      : source.listResults();
+    loadPromise
       .then((next) => {
         if (active) setResults(next);
       })
@@ -243,7 +363,7 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [apiScenarioFilter, apiTimeFilter, offset, source]);
 
   const {
     assistantMessages,
@@ -337,6 +457,7 @@ const Results = () => {
   ]);
 
   const filteredResults = useMemo(() => {
+    if (source.listRunSummariesPage) return results;
     const scenarioFiltered =
       scenarioFilter === 'all'
         ? results
@@ -375,7 +496,19 @@ const Results = () => {
       if (rangeEnd !== null && timestamp > rangeEnd) return false;
       return true;
     });
-  }, [results, scenarioFilter, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
+  }, [
+    results,
+    scenarioFilter,
+    source.listRunSummariesPage,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [apiScenarioFilter, apiTimeFilter]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
@@ -472,7 +605,20 @@ const Results = () => {
   const runScopesById = useMemo(() => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
-      map.set(run.id, buildRunScopeSummary(run));
+      if (run.scenarios.length > 0) {
+        map.set(run.id, buildRunScopeSummary(run));
+        continue;
+      }
+      const evalName = run.configName?.trim() || '';
+      const configPath = run.configPath?.trim() || '';
+      const evalLabel =
+        evalName && configPath ? `${evalName} · ${configPath}` : evalName || configPath;
+      map.set(run.id, {
+        scenarioCount: run.totalScenarios,
+        agentCount: 0,
+        scopePreview: evalLabel || 'n/a',
+        modelSummary: ''
+      });
     }
     return map;
   }, [sorted]);
@@ -696,12 +842,31 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => Math.max(0, prev - PAGE_LIMIT))}
+            disabled={refreshing || offset === 0}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => prev + PAGE_LIMIT)}
+            disabled={refreshing || !hasMore}
+          >
+            Next
+          </Button>
           <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
             <Sparkles className="h-4 w-4 text-amber-500" />
             MCP Lab Assistant
           </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {totalCount > 0
+          ? `Showing ${offset + 1}-${Math.min(offset + results.length, totalCount)} of ${totalCount}`
+          : 'Showing 0 of 0'}
+      </p>
 
       <div
         className={`grid gap-6 ${

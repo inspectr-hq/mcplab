@@ -445,6 +445,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     id: record.id,
     name: configName || record.name,
     configName,
+    configHash: record.hash,
     description: record.path,
     ...(record.relativePath ? { relativePath: record.relativePath } : {}),
     ...(record.suitePath !== undefined ? { suitePath: record.suitePath } : {}),

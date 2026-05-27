@@ -88,6 +88,7 @@ export interface EvalConfig {
   configName?: string;
   description?: string;
   sourcePath?: string;
+  configHash?: string;
   relativePath?: string;
   suitePath?: string;
   loadError?: string;

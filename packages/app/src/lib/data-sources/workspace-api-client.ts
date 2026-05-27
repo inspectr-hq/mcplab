@@ -16,6 +16,7 @@ import type {
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
+  ListEnvelope,
   SavedToolAnalysisReportRecord,
   WorkspaceConfigRecord,
   WorkspaceRunSummary,
@@ -177,7 +178,14 @@ export const workspaceApiClient = {
       body: JSON.stringify({ config, fileName })
     }),
   deleteConfig: (id: string) => request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
-  listRuns: (filter?: { since?: string; until?: string; lastDays?: number }) => {
+  listRuns: (filter?: {
+    since?: string;
+    until?: string;
+    lastDays?: number;
+    scenario?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams();
     if (filter?.since?.trim()) query.set('since', filter.since.trim());
     if (filter?.until?.trim()) query.set('until', filter.until.trim());
@@ -188,15 +196,41 @@ export const workspaceApiClient = {
     ) {
       query.set('last_days', String(Math.floor(filter.lastDays)));
     }
+    if (filter?.scenario?.trim()) query.set('scenario', filter.scenario.trim());
+    if (typeof filter?.limit === 'number' && Number.isFinite(filter.limit) && filter.limit > 0) {
+      query.set('limit', String(Math.floor(filter.limit)));
+    }
+    if (
+      typeof filter?.offset === 'number' &&
+      Number.isFinite(filter.offset) &&
+      filter.offset >= 0
+    ) {
+      query.set('offset', String(Math.floor(filter.offset)));
+    }
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
-    return request<WorkspaceRunSummary[]>(`/api/runs${suffix}`);
+    return request<ListEnvelope<WorkspaceRunSummary>>(`/api/runs${suffix}`);
   },
-  listMarkdownReports: () =>
-    request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),
+  listMarkdownReports: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (typeof params?.limit === 'number' && Number.isFinite(params.limit) && params.limit > 0) {
+      query.set('limit', String(Math.floor(params.limit)));
+    }
+    if (
+      typeof params?.offset === 'number' &&
+      Number.isFinite(params.offset) &&
+      params.offset >= 0
+    ) {
+      query.set('offset', String(Math.floor(params.offset)));
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    return request<ListEnvelope<MarkdownReportSummary>>(`/api/markdown-reports${suffix}`);
+  },
   getMarkdownReport: (path: string) =>
     request<MarkdownReportContent>(
       `/api/markdown-reports/content?path=${encodeURIComponent(path)}`
     ),
+  getMarkdownReportById: (reportId: string) =>
+    request<MarkdownReportContent>(`/api/markdown-reports/${encodeURIComponent(reportId)}`),
   deleteMarkdownReport: (path: string) =>
     request<{ ok: boolean }>(`/api/markdown-reports?path=${encodeURIComponent(path)}`, {
       method: 'DELETE'
@@ -458,10 +492,22 @@ export const workspaceApiClient = {
     };
     return () => close();
   },
-  listToolAnalysisResults: () =>
-    request<{ items: ToolAnalysisResultSummary[] }>('/api/tool-analysis-results').then(
-      (r) => r.items
-    ),
+  listToolAnalysisResults: (params?: { limit?: number; offset?: number; server?: string }) => {
+    const query = new URLSearchParams();
+    if (typeof params?.limit === 'number' && Number.isFinite(params.limit) && params.limit > 0) {
+      query.set('limit', String(Math.floor(params.limit)));
+    }
+    if (
+      typeof params?.offset === 'number' &&
+      Number.isFinite(params.offset) &&
+      params.offset >= 0
+    ) {
+      query.set('offset', String(Math.floor(params.offset)));
+    }
+    if (params?.server?.trim()) query.set('server', params.server.trim());
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    return request<ListEnvelope<ToolAnalysisResultSummary>>(`/api/tool-analysis-results${suffix}`);
+  },
   getToolAnalysisSavedResult: (id: string) =>
     request<SavedToolAnalysisReportRecord>(`/api/tool-analysis-results/${id}`),
   deleteToolAnalysisSavedResult: (id: string) =>

@@ -212,6 +212,10 @@ const Compare = () => {
   const [timeFilterStart, setTimeFilterStart] = useState(initialTimeFilter.start);
   const [timeFilterEnd, setTimeFilterEnd] = useState(initialTimeFilter.end);
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageLimit = 25;
 
   const initialWithinRunId = searchParams.get('runId') ?? '';
   const initialWithinRunAgents = (searchParams.get('agents') ?? '')
@@ -228,7 +232,15 @@ const Compare = () => {
   const loadResults = async () => {
     setRefreshing(true);
     try {
-      setResults(await source.listResults());
+      if (source.listRunSummariesPage) {
+        const page = await source.listRunSummariesPage({ limit: pageLimit, offset });
+        setHasMore(page.has_more);
+        setTotalCount(page.total_count);
+        const details = await Promise.all(page.data.map((item) => source.getResult(item.runId)));
+        setResults(details.filter((item): item is EvalResult => Boolean(item)));
+      } else {
+        setResults(await source.listResults());
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -243,8 +255,17 @@ const Compare = () => {
   useEffect(() => {
     let active = true;
     setRefreshing(true);
-    source
-      .listResults()
+    const loadPromise = source.listRunSummariesPage
+      ? source.listRunSummariesPage({ limit: pageLimit, offset }).then(async (page) => {
+          if (active) {
+            setHasMore(page.has_more);
+            setTotalCount(page.total_count);
+          }
+          const details = await Promise.all(page.data.map((item) => source.getResult(item.runId)));
+          return details.filter((item): item is EvalResult => Boolean(item));
+        })
+      : source.listResults();
+    loadPromise
       .then((next) => {
         if (active) setResults(next);
       })
@@ -262,7 +283,7 @@ const Compare = () => {
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [offset, source]);
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -923,8 +944,27 @@ const Compare = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => Math.max(0, prev - pageLimit))}
+            disabled={refreshing || offset === 0}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => prev + pageLimit)}
+            disabled={refreshing || !hasMore}
+          >
+            Next
+          </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {totalCount > 0
+          ? `Showing ${offset + 1}-${Math.min(offset + results.length, totalCount)} of ${totalCount}`
+          : 'Showing 0 of 0'}
+      </p>
 
       {mode === 'within-run' && (
         <Card>

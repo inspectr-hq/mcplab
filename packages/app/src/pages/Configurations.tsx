@@ -50,6 +50,7 @@ import {
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { PassRateBadge } from '@/components/PassRateBadge';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
@@ -186,6 +187,9 @@ const Configurations = () => {
   const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
   const [queuingConfigIds, setQueuingConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
+  const [latestPassRateByConfigId, setLatestPassRateByConfigId] = useState<Record<string, number>>(
+    {}
+  );
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
   const toggleSort = (next: typeof sortBy) => {
@@ -207,6 +211,138 @@ const Configurations = () => {
       window.removeEventListener('focus', handleFocus);
     };
   }, [reload]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLatestPassRates = async () => {
+      try {
+        const latestResultByConfigPath = new Map<string, { timestamp: number; passRate: number }>();
+        const latestResultByConfigBasename = new Map<
+          string,
+          { timestamp: number; passRate: number }
+        >();
+        const latestResultByConfigHash = new Map<string, { timestamp: number; passRate: number }>();
+        if (source.listRunSummaries) {
+          const summaries = await source.listRunSummaries({ lastDays: 365 });
+          if (cancelled) return;
+          for (const summary of summaries) {
+            const timestamp = new Date(summary.timestamp).getTime();
+            const configPath = summary.configPath?.trim();
+            if (configPath) {
+              const existingByPath = latestResultByConfigPath.get(configPath);
+              if (!existingByPath || timestamp > existingByPath.timestamp) {
+                latestResultByConfigPath.set(configPath, {
+                  timestamp,
+                  passRate: summary.passRate
+                });
+              }
+              const basename = configPath.split('/').pop()?.trim();
+              if (basename) {
+                const existingByBasename = latestResultByConfigBasename.get(basename);
+                if (!existingByBasename || timestamp > existingByBasename.timestamp) {
+                  latestResultByConfigBasename.set(basename, {
+                    timestamp,
+                    passRate: summary.passRate
+                  });
+                }
+              }
+            }
+            if (!summary.configHash) continue;
+            const existingByHash = latestResultByConfigHash.get(summary.configHash);
+            if (!existingByHash || timestamp > existingByHash.timestamp) {
+              latestResultByConfigHash.set(summary.configHash, {
+                timestamp,
+                passRate: summary.passRate
+              });
+            }
+          }
+        } else {
+          const results = await source.listResults({ lastDays: 365 });
+          if (cancelled) return;
+          for (const result of results) {
+            const timestamp = new Date(result.timestamp).getTime();
+            const configPath = result.configPath?.trim();
+            if (configPath) {
+              const existingByPath = latestResultByConfigPath.get(configPath);
+              if (!existingByPath || timestamp > existingByPath.timestamp) {
+                latestResultByConfigPath.set(configPath, {
+                  timestamp,
+                  passRate: result.overallPassRate
+                });
+              }
+              const basename = configPath.split('/').pop()?.trim();
+              if (basename) {
+                const existingByBasename = latestResultByConfigBasename.get(basename);
+                if (!existingByBasename || timestamp > existingByBasename.timestamp) {
+                  latestResultByConfigBasename.set(basename, {
+                    timestamp,
+                    passRate: result.overallPassRate
+                  });
+                }
+              }
+            }
+            if (!result.configHash) continue;
+            const existingByHash = latestResultByConfigHash.get(result.configHash);
+            if (!existingByHash || timestamp > existingByHash.timestamp) {
+              latestResultByConfigHash.set(result.configHash, {
+                timestamp,
+                passRate: result.overallPassRate
+              });
+            }
+          }
+        }
+
+        const nextByConfigId: Record<string, number> = {};
+        for (const cfg of configs) {
+          const sourcePath = cfg.sourcePath?.trim();
+          if (sourcePath) {
+            const latestByPath = latestResultByConfigPath.get(sourcePath);
+            if (latestByPath) {
+              nextByConfigId[cfg.id] = latestByPath.passRate;
+              continue;
+            }
+            const sourceBasename = sourcePath.split('/').pop()?.trim();
+            if (sourceBasename) {
+              const latestByBasename = latestResultByConfigBasename.get(sourceBasename);
+              if (latestByBasename) {
+                nextByConfigId[cfg.id] = latestByBasename.passRate;
+                continue;
+              }
+            }
+          }
+          const relativePath = cfg.relativePath?.trim();
+          if (relativePath) {
+            const latestByRelative = latestResultByConfigPath.get(relativePath);
+            if (latestByRelative) {
+              nextByConfigId[cfg.id] = latestByRelative.passRate;
+              continue;
+            }
+            const relativeBasename = relativePath.split('/').pop()?.trim();
+            if (relativeBasename) {
+              const latestByBasename = latestResultByConfigBasename.get(relativeBasename);
+              if (latestByBasename) {
+                nextByConfigId[cfg.id] = latestByBasename.passRate;
+                continue;
+              }
+            }
+          }
+          if (!cfg.configHash) continue;
+          const latestByHash = latestResultByConfigHash.get(cfg.configHash);
+          if (latestByHash) nextByConfigId[cfg.id] = latestByHash.passRate;
+        }
+        setLatestPassRateByConfigId(nextByConfigId);
+      } catch {
+        if (!cancelled) setLatestPassRateByConfigId({});
+      }
+    };
+
+    void loadLatestPassRates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [configs, source]);
 
   const handleDelete = async (id: string, name: string) => {
     await deleteConfig(id);
@@ -504,6 +640,7 @@ const Configurations = () => {
                     {sortIcon('updatedAt')}
                   </button>
                 </TableHead>
+                <TableHead className="text-right">Last Run</TableHead>
                 <TableHead className="w-[220px] text-right" />
               </TableRow>
             </TableHeader>
@@ -516,7 +653,7 @@ const Configurations = () => {
                 return (
                   <Fragment key={`suite-group-${suiteToken}`}>
                     <TableRow key={`suite-${suiteToken}`} className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={5} className="py-2">
+                      <TableCell colSpan={6} className="py-2">
                         <div className="flex items-center justify-between gap-2">
                           <button
                             type="button"
@@ -612,6 +749,15 @@ const Configurations = () => {
                                 <Clock className="h-3 w-3" />
                                 {new Date(cfg.updatedAt).toLocaleDateString()}
                               </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {typeof latestPassRateByConfigId[cfg.id] === 'number' ? (
+                                <div className="inline-flex justify-end">
+                                  <PassRateBadge rate={latestPassRateByConfigId[cfg.id]} />
+                                </div>
+                              ) : (
+                                ''
+                              )}
                             </TableCell>
                             <TableCell className="w-[220px] whitespace-nowrap">
                               <div className="flex items-center justify-end gap-2">
@@ -717,21 +863,21 @@ const Configurations = () => {
               })}
               {!loading && configs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     No MCP evaluations yet. Create your first one to get started.
                   </TableCell>
                 </TableRow>
               )}
               {!loading && configs.length > 0 && sortedConfigs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     No MCP evaluations match this filter.
                   </TableCell>
                 </TableRow>
               )}
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     Loading MCP evaluations...
                   </TableCell>
                 </TableRow>

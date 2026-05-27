@@ -61,11 +61,32 @@ export default function ToolAnalysisResultsPage() {
   const [deleting, setDeleting] = useState(false);
   const [serverFilter, setServerFilter] = useState('all');
   const [openServerFilterPicker, setOpenServerFilterPicker] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const limit = 25;
 
   const load = async () => {
     setLoading(true);
     try {
-      setItems(await source.listToolAnalysisResults());
+      if (source.listToolAnalysisResultsPage) {
+        const page = await source.listToolAnalysisResultsPage({
+          limit,
+          offset,
+          server: serverFilter === 'all' ? undefined : serverFilter
+        });
+        setItems(page.data);
+        setHasMore(page.has_more);
+        setTotalCount(page.total_count);
+      } else {
+        setItems(
+          await source.listToolAnalysisResults({
+            limit,
+            offset,
+            server: serverFilter === 'all' ? undefined : serverFilter
+          })
+        );
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load tool analysis results',
@@ -80,7 +101,7 @@ export default function ToolAnalysisResultsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offset, serverFilter]);
 
   const serverOptions = useMemo(
     () =>
@@ -90,12 +111,13 @@ export default function ToolAnalysisResultsPage() {
     [items]
   );
   const filteredItems = useMemo(
-    () =>
-      serverFilter === 'all'
-        ? items
-        : items.filter((item) => item.serverNames.includes(serverFilter)),
+    () => items,
     [items, serverFilter]
   );
+
+  useEffect(() => {
+    setOffset(0);
+  }, [serverFilter]);
 
   const deleteTarget = useMemo(
     () => items.find((i) => i.reportId === deleteId) ?? null,
@@ -211,11 +233,30 @@ export default function ToolAnalysisResultsPage() {
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => Math.max(0, prev - limit))}
+            disabled={loading || offset === 0}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => prev + limit)}
+            disabled={loading || !hasMore}
+          >
+            Next
+          </Button>
           <Button asChild variant="outline">
             <Link to="/tool-analysis">Analyze MCP Tools</Link>
           </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {totalCount > 0
+          ? `Showing ${offset + 1}-${Math.min(offset + items.length, totalCount)} of ${totalCount}`
+          : 'Showing 0 of 0'}
+      </p>
 
       <Card>
         <CardContent className="p-0">

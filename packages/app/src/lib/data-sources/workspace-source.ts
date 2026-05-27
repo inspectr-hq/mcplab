@@ -49,7 +49,7 @@ export const workspaceSource: EvalDataSource = {
     await workspaceApiClient.deleteConfig(id);
   },
   async listResults(filter) {
-    const summaries = await workspaceApiClient.listRuns(filter);
+    const summaries = (await workspaceApiClient.listRuns(filter)).data;
     const resultPromises = summaries.map(async (summary) => {
       const [{ results }, trace] = await Promise.all([
         workspaceApiClient.getRun(summary.runId),
@@ -58,6 +58,21 @@ export const workspaceSource: EvalDataSource = {
       return fromCoreResultsJson(results, trace.records);
     });
     return Promise.all(resultPromises);
+  },
+  async listRunSummaries(filter) {
+    const pageSize = Math.max(1, Math.min(100, filter?.limit ?? 100));
+    let offset = Math.max(0, filter?.offset ?? 0);
+    const all: Awaited<ReturnType<typeof workspaceApiClient.listRuns>>['data'] = [];
+    while (true) {
+      const page = await workspaceApiClient.listRuns({ ...filter, limit: pageSize, offset });
+      all.push(...page.data);
+      if (!page.has_more || page.next_offset === null) break;
+      offset = page.next_offset;
+    }
+    return all;
+  },
+  async listRunSummariesPage(filter) {
+    return workspaceApiClient.listRuns(filter);
   },
   async getResult(id) {
     try {
@@ -76,11 +91,29 @@ export const workspaceSource: EvalDataSource = {
   async updateRunNote(runId, runNote) {
     await workspaceApiClient.updateRunNote(runId, runNote);
   },
-  async listMarkdownReports() {
-    return workspaceApiClient.listMarkdownReports();
+  async listMarkdownReports(params) {
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      return (await workspaceApiClient.listMarkdownReports(params)).data;
+    }
+    const all: Awaited<ReturnType<typeof workspaceApiClient.listMarkdownReports>>['data'] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await workspaceApiClient.listMarkdownReports({ limit, offset });
+      all.push(...page.data);
+      if (!page.has_more || page.next_offset === null) break;
+      offset = page.next_offset;
+    }
+    return all;
+  },
+  async listMarkdownReportsPage(params) {
+    return workspaceApiClient.listMarkdownReports(params);
   },
   async getMarkdownReport(relativePath) {
     return workspaceApiClient.getMarkdownReport(relativePath);
+  },
+  async getMarkdownReportById(reportId) {
+    return workspaceApiClient.getMarkdownReportById(reportId);
   },
   async deleteMarkdownReport(relativePath) {
     await workspaceApiClient.deleteMarkdownReport(relativePath);
@@ -195,8 +228,23 @@ export const workspaceSource: EvalDataSource = {
   async stopToolAnalysis(jobId) {
     return workspaceApiClient.stopToolAnalysis(jobId);
   },
-  async listToolAnalysisResults() {
-    return workspaceApiClient.listToolAnalysisResults();
+  async listToolAnalysisResults(params) {
+    if (params?.limit !== undefined || params?.offset !== undefined) {
+      return (await workspaceApiClient.listToolAnalysisResults(params)).data;
+    }
+    const all: Awaited<ReturnType<typeof workspaceApiClient.listToolAnalysisResults>>['data'] = [];
+    let offset = 0;
+    const limit = 100;
+    while (true) {
+      const page = await workspaceApiClient.listToolAnalysisResults({ limit, offset });
+      all.push(...page.data);
+      if (!page.has_more || page.next_offset === null) break;
+      offset = page.next_offset;
+    }
+    return all;
+  },
+  async listToolAnalysisResultsPage(params) {
+    return workspaceApiClient.listToolAnalysisResults(params);
   },
   async getToolAnalysisSavedResult(id) {
     return workspaceApiClient.getToolAnalysisSavedResult(id);

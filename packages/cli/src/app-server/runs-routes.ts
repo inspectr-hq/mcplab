@@ -170,21 +170,37 @@ export async function handleRunsRoutes(params: {
     const requestUrl = new URL(req.url ?? '/api/runs', 'http://localhost');
     const since = requestUrl.searchParams.get('since') ?? undefined;
     const until = requestUrl.searchParams.get('until') ?? undefined;
+    const scenario = requestUrl.searchParams.get('scenario') ?? undefined;
     const lastDaysRaw = requestUrl.searchParams.get('last_days');
     const lastDaysParsed = lastDaysRaw === null ? NaN : Number(lastDaysRaw);
     const lastDays =
       Number.isFinite(lastDaysParsed) && lastDaysParsed > 0
         ? Math.floor(lastDaysParsed)
         : undefined;
-    asJson(
-      res,
-      200,
-      listRuns(settings.runsDir, {
-        since,
-        until,
-        lastDays
-      })
-    );
+    const limitRaw = Number(requestUrl.searchParams.get('limit'));
+    const offsetRaw = Number(requestUrl.searchParams.get('offset'));
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 25;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+    const all = listRuns(settings.runsDir, {
+      since,
+      until,
+      lastDays,
+      scenario
+    });
+    const data = all.slice(offset, offset + limit);
+    const totalCount = all.length;
+    const hasMore = offset + data.length < totalCount;
+    const nextOffset = hasMore ? offset + data.length : null;
+    const prevOffset = offset > 0 ? Math.max(0, offset - limit) : null;
+    asJson(res, 200, {
+      object: 'list',
+      url: `${pathname}${requestUrl.search}`,
+      data,
+      has_more: hasMore,
+      total_count: totalCount,
+      next_offset: nextOffset,
+      prev_offset: prevOffset
+    });
     return true;
   }
 

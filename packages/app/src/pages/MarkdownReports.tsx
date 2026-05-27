@@ -50,11 +50,22 @@ export default function MarkdownReportsPage() {
   const [loading, setLoading] = useState(true);
   const [deletePath, setDeletePath] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const limit = 25;
 
   const load = async () => {
     setLoading(true);
     try {
-      setItems(await source.listMarkdownReports());
+      if (source.listMarkdownReportsPage) {
+        const page = await source.listMarkdownReportsPage({ limit, offset });
+        setItems(page.data);
+        setHasMore(page.has_more);
+        setTotalCount(page.total_count);
+      } else {
+        setItems(await source.listMarkdownReports({ limit, offset }));
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load markdown reports',
@@ -69,7 +80,7 @@ export default function MarkdownReportsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offset]);
 
   const latest = useMemo(() => items[0], [items]);
   const deleteTarget = useMemo(
@@ -114,13 +125,32 @@ export default function MarkdownReportsPage() {
           </Button>
           {latest ? (
             <Button asChild variant="outline">
-              <Link to={`/markdown-reports/view?path=${encodeURIComponent(latest.relativePath)}`}>
+              <Link to={`/markdown-reports/view?id=${encodeURIComponent(latest.reportId)}`}>
                 Open latest
               </Link>
             </Button>
           ) : null}
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => Math.max(0, prev - limit))}
+            disabled={loading || offset === 0}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setOffset((prev) => prev + limit)}
+            disabled={loading || !hasMore}
+          >
+            Next
+          </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        {totalCount > 0
+          ? `Showing ${offset + 1}-${Math.min(offset + items.length, totalCount)} of ${totalCount}`
+          : 'Showing 0 of 0'}
+      </p>
 
       <Card>
         <CardContent className="p-0">
@@ -145,9 +175,7 @@ export default function MarkdownReportsPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <Link
-                          to={`/markdown-reports/view?path=${encodeURIComponent(
-                            item.relativePath
-                          )}`}
+                          to={`/markdown-reports/view?id=${encodeURIComponent(item.reportId)}`}
                           className="font-mono text-xs text-primary hover:underline"
                         >
                           {item.name}
@@ -193,9 +221,7 @@ export default function MarkdownReportsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
                             <Link
-                              to={`/markdown-reports/view?path=${encodeURIComponent(
-                                item.relativePath
-                              )}`}
+                              to={`/markdown-reports/view?id=${encodeURIComponent(item.reportId)}`}
                             >
                               View
                             </Link>

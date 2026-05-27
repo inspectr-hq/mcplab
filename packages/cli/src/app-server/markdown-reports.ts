@@ -6,6 +6,7 @@ import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 const MAX_REPORT_BYTES = 2 * 1024 * 1024;
 
 type MarkdownReportListItem = {
+  reportId: string;
   path: string;
   relativePath: string;
   name: string;
@@ -27,12 +28,26 @@ export async function handleMarkdownReportsRoutes(params: {
   const { asJson } = deps;
 
   if (pathname === '/api/markdown-reports' && method === 'GET') {
+    const url = new URL(req.url ?? '/api/markdown-reports', `http://${req.headers.host ?? 'localhost'}`);
+    const limitRaw = Number(url.searchParams.get('limit'));
+    const offsetRaw = Number(url.searchParams.get('offset'));
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 25;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
     const root = resolveReportsRoot(settings);
-    const items = listMarkdownFilesRecursive(root, settings.workspaceRoot);
+    const allItems = listMarkdownFilesRecursive(root, settings.workspaceRoot);
+    const items = allItems.slice(offset, offset + limit);
+    const totalCount = allItems.length;
+    const hasMore = offset + items.length < totalCount;
+    const nextOffset = hasMore ? offset + items.length : null;
+    const prevOffset = offset > 0 ? Math.max(0, offset - limit) : null;
     asJson(res, 200, {
-      root,
-      exists: safeIsDirectory(root),
-      items
+      object: 'list',
+      url: `${pathname}${url.search}`,
+      data: items,
+      has_more: hasMore,
+      total_count: totalCount,
+      next_offset: nextOffset,
+      prev_offset: prevOffset
     });
     return true;
   }
@@ -116,10 +131,52 @@ export async function handleMarkdownReportsRoutes(params: {
       const content = readFileSync(targetPath, 'utf8');
       const relativePath = relative(root, targetPath).split(sep).join('/');
       asJson(res, 200, {
+        reportId: buildReportId(relativePath),
         root,
         path: relative(settings.workspaceRoot, targetPath).split(sep).join('/'),
         relativePath,
         name: basename(targetPath),
+        sizeBytes: st.size,
+        mtime: st.mtime.toISOString(),
+        content
+      });
+    } catch (error) {
+      asJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+    }
+    return true;
+  }
+
+  if (pathname.startsWith('/api/markdown-reports/') && method === 'GET') {
+    const reportId = pathname.split('/')[3];
+    if (!reportId) {
+      asJson(res, 400, { error: 'Report id is required' });
+      return true;
+    }
+    const root = resolveReportsRoot(settings);
+    const allItems = listMarkdownFilesRecursive(root, settings.workspaceRoot);
+    const item = allItems.find((candidate) => candidate.reportId === reportId);
+    if (!item) {
+      asJson(res, 404, { error: 'Report not found' });
+      return true;
+    }
+    const targetPath = resolveReportPath(root, item.relativePath);
+    try {
+      const st = statSync(targetPath);
+      if (!st.isFile()) {
+        asJson(res, 404, { error: 'Report not found' });
+        return true;
+      }
+      if (st.size > MAX_REPORT_BYTES) {
+        asJson(res, 413, { error: `Report exceeds ${MAX_REPORT_BYTES} bytes` });
+        return true;
+      }
+      const content = readFileSync(targetPath, 'utf8');
+      asJson(res, 200, {
+        reportId: item.reportId,
+        root,
+        path: item.path,
+        relativePath: item.relativePath,
+        name: item.name,
         sizeBytes: st.size,
         mtime: st.mtime.toISOString(),
         content
@@ -175,6 +232,7 @@ function listMarkdownFilesRecursive(root: string, workspaceRoot: string): Markdo
         const st = statSync(fullPath);
         if (!st.isFile()) continue;
         items.push({
+          reportId: buildReportId(relative(root, fullPath).split(sep).join('/')),
           path: relative(workspaceRoot, fullPath).split(sep).join('/'),
           relativePath: relative(root, fullPath).split(sep).join('/'),
           name: basename(fullPath),
@@ -193,6 +251,10 @@ function listMarkdownFilesRecursive(root: string, workspaceRoot: string): Markdo
     return b.mtime.localeCompare(a.mtime);
   });
   return items;
+}
+
+function buildReportId(relativePath: string): string {
+  return Buffer.from(relativePath, 'utf8').toString('base64url');
 }
 
 function safeIsDirectory(path: string): boolean {

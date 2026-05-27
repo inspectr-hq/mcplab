@@ -267,8 +267,28 @@ export async function handleToolAnalysisRoutes(params: {
   }
 
   if (pathname === '/api/tool-analysis-results' && method === 'GET') {
+    const url = new URL(req.url ?? '/api/tool-analysis-results', `http://${req.headers.host ?? 'localhost'}`);
+    const limitRaw = Number(url.searchParams.get('limit'));
+    const offsetRaw = Number(url.searchParams.get('offset'));
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 25;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+    const serverFilter = String(url.searchParams.get('server') ?? '').trim();
+    const all = listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings)).filter((item) =>
+      serverFilter ? item.serverNames.includes(serverFilter) : true
+    );
+    const data = all.slice(offset, offset + limit);
+    const totalCount = all.length;
+    const hasMore = offset + data.length < totalCount;
+    const nextOffset = hasMore ? offset + data.length : null;
+    const prevOffset = offset > 0 ? Math.max(0, offset - limit) : null;
     asJson(res, 200, {
-      items: listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings))
+      object: 'list',
+      url: `${pathname}${url.search}`,
+      data,
+      has_more: hasMore,
+      total_count: totalCount,
+      next_offset: nextOffset,
+      prev_offset: prevOffset
     });
     return true;
   }
