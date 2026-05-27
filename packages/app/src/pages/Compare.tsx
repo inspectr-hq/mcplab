@@ -59,7 +59,7 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
-type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -95,6 +95,7 @@ const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
+  { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
   { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
   { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
   { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
@@ -151,6 +152,7 @@ function isTimeFilterMode(value: string | null): value is TimeFilterMode {
 function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
   return (
     value === '15min' ||
+    value === '30min' ||
     value === '1h' ||
     value === '24h' ||
     value === '7d' ||
@@ -215,7 +217,7 @@ const Compare = () => {
   const [timeFilterStart, setTimeFilterStart] = useState(initialTimeFilter.start);
   const [timeFilterEnd, setTimeFilterEnd] = useState(initialTimeFilter.end);
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
-  const pageLimit = 25;
+  const pageLimit = 100;
   const pagination = useOffsetPagination(pageLimit);
   const { offset, hasMore, totalCount } = pagination;
 
@@ -849,7 +851,9 @@ const Compare = () => {
                     role="combobox"
                     aria-expanded={openScenarioFilterPicker}
                     aria-controls="compare-scenario-command-list"
-                    className="w-[260px] justify-between font-normal"
+                    className={`w-[260px] justify-between font-normal ${
+                      scenarioFilter !== 'all' ? 'border-primary/40' : ''
+                    }`}
                   >
                     <span className="truncate text-left">
                       {scenarioFilter === 'all' ? 'All scenarios' : scenarioFilter}
@@ -897,7 +901,9 @@ const Compare = () => {
                     role="combobox"
                     aria-expanded={openTimeFilterPicker}
                     aria-controls="compare-time-command-list"
-                    className="w-[320px] justify-between font-normal"
+                    className={`w-[320px] justify-between font-normal ${
+                      timeFilterMode !== 'all' ? 'border-primary/40' : ''
+                    }`}
                   >
                     <span className="flex min-w-0 items-center gap-2 truncate text-left">
                       <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />

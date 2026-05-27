@@ -211,7 +211,7 @@ const RESULT_ASSISTANT_SNIPPETS = [
       'Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out.'
   }
 ] as const;
-const PAGE_LIMIT = 25;
+const PAGE_LIMIT = 100;
 
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();

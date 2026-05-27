@@ -51,7 +51,7 @@ export default function MarkdownReportsPage() {
   const [loading, setLoading] = useState(true);
   const [deletePath, setDeletePath] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const limit = 25;
+  const limit = 100;
   const pagination = useOffsetPagination(limit);
   const { offset, hasMore } = pagination;
 
