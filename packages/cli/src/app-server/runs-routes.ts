@@ -352,6 +352,9 @@ export async function handleRunsRoutes(params: {
       for (const client of job.clients) client.end();
       job.clients.clear();
       emitQueueEvent(jobs, runQueueState, deps);
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+        emitWhenIdle: true
+      });
       asJson(res, 200, { ok: true, status: 'stopped' });
       return true;
     }
@@ -984,8 +987,14 @@ async function advanceQueue(
   deps: RunsRouteDeps,
   options?: { emitWhenIdle?: boolean }
 ): Promise<void> {
-  if (runQueueState.activeJobId) return;
-  if (runQueueState.isAdvancingQueue) return;
+  if (runQueueState.activeJobId) {
+    if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
+    return;
+  }
+  if (runQueueState.isAdvancingQueue) {
+    if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
+    return;
+  }
   runQueueState.isAdvancingQueue = true;
   let queueMutated = false;
   try {

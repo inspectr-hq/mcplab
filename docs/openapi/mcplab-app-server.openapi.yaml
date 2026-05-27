@@ -401,6 +401,74 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
+  /api/runs/queue:
+    get:
+      tags: [Runs]
+      summary: Get current run queue state
+      operationId: getRunQueue
+      responses:
+        "200":
+          description: Active run and queued entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunQueueResponse"
+
+  /api/runs/queue/events:
+    get:
+      tags: [Runs]
+      summary: Subscribe to run queue events (SSE)
+      operationId: streamRunQueueEvents
+      responses:
+        "200":
+          description: "`text/event-stream` containing queue events (`queue_event`) with full queue state"
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: queue_event
+                  data: {"type":"queue_event","ts":"2026-02-26T19:40:11.000Z","payload":{"event":{"active":null,"queued":[]}}}
+
+  /api/runs/queue/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    delete:
+      tags: [Runs]
+      summary: Remove a queued run job
+      operationId: removeQueuedRun
+      responses:
+        "200":
+          description: Remove acknowledgement
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, jobId, status]
+                properties:
+                  ok: { type: boolean }
+                  jobId: { type: string }
+                  status:
+                    type: string
+                    enum: [stopped]
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+
+  /api/runs/queue/resume:
+    post:
+      tags: [Runs]
+      summary: Resume queue processing (typically after OAuth completion)
+      operationId: resumeRunQueue
+      responses:
+        "200":
+          description: Resume acknowledgement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
   /api/runs/{runId}:
     parameters:
       - $ref: "#/components/parameters/RunId"
@@ -1998,6 +2066,87 @@ components:
         prev_offset:
           type: integer
           nullable: true
+    RunQueueRunParams:
+      type: object
+      required:
+        [
+          configPath,
+          runsPerScenario,
+          scenarioIds,
+          agents,
+          runNote,
+          serverOverrideAll,
+          scenarioServerOverrides
+        ]
+      properties:
+        configPath: { type: string }
+        runsPerScenario: { type: integer, minimum: 1 }
+        scenarioIds:
+          type: array
+          nullable: true
+          items: { type: string }
+        agents:
+          type: array
+          nullable: true
+          items: { type: string }
+        runNote:
+          type: string
+          nullable: true
+        serverOverrideAll:
+          type: array
+          nullable: true
+          items: { type: string }
+        scenarioServerOverrides:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: array
+            items: { type: string }
+    RunQueueEntry:
+      type: object
+      required: [jobId, status, runParams]
+      properties:
+        jobId: { type: string }
+        status:
+          type: string
+          enum: [queued, blocked_auth, running, completed, error, stopped]
+        blockedReason:
+          type: string
+          enum: [oauth_required]
+        requiredServers:
+          type: array
+          items: { type: string }
+        runParams:
+          $ref: "#/components/schemas/RunQueueRunParams"
+    RunQueueResponse:
+      type: object
+      required: [active, queued]
+      properties:
+        active:
+          allOf:
+            - $ref: "#/components/schemas/RunQueueEntry"
+          nullable: true
+        queued:
+          type: array
+          items:
+            $ref: "#/components/schemas/RunQueueEntry"
+    RunQueueEvent:
+      type: object
+      required: [type, ts, payload]
+      properties:
+        type:
+          type: string
+          enum: [queue_event]
+        ts:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          required: [event]
+          properties:
+            event:
+              $ref: "#/components/schemas/RunQueueResponse"
+          additionalProperties: true
     OAuthDebuggerSessionConfigInput:
       type: object
       required: [profile, target, registrationMethod, clientConfig, runtime]
