@@ -163,7 +163,7 @@ type QueueEntryView = {
   };
 };
 
-type QueueSnapshot = {
+type QueueState = {
   active: QueueEntryView | null;
   queued: QueueEntryView[];
 };
@@ -186,10 +186,7 @@ function toQueueEntryView(job: RunJob): QueueEntryView {
   };
 }
 
-function buildQueueSnapshot(
-  jobs: Map<string, RunJob>,
-  runQueueState: RunQueueState
-): QueueSnapshot {
+function buildQueueState(jobs: Map<string, RunJob>, runQueueState: RunQueueState): QueueState {
   const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
   const queuedEntries = runQueueState.queue
     .map((id) => jobs.get(id))
@@ -201,7 +198,7 @@ function buildQueueSnapshot(
   };
 }
 
-function emitQueueSnapshot(
+function emitQueueEvent(
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
   deps: Pick<RunsRouteDeps, 'sendSseEvent'>
@@ -209,7 +206,7 @@ function emitQueueSnapshot(
   const event: SseEvent = {
     type: 'queue_event',
     ts: new Date().toISOString(),
-    payload: { event: buildQueueSnapshot(jobs, runQueueState) }
+    payload: { event: buildQueueState(jobs, runQueueState) }
   };
   for (const client of runQueueState.clients) {
     deps.sendSseEvent(client, event);
@@ -371,7 +368,7 @@ export async function handleRunsRoutes(params: {
       });
       for (const client of job.clients) client.end();
       job.clients.clear();
-      emitQueueSnapshot(jobs, runQueueState, deps);
+      emitQueueEvent(jobs, runQueueState, deps);
       asJson(res, 200, { ok: true, status: 'stopped' });
       return true;
     }
@@ -381,13 +378,13 @@ export async function handleRunsRoutes(params: {
     }
     job.abortController.abort();
     job.status = 'stopped';
-    emitQueueSnapshot(jobs, runQueueState, deps);
+    emitQueueEvent(jobs, runQueueState, deps);
     asJson(res, 200, { ok: true, status: 'stopped' });
     return true;
   }
 
   if (pathname === '/api/runs/queue' && method === 'GET') {
-    asJson(res, 200, buildQueueSnapshot(jobs, runQueueState));
+    asJson(res, 200, buildQueueState(jobs, runQueueState));
     return true;
   }
 
@@ -402,7 +399,7 @@ export async function handleRunsRoutes(params: {
     sendSseEvent(res, {
       type: 'queue_event',
       ts: new Date().toISOString(),
-      payload: { event: buildQueueSnapshot(jobs, runQueueState) }
+      payload: { event: buildQueueState(jobs, runQueueState) }
     });
     runQueueState.clients.add(res);
     req.on('close', () => {
@@ -441,7 +438,7 @@ export async function handleRunsRoutes(params: {
     });
     for (const client of job.clients) client.end();
     job.clients.clear();
-    emitQueueSnapshot(jobs, runQueueState, deps);
+    emitQueueEvent(jobs, runQueueState, deps);
     if (wasBlocked) {
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
@@ -593,12 +590,12 @@ export async function handleRunsRoutes(params: {
           position: runQueueState.queue.length
         }
       });
-      emitQueueSnapshot(jobs, runQueueState, deps);
+      emitQueueEvent(jobs, runQueueState, deps);
       asJson(res, 202, { jobId, queued: true, position: runQueueState.queue.length });
     } else {
       // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
       runQueueState.queue.push(jobId);
-      emitQueueSnapshot(jobs, runQueueState, deps);
+      emitQueueEvent(jobs, runQueueState, deps);
       asJson(res, 202, { jobId });
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
@@ -1056,7 +1053,7 @@ async function advanceQueue(
             }
           });
           queueMutated = true;
-          emitQueueSnapshot(jobs, runQueueState, deps);
+          emitQueueEvent(jobs, runQueueState, deps);
           return; // pause — frontend must call /api/runs/queue/resume after auth
         }
       }
@@ -1080,12 +1077,12 @@ async function advanceQueue(
         }
       });
       queueMutated = true;
-      emitQueueSnapshot(jobs, runQueueState, deps);
+      emitQueueEvent(jobs, runQueueState, deps);
       void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
       return;
     }
     if (queueMutated || options?.emitWhenIdle) {
-      emitQueueSnapshot(jobs, runQueueState, deps);
+      emitQueueEvent(jobs, runQueueState, deps);
     }
   } finally {
     runQueueState.isAdvancingQueue = false;
