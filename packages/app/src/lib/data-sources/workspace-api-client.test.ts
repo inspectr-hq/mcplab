@@ -105,6 +105,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
         }
       }
     });
+    source.readyState = 2;
     source.fail();
 
     expect(onEvent).toHaveBeenCalledWith(

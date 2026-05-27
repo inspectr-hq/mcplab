@@ -514,6 +514,10 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   server.on('close', () => {
+    for (const client of runQueueState.clients) {
+      client.end();
+    }
+    runQueueState.clients.clear();
     devMcp?.stop();
   });
 

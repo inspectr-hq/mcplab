@@ -674,6 +674,9 @@ export const workspaceApiClient = {
     source.addEventListener('queue_snapshot', messageHandler);
     source.onerror = () => {
       if (closed) return;
+      if (source.readyState !== 2) {
+        return;
+      }
       onEvent({
         type: 'error',
         ts: new Date().toISOString(),

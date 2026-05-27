@@ -450,8 +450,9 @@ export async function handleRunsRoutes(params: {
   }
 
   if (pathname === '/api/runs/queue/resume' && method === 'POST') {
-    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
-    emitQueueSnapshot(jobs, runQueueState, deps);
+    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+      emitWhenIdle: true
+    });
     asJson(res, 200, { ok: true });
     return true;
   }
@@ -1000,18 +1001,20 @@ async function advanceQueue(
   runQueueState: RunQueueState,
   settings: AppRouteRequestContext['settings'],
   oauthSessionManager: OAuthSessionManager,
-  deps: RunsRouteDeps
+  deps: RunsRouteDeps,
+  options?: { emitWhenIdle?: boolean }
 ): Promise<void> {
   if (runQueueState.activeJobId) return;
   if (runQueueState.isAdvancingQueue) return;
   runQueueState.isAdvancingQueue = true;
+  let queueMutated = false;
   try {
     while (runQueueState.queue.length > 0) {
       const nextId = runQueueState.queue[0]; // peek — do not shift yet
       const nextJob = jobs.get(nextId);
       if (!nextJob || (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth')) {
         runQueueState.queue.shift();
-        emitQueueSnapshot(jobs, runQueueState, deps);
+        queueMutated = true;
         continue;
       }
 
@@ -1031,7 +1034,7 @@ async function advanceQueue(
         });
         for (const client of nextJob.clients) client.end();
         nextJob.clients.clear();
-        emitQueueSnapshot(jobs, runQueueState, deps);
+        queueMutated = true;
         continue;
       }
       if (oauthServers.length > 0) {
@@ -1052,6 +1055,7 @@ async function advanceQueue(
               message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
             }
           });
+          queueMutated = true;
           emitQueueSnapshot(jobs, runQueueState, deps);
           return; // pause — frontend must call /api/runs/queue/resume after auth
         }
@@ -1075,9 +1079,13 @@ async function advanceQueue(
           scenarioServerOverrides: nextJob.runParams.scenarioServerOverrides ?? null
         }
       });
+      queueMutated = true;
       emitQueueSnapshot(jobs, runQueueState, deps);
       void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
       return;
+    }
+    if (queueMutated || options?.emitWhenIdle) {
+      emitQueueSnapshot(jobs, runQueueState, deps);
     }
   } finally {
     runQueueState.isAdvancingQueue = false;
@@ -1351,8 +1359,15 @@ async function executeRunJob(
     runQueueState.activeJobId = null;
     for (const client of job.clients) client.end();
     job.clients.clear();
-    emitQueueSnapshot(jobs, runQueueState, deps);
-    advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
+    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+      emitWhenIdle: true
+    }).catch((error) => {
+      console.warn(
+        `[mcplab] Failed to advance run queue after job '${job.id}': ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    });
     pruneOldJobs(jobs, runQueueState);
   }
 }

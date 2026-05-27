@@ -15,6 +15,8 @@ export function useRunQueueStatus() {
   const [snapshot, setSnapshot] = useState<QueueResponse>({ active: null, queued: [] });
   const [streamConnected, setStreamConnected] = useState(false);
   const pollIntervalRef = useRef<number | null>(null);
+  const streamConnectedRef = useRef(false);
+  const snapshotRevisionRef = useRef(0);
 
   useEffect(() => {
     let disposed = false;
@@ -27,9 +29,11 @@ export function useRunQueueStatus() {
     };
 
     const refreshSnapshot = async () => {
+      const requestRevision = snapshotRevisionRef.current;
       try {
         const queue = await source.getRunQueue();
         if (disposed) return;
+        if (snapshotRevisionRef.current !== requestRevision) return;
         setSnapshot(queue);
       } catch {
         // ignore transient fetch failures
@@ -46,23 +50,29 @@ export function useRunQueueStatus() {
 
     const unsubscribe = source.subscribeRunQueue((event) => {
       if (event.type === 'queue_snapshot' && event.payload.snapshot) {
+        snapshotRevisionRef.current += 1;
         setStreamConnected(true);
+        streamConnectedRef.current = true;
         stopPolling();
         setSnapshot(event.payload.snapshot);
         return;
       }
       if (event.type === 'error') {
         setStreamConnected(false);
+        streamConnectedRef.current = false;
         startPolling();
       }
     });
 
     const onFocus = () => {
+      if (streamConnectedRef.current) return;
       void refreshSnapshot();
     };
 
     window.addEventListener('focus', onFocus);
-    void refreshSnapshot();
+    if (!streamConnectedRef.current) {
+      void refreshSnapshot();
+    }
 
     return () => {
       disposed = true;
