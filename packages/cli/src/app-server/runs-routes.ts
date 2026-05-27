@@ -1156,6 +1156,23 @@ async function executeRunJob(
       if (loaded.config.name && loaded.config.name.trim().length > 0) {
         results.metadata.config_name = loaded.config.name.trim();
       }
+      results.metadata.rerun_agents = [...resolvedAgentList];
+      results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map((scenario) => scenario.id);
+      if (serverOverrideAll && serverOverrideAll.length > 0) {
+        results.metadata.rerun_server_override_all = [...serverOverrideAll];
+      } else {
+        delete results.metadata.rerun_server_override_all;
+      }
+      if (filteredScenarioOverrides && Object.keys(filteredScenarioOverrides).length > 0) {
+        results.metadata.rerun_scenario_server_overrides = Object.fromEntries(
+          Object.entries(filteredScenarioOverrides).map(([scenarioKey, serverIds]) => [
+            scenarioKey,
+            [...serverIds]
+          ])
+        );
+      } else {
+        delete results.metadata.rerun_scenario_server_overrides;
+      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),

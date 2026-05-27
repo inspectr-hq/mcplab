@@ -60,6 +60,10 @@ export interface WorkspaceRunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
   passRate: number;

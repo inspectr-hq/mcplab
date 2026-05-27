@@ -170,6 +170,10 @@ export interface EvalResult {
   configHash: string;
   configPath?: string;
   configName?: string;
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   timestamp: string;
   runNote?: string;
   mcpServerVersions: Record<string, string | null>;

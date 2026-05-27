@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Eye,
   Download,
+  Play,
   Bot,
   Trash2,
   ChevronUp,
@@ -185,6 +186,10 @@ function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     configHash: summary.configHash,
     configPath: summary.configPath,
     configName: summary.configName,
+    rerunAgents: summary.rerunAgents,
+    rerunScenarioIds: summary.rerunScenarioIds,
+    rerunServerOverrideAll: summary.rerunServerOverrideAll,
+    rerunScenarioServerOverrides: summary.rerunScenarioServerOverrides,
     timestamp: summary.timestamp,
     runNote: summary.runNote,
     mcpServerVersions: {},
@@ -241,6 +246,7 @@ const Results = () => {
   const [offset, setOffset] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
   const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
   const apiTimeFilter = useMemo(() => {
     if (timeFilterMode === 'all') return {};
@@ -648,6 +654,50 @@ const Results = () => {
     }
   };
 
+  const handleRerun = async (run: EvalResult) => {
+    const configPath = run.configPath?.trim();
+    if (!configPath) {
+      toast({
+        title: 'Cannot rerun',
+        description: 'This run has no config path in metadata.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setRerunningRunId(run.id);
+    try {
+      const detailed = await source.getResult(run.id);
+      const sourceRun = detailed ?? run;
+      const agents =
+        sourceRun.rerunAgents && sourceRun.rerunAgents.length > 0
+          ? sourceRun.rerunAgents
+          : Array.from(
+              new Set(sourceRun.scenarios.map((scenario) => scenario.agentId).filter(Boolean))
+            );
+      await source.startRun({
+        configPath,
+        runsPerScenario: 1,
+        scenarioIds: sourceRun.rerunScenarioIds,
+        agents: agents.length > 0 ? agents : undefined,
+        runNote: sourceRun.runNote,
+        serverOverrideAll: sourceRun.rerunServerOverrideAll,
+        scenarioServerOverrides: sourceRun.rerunScenarioServerOverrides
+      });
+      toast({
+        title: 'Rerun queued',
+        description: `${run.id} queued with previous run settings.`
+      });
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not rerun',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setRerunningRunId((current) => (current === run.id ? null : current));
+    }
+  };
+
   return (
     <div className="space-y-6">
       <AlertDialog
@@ -1034,37 +1084,50 @@ const Results = () => {
                           {formatToolTokenTotal(item.run)}
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link to={`/results/${item.run.id}`}>
-                                  <Eye className="mr-2 h-3.5 w-3.5" />
-                                  View
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Download className="mr-2 h-3.5 w-3.5" />
-                                Export JSON
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  const active = document.activeElement;
-                                  if (active instanceof HTMLElement) active.blur();
-                                  setPendingDeleteRunId(item.run.id);
-                                }}
-                              >
-                                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={rerunningRunId === item.run.id}
+                              onClick={() => void handleRerun(item.run)}
+                            >
+                              <Play className="mr-1.5 h-3.5 w-3.5" />
+                              {rerunningRunId === item.run.id
+                                ? 'Queueing...'
+                                : 'Rerun'}
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/results/${item.run.id}`}>
+                                    <Eye className="mr-2 h-3.5 w-3.5" />
+                                    View
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  Export JSON
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    const active = document.activeElement;
+                                    if (active instanceof HTMLElement) active.blur();
+                                    setPendingDeleteRunId(item.run.id);
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )

@@ -14,6 +14,10 @@ export interface RunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
   passRate: number;
@@ -78,6 +82,10 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         scenarioNames: scenarioItems
           .map((scenario) => String(scenario.scenario_name ?? ''))
           .filter(Boolean),
+        rerunAgents: results.metadata.rerun_agents,
+        rerunScenarioIds: results.metadata.rerun_scenario_ids,
+        rerunServerOverrideAll: results.metadata.rerun_server_override_all,
+        rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
         totalScenarios: results.summary.total_scenarios,
         totalRuns: results.summary.total_runs,
         passRate: results.summary.pass_rate,
