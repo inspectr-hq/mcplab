@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractHttpStatusCode,
   mergeRequestHeaders,
   normalizeListedTool,
   sanitizeMcpTransportErrorMessage
@@ -17,6 +18,23 @@ describe('sanitizeMcpTransportErrorMessage', () => {
     expect(sanitized).toContain('502');
     expect(sanitized).not.toContain('<!DOCTYPE html>');
     expect(sanitized.length).toBeLessThan(220);
+  });
+});
+
+describe('extractHttpStatusCode', () => {
+  it('extracts status from common error object fields', () => {
+    expect(extractHttpStatusCode({ status: 429 })).toBe(429);
+    expect(extractHttpStatusCode({ statusCode: '503' })).toBe(503);
+    expect(extractHttpStatusCode({ response: { status: 401 } })).toBe(401);
+  });
+
+  it('falls back to parsing status code from error message', () => {
+    expect(extractHttpStatusCode({}, 'Streamable HTTP error (HTTP 502)')).toBe(502);
+  });
+
+  it('ignores non-http numeric values', () => {
+    expect(extractHttpStatusCode({ status: 42 })).toBeUndefined();
+    expect(extractHttpStatusCode({ statusCode: '999' })).toBeUndefined();
   });
 });
 
