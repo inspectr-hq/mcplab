@@ -7,7 +7,7 @@
 - feat: Provide list endpoints
 - feat: Show pass rate of last run
 - feat: Rerun past runs
-- rechore: Store tool_tokens_total in results metadata
+- chore: Store tool_tokens_total in results metadata
 
 ### Patch Changes
 
