@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
@@ -51,7 +51,23 @@ const program = new Command();
 program
   .name('mcplab')
   .description('Laboratory for testing Model Context Protocol servers')
-  .version(pkgVersion);
+  .version(pkgVersion)
+  .option(
+    '--no-prune-failed-runs-on-start',
+    'Disable startup cleanup of incomplete run folders (env override: MCPLAB_PRUNE_FAILED_RUNS_ON_START=0)'
+  );
+
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  try {
+    pruneFailedRunsOnStartIfEnabled(actionCommand);
+  } catch (err: any) {
+    console.error(
+      kleur.yellow(
+        `Warning: failed to prune runs on startup: ${err?.message ?? String(err)}. Continuing.`
+      )
+    );
+  }
+});
 
 interface RunCommandOptions {
   config?: string;
@@ -914,5 +930,62 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
       return `Run finished: ${event.runId}`;
     default:
       return undefined;
+  }
+}
+
+function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
+  if (actionCommand.name() !== 'app') return;
+  if (!actionCommand.options.some((option) => option.attributeName() === 'runsDir')) {
+    return;
+  }
+  const opts = actionCommand.optsWithGlobals<{ pruneFailedRunsOnStart?: boolean }>();
+
+  const envToggle = process.env.MCPLAB_PRUNE_FAILED_RUNS_ON_START?.trim().toLowerCase();
+  const enabled =
+    envToggle === '0' || envToggle === 'false' || envToggle === 'no' || envToggle === 'off'
+      ? false
+      : opts.pruneFailedRunsOnStart !== false;
+  if (!enabled) return;
+
+  const runsDir = resolveRunArtifactsDir(actionCommand);
+  if (!existsSync(runsDir)) return;
+  const abandonAgeMs = 60 * 60 * 1000;
+
+  const runDirs = readdirSync(runsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const dirPath = join(runsDir, entry.name);
+      return { path: dirPath };
+    });
+
+  let deletedAbandonedRuns = 0;
+  for (const entry of runDirs) {
+    if (!isAbandonedRun(entry.path, abandonAgeMs)) continue;
+    rmSync(entry.path, { recursive: true, force: true });
+    deletedAbandonedRuns += 1;
+  }
+
+  if (deletedAbandonedRuns > 0) {
+    console.log(
+      kleur.gray(
+        `[mcplab] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s) older than 1h.`
+      )
+    );
+  }
+}
+
+function resolveRunArtifactsDir(actionCommand: Command): string {
+  const merged = actionCommand.optsWithGlobals<{ runsDir?: string }>();
+  const raw = merged.runsDir?.trim();
+  return resolve(raw && raw.length > 0 ? raw : 'mcplab/results/evaluation-runs');
+}
+
+function isAbandonedRun(runDir: string, abandonAgeMs: number): boolean {
+  const resultsPath = join(runDir, 'results.json');
+  if (existsSync(resultsPath)) return false;
+  try {
+    return Date.now() - statSync(runDir).mtimeMs > abandonAgeMs;
+  } catch {
+    return false;
   }
 }

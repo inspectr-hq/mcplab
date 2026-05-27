@@ -63,7 +63,7 @@ export default function ToolAnalysisResultsPage() {
   const [serverFilter, setServerFilter] = useState('all');
   const [openServerFilterPicker, setOpenServerFilterPicker] = useState(false);
   const [serverOptions, setServerOptions] = useState<string[]>([]);
-  const limit = 25;
+  const limit = 100;
   const pagination = useOffsetPagination(limit);
   const { offset, hasMore } = pagination;
 
@@ -196,7 +196,9 @@ export default function ToolAnalysisResultsPage() {
                   role="combobox"
                   aria-expanded={openServerFilterPicker}
                   aria-controls="tool-analysis-server-command-list"
-                  className="h-9 w-[240px] justify-between font-normal"
+                  className={`h-9 w-[240px] justify-between font-normal ${
+                    serverFilter !== 'all' ? 'border-primary/40' : ''
+                  }`}
                 >
                   <span className="truncate text-left">
                     {serverFilter === 'all' ? 'All servers' : serverFilter}

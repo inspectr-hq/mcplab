@@ -526,14 +526,18 @@ function serializeHeaders(headers: Record<string, string>): string {
 function formatMcpError(prefix: string, url: string | undefined, err: any): string {
   const rawMessage = err?.message ?? String(err);
   const message = sanitizeMcpTransportErrorMessage(rawMessage);
+  const statusCode = extractHttpStatusCode(err, rawMessage);
+  const messageStatusCode = extractHttpStatusCode(undefined, message);
   const hints: string[] = [];
   if (rawMessage.includes('fetch failed')) {
     hints.push('Verify the MCP server is running and reachable.');
     if (url) hints.push(`Check the URL: ${url}`);
     hints.push('If auth is required, confirm the bearer token env var is set.');
   }
+  const statusSuffix =
+    statusCode && messageStatusCode !== statusCode ? ` (HTTP ${statusCode})` : '';
   const hintText = hints.length > 0 ? ` Hints: ${hints.join(' ')}` : '';
-  return `${prefix}. ${message}.${hintText}`;
+  return `${prefix}. ${ensureSentence(message)}${statusSuffix}${hintText}`;
 }
 
 export function sanitizeMcpTransportErrorMessage(message: string): string {
@@ -556,6 +560,39 @@ export function sanitizeMcpTransportErrorMessage(message: string): string {
 
   if (normalized.length <= 220) return normalized;
   return `${normalized.slice(0, 217)}...`;
+}
+
+export function extractHttpStatusCode(err: unknown, message?: string): number | undefined {
+  const candidates = [
+    (err as { status?: unknown } | undefined)?.status,
+    (err as { statusCode?: unknown } | undefined)?.statusCode,
+    (err as { response?: { status?: unknown } } | undefined)?.response?.status
+  ];
+  for (const candidate of candidates) {
+    const parsed = toHttpStatusCode(candidate);
+    if (parsed) return parsed;
+  }
+
+  const text = message ?? '';
+  const fromHttpContext = text.match(/\bhttp(?:\s+status)?\s*[:=()-]*\s*(\d{3})\b/i)?.[1];
+  if (fromHttpContext) return toHttpStatusCode(fromHttpContext);
+  const fromStatusCode = text.match(/\bstatus(?:\s+code)?\s*[:=()-]*\s*(\d{3})\b/i)?.[1];
+  if (fromStatusCode) return toHttpStatusCode(fromStatusCode);
+  return undefined;
+}
+
+function toHttpStatusCode(value: unknown): number | undefined {
+  const numeric =
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : NaN;
+  if (!Number.isInteger(numeric)) return undefined;
+  if (numeric < 100 || numeric > 599) return undefined;
+  return numeric;
+}
+
+function ensureSentence(text: string): string {
+  const trimmed = text.trimEnd();
+  if (!trimmed) return '';
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 async function safeReadText(response: Response): Promise<string> {

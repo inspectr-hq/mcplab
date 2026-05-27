@@ -69,7 +69,7 @@ import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
-type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -82,9 +82,11 @@ type ResultTableItem =
   | { type: 'run'; run: EvalResult };
 
 const RESULTS_TABLE_COLUMN_COUNT = 8;
+const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
+  { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
   { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
   { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
   { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
@@ -132,6 +134,7 @@ function isTimeFilterMode(value: string | null): value is TimeFilterMode {
 function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
   return (
     value === '15min' ||
+    value === '30min' ||
     value === '1h' ||
     value === '24h' ||
     value === '7d' ||
@@ -149,6 +152,37 @@ function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQuery
     start: searchParams.get('time_start') ?? '',
     end: searchParams.get('time_end') ?? ''
   };
+}
+
+function hasExplicitTimeFilterQuery(searchParams: URLSearchParams): boolean {
+  return (
+    searchParams.has('time_filter') ||
+    searchParams.has('time_preset') ||
+    searchParams.has('time_start') ||
+    searchParams.has('time_end')
+  );
+}
+
+function readStoredTimeFilter(): TimeFilterQueryState | null {
+  try {
+    const raw = localStorage.getItem(RESULTS_TIME_FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<TimeFilterQueryState>;
+    const mode = isTimeFilterMode(typeof parsed.mode === 'string' ? parsed.mode : null)
+      ? parsed.mode
+      : 'all';
+    const preset = isTimeFilterPreset(typeof parsed.preset === 'string' ? parsed.preset : null)
+      ? parsed.preset
+      : '15min';
+    return {
+      mode,
+      preset,
+      start: typeof parsed.start === 'string' ? parsed.start : '',
+      end: typeof parsed.end === 'string' ? parsed.end : ''
+    };
+  } catch {
+    return null;
+  }
 }
 
 const RESULT_ASSISTANT_SNIPPETS = [
@@ -177,12 +211,16 @@ const RESULT_ASSISTANT_SNIPPETS = [
       'Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out.'
   }
 ] as const;
-const PAGE_LIMIT = 25;
+const PAGE_LIMIT = 100;
 
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { source } = useDataSource();
-  const initialTimeFilter = getTimeFilterQueryState(searchParams);
+  const [initialTimeFilter] = useState<TimeFilterQueryState>(() =>
+    hasExplicitTimeFilterQuery(searchParams)
+      ? getTimeFilterQueryState(searchParams)
+      : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams)
+  );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
@@ -417,6 +455,24 @@ const Results = () => {
     timeFilterPreset,
     timeFilterStart
   ]);
+
+  useEffect(() => {
+    try {
+      if (timeFilterMode === 'all') {
+        localStorage.removeItem(RESULTS_TIME_FILTER_STORAGE_KEY);
+        return;
+      }
+      const next: TimeFilterQueryState = {
+        mode: timeFilterMode,
+        preset: timeFilterPreset,
+        start: timeFilterStart,
+        end: timeFilterEnd
+      };
+      localStorage.setItem(RESULTS_TIME_FILTER_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore persistence failures
+    }
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const filteredResults = useMemo(() => {
     if (source.listRunSummariesPage) return results;
@@ -690,7 +746,9 @@ const Results = () => {
                 role="combobox"
                 aria-expanded={openScenarioFilterPicker}
                 aria-controls="results-scenario-command-list"
-                className="w-[260px] justify-between font-normal"
+                className={`w-[260px] justify-between font-normal ${
+                  scenarioFilter !== 'all' ? 'border-primary/40' : ''
+                }`}
               >
                 <span className="truncate text-left">{selectedScenarioFilterLabel}</span>
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -736,7 +794,9 @@ const Results = () => {
                 role="combobox"
                 aria-expanded={openTimeFilterPicker}
                 aria-controls="results-time-command-list"
-                className="w-[320px] justify-between font-normal"
+                className={`w-[320px] justify-between font-normal ${
+                  timeFilterMode !== 'all' ? 'border-primary/40' : ''
+                }`}
               >
                 <span className="flex min-w-0 items-center gap-2 truncate text-left">
                   <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />
