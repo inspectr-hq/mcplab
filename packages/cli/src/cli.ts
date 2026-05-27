@@ -966,7 +966,7 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
   if (runDirs.length > 0) {
     console.log(
       kleur.gray(
-        `Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} abandoned run folder(s).`
+        `[mcplab-app] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s).`
       )
     );
   }
