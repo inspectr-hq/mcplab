@@ -11,7 +11,8 @@ import {
   renderSummaryMarkdown,
   applyRuntimeServerOverrides,
   type EvalConfig,
-  type RunProgressEvent
+  type RunProgressEvent,
+  type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
@@ -1030,6 +1031,7 @@ async function executeRunJob(
 ) {
   const {
     addJobEvent,
+    getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
@@ -1232,6 +1234,11 @@ async function executeRunJob(
         ts: new Date().toISOString(),
         payload: { message: `Writing results to ${runDir}` }
       });
+      const traceRecords = getScenarioRunTraceRecords(
+        results.metadata.run_id,
+        settings.runsDir
+      ) as ScenarioRunTraceRecord[];
+      results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
       writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
       writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
       writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
@@ -1282,6 +1289,77 @@ async function executeRunJob(
     advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     pruneOldJobs(jobs, runQueueState);
   }
+}
+
+function splitInteger(total: number | undefined, parts: number): number[] {
+  if (!Number.isFinite(total) || !parts || parts <= 0) return Array(parts).fill(0);
+  const safeTotal = Math.max(0, Math.round(total ?? 0));
+  const base = Math.floor(safeTotal / parts);
+  let remainder = safeTotal % parts;
+  return Array.from({ length: parts }, () => {
+    const value = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    return value;
+  });
+}
+
+function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number | null {
+  let total = 0;
+  let hasAny = false;
+  for (const record of records) {
+    const toolUsesById = new Map<string, string>();
+    for (const message of record.messages ?? []) {
+      const toolUses = message.content.filter(
+        (block): block is Extract<(typeof message.content)[number], { type: 'tool_use' }> =>
+          block.type === 'tool_use'
+      );
+      if (toolUses.length > 0) {
+        for (const toolUse of toolUses) toolUsesById.set(toolUse.id, toolUse.name);
+        const allEstimated = toolUses.every((toolUse) => Boolean(toolUse.estimated_tokens));
+        if (allEstimated) {
+          for (const toolUse of toolUses) total += toolUse.estimated_tokens?.total ?? 0;
+          hasAny = true;
+        } else if (toolUses.length === 1 && typeof message.usage?.total_tokens === 'number') {
+          total += message.usage.total_tokens;
+          hasAny = true;
+        } else {
+          const shares = splitInteger(message.usage?.total_tokens, toolUses.length);
+          total += shares.reduce((sum, value) => sum + value, 0);
+          if (typeof message.usage?.total_tokens === 'number') hasAny = true;
+        }
+      }
+
+      const toolResults = message.content.filter(
+        (block): block is Extract<(typeof message.content)[number], { type: 'tool_result' }> =>
+          block.type === 'tool_result'
+      );
+      if (toolResults.length === 0) continue;
+      const allEstimated = toolResults.every((result) => Boolean(result.estimated_tokens));
+      if (allEstimated) {
+        for (const result of toolResults) total += result.estimated_tokens?.total ?? 0;
+        hasAny = true;
+        continue;
+      }
+      if (toolResults.length === 1) {
+        const [result] = toolResults;
+        if (
+          result &&
+          toolUsesById.has(result.tool_use_id) &&
+          typeof message.usage?.total_tokens === 'number'
+        ) {
+          total += message.usage.total_tokens;
+          hasAny = true;
+          continue;
+        }
+      }
+      const knownResults = toolResults.filter((result) => toolUsesById.has(result.tool_use_id));
+      if (knownResults.length === 0) continue;
+      const shares = splitInteger(message.usage?.total_tokens, knownResults.length);
+      total += shares.reduce((sum, value) => sum + value, 0);
+      if (typeof message.usage?.total_tokens === 'number') hasAny = true;
+    }
+  }
+  return hasAny ? total : null;
 }
 
 function pruneOldJobs(jobs: Map<string, RunJob>, runQueueState: RunQueueState) {

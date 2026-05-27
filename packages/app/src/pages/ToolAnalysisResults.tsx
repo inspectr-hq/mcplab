@@ -104,20 +104,22 @@ export default function ToolAnalysisResultsPage() {
   }, [offset, serverFilter]);
 
   useEffect(() => {
-    if (!source.listToolAnalysisServers) {
-      setServerOptions(
-        Array.from(new Set(items.flatMap((item) => item.serverNames))).sort((a, b) =>
-          a.localeCompare(b)
-        )
-      );
-      return;
-    }
+    if (!source.listToolAnalysisServers) return;
     void source
       .listToolAnalysisServers()
       .then((servers) => setServerOptions(servers))
       .catch(() => {
         setServerOptions([]);
       });
+  }, [source]);
+
+  useEffect(() => {
+    if (source.listToolAnalysisServers) return;
+    setServerOptions(
+      Array.from(new Set(items.flatMap((item) => item.serverNames))).sort((a, b) =>
+        a.localeCompare(b)
+      )
+    );
   }, [items, source]);
 
   useEffect(() => {

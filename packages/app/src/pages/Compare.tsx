@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,
   ChevronUp,
@@ -230,8 +230,31 @@ const Compare = () => {
   const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
   const [withinRunScenarioFilter, setWithinRunScenarioFilter] = useState(initialWithinRunScenario);
   const [openWithinRunScenarioPicker, setOpenWithinRunScenarioPicker] = useState(false);
+  const refreshRequestIdRef = useRef(0);
+
+  const apiTimeFilter = useMemo(() => {
+    if (timeFilterMode === 'all') return {};
+    if (timeFilterMode === 'last') {
+      const preset =
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
+        TIME_FILTER_PRESETS[0]!;
+      const now = new Date();
+      return {
+        since: new Date(now.getTime() - preset.durationMs).toISOString(),
+        until: now.toISOString()
+      };
+    }
+    const start = parseLocalDateTime(timeFilterStart)?.toISOString();
+    const end = parseLocalDateTime(timeFilterEnd)?.toISOString();
+    return {
+      since: start,
+      until: end
+    };
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const loadResults = async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     setRefreshing(true);
     try {
       if (source.listRunSummariesPage) {
@@ -241,25 +264,18 @@ const Compare = () => {
           scenario?: string;
           since?: string;
           until?: string;
-          lastDays?: number;
         } = { limit: pageLimit, offset };
         if (scenarioFilter !== 'all') pageFilter.scenario = scenarioFilter;
-        if (timeFilterMode === 'last') {
-          const preset =
-            TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
-            TIME_FILTER_PRESETS[0]!;
-          pageFilter.lastDays = Math.max(1, Math.ceil(preset.durationMs / (24 * 60 * 60 * 1000)));
-        } else if (timeFilterMode === 'custom') {
-          const start = parseLocalDateTime(timeFilterStart)?.toISOString();
-          const end = parseLocalDateTime(timeFilterEnd)?.toISOString();
-          if (start) pageFilter.since = start;
-          if (end) pageFilter.until = end;
-        }
+        if (apiTimeFilter.since) pageFilter.since = apiTimeFilter.since;
+        if (apiTimeFilter.until) pageFilter.until = apiTimeFilter.until;
         const page = await source.listRunSummariesPage(pageFilter);
+        if (refreshRequestIdRef.current !== requestId) return;
         pagination.updateMeta(page);
         setResults(page.data.map(summaryToResult));
       } else {
-        setResults(await source.listResults());
+        const next = await source.listResults();
+        if (refreshRequestIdRef.current !== requestId) return;
+        setResults(next);
       }
     } catch (error: unknown) {
       toast({
@@ -268,12 +284,13 @@ const Compare = () => {
         variant: 'destructive'
       });
     } finally {
-      setRefreshing(false);
+      if (refreshRequestIdRef.current === requestId) setRefreshing(false);
     }
   };
 
   useEffect(() => {
     let active = true;
+    refreshRequestIdRef.current += 1;
     setRefreshing(true);
     const loadPromise = source.listRunSummariesPage
       ? source
@@ -281,25 +298,8 @@ const Compare = () => {
             limit: pageLimit,
             offset,
             scenario: scenarioFilter === 'all' ? undefined : scenarioFilter,
-            ...(timeFilterMode === 'last'
-              ? {
-                  lastDays: Math.max(
-                    1,
-                    Math.ceil(
-                      (TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset)
-                        ?.durationMs ??
-                        TIME_FILTER_PRESETS[0]!.durationMs) /
-                        (24 * 60 * 60 * 1000)
-                    )
-                  )
-                }
-              : {}),
-            ...(timeFilterMode === 'custom'
-              ? {
-                  since: parseLocalDateTime(timeFilterStart)?.toISOString(),
-                  until: parseLocalDateTime(timeFilterEnd)?.toISOString()
-                }
-              : {})
+            since: apiTimeFilter.since,
+            until: apiTimeFilter.until
           })
           .then((page) => {
           if (active) {
@@ -330,10 +330,7 @@ const Compare = () => {
     offset,
     scenarioFilter,
     source,
-    timeFilterEnd,
-    timeFilterMode,
-    timeFilterPreset,
-    timeFilterStart
+    apiTimeFilter
   ]);
 
   const toggleSort = (next: typeof sortBy) => {

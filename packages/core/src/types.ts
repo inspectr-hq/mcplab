@@ -385,6 +385,7 @@ export interface ResultsJson {
     rerun_scenario_ids?: string[];
     rerun_server_override_all?: string[];
     rerun_scenario_server_overrides?: Record<string, string[]>;
+    tool_tokens_total?: number | null;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
   };
