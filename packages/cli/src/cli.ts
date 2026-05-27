@@ -54,7 +54,7 @@ program
   .version(pkgVersion)
   .option(
     '--no-prune-failed-runs-on-start',
-    'Disable startup cleanup of old failed run folders (env override: MCPLAB_PRUNE_FAILED_RUNS_ON_START=0)'
+    'Disable startup cleanup of incomplete run folders (env override: MCPLAB_PRUNE_FAILED_RUNS_ON_START=0)'
   );
 
 program.hook('preAction', (_thisCommand, actionCommand) => {
@@ -934,6 +934,7 @@ function formatRunProgressEvent(event: RunProgressEvent): string | undefined {
 }
 
 function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
+  if (actionCommand.name() !== 'app') return;
   if (!actionCommand.options.some((option) => option.attributeName() === 'runsDir')) {
     return;
   }
@@ -966,7 +967,7 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
   if (deletedAbandonedRuns > 0) {
     console.log(
       kleur.gray(
-        `[mcplab-app] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s).`
+        `[mcplab] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s).`
       )
     );
   }
