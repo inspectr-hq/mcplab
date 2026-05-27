@@ -746,7 +746,9 @@ const Results = () => {
                 role="combobox"
                 aria-expanded={openScenarioFilterPicker}
                 aria-controls="results-scenario-command-list"
-                className="w-[260px] justify-between font-normal"
+                className={`w-[260px] justify-between font-normal ${
+                  scenarioFilter !== 'all' ? 'border-primary/40' : ''
+                }`}
               >
                 <span className="truncate text-left">{selectedScenarioFilterLabel}</span>
                 <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -792,7 +794,9 @@ const Results = () => {
                 role="combobox"
                 aria-expanded={openTimeFilterPicker}
                 aria-controls="results-time-command-list"
-                className="w-[320px] justify-between font-normal"
+                className={`w-[320px] justify-between font-normal ${
+                  timeFilterMode !== 'all' ? 'border-primary/40' : ''
+                }`}
               >
                 <span className="flex min-w-0 items-center gap-2 truncate text-left">
                   <CalendarRange className="h-4 w-4 shrink-0 text-muted-foreground" />
