@@ -1,5 +1,21 @@
 # @inspectr/mcplab
 
+## 1.17.0
+
+### Minor Changes
+
+- feat: Provide list endpoints
+- feat: Show pass rate of last run
+- feat: Rerun past runs
+- rechore: Store tool_tokens_total in results metadata
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.13.0
+  - @inspectr/mcplab-mcp-server@1.4.1
+  - @inspectr/mcplab-reporting@1.1.14
+
 ## 1.16.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.13.0
+
+### Minor Changes
+
+- chore: Store tool_tokens_total in results metadata
+
 ## 1.12.0
 
 ### Minor Changes
