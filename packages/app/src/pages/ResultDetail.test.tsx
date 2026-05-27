@@ -12,6 +12,7 @@ const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() =>
   const getResult = vi.fn();
   const listMarkdownReports = vi.fn().mockResolvedValue([]);
   const updateRunNote = vi.fn().mockResolvedValue(undefined);
+  const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
   const assistantState = {
     assistantMessages: [] as ResultAssistantSessionView['messages'],
     assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
@@ -29,7 +30,7 @@ const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() =>
   };
   return {
     getResultMock: getResult,
-    sourceMock: { getResult, listMarkdownReports, updateRunNote },
+    sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
     mockResultAssistantState: assistantState
   };
 });
@@ -412,5 +413,40 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument();
+  });
+
+  it('queues rerun from detail page with same settings', async () => {
+    const result = makeResult();
+    result.id = 'run-rerun';
+    result.configPath = 'evaluate-search-tags.yaml';
+    result.rerunAgents = ['agent-1'];
+    result.rerunScenarioIds = ['scn-1'];
+    getResultMock.mockResolvedValue(result);
+    sourceMock.startRun.mockClear();
+
+    render(
+      <MemoryRouter
+        initialEntries={['/results/run-rerun']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-rerun');
+    fireEvent.click(screen.getByRole('button', { name: 'Rerun' }));
+
+    await waitFor(() => {
+      expect(sourceMock.startRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configPath: 'evaluate-search-tags.yaml',
+          runsPerScenario: 1,
+          scenarioIds: ['scn-1'],
+          agents: ['agent-1']
+        })
+      );
+    });
   });
 });

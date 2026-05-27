@@ -88,6 +88,7 @@ export interface EvalConfig {
   configName?: string;
   description?: string;
   sourcePath?: string;
+  configHash?: string;
   relativePath?: string;
   suitePath?: string;
   loadError?: string;
@@ -169,6 +170,10 @@ export interface EvalResult {
   configHash: string;
   configPath?: string;
   configName?: string;
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   timestamp: string;
   runNote?: string;
   mcpServerVersions: Record<string, string | null>;

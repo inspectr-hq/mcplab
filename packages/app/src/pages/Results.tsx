@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Eye,
   Download,
+  Play,
   Bot,
   Trash2,
   ChevronUp,
@@ -64,6 +65,9 @@ import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import type { EvalResult } from '@/types/eval';
+import { summaryToResult } from '@/lib/run-summary-to-result';
+import { rerunWithSameSettings } from '@/lib/rerun-run';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -173,6 +177,7 @@ const RESULT_ASSISTANT_SNIPPETS = [
       'Find unusual runs or outliers in latency, tool calls, or pass rate, and explain why they stand out.'
   }
 ] as const;
+const PAGE_LIMIT = 25;
 
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -197,6 +202,31 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const pagination = useOffsetPagination(PAGE_LIMIT);
+  const { offset, totalCount, hasMore } = pagination;
+  const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
+  const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
+  const apiTimeFilter = useMemo(() => {
+    if (timeFilterMode === 'all') return {};
+    if (timeFilterMode === 'last') {
+      const preset =
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
+        TIME_FILTER_PRESETS[0]!;
+      const now = new Date();
+      const since = new Date(now.getTime() - preset.durationMs);
+      return { since: since.toISOString(), until: now.toISOString() };
+    }
+    const start = parseLocalDateTime(timeFilterStart);
+    const end = parseLocalDateTime(timeFilterEnd);
+    if (start && end) {
+      return start.getTime() <= end.getTime()
+        ? { since: start.toISOString(), until: end.toISOString() }
+        : { since: end.toISOString(), until: start.toISOString() };
+    }
+    if (start) return { since: start.toISOString() };
+    if (end) return { until: end.toISOString() };
+    return {};
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -209,7 +239,30 @@ const Results = () => {
   const loadResults = async () => {
     setRefreshing(true);
     try {
-      setResults(await source.listResults());
+      if (source.listRunSummariesPage) {
+        const page = await source.listRunSummariesPage({
+          ...apiTimeFilter,
+          scenario: apiScenarioFilter,
+          limit: PAGE_LIMIT,
+          offset
+        });
+        pagination.updateMeta(page);
+        setResults(page.data.map(summaryToResult));
+      } else if (source.listRunSummaries) {
+        const summaries = await source.listRunSummaries({
+          ...apiTimeFilter,
+          scenario: apiScenarioFilter,
+          limit: PAGE_LIMIT,
+          offset
+        });
+        pagination.setTotalCount(summaries.length);
+        pagination.setHasMore(false);
+        setResults(summaries.map(summaryToResult));
+      } else {
+        pagination.setTotalCount(0);
+        pagination.setHasMore(false);
+        setResults(await source.listResults());
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -224,8 +277,37 @@ const Results = () => {
   useEffect(() => {
     let active = true;
     setRefreshing(true);
-    source
-      .listResults()
+    const loadPromise = source.listRunSummariesPage
+      ? source
+          .listRunSummariesPage({
+            ...apiTimeFilter,
+            scenario: apiScenarioFilter,
+            limit: PAGE_LIMIT,
+            offset
+          })
+          .then((page) => {
+            if (active) {
+              pagination.updateMeta(page);
+            }
+            return page.data.map(summaryToResult);
+          })
+      : source.listRunSummaries
+      ? source
+          .listRunSummaries({
+            ...apiTimeFilter,
+            scenario: apiScenarioFilter,
+            limit: PAGE_LIMIT,
+            offset
+          })
+          .then((summaries) => {
+            if (active) {
+              pagination.setTotalCount(summaries.length);
+              pagination.setHasMore(false);
+            }
+            return summaries.map(summaryToResult);
+          })
+      : source.listResults();
+    loadPromise
       .then((next) => {
         if (active) setResults(next);
       })
@@ -243,7 +325,7 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [apiScenarioFilter, apiTimeFilter, offset, source]);
 
   const {
     assistantMessages,
@@ -337,6 +419,7 @@ const Results = () => {
   ]);
 
   const filteredResults = useMemo(() => {
+    if (source.listRunSummariesPage) return results;
     const scenarioFiltered =
       scenarioFilter === 'all'
         ? results
@@ -375,7 +458,19 @@ const Results = () => {
       if (rangeEnd !== null && timestamp > rangeEnd) return false;
       return true;
     });
-  }, [results, scenarioFilter, timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
+  }, [
+    results,
+    scenarioFilter,
+    source.listRunSummariesPage,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
+
+  useEffect(() => {
+    pagination.reset();
+  }, [apiScenarioFilter, apiTimeFilter, pagination.reset]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
@@ -472,7 +567,20 @@ const Results = () => {
   const runScopesById = useMemo(() => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
-      map.set(run.id, buildRunScopeSummary(run));
+      if (run.scenarios.length > 0) {
+        map.set(run.id, buildRunScopeSummary(run));
+        continue;
+      }
+      const evalName = run.configName?.trim() || '';
+      const configPath = run.configPath?.trim() || '';
+      const evalLabel =
+        evalName && configPath ? `${evalName} · ${configPath}` : evalName || configPath;
+      map.set(run.id, {
+        scenarioCount: run.totalScenarios,
+        agentCount: 0,
+        scopePreview: evalLabel || 'n/a',
+        modelSummary: ''
+      });
     }
     return map;
   }, [sorted]);
@@ -499,6 +607,34 @@ const Results = () => {
       });
     } finally {
       setDeletingRun(false);
+    }
+  };
+
+  const handleRerun = async (run: EvalResult) => {
+    const configPath = run.configPath?.trim();
+    if (!configPath) {
+      toast({
+        title: 'Cannot rerun',
+        description: 'This run has no config path in metadata.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setRerunningRunId(run.id);
+    try {
+      await rerunWithSameSettings(source, run);
+      toast({
+        title: 'Rerun queued',
+        description: `${run.id} queued with previous run settings.`
+      });
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not rerun',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setRerunningRunId((current) => (current === run.id ? null : current));
     }
   };
 
@@ -696,12 +832,19 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
+            Prev
+          </Button>
+          <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
+            Next
+          </Button>
           <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
             <Sparkles className="h-4 w-4 text-amber-500" />
             MCP Lab Assistant
           </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
 
       <div
         className={`grid gap-6 ${
@@ -869,37 +1012,48 @@ const Results = () => {
                           {formatToolTokenTotal(item.run)}
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link to={`/results/${item.run.id}`}>
-                                  <Eye className="mr-2 h-3.5 w-3.5" />
-                                  View
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Download className="mr-2 h-3.5 w-3.5" />
-                                Export JSON
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onSelect={(e) => {
-                                  e.preventDefault();
-                                  const active = document.activeElement;
-                                  if (active instanceof HTMLElement) active.blur();
-                                  setPendingDeleteRunId(item.run.id);
-                                }}
-                              >
-                                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={rerunningRunId === item.run.id}
+                              onClick={() => void handleRerun(item.run)}
+                            >
+                              <Play className="mr-1.5 h-3.5 w-3.5" />
+                              {rerunningRunId === item.run.id ? 'Queueing...' : 'Rerun'}
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/results/${item.run.id}`}>
+                                    <Eye className="mr-2 h-3.5 w-3.5" />
+                                    View
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  Export JSON
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onSelect={(e) => {
+                                    e.preventDefault();
+                                    const active = document.activeElement;
+                                    if (active instanceof HTMLElement) active.blur();
+                                    setPendingDeleteRunId(item.run.id);
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )

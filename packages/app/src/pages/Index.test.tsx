@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from './Index';
 import type { EvalResult } from '@/types/eval';
+import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -16,8 +17,9 @@ vi.mock('recharts', () => ({
 
 const { sourceMock, configsRef } = vi.hoisted(() => {
   const listResults = vi.fn();
+  const listRunSummaries = vi.fn();
   return {
-    sourceMock: { listResults },
+    sourceMock: { listResults, listRunSummaries },
     configsRef: { value: [] as Array<{ id: string }> }
   };
 });
@@ -46,25 +48,45 @@ function makeRun(id: string, passRate: number, avgLatency: number, timestamp: st
   };
 }
 
+function makeSummary(
+  runId: string,
+  passRate: number,
+  avgLatencyMs: number,
+  timestamp: string
+): WorkspaceRunSummary {
+  return {
+    runId,
+    path: `/tmp/${runId}`,
+    timestamp,
+    configHash: 'hash',
+    totalScenarios: 1,
+    totalRuns: 1,
+    passRate,
+    avgToolCalls: 1,
+    avgLatencyMs
+  };
+}
+
 describe('Dashboard', () => {
   beforeEach(() => {
     sourceMock.listResults.mockReset();
+    sourceMock.listRunSummaries.mockReset();
   });
 
   it('computes WoW deltas for pass rate and latency', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T12:00:00.000Z').getTime());
-    sourceMock.listResults
+    sourceMock.listRunSummaries
       .mockResolvedValueOnce([
-        makeRun('run-30d-a', 0.8, 100, '2026-03-09T12:00:00.000Z'),
-        makeRun('run-30d-b', 0.6, 140, '2026-03-08T12:00:00.000Z')
+        makeSummary('run-30d-a', 0.8, 100, '2026-03-09T12:00:00.000Z'),
+        makeSummary('run-30d-b', 0.6, 140, '2026-03-08T12:00:00.000Z')
       ])
       .mockResolvedValueOnce([
-        makeRun('run-current', 0.8, 100, '2026-03-09T12:00:00.000Z'),
-        makeRun('run-current-2', 0.6, 140, '2026-03-08T12:00:00.000Z')
+        makeSummary('run-current', 0.8, 100, '2026-03-09T12:00:00.000Z'),
+        makeSummary('run-current-2', 0.6, 140, '2026-03-08T12:00:00.000Z')
       ])
       .mockResolvedValueOnce([
-        makeRun('run-prev', 0.5, 200, '2026-03-02T12:00:00.000Z'),
-        makeRun('run-prev-2', 0.5, 200, '2026-03-01T12:00:00.000Z')
+        makeSummary('run-prev', 0.5, 200, '2026-03-02T12:00:00.000Z'),
+        makeSummary('run-prev-2', 0.5, 200, '2026-03-01T12:00:00.000Z')
       ]);
 
     render(
@@ -76,7 +98,7 @@ describe('Dashboard', () => {
     );
 
     await waitFor(() => {
-      expect(sourceMock.listResults).toHaveBeenCalledTimes(3);
+      expect(sourceMock.listRunSummaries).toHaveBeenCalledTimes(3);
     });
     expect(screen.getByText('70%')).toBeInTheDocument();
     expect(screen.getByText('120ms')).toBeInTheDocument();
@@ -86,9 +108,13 @@ describe('Dashboard', () => {
 
   it('shows fallback text when previous-week baseline is missing', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T12:00:00.000Z').getTime());
-    sourceMock.listResults.mockResolvedValueOnce([makeRun('run-30d', 1, 90, '2026-03-09')]);
-    sourceMock.listResults.mockResolvedValueOnce([makeRun('run-current', 1, 90, '2026-03-09')]);
-    sourceMock.listResults.mockResolvedValueOnce([]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([
+      makeSummary('run-30d', 1, 90, '2026-03-09')
+    ]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([
+      makeSummary('run-current', 1, 90, '2026-03-09')
+    ]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([]);
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -104,9 +130,9 @@ describe('Dashboard', () => {
 
   it('shows empty state for Recent Runs when no runs exist in last 30 days', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T12:00:00.000Z').getTime());
-    sourceMock.listResults.mockResolvedValueOnce([]);
-    sourceMock.listResults.mockResolvedValueOnce([]);
-    sourceMock.listResults.mockResolvedValueOnce([]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([]);
+    sourceMock.listRunSummaries.mockResolvedValueOnce([]);
 
     render(
       <MemoryRouter initialEntries={['/']}>

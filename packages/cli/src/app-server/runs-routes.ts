@@ -11,7 +11,8 @@ import {
   renderSummaryMarkdown,
   applyRuntimeServerOverrides,
   type EvalConfig,
-  type RunProgressEvent
+  type RunProgressEvent,
+  type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { SseEvent } from './jobs.js';
@@ -134,6 +135,16 @@ type PreviewRunRequestBody = {
   };
 };
 
+type LatestPassRatesRequestBody = {
+  lastDays?: unknown;
+  configs?: Array<{
+    id?: unknown;
+    sourcePath?: unknown;
+    relativePath?: unknown;
+    configHash?: unknown;
+  }>;
+};
+
 type ConfigScenario = EvalConfig['scenarios'][number];
 
 export async function handleRunsRoutes(params: {
@@ -170,21 +181,74 @@ export async function handleRunsRoutes(params: {
     const requestUrl = new URL(req.url ?? '/api/runs', 'http://localhost');
     const since = requestUrl.searchParams.get('since') ?? undefined;
     const until = requestUrl.searchParams.get('until') ?? undefined;
+    const scenario = requestUrl.searchParams.get('scenario') ?? undefined;
     const lastDaysRaw = requestUrl.searchParams.get('last_days');
     const lastDaysParsed = lastDaysRaw === null ? NaN : Number(lastDaysRaw);
     const lastDays =
       Number.isFinite(lastDaysParsed) && lastDaysParsed > 0
         ? Math.floor(lastDaysParsed)
         : undefined;
-    asJson(
-      res,
-      200,
-      listRuns(settings.runsDir, {
-        since,
-        until,
-        lastDays
-      })
-    );
+    const limitRaw = Number(requestUrl.searchParams.get('limit'));
+    const offsetRaw = Number(requestUrl.searchParams.get('offset'));
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 25;
+    const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
+    const all = listRuns(settings.runsDir, {
+      since,
+      until,
+      lastDays,
+      scenario
+    });
+    const data = all.slice(offset, offset + limit);
+    const totalCount = all.length;
+    const hasMore = offset + data.length < totalCount;
+    const nextOffset = hasMore ? offset + data.length : null;
+    const prevOffset = offset > 0 ? Math.max(0, offset - limit) : null;
+    asJson(res, 200, {
+      object: 'list',
+      url: `${pathname}${requestUrl.search}`,
+      data,
+      has_more: hasMore,
+      total_count: totalCount,
+      next_offset: nextOffset,
+      prev_offset: prevOffset
+    });
+    return true;
+  }
+
+  if (pathname === '/api/runs/latest-pass-rates' && method === 'POST') {
+    const body = (await parseBody(req)) as LatestPassRatesRequestBody;
+    const requestedConfigs = Array.isArray(body.configs) ? body.configs : [];
+    const normalizedConfigs = requestedConfigs
+      .map((entry) => ({
+        id: String(entry?.id ?? '').trim(),
+        sourcePath: String(entry?.sourcePath ?? '').trim(),
+        relativePath: String(entry?.relativePath ?? '').trim(),
+        configHash: String(entry?.configHash ?? '').trim()
+      }))
+      .filter((entry) => entry.id);
+    const lastDaysRaw = Number(body.lastDays);
+    const lastDays =
+      Number.isFinite(lastDaysRaw) && lastDaysRaw > 0 ? Math.floor(lastDaysRaw) : undefined;
+    const summaries = listRuns(settings.runsDir, { lastDays });
+    const pending = new Set(normalizedConfigs.map((entry) => entry.id));
+    const byConfigId: Record<string, number> = {};
+    for (const summary of summaries) {
+      if (pending.size === 0) break;
+      const summaryPath = String(summary.configPath ?? '').trim();
+      const summaryHash = String(summary.configHash ?? '').trim();
+      for (const cfg of normalizedConfigs) {
+        if (!pending.has(cfg.id)) continue;
+        if (
+          (cfg.sourcePath && cfg.sourcePath === summaryPath) ||
+          (cfg.relativePath && cfg.relativePath === summaryPath) ||
+          (cfg.configHash && cfg.configHash === summaryHash)
+        ) {
+          byConfigId[cfg.id] = summary.passRate;
+          pending.delete(cfg.id);
+        }
+      }
+    }
+    asJson(res, 200, { byConfigId });
     return true;
   }
 
@@ -967,6 +1031,7 @@ async function executeRunJob(
 ) {
   const {
     addJobEvent,
+    getScenarioRunTraceRecords,
     selectScenarioIds,
     expandConfigForAgents,
     resolveRunSelectedAgents,
@@ -1140,6 +1205,25 @@ async function executeRunJob(
       if (loaded.config.name && loaded.config.name.trim().length > 0) {
         results.metadata.config_name = loaded.config.name.trim();
       }
+      results.metadata.rerun_agents = [...resolvedAgentList];
+      results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
+        (scenario) => scenario.id
+      );
+      if (serverOverrideAll && serverOverrideAll.length > 0) {
+        results.metadata.rerun_server_override_all = [...serverOverrideAll];
+      } else {
+        delete results.metadata.rerun_server_override_all;
+      }
+      if (filteredScenarioOverrides && Object.keys(filteredScenarioOverrides).length > 0) {
+        results.metadata.rerun_scenario_server_overrides = Object.fromEntries(
+          Object.entries(filteredScenarioOverrides).map(([scenarioKey, serverIds]) => [
+            scenarioKey,
+            [...serverIds]
+          ])
+        );
+      } else {
+        delete results.metadata.rerun_scenario_server_overrides;
+      }
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),
@@ -1152,6 +1236,11 @@ async function executeRunJob(
         ts: new Date().toISOString(),
         payload: { message: `Writing results to ${runDir}` }
       });
+      const traceRecords = getScenarioRunTraceRecords(
+        results.metadata.run_id,
+        settings.runsDir
+      ) as ScenarioRunTraceRecord[];
+      results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
       writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
       writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
       writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
@@ -1202,6 +1291,77 @@ async function executeRunJob(
     advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     pruneOldJobs(jobs, runQueueState);
   }
+}
+
+function splitInteger(total: number | undefined, parts: number): number[] {
+  if (!Number.isFinite(total) || !parts || parts <= 0) return Array(parts).fill(0);
+  const safeTotal = Math.max(0, Math.round(total ?? 0));
+  const base = Math.floor(safeTotal / parts);
+  let remainder = safeTotal % parts;
+  return Array.from({ length: parts }, () => {
+    const value = base + (remainder > 0 ? 1 : 0);
+    if (remainder > 0) remainder -= 1;
+    return value;
+  });
+}
+
+function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number | null {
+  let total = 0;
+  let hasAny = false;
+  for (const record of records) {
+    const toolUsesById = new Map<string, string>();
+    for (const message of record.messages ?? []) {
+      const toolUses = message.content.filter(
+        (block): block is Extract<(typeof message.content)[number], { type: 'tool_use' }> =>
+          block.type === 'tool_use'
+      );
+      if (toolUses.length > 0) {
+        for (const toolUse of toolUses) toolUsesById.set(toolUse.id, toolUse.name);
+        const allEstimated = toolUses.every((toolUse) => Boolean(toolUse.estimated_tokens));
+        if (allEstimated) {
+          for (const toolUse of toolUses) total += toolUse.estimated_tokens?.total ?? 0;
+          hasAny = true;
+        } else if (toolUses.length === 1 && typeof message.usage?.total_tokens === 'number') {
+          total += message.usage.total_tokens;
+          hasAny = true;
+        } else {
+          const shares = splitInteger(message.usage?.total_tokens, toolUses.length);
+          total += shares.reduce((sum, value) => sum + value, 0);
+          if (typeof message.usage?.total_tokens === 'number') hasAny = true;
+        }
+      }
+
+      const toolResults = message.content.filter(
+        (block): block is Extract<(typeof message.content)[number], { type: 'tool_result' }> =>
+          block.type === 'tool_result'
+      );
+      if (toolResults.length === 0) continue;
+      const allEstimated = toolResults.every((result) => Boolean(result.estimated_tokens));
+      if (allEstimated) {
+        for (const result of toolResults) total += result.estimated_tokens?.total ?? 0;
+        hasAny = true;
+        continue;
+      }
+      if (toolResults.length === 1) {
+        const [result] = toolResults;
+        if (
+          result &&
+          toolUsesById.has(result.tool_use_id) &&
+          typeof message.usage?.total_tokens === 'number'
+        ) {
+          total += message.usage.total_tokens;
+          hasAny = true;
+          continue;
+        }
+      }
+      const knownResults = toolResults.filter((result) => toolUsesById.has(result.tool_use_id));
+      if (knownResults.length === 0) continue;
+      const shares = splitInteger(message.usage?.total_tokens, knownResults.length);
+      total += shares.reduce((sum, value) => sum + value, 0);
+      if (typeof message.usage?.total_tokens === 'number') hasAny = true;
+    }
+  }
+  return hasAny ? total : null;
 }
 
 function pruneOldJobs(jobs: Map<string, RunJob>, runQueueState: RunQueueState) {

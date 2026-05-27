@@ -55,6 +55,15 @@ export interface WorkspaceRunSummary {
   timestamp: string;
   runNote?: string;
   configHash: string;
+  configPath?: string;
+  configName?: string;
+  toolTokensTotal?: number | null;
+  scenarioIds?: string[];
+  scenarioNames?: string[];
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
   passRate: number;
@@ -62,7 +71,18 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
 }
 
+export interface ListEnvelope<T> {
+  object: 'list';
+  url: string;
+  data: T[];
+  has_more: boolean;
+  total_count: number;
+  next_offset: number | null;
+  prev_offset: number | null;
+}
+
 export interface MarkdownReportSummary {
+  reportId: string;
   path: string;
   relativePath: string;
   name: string;
@@ -71,6 +91,7 @@ export interface MarkdownReportSummary {
 }
 
 export interface MarkdownReportContent {
+  reportId: string;
   root: string;
   path: string;
   relativePath: string;
@@ -657,6 +678,31 @@ export interface EvalDataSource {
     until?: string;
     lastDays?: number;
   }) => Promise<EvalResult[]>;
+  listRunSummaries?: (filter?: {
+    since?: string;
+    until?: string;
+    lastDays?: number;
+    scenario?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<WorkspaceRunSummary[]>;
+  listRunSummariesPage?: (filter?: {
+    since?: string;
+    until?: string;
+    lastDays?: number;
+    scenario?: string;
+    limit?: number;
+    offset?: number;
+  }) => Promise<ListEnvelope<WorkspaceRunSummary>>;
+  getLatestPassRatesByConfigIds?: (params: {
+    lastDays?: number;
+    configs: Array<{
+      id: string;
+      sourcePath?: string;
+      relativePath?: string;
+      configHash?: string;
+    }>;
+  }) => Promise<Record<string, number>>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
@@ -810,11 +856,29 @@ export interface EvalDataSource {
   stopToolAnalysis: (
     jobId: string
   ) => Promise<{ ok: boolean; status: 'running' | 'completed' | 'error' | 'stopped' }>;
-  listToolAnalysisResults: () => Promise<ToolAnalysisResultSummary[]>;
+  listToolAnalysisResults: (params?: {
+    limit?: number;
+    offset?: number;
+    server?: string;
+  }) => Promise<ToolAnalysisResultSummary[]>;
+  listToolAnalysisResultsPage?: (params?: {
+    limit?: number;
+    offset?: number;
+    server?: string;
+  }) => Promise<ListEnvelope<ToolAnalysisResultSummary>>;
+  listToolAnalysisServers?: () => Promise<string[]>;
   getToolAnalysisSavedResult: (id: string) => Promise<SavedToolAnalysisReportRecord>;
   deleteToolAnalysisSavedResult: (id: string) => Promise<void>;
-  listMarkdownReports: () => Promise<MarkdownReportSummary[]>;
+  listMarkdownReports: (params?: {
+    limit?: number;
+    offset?: number;
+  }) => Promise<MarkdownReportSummary[]>;
+  listMarkdownReportsPage?: (params?: {
+    limit?: number;
+    offset?: number;
+  }) => Promise<ListEnvelope<MarkdownReportSummary>>;
   getMarkdownReport: (relativePath: string) => Promise<MarkdownReportContent>;
+  getMarkdownReportById?: (reportId: string) => Promise<MarkdownReportContent>;
   deleteMarkdownReport: (relativePath: string) => Promise<void>;
   createOAuthDebuggerSession: (
     config: OAuthDebuggerSessionConfig

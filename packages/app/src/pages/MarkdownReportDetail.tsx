@@ -29,6 +29,7 @@ function detectRunId(report: MarkdownReportContent): string | null {
 export default function MarkdownReportDetailPage() {
   const { source } = useDataSource();
   const [searchParams] = useSearchParams();
+  const reportId = (searchParams.get('id') ?? '').trim();
   const relativePath = (searchParams.get('path') ?? '').trim();
   const [report, setReport] = useState<MarkdownReportContent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,13 +40,16 @@ export default function MarkdownReportDetailPage() {
     let active = true;
     setReport(null);
     setNotFound(false);
-    if (!relativePath) {
+    if (!reportId && !relativePath) {
       setLoading(false);
       return;
     }
     setLoading(true);
-    source
-      .getMarkdownReport(relativePath)
+    const loadPromise =
+      reportId && source.getMarkdownReportById
+        ? source.getMarkdownReportById(reportId)
+        : source.getMarkdownReport(relativePath);
+    loadPromise
       .then((next) => {
         if (!active) return;
         setReport(next);
@@ -69,13 +73,13 @@ export default function MarkdownReportDetailPage() {
     return () => {
       active = false;
     };
-  }, [relativePath, source]);
+  }, [relativePath, reportId, source]);
 
-  if (!relativePath) {
+  if (!reportId && !relativePath) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Markdown Report</h1>
-        <p className="text-sm text-muted-foreground">Missing report path.</p>
+        <p className="text-sm text-muted-foreground">Missing report identifier.</p>
         <Button asChild variant="outline">
           <Link to="/markdown-reports">Back to Markdown Reports</Link>
         </Button>

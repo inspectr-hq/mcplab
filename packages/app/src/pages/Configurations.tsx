@@ -50,6 +50,7 @@ import {
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { PassRateBadge } from '@/components/PassRateBadge';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
@@ -186,6 +187,9 @@ const Configurations = () => {
   const [recentlyQueuedConfigIds, setRecentlyQueuedConfigIds] = useState<Set<string>>(new Set());
   const [queuingConfigIds, setQueuingConfigIds] = useState<Set<string>>(new Set());
   const [runningSuites, setRunningSuites] = useState<Set<string>>(new Set());
+  const [latestPassRateByConfigId, setLatestPassRateByConfigId] = useState<Record<string, number>>(
+    {}
+  );
   const normalizedConfigFilter = configFilter.trim().toLowerCase();
 
   const toggleSort = (next: typeof sortBy) => {
@@ -207,6 +211,37 @@ const Configurations = () => {
       window.removeEventListener('focus', handleFocus);
     };
   }, [reload]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLatestPassRates = async () => {
+      try {
+        if (source.getLatestPassRatesByConfigIds) {
+          const byConfigId = await source.getLatestPassRatesByConfigIds({
+            lastDays: 365,
+            configs: configs.map((cfg) => ({
+              id: cfg.id,
+              sourcePath: cfg.sourcePath,
+              relativePath: cfg.relativePath,
+              configHash: cfg.configHash
+            }))
+          });
+          if (!cancelled) setLatestPassRateByConfigId(byConfigId);
+          return;
+        }
+        setLatestPassRateByConfigId({});
+      } catch {
+        if (!cancelled) setLatestPassRateByConfigId({});
+      }
+    };
+
+    void loadLatestPassRates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [configs, source]);
 
   const handleDelete = async (id: string, name: string) => {
     await deleteConfig(id);
@@ -504,6 +539,7 @@ const Configurations = () => {
                     {sortIcon('updatedAt')}
                   </button>
                 </TableHead>
+                <TableHead className="text-right">Last Run</TableHead>
                 <TableHead className="w-[220px] text-right" />
               </TableRow>
             </TableHeader>
@@ -516,7 +552,7 @@ const Configurations = () => {
                 return (
                   <Fragment key={`suite-group-${suiteToken}`}>
                     <TableRow key={`suite-${suiteToken}`} className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={5} className="py-2">
+                      <TableCell colSpan={6} className="py-2">
                         <div className="flex items-center justify-between gap-2">
                           <button
                             type="button"
@@ -612,6 +648,15 @@ const Configurations = () => {
                                 <Clock className="h-3 w-3" />
                                 {new Date(cfg.updatedAt).toLocaleDateString()}
                               </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {typeof latestPassRateByConfigId[cfg.id] === 'number' ? (
+                                <div className="inline-flex justify-end">
+                                  <PassRateBadge rate={latestPassRateByConfigId[cfg.id]} />
+                                </div>
+                              ) : (
+                                ''
+                              )}
                             </TableCell>
                             <TableCell className="w-[220px] whitespace-nowrap">
                               <div className="flex items-center justify-end gap-2">
@@ -717,21 +762,21 @@ const Configurations = () => {
               })}
               {!loading && configs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     No MCP evaluations yet. Create your first one to get started.
                   </TableCell>
                 </TableRow>
               )}
               {!loading && configs.length > 0 && sortedConfigs.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     No MCP evaluations match this filter.
                   </TableCell>
                 </TableRow>
               )}
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                     Loading MCP evaluations...
                   </TableCell>
                 </TableRow>

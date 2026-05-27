@@ -30,6 +30,7 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import type { MarkdownReportSummary } from '@/lib/data-sources/types';
 import { Clock, MoreHorizontal, NotepadText, Trash2 } from 'lucide-react';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -50,11 +51,20 @@ export default function MarkdownReportsPage() {
   const [loading, setLoading] = useState(true);
   const [deletePath, setDeletePath] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const limit = 25;
+  const pagination = useOffsetPagination(limit);
+  const { offset, hasMore } = pagination;
 
   const load = async () => {
     setLoading(true);
     try {
-      setItems(await source.listMarkdownReports());
+      if (source.listMarkdownReportsPage) {
+        const page = await source.listMarkdownReportsPage({ limit, offset });
+        setItems(page.data);
+        pagination.updateMeta(page);
+      } else {
+        setItems(await source.listMarkdownReports({ limit, offset }));
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load markdown reports',
@@ -69,7 +79,7 @@ export default function MarkdownReportsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offset]);
 
   const latest = useMemo(() => items[0], [items]);
   const deleteTarget = useMemo(
@@ -114,13 +124,20 @@ export default function MarkdownReportsPage() {
           </Button>
           {latest ? (
             <Button asChild variant="outline">
-              <Link to={`/markdown-reports/view?path=${encodeURIComponent(latest.relativePath)}`}>
+              <Link to={`/markdown-reports/view?id=${encodeURIComponent(latest.reportId)}`}>
                 Open latest
               </Link>
             </Button>
           ) : null}
+          <Button variant="outline" onClick={pagination.prev} disabled={loading || offset === 0}>
+            Prev
+          </Button>
+          <Button variant="outline" onClick={pagination.next} disabled={loading || !hasMore}>
+            Next
+          </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(items.length)}</p>
 
       <Card>
         <CardContent className="p-0">
@@ -145,9 +162,7 @@ export default function MarkdownReportsPage() {
                     <TableCell>
                       <div className="space-y-1">
                         <Link
-                          to={`/markdown-reports/view?path=${encodeURIComponent(
-                            item.relativePath
-                          )}`}
+                          to={`/markdown-reports/view?id=${encodeURIComponent(item.reportId)}`}
                           className="font-mono text-xs text-primary hover:underline"
                         >
                           {item.name}
@@ -193,9 +208,7 @@ export default function MarkdownReportsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
                             <Link
-                              to={`/markdown-reports/view?path=${encodeURIComponent(
-                                item.relativePath
-                              )}`}
+                              to={`/markdown-reports/view?id=${encodeURIComponent(item.reportId)}`}
                             >
                               View
                             </Link>

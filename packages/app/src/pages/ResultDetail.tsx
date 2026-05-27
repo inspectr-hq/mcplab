@@ -22,7 +22,8 @@ import {
   NotepadText,
   Plus,
   Clock,
-  Clock3
+  Clock3,
+  Play
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,7 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { formatProvider } from '@/components/ProviderBadge';
+import { rerunWithSameSettings } from '@/lib/rerun-run';
 import type {
   ConversationItem,
   EvalResult,
@@ -173,6 +175,9 @@ const ResultDetail = () => {
   const [selectedReferenceReportError, setSelectedReferenceReportError] = useState<string | null>(
     null
   );
+  const [deleteRunOpen, setDeleteRunOpen] = useState(false);
+  const [deletingRun, setDeletingRun] = useState(false);
+  const [rerunningRun, setRerunningRun] = useState(false);
   const {
     assistantMessages,
     assistantPendingToolCalls,
@@ -657,6 +662,54 @@ const ResultDetail = () => {
     }
   };
 
+  const deleteRun = async () => {
+    if (!result?.id) return;
+    setDeletingRun(true);
+    try {
+      await source.deleteResult(result.id);
+      toast({ title: 'Run deleted', description: result.id });
+      navigate('/results');
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not delete run',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setDeletingRun(false);
+      setDeleteRunOpen(false);
+    }
+  };
+
+  const rerunResult = async () => {
+    if (!result?.id) return;
+    const configPath = resultConfigPath.trim();
+    if (!configPath) {
+      toast({
+        title: 'Cannot rerun',
+        description: 'This run has no config path in metadata.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    setRerunningRun(true);
+    try {
+      await rerunWithSameSettings(source, result);
+      toast({
+        title: 'Rerun queued',
+        description: `${result.id} queued with previous run settings.`
+      });
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not rerun',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setRerunningRun(false);
+    }
+  };
+
   return (
     <div
       className={`${
@@ -751,10 +804,8 @@ const ResultDetail = () => {
               >
                 <NotepadText className="h-3.5 w-3.5" />
                 {referenceReportsLoading
-                  ? 'Reference Reports...'
-                  : `Reference Reports${
-                      referenceReports.length ? ` (${referenceReports.length})` : ''
-                    }`}
+                  ? 'Reports...'
+                  : `Reports${referenceReports.length ? ` (${referenceReports.length})` : ''}`}
               </Button>
               <Button
                 type="button"
@@ -775,6 +826,28 @@ const ResultDetail = () => {
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
                 MCP Lab Assistant
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-w-full gap-1.5"
+                onClick={() => void rerunResult()}
+                disabled={rerunningRun || !resultConfigPath.trim()}
+              >
+                <Play className="h-3.5 w-3.5" />
+                {rerunningRun ? 'Queueing...' : 'Rerun'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="max-w-full gap-1.5 text-destructive"
+                onClick={() => setDeleteRunOpen(true)}
+                disabled={deletingRun}
+              >
+                <XCircle className="h-4 w-4" />
+                {deletingRun ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
           </div>
@@ -1919,7 +1992,7 @@ const ResultDetail = () => {
                     <div className="flex items-center justify-between gap-2">
                       <CardTitle className="flex items-center gap-2 text-base">
                         <NotepadText className="h-4 w-4 text-muted-foreground" />
-                        Reference Reports
+                        Reports
                       </CardTitle>
                       <div className="flex items-center gap-2 shrink-0">
                         <Button
@@ -2218,6 +2291,30 @@ const ResultDetail = () => {
                   : applyReportIsManual
                   ? 'Save Report'
                   : 'Approve & Write'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={deleteRunOpen} onOpenChange={setDeleteRunOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete run?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove run <span className="font-mono">{result?.id}</span>.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletingRun}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deletingRun || !result?.id}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void deleteRun();
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deletingRun ? 'Deleting...' : 'Delete'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

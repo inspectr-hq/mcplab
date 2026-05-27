@@ -16,6 +16,7 @@ import type {
   ToolAnalysisDiscoverResponse,
   ToolAnalysisReport,
   ToolAnalysisResultSummary,
+  ListEnvelope,
   SavedToolAnalysisReportRecord,
   WorkspaceConfigRecord,
   WorkspaceRunSummary,
@@ -144,6 +145,20 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   return () => close();
 }
 
+function appendPositiveIntegerParam(query: URLSearchParams, key: string, value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return;
+  const normalized = Math.floor(value);
+  if (normalized <= 0) return;
+  query.set(key, String(normalized));
+}
+
+function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return;
+  const normalized = Math.floor(value);
+  if (normalized < 0) return;
+  query.set(key, String(normalized));
+}
+
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () =>
@@ -177,7 +192,14 @@ export const workspaceApiClient = {
       body: JSON.stringify({ config, fileName })
     }),
   deleteConfig: (id: string) => request<{ ok: boolean }>(`/api/evals/${id}`, { method: 'DELETE' }),
-  listRuns: (filter?: { since?: string; until?: string; lastDays?: number }) => {
+  listRuns: (filter?: {
+    since?: string;
+    until?: string;
+    lastDays?: number;
+    scenario?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
     const query = new URLSearchParams();
     if (filter?.since?.trim()) query.set('since', filter.since.trim());
     if (filter?.until?.trim()) query.set('until', filter.until.trim());
@@ -188,15 +210,42 @@ export const workspaceApiClient = {
     ) {
       query.set('last_days', String(Math.floor(filter.lastDays)));
     }
+    if (filter?.scenario?.trim()) query.set('scenario', filter.scenario.trim());
+    appendPositiveIntegerParam(query, 'limit', filter?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', filter?.offset);
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
-    return request<WorkspaceRunSummary[]>(`/api/runs${suffix}`);
+    return request<ListEnvelope<WorkspaceRunSummary>>(`/api/runs${suffix}`);
   },
-  listMarkdownReports: () =>
-    request<{ items: MarkdownReportSummary[] }>('/api/markdown-reports').then((r) => r.items),
+  getLatestPassRatesByConfigIds: (params: {
+    lastDays?: number;
+    configs: Array<{
+      id: string;
+      sourcePath?: string;
+      relativePath?: string;
+      configHash?: string;
+    }>;
+  }) =>
+    request<{ byConfigId: Record<string, number> }>('/api/runs/latest-pass-rates', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }).then((response) => response.byConfigId),
+  listMarkdownReports: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    appendPositiveIntegerParam(query, 'limit', params?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', params?.offset);
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    return request<ListEnvelope<MarkdownReportSummary>>(`/api/markdown-reports${suffix}`);
+  },
+  listToolAnalysisServers: () =>
+    request<{ object: 'list'; data: string[] }>('/api/tool-analysis-results/servers').then(
+      (response) => response.data
+    ),
   getMarkdownReport: (path: string) =>
     request<MarkdownReportContent>(
       `/api/markdown-reports/content?path=${encodeURIComponent(path)}`
     ),
+  getMarkdownReportById: (reportId: string) =>
+    request<MarkdownReportContent>(`/api/markdown-reports/${encodeURIComponent(reportId)}`),
   deleteMarkdownReport: (path: string) =>
     request<{ ok: boolean }>(`/api/markdown-reports?path=${encodeURIComponent(path)}`, {
       method: 'DELETE'
@@ -458,10 +507,14 @@ export const workspaceApiClient = {
     };
     return () => close();
   },
-  listToolAnalysisResults: () =>
-    request<{ items: ToolAnalysisResultSummary[] }>('/api/tool-analysis-results').then(
-      (r) => r.items
-    ),
+  listToolAnalysisResults: (params?: { limit?: number; offset?: number; server?: string }) => {
+    const query = new URLSearchParams();
+    appendPositiveIntegerParam(query, 'limit', params?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', params?.offset);
+    if (params?.server?.trim()) query.set('server', params.server.trim());
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    return request<ListEnvelope<ToolAnalysisResultSummary>>(`/api/tool-analysis-results${suffix}`);
+  },
   getToolAnalysisSavedResult: (id: string) =>
     request<SavedToolAnalysisReportRecord>(`/api/tool-analysis-results/${id}`),
   deleteToolAnalysisSavedResult: (id: string) =>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GitCompare,
   ChevronUp,
@@ -47,6 +47,8 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
+import { summaryToResult } from '@/lib/run-summary-to-result';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 const colors = [
   'hsl(38, 92%, 50%)',
@@ -191,6 +193,7 @@ const Compare = () => {
   const initialTimeFilter = getTimeFilterQueryState(searchParams);
   const mode: CompareMode = searchParams.get('mode') === 'within-run' ? 'within-run' : 'runs';
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [detailedRunsById, setDetailedRunsById] = useState<Record<string, EvalResult>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'id' | 'timestamp' | 'passRate' | 'scenarios'>('timestamp');
@@ -212,6 +215,9 @@ const Compare = () => {
   const [timeFilterStart, setTimeFilterStart] = useState(initialTimeFilter.start);
   const [timeFilterEnd, setTimeFilterEnd] = useState(initialTimeFilter.end);
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
+  const pageLimit = 25;
+  const pagination = useOffsetPagination(pageLimit);
+  const { offset, hasMore, totalCount } = pagination;
 
   const initialWithinRunId = searchParams.get('runId') ?? '';
   const initialWithinRunAgents = (searchParams.get('agents') ?? '')
@@ -224,11 +230,53 @@ const Compare = () => {
   const [withinRunAgentIds, setWithinRunAgentIds] = useState<string[]>(initialWithinRunAgents);
   const [withinRunScenarioFilter, setWithinRunScenarioFilter] = useState(initialWithinRunScenario);
   const [openWithinRunScenarioPicker, setOpenWithinRunScenarioPicker] = useState(false);
+  const refreshRequestIdRef = useRef(0);
+
+  const apiTimeFilter = useMemo(() => {
+    if (timeFilterMode === 'all') return {};
+    if (timeFilterMode === 'last') {
+      const preset =
+        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
+        TIME_FILTER_PRESETS[0]!;
+      const now = new Date();
+      return {
+        since: new Date(now.getTime() - preset.durationMs).toISOString(),
+        until: now.toISOString()
+      };
+    }
+    const start = parseLocalDateTime(timeFilterStart)?.toISOString();
+    const end = parseLocalDateTime(timeFilterEnd)?.toISOString();
+    return {
+      since: start,
+      until: end
+    };
+  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
 
   const loadResults = async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     setRefreshing(true);
     try {
-      setResults(await source.listResults());
+      if (source.listRunSummariesPage) {
+        const pageFilter: {
+          limit: number;
+          offset: number;
+          scenario?: string;
+          since?: string;
+          until?: string;
+        } = { limit: pageLimit, offset };
+        if (scenarioFilter !== 'all') pageFilter.scenario = scenarioFilter;
+        if (apiTimeFilter.since) pageFilter.since = apiTimeFilter.since;
+        if (apiTimeFilter.until) pageFilter.until = apiTimeFilter.until;
+        const page = await source.listRunSummariesPage(pageFilter);
+        if (refreshRequestIdRef.current !== requestId) return;
+        pagination.updateMeta(page);
+        setResults(page.data.map(summaryToResult));
+      } else {
+        const next = await source.listResults();
+        if (refreshRequestIdRef.current !== requestId) return;
+        setResults(next);
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -236,15 +284,31 @@ const Compare = () => {
         variant: 'destructive'
       });
     } finally {
-      setRefreshing(false);
+      if (refreshRequestIdRef.current === requestId) setRefreshing(false);
     }
   };
 
   useEffect(() => {
     let active = true;
+    refreshRequestIdRef.current += 1;
     setRefreshing(true);
-    source
-      .listResults()
+    const loadPromise = source.listRunSummariesPage
+      ? source
+          .listRunSummariesPage({
+            limit: pageLimit,
+            offset,
+            scenario: scenarioFilter === 'all' ? undefined : scenarioFilter,
+            since: apiTimeFilter.since,
+            until: apiTimeFilter.until
+          })
+          .then((page) => {
+            if (active) {
+              pagination.updateMeta(page);
+            }
+            return page.data.map(summaryToResult);
+          })
+      : source.listResults();
+    loadPromise
       .then((next) => {
         if (active) setResults(next);
       })
@@ -262,7 +326,7 @@ const Compare = () => {
     return () => {
       active = false;
     };
-  }, [source]);
+  }, [offset, scenarioFilter, source, apiTimeFilter]);
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -312,7 +376,6 @@ const Compare = () => {
     if (timeFilterMode === 'all') return scenarioFiltered;
 
     const now = Date.now();
-
     if (timeFilterMode === 'last') {
       const preset =
         TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
@@ -328,7 +391,6 @@ const Compare = () => {
     const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
     const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
     const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
-
     return scenarioFiltered.filter((run) => {
       const timestamp = new Date(run.timestamp).getTime();
       if (Number.isNaN(timestamp)) return false;
@@ -359,8 +421,8 @@ const Compare = () => {
   }, [filteredResults, sortBy, sortDir]);
 
   const selectedRuns = useMemo(
-    () => sortedResults.filter((r) => selected.has(r.id)),
-    [sortedResults, selected]
+    () => sortedResults.filter((r) => selected.has(r.id)).map((r) => detailedRunsById[r.id] ?? r),
+    [detailedRunsById, sortedResults, selected]
   );
   const sortedResultsWithDaySeparators = useMemo<CompareTableItem[]>(() => {
     if (!showDaySeparators) return sortedResults.map((run) => ({ type: 'run', run }));
@@ -447,9 +509,34 @@ const Compare = () => {
   }, [selectedRuns]);
 
   const withinRun = useMemo(
-    () => results.find((result) => result.id === withinRunId),
-    [results, withinRunId]
+    () => detailedRunsById[withinRunId] ?? results.find((result) => result.id === withinRunId),
+    [detailedRunsById, results, withinRunId]
   );
+
+  useEffect(() => {
+    if (typeof source.getResult !== 'function') return;
+    if (selected.size === 0 && !withinRunId) return;
+    const ids = new Set<string>([...selected]);
+    if (withinRunId) ids.add(withinRunId);
+    for (const runId of ids) {
+      if (detailedRunsById[runId]) continue;
+      void source.getResult(runId).then((result) => {
+        if (!result) return;
+        setDetailedRunsById((prev) => (prev[runId] ? prev : { ...prev, [runId]: result }));
+      });
+    }
+  }, [detailedRunsById, selected, source, withinRunId]);
+
+  useEffect(() => {
+    pagination.reset();
+  }, [
+    pagination.reset,
+    scenarioFilter,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart,
+    timeFilterEnd
+  ]);
 
   const withinRunAgentOptions = useMemo(() => {
     if (!withinRun) return [];
@@ -923,8 +1010,15 @@ const Compare = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
+            Prev
+          </Button>
+          <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
+            Next
+          </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
 
       {mode === 'within-run' && (
         <Card>

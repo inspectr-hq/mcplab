@@ -9,6 +9,15 @@ export interface RunSummary {
   timestamp: string;
   runNote?: string;
   configHash: string;
+  configPath?: string;
+  configName?: string;
+  toolTokensTotal?: number | null;
+  scenarioIds?: string[];
+  scenarioNames?: string[];
+  rerunAgents?: string[];
+  rerunScenarioIds?: string[];
+  rerunServerOverrideAll?: string[];
+  rerunScenarioServerOverrides?: Record<string, string[]>;
   totalScenarios: number;
   totalRuns: number;
   passRate: number;
@@ -20,6 +29,7 @@ export interface ListRunsFilter {
   since?: string;
   until?: string;
   lastDays?: number;
+  scenario?: string;
 }
 
 export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[] {
@@ -49,12 +59,39 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
       if (!Number.isFinite(timestampMs) || timestampMs < sinceMs || timestampMs > untilMs) {
         continue;
       }
+      const scenarioItems = Array.isArray(results.scenarios) ? results.scenarios : [];
+      if (filter?.scenario?.trim()) {
+        const needle = filter.scenario.trim();
+        const matchesScenario = scenarioItems.some((scenario) => {
+          const scenarioId = String(scenario.scenario_id ?? '').trim();
+          const scenarioName = String(scenario.scenario_name ?? '').trim();
+          return scenarioId === needle || scenarioName === needle;
+        });
+        if (!matchesScenario) continue;
+      }
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,
         timestamp: results.metadata.timestamp,
         runNote: results.metadata.run_note,
         configHash: results.metadata.config_hash,
+        configPath: results.metadata.config_path,
+        configName: results.metadata.config_name,
+        toolTokensTotal:
+          typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total ===
+          'number'
+            ? (results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null
+            : null,
+        scenarioIds: scenarioItems
+          .map((scenario) => String(scenario.scenario_id ?? ''))
+          .filter(Boolean),
+        scenarioNames: scenarioItems
+          .map((scenario) => String(scenario.scenario_name ?? ''))
+          .filter(Boolean),
+        rerunAgents: results.metadata.rerun_agents,
+        rerunScenarioIds: results.metadata.rerun_scenario_ids,
+        rerunServerOverrideAll: results.metadata.rerun_server_override_all,
+        rerunScenarioServerOverrides: results.metadata.rerun_scenario_server_overrides,
         totalScenarios: results.summary.total_scenarios,
         totalRuns: results.summary.total_runs,
         passRate: results.summary.pass_rate,

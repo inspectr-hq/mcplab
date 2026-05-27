@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -21,7 +21,13 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
         pass_rate: 1,
         avg_tool_calls_per_run: 1,
         avg_tool_latency_ms: 10
-      }
+      },
+      scenarios: [
+        {
+          scenario_id: 'scn-default',
+          scenario_name: 'Default Scenario'
+        }
+      ]
     }),
     'utf8'
   );
@@ -101,5 +107,26 @@ describe('listRuns filters', () => {
 
     const runs = listRuns(runsDir, { since: 'not-a-date', until: 'bad-date' });
     expect(runs.map((item) => item.runId)).toEqual(['run-b', 'run-a']);
+  });
+
+  it('filters runs by scenario id or scenario name', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-a', '2026-03-10T10:00:00.000Z');
+    writeRun(runsDir, 'run-b', '2026-03-11T10:00:00.000Z');
+
+    const runBPath = join(runsDir, 'run-b', 'results.json');
+    const runB = JSON.parse(readFileSync(runBPath, 'utf8'));
+    runB.scenarios = [{ scenario_id: 'scn-target', scenario_name: 'Target Scenario' }];
+    writeFileSync(runBPath, JSON.stringify(runB), 'utf8');
+
+    expect(listRuns(runsDir, { scenario: 'scn-target' }).map((item) => item.runId)).toEqual([
+      'run-b'
+    ]);
+    expect(listRuns(runsDir, { scenario: 'Target Scenario' }).map((item) => item.runId)).toEqual([
+      'run-b'
+    ]);
   });
 });

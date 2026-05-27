@@ -42,6 +42,7 @@ import type { ToolAnalysisResultSummary } from '@/lib/data-sources/types';
 import { Clock, Download, MoreHorizontal, Trash2, NotebookTabs, ChevronDown } from 'lucide-react';
 import { toolAnalysisReportToMarkdown } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -61,11 +62,31 @@ export default function ToolAnalysisResultsPage() {
   const [deleting, setDeleting] = useState(false);
   const [serverFilter, setServerFilter] = useState('all');
   const [openServerFilterPicker, setOpenServerFilterPicker] = useState(false);
+  const [serverOptions, setServerOptions] = useState<string[]>([]);
+  const limit = 25;
+  const pagination = useOffsetPagination(limit);
+  const { offset, hasMore } = pagination;
 
   const load = async () => {
     setLoading(true);
     try {
-      setItems(await source.listToolAnalysisResults());
+      if (source.listToolAnalysisResultsPage) {
+        const page = await source.listToolAnalysisResultsPage({
+          limit,
+          offset,
+          server: serverFilter === 'all' ? undefined : serverFilter
+        });
+        setItems(page.data);
+        pagination.updateMeta(page);
+      } else {
+        setItems(
+          await source.listToolAnalysisResults({
+            limit,
+            offset,
+            server: serverFilter === 'all' ? undefined : serverFilter
+          })
+        );
+      }
     } catch (error: unknown) {
       toast({
         title: 'Could not load tool analysis results',
@@ -80,22 +101,30 @@ export default function ToolAnalysisResultsPage() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offset, serverFilter]);
 
-  const serverOptions = useMemo(
-    () =>
+  useEffect(() => {
+    if (!source.listToolAnalysisServers) return;
+    void source
+      .listToolAnalysisServers()
+      .then((servers) => setServerOptions(servers))
+      .catch(() => {
+        setServerOptions([]);
+      });
+  }, [source]);
+
+  useEffect(() => {
+    if (source.listToolAnalysisServers) return;
+    setServerOptions(
       Array.from(new Set(items.flatMap((item) => item.serverNames))).sort((a, b) =>
         a.localeCompare(b)
-      ),
-    [items]
-  );
-  const filteredItems = useMemo(
-    () =>
-      serverFilter === 'all'
-        ? items
-        : items.filter((item) => item.serverNames.includes(serverFilter)),
-    [items, serverFilter]
-  );
+      )
+    );
+  }, [items, source]);
+
+  useEffect(() => {
+    pagination.reset();
+  }, [pagination.reset, serverFilter]);
 
   const deleteTarget = useMemo(
     () => items.find((i) => i.reportId === deleteId) ?? null,
@@ -211,11 +240,18 @@ export default function ToolAnalysisResultsPage() {
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button variant="outline" onClick={pagination.prev} disabled={loading || offset === 0}>
+            Prev
+          </Button>
+          <Button variant="outline" onClick={pagination.next} disabled={loading || !hasMore}>
+            Next
+          </Button>
           <Button asChild variant="outline">
             <Link to="/tool-analysis">Analyze MCP Tools</Link>
           </Button>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(items.length)}</p>
 
       <Card>
         <CardContent className="p-0">
@@ -227,12 +263,11 @@ export default function ToolAnalysisResultsPage() {
             <>
               <div className="border-b px-4 py-3">
                 <p className="text-xs text-muted-foreground">
-                  Showing{' '}
-                  <span className="font-medium text-foreground">{filteredItems.length}</span> of{' '}
-                  <span className="font-medium text-foreground">{items.length}</span> reports
+                  Showing <span className="font-medium text-foreground">{items.length}</span>{' '}
+                  reports
                 </p>
               </div>
-              {filteredItems.length === 0 ? (
+              {items.length === 0 ? (
                 <p className="p-6 text-sm text-muted-foreground">
                   No reports for the selected MCP server.
                 </p>
@@ -249,7 +284,7 @@ export default function ToolAnalysisResultsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredItems.map((item) => (
+                    {items.map((item) => (
                       <TableRow key={item.reportId}>
                         <TableCell>
                           <div className="space-y-1">
