@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
@@ -949,32 +949,27 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
   const runsDir = resolveRunArtifactsDir(actionCommand);
   if (!existsSync(runsDir)) return;
 
-  const days = 7;
-  const maxAgeMs = days * 24 * 60 * 60 * 1000;
-  const nowMs = Date.now();
-
   const runDirs = readdirSync(runsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => {
       const dirPath = join(runsDir, entry.name);
-      return { path: dirPath, mtimeMs: statSync(dirPath).mtimeMs };
+      return { path: dirPath };
     });
 
-  let deleted = 0;
-  let failedOldCandidates = 0;
+  let deletedAbandonedRuns = 0;
   for (const entry of runDirs) {
-    if (nowMs - entry.mtimeMs <= maxAgeMs) continue;
-    if (!isFailedRun(join(entry.path, 'results.json'))) continue;
-    failedOldCandidates += 1;
+    if (!isAbandonedRun(join(entry.path, 'results.json'))) continue;
     rmSync(entry.path, { recursive: true, force: true });
-    deleted += 1;
+    deletedAbandonedRuns += 1;
   }
 
-  console.log(
-    kleur.gray(
-      `Startup cleanup: checked ${runDirs.length} run folder(s); found ${failedOldCandidates} failed run(s) older than ${days} day(s); removed ${deleted}.`
-    )
-  );
+  if (runDirs.length > 0) {
+    console.log(
+      kleur.gray(
+        `Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} abandoned run folder(s).`
+      )
+    );
+  }
 }
 
 function resolveRunArtifactsDir(actionCommand: Command): string {
@@ -983,6 +978,6 @@ function resolveRunArtifactsDir(actionCommand: Command): string {
   return resolve(raw && raw.length > 0 ? raw : 'mcplab/results/evaluation-runs');
 }
 
-function isFailedRun(resultsPath: string): boolean {
+function isAbandonedRun(resultsPath: string): boolean {
   return !existsSync(resultsPath);
 }
