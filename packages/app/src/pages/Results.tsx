@@ -216,9 +216,11 @@ const PAGE_LIMIT = 25;
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { source } = useDataSource();
-  const initialTimeFilter = hasExplicitTimeFilterQuery(searchParams)
-    ? getTimeFilterQueryState(searchParams)
-    : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams);
+  const [initialTimeFilter] = useState<TimeFilterQueryState>(() =>
+    hasExplicitTimeFilterQuery(searchParams)
+      ? getTimeFilterQueryState(searchParams)
+      : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams)
+  );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);

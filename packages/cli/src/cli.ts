@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
 import kleur from 'kleur';
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   loadConfig,
@@ -949,6 +949,7 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
 
   const runsDir = resolveRunArtifactsDir(actionCommand);
   if (!existsSync(runsDir)) return;
+  const abandonAgeMs = 60 * 60 * 1000;
 
   const runDirs = readdirSync(runsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -959,7 +960,7 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
 
   let deletedAbandonedRuns = 0;
   for (const entry of runDirs) {
-    if (!isAbandonedRun(join(entry.path, 'results.json'))) continue;
+    if (!isAbandonedRun(entry.path, abandonAgeMs)) continue;
     rmSync(entry.path, { recursive: true, force: true });
     deletedAbandonedRuns += 1;
   }
@@ -967,7 +968,7 @@ function pruneFailedRunsOnStartIfEnabled(actionCommand: Command): void {
   if (deletedAbandonedRuns > 0) {
     console.log(
       kleur.gray(
-        `[mcplab] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s).`
+        `[mcplab] Startup cleanup: checked ${runDirs.length} run folder(s); removed ${deletedAbandonedRuns} incomplete run folder(s) older than 1h.`
       )
     );
   }
@@ -979,6 +980,12 @@ function resolveRunArtifactsDir(actionCommand: Command): string {
   return resolve(raw && raw.length > 0 ? raw : 'mcplab/results/evaluation-runs');
 }
 
-function isAbandonedRun(resultsPath: string): boolean {
-  return !existsSync(resultsPath);
+function isAbandonedRun(runDir: string, abandonAgeMs: number): boolean {
+  const resultsPath = join(runDir, 'results.json');
+  if (existsSync(resultsPath)) return false;
+  try {
+    return Date.now() - statSync(runDir).mtimeMs > abandonAgeMs;
+  } catch {
+    return false;
+  }
 }
