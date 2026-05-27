@@ -240,18 +240,10 @@ export default function ToolAnalysisResultsPage() {
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.prev}
-            disabled={loading || offset === 0}
-          >
+          <Button variant="outline" onClick={pagination.prev} disabled={loading || offset === 0}>
             Prev
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.next}
-            disabled={loading || !hasMore}
-          >
+          <Button variant="outline" onClick={pagination.next} disabled={loading || !hasMore}>
             Next
           </Button>
           <Button asChild variant="outline">
@@ -259,9 +251,7 @@ export default function ToolAnalysisResultsPage() {
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {pagination.rangeLabel(items.length)}
-      </p>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(items.length)}</p>
 
       <Card>
         <CardContent className="p-0">
@@ -273,7 +263,8 @@ export default function ToolAnalysisResultsPage() {
             <>
               <div className="border-b px-4 py-3">
                 <p className="text-xs text-muted-foreground">
-                  Showing <span className="font-medium text-foreground">{items.length}</span> reports
+                  Showing <span className="font-medium text-foreground">{items.length}</span>{' '}
+                  reports
                 </p>
               </div>
               {items.length === 0 ? (

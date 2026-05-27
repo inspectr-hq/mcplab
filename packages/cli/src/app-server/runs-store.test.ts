@@ -125,8 +125,8 @@ describe('listRuns filters', () => {
     expect(listRuns(runsDir, { scenario: 'scn-target' }).map((item) => item.runId)).toEqual([
       'run-b'
     ]);
-    expect(
-      listRuns(runsDir, { scenario: 'Target Scenario' }).map((item) => item.runId)
-    ).toEqual(['run-b']);
+    expect(listRuns(runsDir, { scenario: 'Target Scenario' }).map((item) => item.runId)).toEqual([
+      'run-b'
+    ]);
   });
 });

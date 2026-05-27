@@ -1206,7 +1206,9 @@ async function executeRunJob(
         results.metadata.config_name = loaded.config.name.trim();
       }
       results.metadata.rerun_agents = [...resolvedAgentList];
-      results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map((scenario) => scenario.id);
+      results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
+        (scenario) => scenario.id
+      );
       if (serverOverrideAll && serverOverrideAll.length > 0) {
         results.metadata.rerun_server_override_all = [...serverOverrideAll];
       } else {

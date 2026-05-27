@@ -28,7 +28,10 @@ export async function handleMarkdownReportsRoutes(params: {
   const { asJson } = deps;
 
   if (pathname === '/api/markdown-reports' && method === 'GET') {
-    const url = new URL(req.url ?? '/api/markdown-reports', `http://${req.headers.host ?? 'localhost'}`);
+    const url = new URL(
+      req.url ?? '/api/markdown-reports',
+      `http://${req.headers.host ?? 'localhost'}`
+    );
     const limitRaw = Number(url.searchParams.get('limit'));
     const offsetRaw = Number(url.searchParams.get('offset'));
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 25;

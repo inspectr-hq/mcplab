@@ -302,11 +302,11 @@ const Compare = () => {
             until: apiTimeFilter.until
           })
           .then((page) => {
-          if (active) {
-            pagination.updateMeta(page);
-          }
-          return page.data.map(summaryToResult);
-        })
+            if (active) {
+              pagination.updateMeta(page);
+            }
+            return page.data.map(summaryToResult);
+          })
       : source.listResults();
     loadPromise
       .then((next) => {
@@ -326,12 +326,7 @@ const Compare = () => {
     return () => {
       active = false;
     };
-  }, [
-    offset,
-    scenarioFilter,
-    source,
-    apiTimeFilter
-  ]);
+  }, [offset, scenarioFilter, source, apiTimeFilter]);
 
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
@@ -426,10 +421,7 @@ const Compare = () => {
   }, [filteredResults, sortBy, sortDir]);
 
   const selectedRuns = useMemo(
-    () =>
-      sortedResults
-        .filter((r) => selected.has(r.id))
-        .map((r) => detailedRunsById[r.id] ?? r),
+    () => sortedResults.filter((r) => selected.has(r.id)).map((r) => detailedRunsById[r.id] ?? r),
     [detailedRunsById, sortedResults, selected]
   );
   const sortedResultsWithDaySeparators = useMemo<CompareTableItem[]>(() => {
@@ -516,7 +508,10 @@ const Compare = () => {
     return map;
   }, [selectedRuns]);
 
-  const withinRun = useMemo(() => detailedRunsById[withinRunId] ?? results.find((result) => result.id === withinRunId), [detailedRunsById, results, withinRunId]);
+  const withinRun = useMemo(
+    () => detailedRunsById[withinRunId] ?? results.find((result) => result.id === withinRunId),
+    [detailedRunsById, results, withinRunId]
+  );
 
   useEffect(() => {
     if (typeof source.getResult !== 'function') return;
@@ -1015,25 +1010,15 @@ const Compare = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.prev}
-            disabled={refreshing || offset === 0}
-          >
+          <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
             Prev
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.next}
-            disabled={refreshing || !hasMore}
-          >
+          <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
             Next
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {pagination.rangeLabel(results.length)}
-      </p>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
 
       {mode === 'within-run' && (
         <Card>

@@ -129,25 +129,15 @@ export default function MarkdownReportsPage() {
               </Link>
             </Button>
           ) : null}
-          <Button
-            variant="outline"
-            onClick={pagination.prev}
-            disabled={loading || offset === 0}
-          >
+          <Button variant="outline" onClick={pagination.prev} disabled={loading || offset === 0}>
             Prev
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.next}
-            disabled={loading || !hasMore}
-          >
+          <Button variant="outline" onClick={pagination.next} disabled={loading || !hasMore}>
             Next
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {pagination.rangeLabel(items.length)}
-      </p>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(items.length)}</p>
 
       <Card>
         <CardContent className="p-0">

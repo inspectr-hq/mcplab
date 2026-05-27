@@ -286,11 +286,11 @@ const Results = () => {
             offset
           })
           .then((page) => {
-          if (active) {
-            pagination.updateMeta(page);
-          }
-          return page.data.map(summaryToResult);
-        })
+            if (active) {
+              pagination.updateMeta(page);
+            }
+            return page.data.map(summaryToResult);
+          })
       : source.listRunSummaries
       ? source
           .listRunSummaries({
@@ -300,12 +300,12 @@ const Results = () => {
             offset
           })
           .then((summaries) => {
-          if (active) {
-            pagination.setTotalCount(summaries.length);
-            pagination.setHasMore(false);
-          }
-          return summaries.map(summaryToResult);
-        })
+            if (active) {
+              pagination.setTotalCount(summaries.length);
+              pagination.setHasMore(false);
+            }
+            return summaries.map(summaryToResult);
+          })
       : source.listResults();
     loadPromise
       .then((next) => {
@@ -832,18 +832,10 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.prev}
-            disabled={refreshing || offset === 0}
-          >
+          <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
             Prev
           </Button>
-          <Button
-            variant="outline"
-            onClick={pagination.next}
-            disabled={refreshing || !hasMore}
-          >
+          <Button variant="outline" onClick={pagination.next} disabled={refreshing || !hasMore}>
             Next
           </Button>
           <Button type="button" variant="outline" className="gap-1.5" onClick={openGlobalAssistant}>
@@ -852,9 +844,7 @@ const Results = () => {
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {pagination.rangeLabel(results.length)}
-      </p>
+      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
 
       <div
         className={`grid gap-6 ${
@@ -1030,9 +1020,7 @@ const Results = () => {
                               onClick={() => void handleRerun(item.run)}
                             >
                               <Play className="mr-1.5 h-3.5 w-3.5" />
-                              {rerunningRunId === item.run.id
-                                ? 'Queueing...'
-                                : 'Rerun'}
+                              {rerunningRunId === item.run.id ? 'Queueing...' : 'Rerun'}
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

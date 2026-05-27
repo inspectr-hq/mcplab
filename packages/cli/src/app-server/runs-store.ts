@@ -80,9 +80,11 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         toolTokensTotal:
           typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total ===
           'number'
-            ? ((results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null)
+            ? (results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null
             : null,
-        scenarioIds: scenarioItems.map((scenario) => String(scenario.scenario_id ?? '')).filter(Boolean),
+        scenarioIds: scenarioItems
+          .map((scenario) => String(scenario.scenario_id ?? ''))
+          .filter(Boolean),
         scenarioNames: scenarioItems
           .map((scenario) => String(scenario.scenario_name ?? ''))
           .filter(Boolean),

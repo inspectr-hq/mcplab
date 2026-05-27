@@ -9,7 +9,9 @@ export async function rerunWithSameSettings(source: EvalDataSource, run: EvalRes
   const agents =
     sourceRun.rerunAgents && sourceRun.rerunAgents.length > 0
       ? sourceRun.rerunAgents
-      : Array.from(new Set(sourceRun.scenarios.map((scenario) => scenario.agentId).filter(Boolean)));
+      : Array.from(
+          new Set(sourceRun.scenarios.map((scenario) => scenario.agentId).filter(Boolean))
+        );
   await source.startRun({
     configPath,
     runsPerScenario: 1,
