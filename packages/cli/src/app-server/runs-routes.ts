@@ -207,9 +207,9 @@ function emitQueueSnapshot(
   deps: Pick<RunsRouteDeps, 'sendSseEvent'>
 ) {
   const event: SseEvent = {
-    type: 'queue_snapshot',
+    type: 'queue_event',
     ts: new Date().toISOString(),
-    payload: { snapshot: buildQueueSnapshot(jobs, runQueueState) }
+    payload: { event: buildQueueSnapshot(jobs, runQueueState) }
   };
   for (const client of runQueueState.clients) {
     deps.sendSseEvent(client, event);
@@ -400,9 +400,9 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     sendSseEvent(res, {
-      type: 'queue_snapshot',
+      type: 'queue_event',
       ts: new Date().toISOString(),
-      payload: { snapshot: buildQueueSnapshot(jobs, runQueueState) }
+      payload: { event: buildQueueSnapshot(jobs, runQueueState) }
     });
     runQueueState.clients.add(res);
     req.on('close', () => {

@@ -88,18 +88,18 @@ describe('workspaceApiClient SSE subscriptions', () => {
     unsubscribe();
   });
 
-  it('parses queue snapshot events and emits synthetic error on SSE failure', () => {
+  it('parses queue events and emits synthetic error on SSE failure', () => {
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
     const onEvent = vi.fn();
 
     const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
     const source = MockEventSource.instances[0]!;
 
-    source.emit('queue_snapshot', {
-      type: 'queue_snapshot',
+    source.emit('queue_event', {
+      type: 'queue_event',
       ts: '2026-01-01T00:00:00.000Z',
       payload: {
-        snapshot: {
+        event: {
           active: null,
           queued: [{ jobId: 'job-1', status: 'queued', runParams: { configPath: '/tmp/x.yaml' } }]
         }
@@ -110,7 +110,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
 
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'queue_snapshot'
+        type: 'queue_event'
       })
     );
     expect(onEvent).toHaveBeenCalledWith(

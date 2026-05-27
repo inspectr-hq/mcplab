@@ -671,6 +671,7 @@ export const workspaceApiClient = {
         // Ignore malformed or non-JSON SSE payloads.
       }
     };
+    source.addEventListener('queue_event', messageHandler);
     source.addEventListener('queue_snapshot', messageHandler);
     source.onerror = () => {
       if (closed) return;

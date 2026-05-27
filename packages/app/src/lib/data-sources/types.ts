@@ -129,9 +129,10 @@ export interface QueueResponse {
 }
 
 export interface RunQueueSseEvent {
-  type: 'queue_snapshot' | (string & {});
+  type: 'queue_event' | 'queue_snapshot' | (string & {});
   ts: string;
   payload: {
+    event?: QueueResponse;
     snapshot?: QueueResponse;
     [key: string]: unknown;
   };

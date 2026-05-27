@@ -306,7 +306,7 @@ describe('run request validation', () => {
 });
 
 describe('run queue SSE endpoint', () => {
-  it('streams initial queue_snapshot and registers client', async () => {
+  it('streams initial queue_event and registers client', async () => {
     const { handleRunsRoutes } = await import('./runs-routes.js');
 
     const writes: string[] = [];
@@ -372,7 +372,7 @@ describe('run queue SSE endpoint', () => {
 
     expect(handled).toBe(true);
     expect(res.headers['content-type']).toBe('text/event-stream');
-    expect(writes.join('')).toContain('event: queue_snapshot');
+    expect(writes.join('')).toContain('event: queue_event');
     expect(runQueueState.clients.size).toBe(1);
 
     closeHandler?.();

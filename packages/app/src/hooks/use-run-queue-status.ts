@@ -49,12 +49,13 @@ export function useRunQueueStatus() {
     };
 
     const unsubscribe = source.subscribeRunQueue((event) => {
-      if (event.type === 'queue_snapshot' && event.payload.snapshot) {
+      const queueEvent = event.payload.event ?? event.payload.snapshot;
+      if ((event.type === 'queue_event' || event.type === 'queue_snapshot') && queueEvent) {
         snapshotRevisionRef.current += 1;
         setStreamConnected(true);
         streamConnectedRef.current = true;
         stopPolling();
-        setSnapshot(event.payload.snapshot);
+        setSnapshot(queueEvent);
         return;
       }
       if (event.type === 'error') {
