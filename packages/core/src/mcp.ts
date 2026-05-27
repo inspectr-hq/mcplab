@@ -527,15 +527,17 @@ function formatMcpError(prefix: string, url: string | undefined, err: any): stri
   const rawMessage = err?.message ?? String(err);
   const message = sanitizeMcpTransportErrorMessage(rawMessage);
   const statusCode = extractHttpStatusCode(err, rawMessage);
+  const messageStatusCode = extractHttpStatusCode(undefined, message);
   const hints: string[] = [];
   if (rawMessage.includes('fetch failed')) {
     hints.push('Verify the MCP server is running and reachable.');
     if (url) hints.push(`Check the URL: ${url}`);
     hints.push('If auth is required, confirm the bearer token env var is set.');
   }
-  const statusSuffix = statusCode ? ` (HTTP ${statusCode})` : '';
+  const statusSuffix =
+    statusCode && messageStatusCode !== statusCode ? ` (HTTP ${statusCode})` : '';
   const hintText = hints.length > 0 ? ` Hints: ${hints.join(' ')}` : '';
-  return `${prefix}. ${message}${statusSuffix}.${hintText}`;
+  return `${prefix}. ${ensureSentence(message)}${statusSuffix}${hintText}`;
 }
 
 export function sanitizeMcpTransportErrorMessage(message: string): string {
@@ -571,9 +573,12 @@ export function extractHttpStatusCode(err: unknown, message?: string): number | 
     if (parsed) return parsed;
   }
 
-  const statusFromMessage = (message ?? '').match(/\b(?:http\s*)?(\d{3})\b/i)?.[1];
-  const parsed = toHttpStatusCode(statusFromMessage);
-  return parsed;
+  const text = message ?? '';
+  const fromHttpContext = text.match(/\bhttp(?:\s+status)?\s*[:=()-]*\s*(\d{3})\b/i)?.[1];
+  if (fromHttpContext) return toHttpStatusCode(fromHttpContext);
+  const fromStatusCode = text.match(/\bstatus(?:\s+code)?\s*[:=()-]*\s*(\d{3})\b/i)?.[1];
+  if (fromStatusCode) return toHttpStatusCode(fromStatusCode);
+  return undefined;
 }
 
 function toHttpStatusCode(value: unknown): number | undefined {
@@ -582,6 +587,12 @@ function toHttpStatusCode(value: unknown): number | undefined {
   if (!Number.isInteger(numeric)) return undefined;
   if (numeric < 100 || numeric > 599) return undefined;
   return numeric;
+}
+
+function ensureSentence(text: string): string {
+  const trimmed = text.trimEnd();
+  if (!trimmed) return '';
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 async function safeReadText(response: Response): Promise<string> {

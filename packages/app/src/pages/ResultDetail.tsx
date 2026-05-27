@@ -1644,10 +1644,23 @@ const ResultDetail = () => {
                                                 'conversation'
                                               )
                                             ) && (
-                                              <p className="text-xs text-muted-foreground">
+                                              <button
+                                                type="button"
+                                                className="text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+                                                onClick={() =>
+                                                  toggleRunSection(
+                                                    runSectionKey(
+                                                      sc.scenarioId,
+                                                      sc.agentName,
+                                                      run.runIndex,
+                                                      'conversation'
+                                                    )
+                                                  )
+                                                }
+                                              >
                                                 Expand to inspect user/assistant/tool messages for
                                                 this run.
-                                              </p>
+                                              </button>
                                             )}
                                           </div>
                                         </Collapsible>

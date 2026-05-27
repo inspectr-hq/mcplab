@@ -32,6 +32,11 @@ describe('extractHttpStatusCode', () => {
     expect(extractHttpStatusCode({}, 'Streamable HTTP error (HTTP 502)')).toBe(502);
   });
 
+  it('does not infer status code from unrelated 3-digit numbers', () => {
+    expect(extractHttpStatusCode({}, 'failed at line 404 of config')).toBeUndefined();
+    expect(extractHttpStatusCode({}, 'retried 503 times')).toBeUndefined();
+  });
+
   it('ignores non-http numeric values', () => {
     expect(extractHttpStatusCode({ status: 42 })).toBeUndefined();
     expect(extractHttpStatusCode({ statusCode: '999' })).toBeUndefined();
