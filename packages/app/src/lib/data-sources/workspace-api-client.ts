@@ -145,6 +145,20 @@ function subscribeAssistantSessionEvents<TEvent extends { type: string }>(
   return () => close();
 }
 
+function appendPositiveIntegerParam(query: URLSearchParams, key: string, value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return;
+  const normalized = Math.floor(value);
+  if (normalized <= 0) return;
+  query.set(key, String(normalized));
+}
+
+function appendNonNegativeIntegerParam(query: URLSearchParams, key: string, value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return;
+  const normalized = Math.floor(value);
+  if (normalized < 0) return;
+  query.set(key, String(normalized));
+}
+
 export const workspaceApiClient = {
   health: () => request<WorkspaceHealthResponse>('/api/health'),
   getSettings: () =>
@@ -197,34 +211,35 @@ export const workspaceApiClient = {
       query.set('last_days', String(Math.floor(filter.lastDays)));
     }
     if (filter?.scenario?.trim()) query.set('scenario', filter.scenario.trim());
-    if (typeof filter?.limit === 'number' && Number.isFinite(filter.limit) && filter.limit > 0) {
-      query.set('limit', String(Math.floor(filter.limit)));
-    }
-    if (
-      typeof filter?.offset === 'number' &&
-      Number.isFinite(filter.offset) &&
-      filter.offset >= 0
-    ) {
-      query.set('offset', String(Math.floor(filter.offset)));
-    }
+    appendPositiveIntegerParam(query, 'limit', filter?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', filter?.offset);
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
     return request<ListEnvelope<WorkspaceRunSummary>>(`/api/runs${suffix}`);
   },
+  getLatestPassRatesByConfigIds: (params: {
+    lastDays?: number;
+    configs: Array<{
+      id: string;
+      sourcePath?: string;
+      relativePath?: string;
+      configHash?: string;
+    }>;
+  }) =>
+    request<{ byConfigId: Record<string, number> }>('/api/runs/latest-pass-rates', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    }).then((response) => response.byConfigId),
   listMarkdownReports: (params?: { limit?: number; offset?: number }) => {
     const query = new URLSearchParams();
-    if (typeof params?.limit === 'number' && Number.isFinite(params.limit) && params.limit > 0) {
-      query.set('limit', String(Math.floor(params.limit)));
-    }
-    if (
-      typeof params?.offset === 'number' &&
-      Number.isFinite(params.offset) &&
-      params.offset >= 0
-    ) {
-      query.set('offset', String(Math.floor(params.offset)));
-    }
+    appendPositiveIntegerParam(query, 'limit', params?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', params?.offset);
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
     return request<ListEnvelope<MarkdownReportSummary>>(`/api/markdown-reports${suffix}`);
   },
+  listToolAnalysisServers: () =>
+    request<{ object: 'list'; data: string[] }>('/api/tool-analysis-results/servers').then(
+      (response) => response.data
+    ),
   getMarkdownReport: (path: string) =>
     request<MarkdownReportContent>(
       `/api/markdown-reports/content?path=${encodeURIComponent(path)}`
@@ -494,16 +509,8 @@ export const workspaceApiClient = {
   },
   listToolAnalysisResults: (params?: { limit?: number; offset?: number; server?: string }) => {
     const query = new URLSearchParams();
-    if (typeof params?.limit === 'number' && Number.isFinite(params.limit) && params.limit > 0) {
-      query.set('limit', String(Math.floor(params.limit)));
-    }
-    if (
-      typeof params?.offset === 'number' &&
-      Number.isFinite(params.offset) &&
-      params.offset >= 0
-    ) {
-      query.set('offset', String(Math.floor(params.offset)));
-    }
+    appendPositiveIntegerParam(query, 'limit', params?.limit);
+    appendNonNegativeIntegerParam(query, 'offset', params?.offset);
     if (params?.server?.trim()) query.set('server', params.server.trim());
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
     return request<ListEnvelope<ToolAnalysisResultSummary>>(`/api/tool-analysis-results${suffix}`);

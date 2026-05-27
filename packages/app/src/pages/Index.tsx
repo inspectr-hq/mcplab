@@ -30,6 +30,7 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult } from '@/types/eval';
 import { buildRunScopeSummary } from '@/lib/run-scope-summary';
+import { summaryToResult } from '@/lib/run-summary-to-result';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -77,10 +78,18 @@ const Dashboard = () => {
     const previousUntil = new Date(currentSinceMs - 1).toISOString();
     const currentUntil = new Date(nowMs).toISOString();
 
+    const loadWindow = async (since: string, until: string) => {
+      if (source.listRunSummaries) {
+        const summaries = await source.listRunSummaries({ since, until });
+        return summaries.map(summaryToResult);
+      }
+      return source.listResults({ since, until });
+    };
+
     Promise.all([
-      source.listResults({ since: last30Since, until: currentUntil }),
-      source.listResults({ since: currentSince, until: currentUntil }),
-      source.listResults({ since: previousSince, until: previousUntil })
+      loadWindow(last30Since, currentUntil),
+      loadWindow(currentSince, currentUntil),
+      loadWindow(previousSince, previousUntil)
     ])
       .then(([last30WindowResults, currentWindowResults, previousWindowResults]) => {
         if (!active) return;

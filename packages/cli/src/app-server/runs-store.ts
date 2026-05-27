@@ -77,7 +77,11 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         configHash: results.metadata.config_hash,
         configPath: results.metadata.config_path,
         configName: results.metadata.config_name,
-        toolTokensTotal: estimateRunToolTokensTotal(results.metadata.run_id, runsDir),
+        toolTokensTotal:
+          typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total ===
+          'number'
+            ? ((results.metadata as { tool_tokens_total?: number }).tool_tokens_total ?? null)
+            : null,
         scenarioIds: scenarioItems.map((scenario) => String(scenario.scenario_id ?? '')).filter(Boolean),
         scenarioNames: scenarioItems
           .map((scenario) => String(scenario.scenario_name ?? ''))
@@ -99,85 +103,6 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
   return summaries.sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
-}
-
-function splitInteger(total: number | undefined, parts: number): number[] {
-  if (!Number.isFinite(total) || !parts || parts <= 0) return Array(parts).fill(0);
-  const safeTotal = Math.max(0, Math.round(total ?? 0));
-  const base = Math.floor(safeTotal / parts);
-  let remainder = safeTotal % parts;
-  return Array.from({ length: parts }, () => {
-    const value = base + (remainder > 0 ? 1 : 0);
-    if (remainder > 0) remainder -= 1;
-    return value;
-  });
-}
-
-function estimateRunToolTokensTotal(runId: string, runsDir: string): number | null {
-  const records = getScenarioRunTraceRecords(runId, runsDir);
-  let total = 0;
-  let hasAny = false;
-  for (const record of records) {
-    const toolUsesById = new Map<string, string>();
-    for (const message of record.messages ?? []) {
-      const toolUses = message.content.filter(
-        (block): block is Extract<(typeof message.content)[number], { type: 'tool_use' }> =>
-          block.type === 'tool_use'
-      );
-      if (toolUses.length > 0) {
-        for (const toolUse of toolUses) toolUsesById.set(toolUse.id, toolUse.name);
-        const allEstimated = toolUses.every((toolUse) => Boolean(toolUse.estimated_tokens));
-        if (allEstimated) {
-          for (const toolUse of toolUses) {
-            total += toolUse.estimated_tokens?.total ?? 0;
-          }
-          hasAny = true;
-        } else if (toolUses.length === 1 && typeof message.usage?.total_tokens === 'number') {
-          total += message.usage.total_tokens;
-          hasAny = true;
-        } else {
-          const shares = splitInteger(message.usage?.total_tokens, toolUses.length);
-          total += shares.reduce((sum, value) => sum + value, 0);
-          if (typeof message.usage?.total_tokens === 'number') hasAny = true;
-        }
-      }
-
-      const toolResults = message.content.filter(
-        (block): block is Extract<(typeof message.content)[number], { type: 'tool_result' }> =>
-          block.type === 'tool_result'
-      );
-      if (toolResults.length === 0) continue;
-
-      const allEstimated = toolResults.every((result) => Boolean(result.estimated_tokens));
-      if (allEstimated) {
-        for (const result of toolResults) {
-          total += result.estimated_tokens?.total ?? 0;
-        }
-        hasAny = true;
-        continue;
-      }
-
-      if (toolResults.length === 1) {
-        const [result] = toolResults;
-        if (
-          result &&
-          toolUsesById.has(result.tool_use_id) &&
-          typeof message.usage?.total_tokens === 'number'
-        ) {
-          total += message.usage.total_tokens;
-          hasAny = true;
-          continue;
-        }
-      }
-
-      const knownResults = toolResults.filter((result) => toolUsesById.has(result.tool_use_id));
-      if (knownResults.length === 0) continue;
-      const shares = splitInteger(message.usage?.total_tokens, knownResults.length);
-      total += shares.reduce((sum, value) => sum + value, 0);
-      if (typeof message.usage?.total_tokens === 'number') hasAny = true;
-    }
-  }
-  return hasAny ? total : null;
 }
 
 export function getRunResults(runId: string, runsDir: string): ResultsJson {

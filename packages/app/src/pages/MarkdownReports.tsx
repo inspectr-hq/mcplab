@@ -30,6 +30,7 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import type { MarkdownReportSummary } from '@/lib/data-sources/types';
 import { Clock, MoreHorizontal, NotepadText, Trash2 } from 'lucide-react';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -50,10 +51,9 @@ export default function MarkdownReportsPage() {
   const [loading, setLoading] = useState(true);
   const [deletePath, setDeletePath] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
   const limit = 25;
+  const pagination = useOffsetPagination(limit);
+  const { offset, hasMore } = pagination;
 
   const load = async () => {
     setLoading(true);
@@ -61,8 +61,7 @@ export default function MarkdownReportsPage() {
       if (source.listMarkdownReportsPage) {
         const page = await source.listMarkdownReportsPage({ limit, offset });
         setItems(page.data);
-        setHasMore(page.has_more);
-        setTotalCount(page.total_count);
+        pagination.updateMeta(page);
       } else {
         setItems(await source.listMarkdownReports({ limit, offset }));
       }
@@ -132,14 +131,14 @@ export default function MarkdownReportsPage() {
           ) : null}
           <Button
             variant="outline"
-            onClick={() => setOffset((prev) => Math.max(0, prev - limit))}
+            onClick={pagination.prev}
             disabled={loading || offset === 0}
           >
             Prev
           </Button>
           <Button
             variant="outline"
-            onClick={() => setOffset((prev) => prev + limit)}
+            onClick={pagination.next}
             disabled={loading || !hasMore}
           >
             Next
@@ -147,9 +146,7 @@ export default function MarkdownReportsPage() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        {totalCount > 0
-          ? `Showing ${offset + 1}-${Math.min(offset + items.length, totalCount)} of ${totalCount}`
-          : 'Showing 0 of 0'}
+        {pagination.rangeLabel(items.length)}
       </p>
 
       <Card>

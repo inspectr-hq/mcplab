@@ -694,6 +694,15 @@ export interface EvalDataSource {
     limit?: number;
     offset?: number;
   }) => Promise<ListEnvelope<WorkspaceRunSummary>>;
+  getLatestPassRatesByConfigIds?: (params: {
+    lastDays?: number;
+    configs: Array<{
+      id: string;
+      sourcePath?: string;
+      relativePath?: string;
+      configHash?: string;
+    }>;
+  }) => Promise<Record<string, number>>;
   getResult: (id: string) => Promise<EvalResult | undefined>;
   deleteResult: (id: string) => Promise<void>;
   updateRunNote: (runId: string, runNote?: string) => Promise<void>;
@@ -857,6 +866,7 @@ export interface EvalDataSource {
     offset?: number;
     server?: string;
   }) => Promise<ListEnvelope<ToolAnalysisResultSummary>>;
+  listToolAnalysisServers?: () => Promise<string[]>;
   getToolAnalysisSavedResult: (id: string) => Promise<SavedToolAnalysisReportRecord>;
   deleteToolAnalysisSavedResult: (id: string) => Promise<void>;
   listMarkdownReports: (params?: {

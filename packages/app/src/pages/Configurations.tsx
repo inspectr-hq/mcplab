@@ -217,121 +217,20 @@ const Configurations = () => {
 
     const loadLatestPassRates = async () => {
       try {
-        const latestResultByConfigPath = new Map<string, { timestamp: number; passRate: number }>();
-        const latestResultByConfigBasename = new Map<
-          string,
-          { timestamp: number; passRate: number }
-        >();
-        const latestResultByConfigHash = new Map<string, { timestamp: number; passRate: number }>();
-        if (source.listRunSummaries) {
-          const summaries = await source.listRunSummaries({ lastDays: 365 });
-          if (cancelled) return;
-          for (const summary of summaries) {
-            const timestamp = new Date(summary.timestamp).getTime();
-            const configPath = summary.configPath?.trim();
-            if (configPath) {
-              const existingByPath = latestResultByConfigPath.get(configPath);
-              if (!existingByPath || timestamp > existingByPath.timestamp) {
-                latestResultByConfigPath.set(configPath, {
-                  timestamp,
-                  passRate: summary.passRate
-                });
-              }
-              const basename = configPath.split('/').pop()?.trim();
-              if (basename) {
-                const existingByBasename = latestResultByConfigBasename.get(basename);
-                if (!existingByBasename || timestamp > existingByBasename.timestamp) {
-                  latestResultByConfigBasename.set(basename, {
-                    timestamp,
-                    passRate: summary.passRate
-                  });
-                }
-              }
-            }
-            if (!summary.configHash) continue;
-            const existingByHash = latestResultByConfigHash.get(summary.configHash);
-            if (!existingByHash || timestamp > existingByHash.timestamp) {
-              latestResultByConfigHash.set(summary.configHash, {
-                timestamp,
-                passRate: summary.passRate
-              });
-            }
-          }
-        } else {
-          const results = await source.listResults({ lastDays: 365 });
-          if (cancelled) return;
-          for (const result of results) {
-            const timestamp = new Date(result.timestamp).getTime();
-            const configPath = result.configPath?.trim();
-            if (configPath) {
-              const existingByPath = latestResultByConfigPath.get(configPath);
-              if (!existingByPath || timestamp > existingByPath.timestamp) {
-                latestResultByConfigPath.set(configPath, {
-                  timestamp,
-                  passRate: result.overallPassRate
-                });
-              }
-              const basename = configPath.split('/').pop()?.trim();
-              if (basename) {
-                const existingByBasename = latestResultByConfigBasename.get(basename);
-                if (!existingByBasename || timestamp > existingByBasename.timestamp) {
-                  latestResultByConfigBasename.set(basename, {
-                    timestamp,
-                    passRate: result.overallPassRate
-                  });
-                }
-              }
-            }
-            if (!result.configHash) continue;
-            const existingByHash = latestResultByConfigHash.get(result.configHash);
-            if (!existingByHash || timestamp > existingByHash.timestamp) {
-              latestResultByConfigHash.set(result.configHash, {
-                timestamp,
-                passRate: result.overallPassRate
-              });
-            }
-          }
+        if (source.getLatestPassRatesByConfigIds) {
+          const byConfigId = await source.getLatestPassRatesByConfigIds({
+            lastDays: 365,
+            configs: configs.map((cfg) => ({
+              id: cfg.id,
+              sourcePath: cfg.sourcePath,
+              relativePath: cfg.relativePath,
+              configHash: cfg.configHash
+            }))
+          });
+          if (!cancelled) setLatestPassRateByConfigId(byConfigId);
+          return;
         }
-
-        const nextByConfigId: Record<string, number> = {};
-        for (const cfg of configs) {
-          const sourcePath = cfg.sourcePath?.trim();
-          if (sourcePath) {
-            const latestByPath = latestResultByConfigPath.get(sourcePath);
-            if (latestByPath) {
-              nextByConfigId[cfg.id] = latestByPath.passRate;
-              continue;
-            }
-            const sourceBasename = sourcePath.split('/').pop()?.trim();
-            if (sourceBasename) {
-              const latestByBasename = latestResultByConfigBasename.get(sourceBasename);
-              if (latestByBasename) {
-                nextByConfigId[cfg.id] = latestByBasename.passRate;
-                continue;
-              }
-            }
-          }
-          const relativePath = cfg.relativePath?.trim();
-          if (relativePath) {
-            const latestByRelative = latestResultByConfigPath.get(relativePath);
-            if (latestByRelative) {
-              nextByConfigId[cfg.id] = latestByRelative.passRate;
-              continue;
-            }
-            const relativeBasename = relativePath.split('/').pop()?.trim();
-            if (relativeBasename) {
-              const latestByBasename = latestResultByConfigBasename.get(relativeBasename);
-              if (latestByBasename) {
-                nextByConfigId[cfg.id] = latestByBasename.passRate;
-                continue;
-              }
-            }
-          }
-          if (!cfg.configHash) continue;
-          const latestByHash = latestResultByConfigHash.get(cfg.configHash);
-          if (latestByHash) nextByConfigId[cfg.id] = latestByHash.passRate;
-        }
-        setLatestPassRateByConfigId(nextByConfigId);
+        setLatestPassRateByConfigId({});
       } catch {
         if (!cancelled) setLatestPassRateByConfigId({});
       }

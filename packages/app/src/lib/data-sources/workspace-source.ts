@@ -74,6 +74,9 @@ export const workspaceSource: EvalDataSource = {
   async listRunSummariesPage(filter) {
     return workspaceApiClient.listRuns(filter);
   },
+  async getLatestPassRatesByConfigIds(params) {
+    return workspaceApiClient.getLatestPassRatesByConfigIds(params);
+  },
   async getResult(id) {
     try {
       const [{ results }, trace] = await Promise.all([
@@ -245,6 +248,9 @@ export const workspaceSource: EvalDataSource = {
   },
   async listToolAnalysisResultsPage(params) {
     return workspaceApiClient.listToolAnalysisResults(params);
+  },
+  async listToolAnalysisServers() {
+    return workspaceApiClient.listToolAnalysisServers();
   },
   async getToolAnalysisSavedResult(id) {
     return workspaceApiClient.getToolAnalysisSavedResult(id);

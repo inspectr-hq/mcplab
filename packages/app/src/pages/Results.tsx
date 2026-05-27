@@ -64,8 +64,10 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
-import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 import type { EvalResult } from '@/types/eval';
+import { summaryToResult } from '@/lib/run-summary-to-result';
+import { rerunWithSameSettings } from '@/lib/rerun-run';
+import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
 type TimeFilterPreset = '15min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -177,49 +179,6 @@ const RESULT_ASSISTANT_SNIPPETS = [
 ] as const;
 const PAGE_LIMIT = 25;
 
-function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
-  const toolTokensTotal =
-    typeof summary.toolTokensTotal === 'number' ? summary.toolTokensTotal : null;
-  return {
-    id: summary.runId,
-    configId: '',
-    configHash: summary.configHash,
-    configPath: summary.configPath,
-    configName: summary.configName,
-    rerunAgents: summary.rerunAgents,
-    rerunScenarioIds: summary.rerunScenarioIds,
-    rerunServerOverrideAll: summary.rerunServerOverrideAll,
-    rerunScenarioServerOverrides: summary.rerunScenarioServerOverrides,
-    timestamp: summary.timestamp,
-    runNote: summary.runNote,
-    mcpServerVersions: {},
-    scenarios: (summary.scenarioIds ?? []).map((scenarioId, index) => ({
-      scenarioId,
-      scenarioName: summary.scenarioNames?.[index] ?? scenarioId,
-      agentId: '',
-      agentName: '',
-      runs: [],
-      passRate: 0,
-      avgToolCalls: 0,
-      avgDuration: 0
-    })),
-    assistantTokenUsage: null,
-    toolTokenUsage:
-      toolTokensTotal === null
-        ? null
-        : {
-            inputTokens: null,
-            outputTokens: null,
-            totalTokens: toolTokensTotal
-          },
-    overallPassRate: summary.passRate,
-    totalScenarios: summary.totalScenarios,
-    totalRuns: summary.totalRuns,
-    avgToolCalls: summary.avgToolCalls,
-    avgLatency: Math.round(summary.avgLatencyMs ?? 0)
-  };
-}
-
 const Results = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { source } = useDataSource();
@@ -243,9 +202,8 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
+  const pagination = useOffsetPagination(PAGE_LIMIT);
+  const { offset, totalCount, hasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
   const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
   const apiTimeFilter = useMemo(() => {
@@ -288,8 +246,7 @@ const Results = () => {
           limit: PAGE_LIMIT,
           offset
         });
-        setTotalCount(page.total_count);
-        setHasMore(page.has_more);
+        pagination.updateMeta(page);
         setResults(page.data.map(summaryToResult));
       } else if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({
@@ -298,12 +255,12 @@ const Results = () => {
           limit: PAGE_LIMIT,
           offset
         });
-        setTotalCount(summaries.length);
-        setHasMore(false);
+        pagination.setTotalCount(summaries.length);
+        pagination.setHasMore(false);
         setResults(summaries.map(summaryToResult));
       } else {
-        setTotalCount(0);
-        setHasMore(false);
+        pagination.setTotalCount(0);
+        pagination.setHasMore(false);
         setResults(await source.listResults());
       }
     } catch (error: unknown) {
@@ -330,8 +287,7 @@ const Results = () => {
           })
           .then((page) => {
           if (active) {
-            setTotalCount(page.total_count);
-            setHasMore(page.has_more);
+            pagination.updateMeta(page);
           }
           return page.data.map(summaryToResult);
         })
@@ -345,8 +301,8 @@ const Results = () => {
           })
           .then((summaries) => {
           if (active) {
-            setTotalCount(summaries.length);
-            setHasMore(false);
+            pagination.setTotalCount(summaries.length);
+            pagination.setHasMore(false);
           }
           return summaries.map(summaryToResult);
         })
@@ -513,8 +469,8 @@ const Results = () => {
   ]);
 
   useEffect(() => {
-    setOffset(0);
-  }, [apiScenarioFilter, apiTimeFilter]);
+    pagination.reset();
+  }, [apiScenarioFilter, apiTimeFilter, pagination.reset]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
@@ -666,23 +622,7 @@ const Results = () => {
     }
     setRerunningRunId(run.id);
     try {
-      const detailed = await source.getResult(run.id);
-      const sourceRun = detailed ?? run;
-      const agents =
-        sourceRun.rerunAgents && sourceRun.rerunAgents.length > 0
-          ? sourceRun.rerunAgents
-          : Array.from(
-              new Set(sourceRun.scenarios.map((scenario) => scenario.agentId).filter(Boolean))
-            );
-      await source.startRun({
-        configPath,
-        runsPerScenario: 1,
-        scenarioIds: sourceRun.rerunScenarioIds,
-        agents: agents.length > 0 ? agents : undefined,
-        runNote: sourceRun.runNote,
-        serverOverrideAll: sourceRun.rerunServerOverrideAll,
-        scenarioServerOverrides: sourceRun.rerunScenarioServerOverrides
-      });
+      await rerunWithSameSettings(source, run);
       toast({
         title: 'Rerun queued',
         description: `${run.id} queued with previous run settings.`
@@ -894,14 +834,14 @@ const Results = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setOffset((prev) => Math.max(0, prev - PAGE_LIMIT))}
+            onClick={pagination.prev}
             disabled={refreshing || offset === 0}
           >
             Prev
           </Button>
           <Button
             variant="outline"
-            onClick={() => setOffset((prev) => prev + PAGE_LIMIT)}
+            onClick={pagination.next}
             disabled={refreshing || !hasMore}
           >
             Next
@@ -913,9 +853,7 @@ const Results = () => {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        {totalCount > 0
-          ? `Showing ${offset + 1}-${Math.min(offset + results.length, totalCount)} of ${totalCount}`
-          : 'Showing 0 of 0'}
+        {pagination.rangeLabel(results.length)}
       </p>
 
       <div

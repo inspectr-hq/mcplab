@@ -134,6 +134,16 @@ type PreviewRunRequestBody = {
   };
 };
 
+type LatestPassRatesRequestBody = {
+  lastDays?: unknown;
+  configs?: Array<{
+    id?: unknown;
+    sourcePath?: unknown;
+    relativePath?: unknown;
+    configHash?: unknown;
+  }>;
+};
+
 type ConfigScenario = EvalConfig['scenarios'][number];
 
 export async function handleRunsRoutes(params: {
@@ -201,6 +211,43 @@ export async function handleRunsRoutes(params: {
       next_offset: nextOffset,
       prev_offset: prevOffset
     });
+    return true;
+  }
+
+  if (pathname === '/api/runs/latest-pass-rates' && method === 'POST') {
+    const body = (await parseBody(req)) as LatestPassRatesRequestBody;
+    const requestedConfigs = Array.isArray(body.configs) ? body.configs : [];
+    const normalizedConfigs = requestedConfigs
+      .map((entry) => ({
+        id: String(entry?.id ?? '').trim(),
+        sourcePath: String(entry?.sourcePath ?? '').trim(),
+        relativePath: String(entry?.relativePath ?? '').trim(),
+        configHash: String(entry?.configHash ?? '').trim()
+      }))
+      .filter((entry) => entry.id);
+    const lastDaysRaw = Number(body.lastDays);
+    const lastDays =
+      Number.isFinite(lastDaysRaw) && lastDaysRaw > 0 ? Math.floor(lastDaysRaw) : undefined;
+    const summaries = listRuns(settings.runsDir, { lastDays });
+    const pending = new Set(normalizedConfigs.map((entry) => entry.id));
+    const byConfigId: Record<string, number> = {};
+    for (const summary of summaries) {
+      if (pending.size === 0) break;
+      const summaryPath = String(summary.configPath ?? '').trim();
+      const summaryHash = String(summary.configHash ?? '').trim();
+      for (const cfg of normalizedConfigs) {
+        if (!pending.has(cfg.id)) continue;
+        if (
+          (cfg.sourcePath && cfg.sourcePath === summaryPath) ||
+          (cfg.relativePath && cfg.relativePath === summaryPath) ||
+          (cfg.configHash && cfg.configHash === summaryHash)
+        ) {
+          byConfigId[cfg.id] = summary.passRate;
+          pending.delete(cfg.id);
+        }
+      }
+    }
+    asJson(res, 200, { byConfigId });
     return true;
   }
 

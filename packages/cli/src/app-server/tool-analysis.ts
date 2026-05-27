@@ -293,6 +293,15 @@ export async function handleToolAnalysisRoutes(params: {
     return true;
   }
 
+  if (pathname === '/api/tool-analysis-results/servers' && method === 'GET') {
+    const all = listToolAnalysisReportsFromDirs(resolveToolAnalysisReadDirs(settings));
+    const servers = Array.from(new Set(all.flatMap((item) => item.serverNames))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+    asJson(res, 200, { object: 'list', data: servers });
+    return true;
+  }
+
   if (pathname.startsWith('/api/tool-analysis-results/') && method === 'GET') {
     const reportId = pathname.split('/')[3];
     if (!reportId) {
