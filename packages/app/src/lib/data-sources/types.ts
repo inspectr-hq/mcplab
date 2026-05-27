@@ -128,6 +128,15 @@ export interface QueueResponse {
   queued: QueueEntry[];
 }
 
+export interface RunQueueSseEvent {
+  type: 'queue_snapshot' | (string & {});
+  ts: string;
+  payload: {
+    snapshot?: QueueResponse;
+    [key: string]: unknown;
+  };
+}
+
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';
   items: string[];
@@ -718,6 +727,7 @@ export interface EvalDataSource {
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
+  subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;
   resumeQueue: () => Promise<{ ok: boolean }>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;

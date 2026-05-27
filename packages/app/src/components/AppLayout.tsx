@@ -9,6 +9,7 @@ import {
   BreadcrumbSeparator
 } from '@/components/ui/breadcrumb';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { Fragment } from 'react';
 import { Link, Outlet, matchPath, useLocation } from 'react-router-dom';
 
@@ -153,6 +154,8 @@ export function AppLayout() {
   const embed = new URLSearchParams(location.search).get('embed') === '1';
   const crumbs = buildCrumbs(location.pathname, location.search);
   const { connection, version } = useDataSource();
+  const { isRunning, queuedCount, oauthBlockedCount } = useRunQueueStatus();
+  const queueDisplayCount = queuedCount + (isRunning ? 1 : 0);
 
   if (embed) {
     return (
@@ -191,6 +194,33 @@ export function AppLayout() {
               </BreadcrumbList>
             </Breadcrumb>
             <div className="ml-auto flex items-center gap-2">
+              {(isRunning || queuedCount > 0 || oauthBlockedCount > 0) && (
+                <Link
+                  to="/run"
+                  className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 hover:bg-muted/50 transition-colors"
+                  title="Open Run Evaluation queue"
+                >
+                  <span className="text-xs text-muted-foreground">Run Queue</span>
+                  <span
+                    className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+                      oauthBlockedCount > 0
+                        ? 'bg-yellow-500/20 text-yellow-800 dark:text-yellow-300'
+                        : 'bg-muted text-foreground'
+                    }`}
+                  >
+                    {queueDisplayCount}
+                  </span>
+                  {isRunning && (
+                    <span
+                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
+                      aria-label="Queue processing"
+                    />
+                  )}
+                  {oauthBlockedCount > 0 && (
+                    <span className="text-xs text-yellow-700 dark:text-yellow-400">OAuth wait</span>
+                  )}
+                </Link>
+              )}
               <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1">
                 <span
                   className={`h-2 w-2 rounded-full ${

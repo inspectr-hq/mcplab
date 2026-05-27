@@ -87,6 +87,40 @@ describe('workspaceApiClient SSE subscriptions', () => {
 
     unsubscribe();
   });
+
+  it('parses queue snapshot events and emits synthetic error on SSE failure', () => {
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    const onEvent = vi.fn();
+
+    const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
+    const source = MockEventSource.instances[0]!;
+
+    source.emit('queue_snapshot', {
+      type: 'queue_snapshot',
+      ts: '2026-01-01T00:00:00.000Z',
+      payload: {
+        snapshot: {
+          active: null,
+          queued: [{ jobId: 'job-1', status: 'queued', runParams: { configPath: '/tmp/x.yaml' } }]
+        }
+      }
+    });
+    source.fail();
+
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'queue_snapshot'
+      })
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error'
+      })
+    );
+    expect(source.closed).toBe(true);
+
+    unsubscribe();
+  });
 });
 
 describe('workspaceApiClient assistant request cancellation', () => {

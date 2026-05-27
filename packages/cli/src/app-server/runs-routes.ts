@@ -147,6 +147,75 @@ type LatestPassRatesRequestBody = {
 
 type ConfigScenario = EvalConfig['scenarios'][number];
 
+type QueueEntryView = {
+  jobId: string;
+  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
+  blockedReason?: 'oauth_required';
+  requiredServers?: string[];
+  runParams: {
+    configPath: string;
+    runsPerScenario: number;
+    scenarioIds: string[] | null;
+    agents: string[] | null;
+    runNote: string | null;
+    serverOverrideAll: string[] | null;
+    scenarioServerOverrides: Record<string, string[]> | null;
+  };
+};
+
+type QueueSnapshot = {
+  active: QueueEntryView | null;
+  queued: QueueEntryView[];
+};
+
+function toQueueEntryView(job: RunJob): QueueEntryView {
+  return {
+    jobId: job.id,
+    status: job.status,
+    blockedReason: job.status === 'blocked_auth' ? 'oauth_required' : undefined,
+    requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
+    runParams: {
+      configPath: job.runParams.configPath,
+      runsPerScenario: job.runParams.runsPerScenario,
+      scenarioIds: job.runParams.scenarioIds ?? null,
+      agents: job.runParams.requestedAgents ?? null,
+      runNote: job.runParams.runNote ?? null,
+      serverOverrideAll: job.runParams.serverOverrideAll ?? null,
+      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null
+    }
+  };
+}
+
+function buildQueueSnapshot(
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState
+): QueueSnapshot {
+  const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
+  const queuedEntries = runQueueState.queue
+    .map((id) => jobs.get(id))
+    .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
+    .map((job) => toQueueEntryView(job));
+  return {
+    active: activeJob ? toQueueEntryView(activeJob) : null,
+    queued: queuedEntries
+  };
+}
+
+function emitQueueSnapshot(
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState,
+  deps: Pick<RunsRouteDeps, 'sendSseEvent'>
+) {
+  const event: SseEvent = {
+    type: 'queue_snapshot',
+    ts: new Date().toISOString(),
+    payload: { snapshot: buildQueueSnapshot(jobs, runQueueState) }
+  };
+  for (const client of runQueueState.clients) {
+    deps.sendSseEvent(client, event);
+  }
+}
+
 export async function handleRunsRoutes(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -302,6 +371,7 @@ export async function handleRunsRoutes(params: {
       });
       for (const client of job.clients) client.end();
       job.clients.clear();
+      emitQueueSnapshot(jobs, runQueueState, deps);
       asJson(res, 200, { ok: true, status: 'stopped' });
       return true;
     }
@@ -311,47 +381,32 @@ export async function handleRunsRoutes(params: {
     }
     job.abortController.abort();
     job.status = 'stopped';
+    emitQueueSnapshot(jobs, runQueueState, deps);
     asJson(res, 200, { ok: true, status: 'stopped' });
     return true;
   }
 
   if (pathname === '/api/runs/queue' && method === 'GET') {
-    const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
-    const queuedEntries = runQueueState.queue
-      .map((id) => jobs.get(id))
-      .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
-      .map((j) => ({
-        jobId: j.id,
-        status: j.status,
-        blockedReason: j.status === 'blocked_auth' ? ('oauth_required' as const) : undefined,
-        requiredServers: j.status === 'blocked_auth' ? j.blockedAuthServers ?? [] : undefined,
-        runParams: {
-          configPath: j.runParams.configPath,
-          runsPerScenario: j.runParams.runsPerScenario,
-          scenarioIds: j.runParams.scenarioIds ?? null,
-          agents: j.runParams.requestedAgents ?? null,
-          runNote: j.runParams.runNote ?? null,
-          serverOverrideAll: j.runParams.serverOverrideAll ?? null,
-          scenarioServerOverrides: j.runParams.scenarioServerOverrides ?? null
-        }
-      }));
-    asJson(res, 200, {
-      active: activeJob
-        ? {
-            jobId: activeJob.id,
-            status: activeJob.status,
-            runParams: {
-              configPath: activeJob.runParams.configPath,
-              runsPerScenario: activeJob.runParams.runsPerScenario,
-              scenarioIds: activeJob.runParams.scenarioIds ?? null,
-              agents: activeJob.runParams.requestedAgents ?? null,
-              runNote: activeJob.runParams.runNote ?? null,
-              serverOverrideAll: activeJob.runParams.serverOverrideAll ?? null,
-              scenarioServerOverrides: activeJob.runParams.scenarioServerOverrides ?? null
-            }
-          }
-        : null,
-      queued: queuedEntries
+    asJson(res, 200, buildQueueSnapshot(jobs, runQueueState));
+    return true;
+  }
+
+  if (pathname === '/api/runs/queue/events' && method === 'GET') {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'text/event-stream');
+    res.setHeader('cache-control', 'no-cache');
+    res.setHeader('connection', 'keep-alive');
+    if ('flushHeaders' in res && typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
+    sendSseEvent(res, {
+      type: 'queue_snapshot',
+      ts: new Date().toISOString(),
+      payload: { snapshot: buildQueueSnapshot(jobs, runQueueState) }
+    });
+    runQueueState.clients.add(res);
+    req.on('close', () => {
+      runQueueState.clients.delete(res);
     });
     return true;
   }
@@ -386,6 +441,7 @@ export async function handleRunsRoutes(params: {
     });
     for (const client of job.clients) client.end();
     job.clients.clear();
+    emitQueueSnapshot(jobs, runQueueState, deps);
     if (wasBlocked) {
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
@@ -395,6 +451,7 @@ export async function handleRunsRoutes(params: {
 
   if (pathname === '/api/runs/queue/resume' && method === 'POST') {
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
+    emitQueueSnapshot(jobs, runQueueState, deps);
     asJson(res, 200, { ok: true });
     return true;
   }
@@ -535,10 +592,12 @@ export async function handleRunsRoutes(params: {
           position: runQueueState.queue.length
         }
       });
+      emitQueueSnapshot(jobs, runQueueState, deps);
       asJson(res, 202, { jobId, queued: true, position: runQueueState.queue.length });
     } else {
       // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
       runQueueState.queue.push(jobId);
+      emitQueueSnapshot(jobs, runQueueState, deps);
       asJson(res, 202, { jobId });
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
@@ -952,6 +1011,7 @@ async function advanceQueue(
       const nextJob = jobs.get(nextId);
       if (!nextJob || (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth')) {
         runQueueState.queue.shift();
+        emitQueueSnapshot(jobs, runQueueState, deps);
         continue;
       }
 
@@ -971,6 +1031,7 @@ async function advanceQueue(
         });
         for (const client of nextJob.clients) client.end();
         nextJob.clients.clear();
+        emitQueueSnapshot(jobs, runQueueState, deps);
         continue;
       }
       if (oauthServers.length > 0) {
@@ -991,6 +1052,7 @@ async function advanceQueue(
               message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
             }
           });
+          emitQueueSnapshot(jobs, runQueueState, deps);
           return; // pause — frontend must call /api/runs/queue/resume after auth
         }
       }
@@ -1013,6 +1075,7 @@ async function advanceQueue(
           scenarioServerOverrides: nextJob.runParams.scenarioServerOverrides ?? null
         }
       });
+      emitQueueSnapshot(jobs, runQueueState, deps);
       void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
       return;
     }
@@ -1288,6 +1351,7 @@ async function executeRunJob(
     runQueueState.activeJobId = null;
     for (const client of job.clients) client.end();
     job.clients.clear();
+    emitQueueSnapshot(jobs, runQueueState, deps);
     advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     pruneOldJobs(jobs, runQueueState);
   }

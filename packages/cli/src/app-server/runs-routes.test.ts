@@ -108,7 +108,7 @@ describe('run request validation', () => {
       method: 'POST',
       settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
       jobs: new Map(),
-      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
       deps: {
         ...deps,
@@ -158,7 +158,7 @@ describe('run request validation', () => {
       method: 'POST',
       settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
       jobs: new Map(),
-      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
       deps: {
         ...deps,
@@ -208,7 +208,7 @@ describe('run request validation', () => {
       method: 'POST',
       settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
       jobs: new Map(),
-      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
       deps: {
         ...deps,
@@ -278,7 +278,7 @@ describe('run request validation', () => {
       method: 'POST',
       settings: { evalsDir, runsDir: join(root, 'runs'), librariesDir, workspaceRoot: root },
       jobs: new Map(),
-      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false },
+      runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
       deps: {
         ...deps,
@@ -302,5 +302,80 @@ describe('run request validation', () => {
     expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
       'Unknown server refs in scenarioServerOverrides.s1: missing-server'
     );
+  });
+});
+
+describe('run queue SSE endpoint', () => {
+  it('streams initial queue_snapshot and registers client', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+
+    const writes: string[] = [];
+    const res = {
+      statusCode: 0,
+      headers: {} as Record<string, string>,
+      setHeader(key: string, value: string) {
+        this.headers[key] = value;
+      },
+      write(chunk: string) {
+        writes.push(chunk);
+      },
+      flushHeaders() {
+        return undefined;
+      }
+    } as any;
+
+    let closeHandler: (() => void) | undefined;
+    const req = {
+      url: '/api/runs/queue/events',
+      headers: {},
+      on: (event: string, cb: () => void) => {
+        if (event === 'close') closeHandler = cb;
+      }
+    } as any;
+
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+
+    const handled = await handleRunsRoutes({
+      req,
+      res,
+      pathname: '/api/runs/queue/events',
+      method: 'GET',
+      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      jobs: new Map(),
+      runQueueState,
+      oauthSessionManager: {} as any,
+      deps: {
+        parseBody: async () => ({}),
+        asJson: () => undefined,
+        addJobEvent: () => undefined,
+        sendSseEvent: (target: any, event: any) => {
+          target.write(`event: ${event.type}\n`);
+          target.write(`data: ${JSON.stringify(event)}\n\n`);
+        },
+        ensureInsideRoot: (_root: string, path: string) => path,
+        listRuns: () => [],
+        getRunResults: () => ({}),
+        getScenarioRunTraceRecords: () => [],
+        selectScenarioIds: (c: any) => c,
+        expandConfigForAgents: (c: any) => c,
+        resolveRunSelectedAgents: () => [],
+        readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
+        pickDefaultAssistantAgentName: () => undefined,
+        pkgVersion: 'test'
+      }
+    } as any);
+
+    expect(handled).toBe(true);
+    expect(res.headers['content-type']).toBe('text/event-stream');
+    expect(writes.join('')).toContain('event: queue_snapshot');
+    expect(runQueueState.clients.size).toBe(1);
+
+    closeHandler?.();
+    expect(runQueueState.clients.size).toBe(0);
   });
 });
