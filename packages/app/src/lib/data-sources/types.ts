@@ -14,7 +14,10 @@ import type {
   ServerConfig as CoreServerConfig,
   TraceMessage as CoreTraceMessage,
   TraceMessageContentBlock as CoreTraceMessageContentBlock,
-  HealthMcpConnectionInfo
+  HealthMcpConnectionInfo,
+  QueueEntry,
+  QueueResponse,
+  RunQueueEvent
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -107,36 +110,17 @@ export interface RunJobEvent {
   payload: Record<string, unknown>;
 }
 
-export interface QueueEntry {
-  jobId: string;
-  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
-  blockedReason?: 'oauth_required';
-  requiredServers?: string[];
-  runParams: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioIds: string[] | null;
-    agents: string[] | null;
-    runNote: string | null;
-    serverOverrideAll: string[] | null;
-    scenarioServerOverrides: Record<string, string[]> | null;
-  };
-}
-
-export interface QueueResponse {
-  active: QueueEntry | null;
-  queued: QueueEntry[];
-}
-
-export interface RunQueueSseEvent {
-  type: 'queue_event' | 'queue_snapshot' | (string & {});
-  ts: string;
-  payload: {
-    event?: QueueResponse;
-    snapshot?: QueueResponse;
-    [key: string]: unknown;
-  };
-}
+export type { QueueEntry, QueueResponse };
+export type RunQueueSseEvent =
+  | RunQueueEvent
+  | {
+      type: 'queue_snapshot' | (string & {});
+      ts: string;
+      payload: {
+        snapshot?: QueueResponse;
+        [key: string]: unknown;
+      };
+    };
 
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';

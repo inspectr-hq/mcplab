@@ -10,6 +10,8 @@ import {
   runAll,
   renderSummaryMarkdown,
   applyRuntimeServerOverrides,
+  type QueueEntry,
+  type QueueResponse,
   type EvalConfig,
   type RunProgressEvent,
   type ScenarioRunTraceRecord
@@ -147,28 +149,9 @@ type LatestPassRatesRequestBody = {
 
 type ConfigScenario = EvalConfig['scenarios'][number];
 
-type QueueEntryView = {
-  jobId: string;
-  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
-  blockedReason?: 'oauth_required';
-  requiredServers?: string[];
-  runParams: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioIds: string[] | null;
-    agents: string[] | null;
-    runNote: string | null;
-    serverOverrideAll: string[] | null;
-    scenarioServerOverrides: Record<string, string[]> | null;
-  };
-};
+type QueueState = QueueResponse;
 
-type QueueState = {
-  active: QueueEntryView | null;
-  queued: QueueEntryView[];
-};
-
-function toQueueEntryView(job: RunJob): QueueEntryView {
+function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
     status: job.status,
@@ -191,9 +174,9 @@ function buildQueueState(jobs: Map<string, RunJob>, runQueueState: RunQueueState
   const queuedEntries = runQueueState.queue
     .map((id) => jobs.get(id))
     .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
-    .map((job) => toQueueEntryView(job));
+    .map((job) => toQueueEntry(job));
   return {
-    active: activeJob ? toQueueEntryView(activeJob) : null,
+    active: activeJob ? toQueueEntry(activeJob) : null,
     queued: queuedEntries
   };
 }
