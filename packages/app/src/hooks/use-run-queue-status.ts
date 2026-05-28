@@ -12,11 +12,11 @@ function countOAuthBlockedQueued(queue: QueueResponse['queued']): number {
 
 export function useRunQueueStatus() {
   const { source } = useDataSource();
-  const [snapshot, setSnapshot] = useState<QueueResponse>({ active: null, queued: [] });
+  const [queueState, setQueueState] = useState<QueueResponse>({ active: null, queued: [] });
   const [streamConnected, setStreamConnected] = useState(false);
   const pollIntervalRef = useRef<number | null>(null);
   const streamConnectedRef = useRef(false);
-  const snapshotRevisionRef = useRef(0);
+  const revisionRef = useRef(0);
 
   useEffect(() => {
     let disposed = false;
@@ -28,13 +28,13 @@ export function useRunQueueStatus() {
       }
     };
 
-    const refreshSnapshot = async () => {
-      const requestRevision = snapshotRevisionRef.current;
+    const refreshQueueState = async () => {
+      const requestRevision = revisionRef.current;
       try {
         const queue = await source.getRunQueue();
         if (disposed) return;
-        if (snapshotRevisionRef.current !== requestRevision) return;
-        setSnapshot(queue);
+        if (revisionRef.current !== requestRevision) return;
+        setQueueState(queue);
       } catch {
         // ignore transient fetch failures
       }
@@ -42,20 +42,20 @@ export function useRunQueueStatus() {
 
     const startPolling = () => {
       if (pollIntervalRef.current !== null) return;
-      void refreshSnapshot();
+      void refreshQueueState();
       pollIntervalRef.current = window.setInterval(() => {
-        void refreshSnapshot();
+        void refreshQueueState();
       }, FALLBACK_POLL_MS);
     };
 
     const unsubscribe = source.subscribeRunQueue((event) => {
-      const queueEvent = event.payload.event ?? event.payload.snapshot;
-      if ((event.type === 'queue_event' || event.type === 'queue_snapshot') && queueEvent) {
-        snapshotRevisionRef.current += 1;
+      const queueEvent = event.payload.event;
+      if (event.type === 'queue_event' && queueEvent) {
+        revisionRef.current += 1;
         setStreamConnected(true);
         streamConnectedRef.current = true;
         stopPolling();
-        setSnapshot(queueEvent);
+        setQueueState(queueEvent);
         return;
       }
       if (event.type === 'error') {
@@ -67,12 +67,12 @@ export function useRunQueueStatus() {
 
     const onFocus = () => {
       if (streamConnectedRef.current) return;
-      void refreshSnapshot();
+      void refreshQueueState();
     };
 
     window.addEventListener('focus', onFocus);
     if (!streamConnectedRef.current) {
-      void refreshSnapshot();
+      void refreshQueueState();
     }
 
     return () => {
@@ -84,14 +84,14 @@ export function useRunQueueStatus() {
   }, [source]);
 
   return useMemo(() => {
-    const isRunning = snapshot.active !== null;
-    const queuedCount = snapshot.queued.length;
-    const oauthBlockedCount = countOAuthBlockedQueued(snapshot.queued);
+    const isRunning = queueState.active !== null;
+    const queuedCount = queueState.queued.length;
+    const oauthBlockedCount = countOAuthBlockedQueued(queueState.queued);
     return {
       isRunning,
       queuedCount,
       oauthBlockedCount,
       streamConnected
     };
-  }, [snapshot, streamConnected]);
+  }, [queueState, streamConnected]);
 }
