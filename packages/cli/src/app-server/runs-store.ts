@@ -23,8 +23,8 @@ export interface RunSummary {
   passRate: number;
   avgToolCalls: number;
   avgLatencyMs: number;
-  totalDurationMs: number;
-  totalToolDurationMs: number;
+  totalDurationMs?: number;
+  totalToolDurationMs?: number;
 }
 
 export interface ListRunsFilter {
@@ -106,11 +106,11 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
                 0,
                 (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
               )
-            : 0,
+            : undefined,
         totalDurationMs:
           typeof (results.metadata as { total_duration_ms?: unknown }).total_duration_ms === 'number'
             ? Math.max(0, (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0)
-            : 0
+            : undefined
       });
     } catch {
       // Ignore malformed runs.
