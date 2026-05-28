@@ -49,6 +49,8 @@ import { toast } from '@/hooks/use-toast';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
+import { formatTokenCount } from '@/lib/format-duration';
 
 const colors = [
   'hsl(38, 92%, 50%)',
@@ -90,7 +92,7 @@ type CompareTableItem =
   | { type: 'day-separator'; dayKey: string; dayLabel: string }
   | { type: 'run'; run: EvalResult };
 
-const COMPARE_RUNS_TABLE_COLUMN_COUNT = 8;
+const COMPARE_RUNS_TABLE_COLUMN_COUNT = 9;
 const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
@@ -1180,6 +1182,7 @@ const Compare = () => {
                       {sortIcon('scenarios')}
                     </button>
                   </TableHead>
+                  <TableHead className="text-right">Tool Tokens</TableHead>
                   <TableHead className="text-right">Agents</TableHead>
                   <TableHead className="w-[140px] text-right">Action</TableHead>
                 </TableRow>
@@ -1235,9 +1238,20 @@ const Compare = () => {
                         })()}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(item.run.timestamp).toLocaleString()}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(item.run.timestamp).toLocaleString()}
+                          </div>
+                          {(() => {
+                            const totalTimeMs = getRunTotalDurationMs(item.run);
+                            if (totalTimeMs === null) return null;
+                            return (
+                              <div className="font-mono text-[11px] text-muted-foreground/90">
+                                Total time: {formatDurationMs(totalTimeMs)}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1245,6 +1259,22 @@ const Compare = () => {
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {item.run.totalScenarios}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <div className="font-mono text-sm">
+                            {formatTokenCount(item.run.toolTokenUsage?.totalTokens)}
+                          </div>
+                          {(() => {
+                            const toolTimeMs = getRunToolTimeMs(item.run);
+                            if (toolTimeMs === null) return null;
+                            return (
+                              <div className="font-mono text-[11px] text-muted-foreground/90">
+                                Tool time: {formatDurationMs(toolTimeMs)}
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {runScopesById.get(item.run.id)?.agentCount ?? 0}
@@ -1369,6 +1399,28 @@ const Compare = () => {
                     {selectedRuns.map((r) => (
                       <TableCell key={r.id} className="font-mono">
                         {r.avgLatency}ms
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Total Time</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {(() => {
+                          const totalTimeMs = getRunTotalDurationMs(r);
+                          return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);
+                        })()}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Tool Time</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {(() => {
+                          const toolTimeMs = getRunToolTimeMs(r);
+                          return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);
+                        })()}
                       </TableCell>
                     ))}
                   </TableRow>

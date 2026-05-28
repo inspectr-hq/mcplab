@@ -100,6 +100,30 @@ export function aggregateResults(params: {
     allDurations.length === 0
       ? null
       : allDurations.reduce((a, b) => a + b, 0) / allDurations.length;
+  const totalToolDurationMs = scenarios.reduce(
+    (sum, scenario) =>
+      sum +
+      scenario.runs.reduce(
+        (runSum, run) =>
+          runSum +
+          run.tool_durations_ms.reduce((toolSum, toolDuration) => toolSum + toolDuration, 0),
+        0
+      ),
+    0
+  );
+  const totalDurationMs = scenarios.reduce(
+    (sum, scenario) =>
+      sum +
+      scenario.runs.reduce((runSum, run) => {
+        if (typeof run.run_duration_ms === 'number')
+          return runSum + Math.max(0, run.run_duration_ms);
+        return (
+          runSum +
+          run.tool_durations_ms.reduce((toolSum, toolDuration) => toolSum + toolDuration, 0)
+        );
+      }, 0),
+    0
+  );
 
   return {
     metadata: {
@@ -108,6 +132,8 @@ export function aggregateResults(params: {
       run_note: params.runNote,
       git_commit: params.gitCommit,
       config_hash: params.configHash,
+      total_duration_ms: totalDurationMs,
+      total_tool_duration_ms: totalToolDurationMs,
       cli_version: params.cliVersion,
       mcp_server_versions: params.mcpServerVersions ?? {}
     },

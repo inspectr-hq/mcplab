@@ -329,6 +329,7 @@ export interface ScenarioRunResult {
   tool_sequence: string[];
   tool_usage: Record<string, number>;
   tool_durations_ms: number[];
+  run_duration_ms?: number;
   final_text: string;
   extracted: Record<string, string | number | boolean | null>;
 }
@@ -386,6 +387,8 @@ export interface ResultsJson {
     rerun_server_override_all?: string[];
     rerun_scenario_server_overrides?: Record<string, string[]>;
     tool_tokens_total?: number | null;
+    total_duration_ms?: number;
+    total_tool_duration_ms?: number;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
   };

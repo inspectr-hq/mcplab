@@ -72,6 +72,8 @@ export interface WorkspaceRunSummary {
   passRate: number;
   avgToolCalls: number;
   avgLatencyMs: number;
+  totalDurationMs?: number;
+  totalToolDurationMs?: number;
 }
 
 export interface ListEnvelope<T> {

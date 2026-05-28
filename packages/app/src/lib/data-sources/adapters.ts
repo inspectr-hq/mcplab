@@ -1135,6 +1135,17 @@ function estimateRunTokenUsage(record?: ScenarioRunTraceRecord): {
   };
 }
 
+function deriveRunDurationMs(run: CoreScenarioRun, record?: ScenarioRunTraceRecord): number {
+  if (record) {
+    const startMs = Date.parse(record.ts_start);
+    const endMs = Date.parse(record.ts_end);
+    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+      return Math.max(0, endMs - startMs);
+    }
+  }
+  return run.tool_durations_ms.reduce((sum, value) => sum + value, 0);
+}
+
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceRecords: ScenarioRunTraceRecord[] = []
@@ -1165,7 +1176,7 @@ export function fromCoreResultsJson(
         toolTokenUsageByTool: tokenUsage.perTool,
         finalAnswer: run.final_text,
         conversation: toConversationItemsFromRecord(record),
-        duration: run.tool_durations_ms.reduce((sum, value) => sum + value, 0),
+        duration: deriveRunDurationMs(run, record),
         extractedValues: Object.fromEntries(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
         ),
@@ -1246,7 +1257,15 @@ export function fromCoreResultsJson(
     totalScenarios: results.summary.total_scenarios,
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
-    avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0)
+    avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
+    totalToolDurationMs:
+      typeof (results.metadata as { total_tool_duration_ms?: unknown }).total_tool_duration_ms ===
+      'number'
+        ? Math.max(
+            0,
+            (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
+          )
+        : 0
   };
 }
 
@@ -1264,7 +1283,7 @@ export function fromCoreScenarioRunPreview(
     toolTokenUsageByTool: tokenUsage.perTool,
     finalAnswer: run.final_text,
     conversation: toConversationItemsFromRecord(traceRecord ?? undefined),
-    duration: run.tool_durations_ms.reduce((sum, value) => sum + value, 0),
+    duration: deriveRunDurationMs(run, traceRecord ?? undefined),
     extractedValues: Object.fromEntries(
       Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
     ),

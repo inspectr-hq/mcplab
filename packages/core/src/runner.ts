@@ -249,6 +249,10 @@ export async function runAll(
             tool_sequence: runResult.toolSequence,
             tool_usage: toolUsage,
             tool_durations_ms: runResult.toolDurationsMs,
+            run_duration_ms: Math.max(
+              0,
+              Date.parse(runResult.traceEndedAt) - Date.parse(runResult.traceStartedAt)
+            ),
             final_text: runResult.finalText,
             extracted
           };
@@ -304,6 +308,7 @@ export async function runAll(
             tool_sequence: [],
             tool_usage: {},
             tool_durations_ms: [],
+            run_duration_ms: Math.max(0, Date.parse(tsEnd) - Date.parse(tsStart)),
             final_text: '',
             extracted: {}
           };

@@ -68,6 +68,7 @@ import type { EvalResult } from '@/types/eval';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -1054,9 +1055,20 @@ const Results = () => {
                           })()}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(item.run.timestamp).toLocaleString()}
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(item.run.timestamp).toLocaleString()}
+                            </div>
+                            {(() => {
+                              const totalTimeMs = getRunTotalDurationMs(item.run);
+                              if (totalTimeMs === null) return null;
+                              return (
+                                <div className="font-mono text-[11px] text-muted-foreground/90">
+                                  Total time: {formatDurationMs(totalTimeMs)}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -1068,8 +1080,21 @@ const Results = () => {
                         <TableCell className="text-right font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          {formatToolTokenTotal(item.run)}
+                        <TableCell className="text-right">
+                          <div className="space-y-0.5">
+                            <div className="font-mono text-sm">
+                              {formatToolTokenTotal(item.run)}
+                            </div>
+                            {(() => {
+                              const toolTimeMs = getRunToolTimeMs(item.run);
+                              if (toolTimeMs === null) return null;
+                              return (
+                                <div className="font-mono text-[11px] text-muted-foreground/90">
+                                  Tool time: {formatDurationMs(toolTimeMs)}
+                                </div>
+                              );
+                            })()}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-2">
