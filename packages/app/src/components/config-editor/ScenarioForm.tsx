@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from '@/types/eval';
 import { useEffect, useState, type MouseEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -472,6 +473,19 @@ function ScenarioCard({
             <CardTitle className="truncate text-sm font-medium">
               {scenario.name || `Scenario ${index + 1}`}
             </CardTitle>
+            {readOnly && scenarioOrigin === 'referenced' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                asChild
+              >
+                <Link to={`/libraries/test-cases/${encodeURIComponent(scenario.id)}`}>
+                  Edit test
+                </Link>
+              </Button>
+            )}
           </div>
           {readOnly ? (
             <div className="flex items-center gap-2">
