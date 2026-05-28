@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.19.0
+
+### Minor Changes
+
+- feat: Show run duration
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.15.0
+  - @inspectr/mcplab-mcp-server@1.4.3
+  - @inspectr/mcplab-reporting@1.1.16
+
 ## 1.18.0
 
 ### Minor Changes

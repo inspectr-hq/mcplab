@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.15.0
+
+### Minor Changes
+
+- feat: Show run duration
+
 ## 1.14.0
 
 ### Minor Changes
