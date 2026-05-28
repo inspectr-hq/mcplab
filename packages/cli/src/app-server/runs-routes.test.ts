@@ -379,3 +379,183 @@ describe('run queue SSE endpoint', () => {
     expect(runQueueState.clients.size).toBe(0);
   });
 });
+
+describe('queue event emission', () => {
+  function makeDeps(sseEvents: Array<{ target: any; event: any }>) {
+    return {
+      parseBody: async () => ({}),
+      asJson: (_res: any, _status: number, body: any) => { (_res as any).__body = body; },
+      addJobEvent: () => undefined,
+      sendSseEvent: (target: any, event: any) => { sseEvents.push({ target, event }); },
+      ensureInsideRoot: (_root: string, path: string) => path,
+      listRuns: () => [],
+      getRunResults: () => ({}),
+      getScenarioRunTraceRecords: () => [],
+      selectScenarioIds: (c: any) => c,
+      expandConfigForAgents: (c: any) => c,
+      resolveRunSelectedAgents: () => [],
+      readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
+      pickDefaultAssistantAgentName: () => undefined,
+      pkgVersion: 'test'
+    };
+  }
+
+  it('SSE endpoint sends initial queue_event to new client', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const sseEvents: Array<{ target: any; event: any }> = [];
+
+    const res = {
+      statusCode: 0,
+      headers: {} as Record<string, string>,
+      setHeader(key: string, value: string) { this.headers[key] = value; },
+      write() { return; },
+      flushHeaders() { return undefined; }
+    } as any;
+
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+
+    await handleRunsRoutes({
+      req: { url: '/api/runs/queue/events', headers: {}, on: () => undefined } as any,
+      res,
+      pathname: '/api/runs/queue/events',
+      method: 'GET',
+      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      jobs: new Map(),
+      runQueueState,
+      oauthSessionManager: {} as any,
+      deps: makeDeps(sseEvents) as any
+    });
+
+    expect(sseEvents).toHaveLength(1);
+    expect(sseEvents[0].event.type).toBe('queue_event');
+    expect(sseEvents[0].event.payload.event).toMatchObject({ active: null, queued: [] });
+  });
+
+  it('emitQueueEvent broadcasts to all registered SSE clients on stop', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const sseEvents: Array<{ target: any; event: any }> = [];
+    const deps = makeDeps(sseEvents) as any;
+
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+
+    // Connect two SSE clients
+    for (let i = 0; i < 2; i++) {
+      const res = {
+        statusCode: 0,
+        headers: {} as Record<string, string>,
+        setHeader(key: string, value: string) { this.headers[key] = value; },
+        write() { return; },
+        flushHeaders() { return undefined; }
+      } as any;
+      await handleRunsRoutes({
+        req: { url: '/api/runs/queue/events', headers: {}, on: () => undefined } as any,
+        res,
+        pathname: '/api/runs/queue/events',
+        method: 'GET',
+        settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+        jobs: new Map(),
+        runQueueState,
+        oauthSessionManager: {} as any,
+        deps
+      });
+    }
+
+    expect(runQueueState.clients.size).toBe(2);
+    sseEvents.length = 0; // reset after connect events
+
+    // Stop a queued job — one queue_event should broadcast to both clients
+    const jobId = 'test-job-1';
+    const job: any = {
+      id: jobId,
+      status: 'queued',
+      clients: new Set(),
+      events: [],
+      abortController: new AbortController(),
+      runParams: {
+        configPath: '/tmp/x.yaml',
+        runsPerScenario: 1,
+        scenarioIds: null,
+        requestedAgents: null,
+        runNote: null,
+        serverOverrideAll: null,
+        scenarioServerOverrides: null
+      }
+    };
+    const jobs = new Map([[jobId, job]]);
+    runQueueState.queue.push(jobId);
+
+    const stopRes = { __body: null, statusCode: 0 } as any;
+    stopRes.setHeader = () => undefined;
+    stopRes.write = () => undefined;
+    stopRes.end = () => undefined;
+
+    await handleRunsRoutes({
+      req: { url: `/api/runs/jobs/${jobId}/stop`, headers: {}, on: () => undefined } as any,
+      res: stopRes,
+      pathname: `/api/runs/jobs/${jobId}/stop`,
+      method: 'POST',
+      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      jobs,
+      runQueueState,
+      oauthSessionManager: {} as any,
+      deps: { ...deps, asJson: (_r: any, _s: number, body: any) => { stopRes.__body = body; } } as any
+    });
+
+    expect(stopRes.__body).toMatchObject({ ok: true, status: 'stopped' });
+    expect(sseEvents.every((e) => e.event.type === 'queue_event')).toBe(true);
+    // 2 emits × 2 clients: one from the stop handler, one from advanceQueue's emitWhenIdle
+    expect(sseEvents).toHaveLength(4);
+    expect(runQueueState.queue).toHaveLength(0);
+  });
+
+  it('client removed from SSE clients set on request close', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const sseEvents: Array<{ target: any; event: any }> = [];
+
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+
+    let closeHandler: (() => void) | undefined;
+    const res = {
+      statusCode: 0,
+      headers: {} as Record<string, string>,
+      setHeader(key: string, value: string) { this.headers[key] = value; },
+      write() { return; },
+      flushHeaders() { return undefined; }
+    } as any;
+
+    await handleRunsRoutes({
+      req: {
+        url: '/api/runs/queue/events',
+        headers: {},
+        on: (evt: string, cb: () => void) => { if (evt === 'close') closeHandler = cb; }
+      } as any,
+      res,
+      pathname: '/api/runs/queue/events',
+      method: 'GET',
+      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      jobs: new Map(),
+      runQueueState,
+      oauthSessionManager: {} as any,
+      deps: makeDeps(sseEvents) as any
+    });
+
+    expect(runQueueState.clients.size).toBe(1);
+    closeHandler?.();
+    expect(runQueueState.clients.size).toBe(0);
+  });
+});
