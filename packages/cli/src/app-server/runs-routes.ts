@@ -191,8 +191,16 @@ function emitQueueEvent(
     ts: new Date().toISOString(),
     payload: { event: buildQueueState(jobs, runQueueState) }
   };
-  for (const client of runQueueState.clients) {
-    deps.sendSseEvent(client, event);
+  for (const client of Array.from(runQueueState.clients)) {
+    if (client.destroyed || client.writableEnded) {
+      runQueueState.clients.delete(client);
+      continue;
+    }
+    try {
+      deps.sendSseEvent(client, event);
+    } catch {
+      runQueueState.clients.delete(client);
+    }
   }
 }
 
@@ -351,7 +359,6 @@ export async function handleRunsRoutes(params: {
       });
       for (const client of job.clients) client.end();
       job.clients.clear();
-      emitQueueEvent(jobs, runQueueState, deps);
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
         emitWhenIdle: true
       });
@@ -364,7 +371,6 @@ export async function handleRunsRoutes(params: {
     }
     job.abortController.abort();
     job.status = 'stopped';
-    emitQueueEvent(jobs, runQueueState, deps);
     asJson(res, 200, { ok: true, status: 'stopped' });
     return true;
   }
@@ -413,7 +419,6 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Job is not queued' });
       return true;
     }
-    const wasBlocked = job.status === 'blocked_auth';
     const idx = runQueueState.queue.indexOf(jobId);
     if (idx !== -1) runQueueState.queue.splice(idx, 1);
     job.status = 'stopped';
@@ -424,10 +429,9 @@ export async function handleRunsRoutes(params: {
     });
     for (const client of job.clients) client.end();
     job.clients.clear();
-    emitQueueEvent(jobs, runQueueState, deps);
-    if (wasBlocked) {
-      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
-    }
+    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+      emitWhenIdle: true
+    });
     asJson(res, 200, { ok: true, jobId, status: 'stopped' });
     return true;
   }

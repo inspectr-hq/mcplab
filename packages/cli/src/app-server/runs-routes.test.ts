@@ -539,8 +539,8 @@ describe('queue event emission', () => {
 
     expect(stopRes.__body).toMatchObject({ ok: true, status: 'stopped' });
     expect(sseEvents.every((e) => e.event.type === 'queue_event')).toBe(true);
-    // 2 emits × 2 clients: one from the stop handler, one from advanceQueue's emitWhenIdle
-    expect(sseEvents).toHaveLength(4);
+    // 1 emit × 2 clients: only from advanceQueue's emitWhenIdle path
+    expect(sseEvents).toHaveLength(2);
     expect(runQueueState.queue).toHaveLength(0);
   });
 
