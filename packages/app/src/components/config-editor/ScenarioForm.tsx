@@ -44,6 +44,7 @@ interface ScenarioFormProps {
   defaultAssistantAgentName?: string;
   assistantInitialPromptByScenarioId?: Record<string, string>;
   assistantAutoOpenNonceByScenarioId?: Record<string, number>;
+  testCaseReturnToPath?: string;
   onChange: (scenarios: Scenario[]) => void;
   readOnly?: boolean;
   allowAdd?: boolean;
@@ -70,6 +71,7 @@ export function ScenarioForm({
   defaultAssistantAgentName,
   assistantInitialPromptByScenarioId,
   assistantAutoOpenNonceByScenarioId,
+  testCaseReturnToPath,
   onChange,
   readOnly,
   allowAdd = !readOnly,
@@ -119,6 +121,7 @@ export function ScenarioForm({
           defaultAssistantAgentName={defaultAssistantAgentName}
           assistantInitialPrompt={assistantInitialPromptByScenarioId?.[sc.id]}
           assistantAutoOpenNonce={assistantAutoOpenNonceByScenarioId?.[sc.id]}
+          testCaseReturnToPath={testCaseReturnToPath}
           onUpdate={(patch) => update(i, patch)}
           onMoveUp={() => move(i, -1)}
           onMoveDown={() => move(i, 1)}
@@ -149,6 +152,7 @@ function ScenarioCard({
   defaultAssistantAgentName,
   assistantInitialPrompt,
   assistantAutoOpenNonce,
+  testCaseReturnToPath,
   onUpdate,
   onMoveUp,
   onMoveDown,
@@ -168,6 +172,7 @@ function ScenarioCard({
   defaultAssistantAgentName?: string;
   assistantInitialPrompt?: string;
   assistantAutoOpenNonce?: number;
+  testCaseReturnToPath?: string;
   onUpdate: (patch: Partial<Scenario>) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -481,7 +486,13 @@ function ScenarioCard({
                 className="h-6 px-2 text-xs"
                 asChild
               >
-                <Link to={`/libraries/test-cases/${encodeURIComponent(scenario.id)}`}>
+                <Link
+                  to={`/libraries/test-cases/${encodeURIComponent(scenario.id)}${
+                    testCaseReturnToPath
+                      ? `?returnTo=${encodeURIComponent(testCaseReturnToPath)}`
+                      : ''
+                  }`}
+                >
                   Edit test
                 </Link>
               </Button>
