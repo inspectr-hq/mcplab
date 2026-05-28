@@ -674,14 +674,18 @@ export const workspaceApiClient = {
     source.addEventListener('queue_event', messageHandler);
     source.onerror = () => {
       if (closed) return;
-      if (source.readyState !== 2) {
-        return;
-      }
       onEvent({
         type: 'error',
         ts: new Date().toISOString(),
-        payload: { message: 'SSE connection error' }
+        payload: {
+          message: 'SSE connection error',
+          reconnecting: source.readyState !== 2
+        }
       });
+      if (source.readyState !== 2) {
+        // Let EventSource keep auto-reconnecting on transient failures.
+        return;
+      }
       close();
     };
     return () => {

@@ -384,9 +384,13 @@ describe('queue event emission', () => {
   function makeDeps(sseEvents: Array<{ target: any; event: any }>) {
     return {
       parseBody: async () => ({}),
-      asJson: (_res: any, _status: number, body: any) => { (_res as any).__body = body; },
+      asJson: (_res: any, _status: number, body: any) => {
+        (_res as any).__body = body;
+      },
       addJobEvent: () => undefined,
-      sendSseEvent: (target: any, event: any) => { sseEvents.push({ target, event }); },
+      sendSseEvent: (target: any, event: any) => {
+        sseEvents.push({ target, event });
+      },
       ensureInsideRoot: (_root: string, path: string) => path,
       listRuns: () => [],
       getRunResults: () => ({}),
@@ -407,9 +411,15 @@ describe('queue event emission', () => {
     const res = {
       statusCode: 0,
       headers: {} as Record<string, string>,
-      setHeader(key: string, value: string) { this.headers[key] = value; },
-      write() { return; },
-      flushHeaders() { return undefined; }
+      setHeader(key: string, value: string) {
+        this.headers[key] = value;
+      },
+      write() {
+        return;
+      },
+      flushHeaders() {
+        return undefined;
+      }
     } as any;
 
     const runQueueState = {
@@ -453,16 +463,27 @@ describe('queue event emission', () => {
       const res = {
         statusCode: 0,
         headers: {} as Record<string, string>,
-        setHeader(key: string, value: string) { this.headers[key] = value; },
-        write() { return; },
-        flushHeaders() { return undefined; }
+        setHeader(key: string, value: string) {
+          this.headers[key] = value;
+        },
+        write() {
+          return;
+        },
+        flushHeaders() {
+          return undefined;
+        }
       } as any;
       await handleRunsRoutes({
         req: { url: '/api/runs/queue/events', headers: {}, on: () => undefined } as any,
         res,
         pathname: '/api/runs/queue/events',
         method: 'GET',
-        settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+        settings: {
+          evalsDir: '/tmp',
+          runsDir: '/tmp',
+          librariesDir: '/tmp',
+          workspaceRoot: '/tmp'
+        },
         jobs: new Map(),
         runQueueState,
         oauthSessionManager: {} as any,
@@ -508,7 +529,12 @@ describe('queue event emission', () => {
       jobs,
       runQueueState,
       oauthSessionManager: {} as any,
-      deps: { ...deps, asJson: (_r: any, _s: number, body: any) => { stopRes.__body = body; } } as any
+      deps: {
+        ...deps,
+        asJson: (_r: any, _s: number, body: any) => {
+          stopRes.__body = body;
+        }
+      } as any
     });
 
     expect(stopRes.__body).toMatchObject({ ok: true, status: 'stopped' });
@@ -533,16 +559,24 @@ describe('queue event emission', () => {
     const res = {
       statusCode: 0,
       headers: {} as Record<string, string>,
-      setHeader(key: string, value: string) { this.headers[key] = value; },
-      write() { return; },
-      flushHeaders() { return undefined; }
+      setHeader(key: string, value: string) {
+        this.headers[key] = value;
+      },
+      write() {
+        return;
+      },
+      flushHeaders() {
+        return undefined;
+      }
     } as any;
 
     await handleRunsRoutes({
       req: {
         url: '/api/runs/queue/events',
         headers: {},
-        on: (evt: string, cb: () => void) => { if (evt === 'close') closeHandler = cb; }
+        on: (evt: string, cb: () => void) => {
+          if (evt === 'close') closeHandler = cb;
+        }
       } as any,
       res,
       pathname: '/api/runs/queue/events',
