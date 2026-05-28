@@ -153,8 +153,10 @@ export function AppLayout() {
   const location = useLocation();
   const embed = new URLSearchParams(location.search).get('embed') === '1';
   const crumbs = buildCrumbs(location.pathname, location.search);
-  const { connection, version } = useDataSource();
-  const { isRunning, queuedCount, oauthBlockedCount } = useRunQueueStatus();
+  const { version } = useDataSource();
+  const { isRunning, queuedCount, oauthBlockedCount, streamStatus, reconnectStream } =
+    useRunQueueStatus();
+  const connection = streamStatus;
   const queueDisplayCount = queuedCount + (isRunning ? 1 : 0);
 
   if (embed) {
@@ -221,12 +223,26 @@ export function AppLayout() {
                   )}
                 </Link>
               )}
-              <div className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 disabled:opacity-70"
+                onClick={() => {
+                  if (connection === 'disconnected') reconnectStream();
+                }}
+                disabled={connection === 'connecting'}
+                title={
+                  connection === 'disconnected'
+                    ? 'Retry queue connection'
+                    : connection === 'connecting'
+                    ? 'Connecting to queue stream...'
+                    : 'Queue stream connected'
+                }
+              >
                 <span
                   className={`h-2 w-2 rounded-full ${
                     connection === 'connected'
                       ? 'bg-emerald-500'
-                      : connection === 'checking'
+                      : connection === 'connecting'
                       ? 'bg-amber-400'
                       : 'bg-rose-500'
                   }`}
@@ -236,14 +252,14 @@ export function AppLayout() {
                   className={`text-xs ${
                     connection === 'connected'
                       ? 'text-emerald-700'
-                      : connection === 'checking'
+                      : connection === 'connecting'
                       ? 'text-muted-foreground'
                       : 'text-destructive'
                   }`}
                 >
-                  {connection}
+                  {connection === 'connecting' ? 'connecting...' : connection}
                 </span>
-              </div>
+              </button>
             </div>
           </header>
           <main className="flex-1 overflow-auto p-6">

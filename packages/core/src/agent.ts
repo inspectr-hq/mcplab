@@ -200,7 +200,7 @@ export async function runAgentScenario(params: {
           perTurnServerHeaders = (await params.resolveServerRequestHeaders(turnServers)) ?? {};
           throwIfAborted(params.signal);
         } catch (err) {
-          if (isAbortError(err, params.signal)) {
+          if (isAbortError(err) || params.signal?.aborted) {
             throw err;
           }
           perTurnHeaderResolveError = err;

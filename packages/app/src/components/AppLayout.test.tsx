@@ -26,12 +26,14 @@ vi.mock('@/components/ui/sidebar', () => ({
 
 describe('AppLayout queue indicator', () => {
   it('shows no queue badge when idle', () => {
-    mockUseDataSource.mockReturnValue({ connection: 'connected', version: '1.0.0' });
+    mockUseDataSource.mockReturnValue({ version: '1.0.0' });
     mockUseRunQueueStatus.mockReturnValue({
       isRunning: false,
       queuedCount: 0,
       oauthBlockedCount: 0,
-      streamConnected: true
+      streamConnected: true,
+      streamStatus: 'connected',
+      reconnectStream: vi.fn()
     });
 
     render(
@@ -49,12 +51,14 @@ describe('AppLayout queue indicator', () => {
   });
 
   it('shows running, queue count and oauth wait count in mixed state', () => {
-    mockUseDataSource.mockReturnValue({ connection: 'connected', version: '1.0.0' });
+    mockUseDataSource.mockReturnValue({ version: '1.0.0' });
     mockUseRunQueueStatus.mockReturnValue({
       isRunning: true,
       queuedCount: 3,
       oauthBlockedCount: 1,
-      streamConnected: true
+      streamConnected: true,
+      streamStatus: 'connected',
+      reconnectStream: vi.fn()
     });
 
     render(
