@@ -179,7 +179,7 @@ const ResultDetail = () => {
   const [deleteRunOpen, setDeleteRunOpen] = useState(false);
   const [deletingRun, setDeletingRun] = useState(false);
   const [rerunningRun, setRerunningRun] = useState(false);
-  const rootContainerRef = useRef<HTMLDivElement | null>(null);
+  const headerRowRef = useRef<HTMLDivElement | null>(null);
   const [hideDeleteLabel, setHideDeleteLabel] = useState(false);
   const {
     assistantMessages,
@@ -258,11 +258,11 @@ const ResultDetail = () => {
   }, [id, source, resetAssistantSession]);
 
   useEffect(() => {
-    const node = rootContainerRef.current;
+    const node = headerRowRef.current;
     if (!node) return;
 
     const update = () => {
-      setHideDeleteLabel(node.clientWidth < 840);
+      setHideDeleteLabel(node.clientWidth < 600);
     };
 
     update();
@@ -736,7 +736,6 @@ const ResultDetail = () => {
 
   return (
     <div
-      ref={rootContainerRef}
       className={`${
         assistantOpen
           ? 'xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden'
@@ -744,7 +743,7 @@ const ResultDetail = () => {
       }`}
     >
       <div className={`${assistantOpen ? 'xl:shrink-0 xl:pb-6' : 'mb-6'}`}>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div ref={headerRowRef} className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             {!isEmbedded && (
               <Button variant="ghost" size="icon" asChild>
@@ -850,7 +849,7 @@ const ResultDetail = () => {
                 onClick={() => openAssistantWithPrompt()}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                MCP Lab Assistant
+                {hideDeleteLabel ? 'Assistant' : 'MCP Lab Assistant'}
               </Button>
               <Button
                 type="button"
