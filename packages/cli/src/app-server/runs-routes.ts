@@ -581,7 +581,6 @@ export async function handleRunsRoutes(params: {
     } else {
       // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
       runQueueState.queue.push(jobId);
-      emitQueueEvent(jobs, runQueueState, deps);
       asJson(res, 202, { jobId });
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
     }
@@ -1031,19 +1030,27 @@ async function advanceQueue(
         const needsAuth = authStatus.filter((s) => s.status === 'auth_required');
         if (needsAuth.length > 0) {
           const needsAuthNames = needsAuth.map((s) => s.name);
+          const wasBlocked = nextJob.status === 'blocked_auth';
+          const prevBlockedServers = nextJob.blockedAuthServers ?? [];
+          const prevKey = [...prevBlockedServers].sort().join('|');
+          const nextKey = [...needsAuthNames].sort().join('|');
+          const blockedSetChanged = prevKey !== nextKey;
+
           nextJob.blockedAuthServers = needsAuthNames; // always refresh to current missing subset
-          if (nextJob.status !== 'blocked_auth') {
+          if (!wasBlocked) {
             nextJob.status = 'blocked_auth';
           }
-          deps.addJobEvent(nextJob, {
-            type: 'oauth_required',
-            ts: new Date().toISOString(),
-            payload: {
-              jobId: nextJob.id,
-              servers: needsAuthNames,
-              message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
-            }
-          });
+          if (!wasBlocked || blockedSetChanged) {
+            deps.addJobEvent(nextJob, {
+              type: 'oauth_required',
+              ts: new Date().toISOString(),
+              payload: {
+                jobId: nextJob.id,
+                servers: needsAuthNames,
+                message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
+              }
+            });
+          }
           queueMutated = true;
           emitQueueEvent(jobs, runQueueState, deps);
           return; // pause — frontend must call /api/runs/queue/resume after auth
