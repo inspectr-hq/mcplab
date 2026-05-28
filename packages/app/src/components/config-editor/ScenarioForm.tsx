@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from '@/types/eval';
 import { useEffect, useState, type MouseEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -43,6 +44,7 @@ interface ScenarioFormProps {
   defaultAssistantAgentName?: string;
   assistantInitialPromptByScenarioId?: Record<string, string>;
   assistantAutoOpenNonceByScenarioId?: Record<string, number>;
+  testCaseReturnToPath?: string;
   onChange: (scenarios: Scenario[]) => void;
   readOnly?: boolean;
   allowAdd?: boolean;
@@ -69,6 +71,7 @@ export function ScenarioForm({
   defaultAssistantAgentName,
   assistantInitialPromptByScenarioId,
   assistantAutoOpenNonceByScenarioId,
+  testCaseReturnToPath,
   onChange,
   readOnly,
   allowAdd = !readOnly,
@@ -118,6 +121,7 @@ export function ScenarioForm({
           defaultAssistantAgentName={defaultAssistantAgentName}
           assistantInitialPrompt={assistantInitialPromptByScenarioId?.[sc.id]}
           assistantAutoOpenNonce={assistantAutoOpenNonceByScenarioId?.[sc.id]}
+          testCaseReturnToPath={testCaseReturnToPath}
           onUpdate={(patch) => update(i, patch)}
           onMoveUp={() => move(i, -1)}
           onMoveDown={() => move(i, 1)}
@@ -148,6 +152,7 @@ function ScenarioCard({
   defaultAssistantAgentName,
   assistantInitialPrompt,
   assistantAutoOpenNonce,
+  testCaseReturnToPath,
   onUpdate,
   onMoveUp,
   onMoveDown,
@@ -167,6 +172,7 @@ function ScenarioCard({
   defaultAssistantAgentName?: string;
   assistantInitialPrompt?: string;
   assistantAutoOpenNonce?: number;
+  testCaseReturnToPath?: string;
   onUpdate: (patch: Partial<Scenario>) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -472,6 +478,25 @@ function ScenarioCard({
             <CardTitle className="truncate text-sm font-medium">
               {scenario.name || `Scenario ${index + 1}`}
             </CardTitle>
+            {readOnly && scenarioOrigin === 'referenced' && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                asChild
+              >
+                <Link
+                  to={`/libraries/test-cases/${encodeURIComponent(scenario.id)}${
+                    testCaseReturnToPath
+                      ? `?returnTo=${encodeURIComponent(testCaseReturnToPath)}`
+                      : ''
+                  }`}
+                >
+                  Edit test
+                </Link>
+              </Button>
+            )}
           </div>
           {readOnly ? (
             <div className="flex items-center gap-2">

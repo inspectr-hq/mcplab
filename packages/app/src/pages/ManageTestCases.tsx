@@ -59,6 +59,8 @@ const ManageTestCases = () => {
   const saveSeqRef = useRef(0);
 
   const selectedScenarioId = testCaseId ? decodeURIComponent(testCaseId) : undefined;
+  const returnToParam = searchParams.get('returnTo')?.trim() || '';
+  const returnToPath = returnToParam.startsWith('/') ? returnToParam : '';
   const selectedIndex = selectedScenarioId
     ? scenarios.findIndex((scenario) => scenario.id === selectedScenarioId)
     : -1;
@@ -346,6 +348,14 @@ const ManageTestCases = () => {
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Overview
+            </Button>
+          )}
+          {selectedScenario && returnToPath && (
+            <Button type="button" size="sm" variant="outline" asChild>
+              <Link to={returnToPath}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to evaluation
+              </Link>
             </Button>
           )}
           <Button

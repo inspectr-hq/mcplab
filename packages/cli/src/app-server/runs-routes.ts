@@ -360,7 +360,8 @@ export async function handleRunsRoutes(params: {
       for (const client of job.clients) client.end();
       job.clients.clear();
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
-        emitWhenIdle: true
+        emitWhenIdle: true,
+        hostHeader: req.headers.host
       });
       asJson(res, 200, { ok: true, status: 'stopped' });
       return true;
@@ -430,7 +431,8 @@ export async function handleRunsRoutes(params: {
     for (const client of job.clients) client.end();
     job.clients.clear();
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
-      emitWhenIdle: true
+      emitWhenIdle: true,
+      hostHeader: req.headers.host
     });
     asJson(res, 200, { ok: true, jobId, status: 'stopped' });
     return true;
@@ -438,7 +440,8 @@ export async function handleRunsRoutes(params: {
 
   if (pathname === '/api/runs/queue/resume' && method === 'POST') {
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
-      emitWhenIdle: true
+      emitWhenIdle: true,
+      hostHeader: req.headers.host
     });
     asJson(res, 200, { ok: true });
     return true;
@@ -586,7 +589,9 @@ export async function handleRunsRoutes(params: {
       // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
       runQueueState.queue.push(jobId);
       asJson(res, 202, { jobId });
-      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps);
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+        hostHeader: req.headers.host
+      });
     }
     return true;
   }
@@ -988,7 +993,7 @@ async function advanceQueue(
   settings: AppRouteRequestContext['settings'],
   oauthSessionManager: OAuthSessionManager,
   deps: RunsRouteDeps,
-  options?: { emitWhenIdle?: boolean }
+  options?: { emitWhenIdle?: boolean; hostHeader?: string }
 ): Promise<void> {
   if (runQueueState.activeJobId) {
     if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
@@ -1030,10 +1035,13 @@ async function advanceQueue(
         continue;
       }
       if (oauthServers.length > 0) {
-        const authStatus = oauthSessionManager.checkServersAuthStatus(oauthServers);
-        const needsAuth = authStatus.filter((s) => s.status === 'auth_required');
+        const ensureResult = await oauthSessionManager.ensureServersAuthorized(
+          oauthServers,
+          options?.hostHeader
+        );
+        const needsAuth = ensureResult.servers.filter((s) => s.status === 'auth_required');
         if (needsAuth.length > 0) {
-          const needsAuthNames = needsAuth.map((s) => s.name);
+          const needsAuthNames = needsAuth.map((s) => s.serverName);
           const wasBlocked = nextJob.status === 'blocked_auth';
           const prevBlockedServers = nextJob.blockedAuthServers ?? [];
           const prevKey = [...prevBlockedServers].sort().join('|');
@@ -1058,6 +1066,22 @@ async function advanceQueue(
           queueMutated = true;
           emitQueueEvent(jobs, runQueueState, deps);
           return; // pause — frontend must call /api/runs/queue/resume after auth
+        }
+
+        const readyServers = ensureResult.servers
+          .filter((s) => s.status === 'ready')
+          .map((s) => {
+            const mode = s.debugState ?? 'unknown';
+            return `${s.serverName} (${mode})`;
+          });
+        if (readyServers.length > 0) {
+          deps.addJobEvent(nextJob, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `OAuth credentials ready for queued run: ${readyServers.join(', ')}`
+            }
+          });
         }
       }
 
@@ -1221,9 +1245,10 @@ async function executeRunJob(
     const oauthServers = Array.from(usedServerNames).filter(
       (serverName) => expandedConfig.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
+    const oauthServerSet = new Set(oauthServers);
     const mcpServerAuthHeaders =
       oauthServers.length > 0
-        ? await oauthSessionManager.getAuthHeadersForServers(oauthServers)
+        ? await oauthSessionManager.getAuthHeadersForServers(oauthServers, undefined)
         : undefined;
     if (oauthServers.length > 0) {
       addJobEvent(job, {
@@ -1259,6 +1284,15 @@ async function executeRunJob(
         cliVersion: pkgVersion,
         runsDir: settings.runsDir,
         mcpServerAuthHeaders,
+        resolveMcpServerAuthHeaders:
+          oauthServers.length > 0
+            ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {
+                if (options?.signal?.aborted) return {};
+                const namesToRefresh = serverNames.filter((name) => oauthServerSet.has(name));
+                if (namesToRefresh.length === 0) return {};
+                return oauthSessionManager.getAuthHeadersForServers(namesToRefresh);
+              }
+            : undefined,
         signal: job.abortController.signal,
         onProgress: async (event: RunProgressEvent) => {
           const message = formatRunProgressMessage(event);
@@ -1338,6 +1372,29 @@ async function executeRunJob(
       process.chdir(cwdBefore);
     }
   } catch (error: unknown) {
+    if (error instanceof OAuthAuthorizationRequiredError) {
+      const blockedServers = Array.from(
+        new Set(error.details.map((detail) => detail.serverName).filter(Boolean))
+      );
+      const aborted = job.abortController.signal.aborted || job.status === 'stopped';
+      if (!aborted && blockedServers.length > 0) {
+        job.blockedAuthServers = blockedServers;
+        job.status = 'blocked_auth';
+        if (!runQueueState.queue.includes(job.id)) {
+          runQueueState.queue.unshift(job.id);
+        }
+        addJobEvent(job, {
+          type: 'oauth_required',
+          ts: new Date().toISOString(),
+          payload: {
+            jobId: job.id,
+            servers: blockedServers,
+            message: `OAuth login required for server(s): ${blockedServers.join(', ')}.`
+          }
+        });
+        return;
+      }
+    }
     const normalizedError =
       error instanceof OAuthAuthorizationRequiredError
         ? new Error(error.details[0]?.message || error.message)
@@ -1357,8 +1414,10 @@ async function executeRunJob(
     job.status = aborted ? 'stopped' : 'error';
   } finally {
     runQueueState.activeJobId = null;
-    for (const client of job.clients) client.end();
-    job.clients.clear();
+    if (job.status !== 'blocked_auth') {
+      for (const client of job.clients) client.end();
+      job.clients.clear();
+    }
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
       emitWhenIdle: true
     }).catch((error) => {

@@ -25,6 +25,10 @@ export interface RunOptions {
   runsDir?: string;
   mcpServerAuthHeaders?: Record<string, Record<string, string>>;
   oauthTokens?: Record<string, string>;
+  resolveMcpServerAuthHeaders?: (
+    serverNames: string[],
+    options?: { signal?: AbortSignal }
+  ) => Promise<Record<string, Record<string, string>>>;
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
 }
@@ -206,6 +210,9 @@ export async function runAll(
             agent,
             mcp,
             requestId,
+            resolveServerRequestHeaders: (serverNames) =>
+              options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
+              Promise.resolve({}),
             maxTurns: agent.max_turns,
             signal: options.signal,
             onProgress: async (event) => {

@@ -111,7 +111,9 @@ export interface RunJobEvent {
 }
 
 export type { QueueEntry, QueueResponse };
-export type RunQueueSseEvent = RunQueueEvent;
+export type RunQueueSseEvent =
+  | RunQueueEvent
+  | { type: 'connected' | 'error'; ts: string; payload: Record<string, unknown> };
 
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';

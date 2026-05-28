@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
@@ -60,6 +60,7 @@ const emptyConfig = (): EvalConfig => ({
 
 const ConfigEditor = () => {
   const { id, tab: tabParam } = useParams<{ id: string; tab?: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { getConfig, addConfig, updateConfig, loading } = useConfigs();
@@ -85,6 +86,7 @@ const ConfigEditor = () => {
     const tab = tabParam || searchParams.get('tab');
     return tab === 'agents' || tab === 'scenarios' ? tab : 'scenarios';
   }, [tabParam, searchParams]);
+  const testCaseReturnToPath = `${location.pathname}${location.search}`;
 
   useEffect(() => {
     if (existing && !editing) {
@@ -740,8 +742,8 @@ const ConfigEditor = () => {
           {isView && !editing && existing && !isBrokenConfig && (
             <Button size="sm" variant="outline" asChild>
               <Link to={`/run?configId=${encodeURIComponent(existing.id)}`}>
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                Run MCP Evaluation
+                <Play className="h-3.5 w-3.5" />
+                Run Evaluation
               </Link>
             </Button>
           )}
@@ -1620,6 +1622,7 @@ const ConfigEditor = () => {
                   configId={config.id}
                   configPath={config.sourcePath}
                   defaultAssistantAgentName={config.runDefaults?.selectedAgentNames?.[0]}
+                  testCaseReturnToPath={testCaseReturnToPath}
                   onChange={() => {}}
                   readOnly
                 />
