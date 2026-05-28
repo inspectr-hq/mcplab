@@ -31,7 +31,6 @@ describe('AppLayout queue indicator', () => {
       isRunning: false,
       queuedCount: 0,
       oauthBlockedCount: 0,
-      streamConnected: true,
       streamStatus: 'connected',
       reconnectStream: vi.fn()
     });
@@ -56,7 +55,6 @@ describe('AppLayout queue indicator', () => {
       isRunning: true,
       queuedCount: 3,
       oauthBlockedCount: 1,
-      streamConnected: true,
       streamStatus: 'connected',
       reconnectStream: vi.fn()
     });

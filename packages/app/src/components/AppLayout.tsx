@@ -156,7 +156,6 @@ export function AppLayout() {
   const { version } = useDataSource();
   const { isRunning, queuedCount, oauthBlockedCount, streamStatus, reconnectStream } =
     useRunQueueStatus();
-  const connection = streamStatus;
   const queueDisplayCount = queuedCount + (isRunning ? 1 : 0);
 
   if (embed) {
@@ -227,22 +226,22 @@ export function AppLayout() {
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 disabled:opacity-70"
                 onClick={() => {
-                  if (connection === 'disconnected') reconnectStream();
+                  if (streamStatus === 'disconnected') reconnectStream();
                 }}
-                disabled={connection === 'connecting'}
+                disabled={streamStatus === 'connecting'}
                 title={
-                  connection === 'disconnected'
+                  streamStatus === 'disconnected'
                     ? 'Retry queue connection'
-                    : connection === 'connecting'
+                    : streamStatus === 'connecting'
                     ? 'Connecting to queue stream...'
                     : 'Queue stream connected'
                 }
               >
                 <span
                   className={`h-2 w-2 rounded-full ${
-                    connection === 'connected'
+                    streamStatus === 'connected'
                       ? 'bg-emerald-500'
-                      : connection === 'connecting'
+                      : streamStatus === 'connecting'
                       ? 'bg-amber-400'
                       : 'bg-rose-500'
                   }`}
@@ -250,14 +249,14 @@ export function AppLayout() {
                 />
                 <span
                   className={`text-xs ${
-                    connection === 'connected'
+                    streamStatus === 'connected'
                       ? 'text-emerald-700'
-                      : connection === 'connecting'
+                      : streamStatus === 'connecting'
                       ? 'text-muted-foreground'
                       : 'text-destructive'
                   }`}
                 >
-                  {connection === 'connecting' ? 'connecting...' : connection}
+                  {streamStatus}
                 </span>
               </button>
             </div>

@@ -672,6 +672,14 @@ export const workspaceApiClient = {
       }
     };
     source.addEventListener('queue_event', messageHandler);
+    source.onopen = () => {
+      if (closed) return;
+      onEvent({
+        type: 'connected',
+        ts: new Date().toISOString(),
+        payload: { message: 'SSE connected' }
+      });
+    };
     source.onerror = () => {
       if (closed) return;
       onEvent({
