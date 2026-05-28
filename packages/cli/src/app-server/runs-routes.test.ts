@@ -106,7 +106,13 @@ describe('run request validation', () => {
       res: {} as any,
       pathname: '/api/runs',
       method: 'POST',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
@@ -156,7 +162,13 @@ describe('run request validation', () => {
       res: {} as any,
       pathname: '/api/runs',
       method: 'POST',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
@@ -206,7 +218,13 @@ describe('run request validation', () => {
       res: {} as any,
       pathname: '/api/runs',
       method: 'POST',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
@@ -276,7 +294,13 @@ describe('run request validation', () => {
       res: {} as any,
       pathname: '/api/runs',
       method: 'POST',
-      settings: { evalsDir, runsDir: join(root, 'runs'), librariesDir, workspaceRoot: root },
+      settings: {
+        evalsDir,
+        runsDir: join(root, 'runs'),
+        librariesDir,
+        workspaceRoot: root,
+        toolAnalysisResultsDir: root
+      },
       jobs: new Map(),
       runQueueState: { queue: [], activeJobId: null, isAdvancingQueue: false, clients: new Set() },
       oauthSessionManager: {} as any,
@@ -345,7 +369,13 @@ describe('run queue SSE endpoint', () => {
       res,
       pathname: '/api/runs/queue/events',
       method: 'GET',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState,
       oauthSessionManager: {} as any,
@@ -434,7 +464,13 @@ describe('queue event emission', () => {
       res,
       pathname: '/api/runs/queue/events',
       method: 'GET',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState,
       oauthSessionManager: {} as any,
@@ -482,7 +518,8 @@ describe('queue event emission', () => {
           evalsDir: '/tmp',
           runsDir: '/tmp',
           librariesDir: '/tmp',
-          workspaceRoot: '/tmp'
+          workspaceRoot: '/tmp',
+          toolAnalysisResultsDir: '/tmp'
         },
         jobs: new Map(),
         runQueueState,
@@ -525,7 +562,13 @@ describe('queue event emission', () => {
       res: stopRes,
       pathname: `/api/runs/jobs/${jobId}/stop`,
       method: 'POST',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs,
       runQueueState,
       oauthSessionManager: {} as any,
@@ -581,7 +624,13 @@ describe('queue event emission', () => {
       res,
       pathname: '/api/runs/queue/events',
       method: 'GET',
-      settings: { evalsDir: '/tmp', runsDir: '/tmp', librariesDir: '/tmp', workspaceRoot: '/tmp' },
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      },
       jobs: new Map(),
       runQueueState,
       oauthSessionManager: {} as any,
@@ -687,7 +736,8 @@ describe('queue OAuth admission', () => {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
-          workspaceRoot: fixture.root
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
         },
         jobs,
         runQueueState,
@@ -738,7 +788,8 @@ describe('queue OAuth admission', () => {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
-          workspaceRoot: fixture.root
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
         },
         jobs,
         runQueueState,
@@ -798,7 +849,8 @@ describe('queue OAuth admission', () => {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
-          workspaceRoot: fixture.root
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
         },
         jobs,
         runQueueState,
@@ -818,7 +870,8 @@ describe('queue OAuth admission', () => {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
-          workspaceRoot: fixture.root
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
         },
         jobs,
         runQueueState,

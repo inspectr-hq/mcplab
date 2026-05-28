@@ -41,7 +41,7 @@ export function useRunQueueStatus() {
       streamStatusRef.current = 'connecting';
       unsubscribeCurrent?.();
       unsubscribeCurrent = source.subscribeRunQueue((event) => {
-        const queueEvent = event.payload.event;
+        const queueEvent = event.payload.event as QueueResponse | undefined;
         if (event.type === 'connected') {
           reconnectAttempts = 0;
           setStreamStatus('connected');
