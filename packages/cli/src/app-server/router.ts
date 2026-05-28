@@ -199,7 +199,12 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
-  const runQueueState: RunQueueState = { activeJobId: null, queue: [], isAdvancingQueue: false };
+  const runQueueState: RunQueueState = {
+    activeJobId: null,
+    queue: [],
+    isAdvancingQueue: false,
+    clients: new Set()
+  };
   const routeDeps: AppRouteDeps = {
     parseBody,
     asHtml,
@@ -509,6 +514,10 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   server.on('close', () => {
+    for (const client of runQueueState.clients) {
+      client.end();
+    }
+    runQueueState.clients.clear();
     devMcp?.stop();
   });
 

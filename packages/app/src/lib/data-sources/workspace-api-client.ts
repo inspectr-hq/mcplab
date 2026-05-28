@@ -6,6 +6,7 @@ import type {
   ScenarioAssistantSessionView,
   ScenarioAssistantTurnResponse,
   RunJobEvent,
+  RunQueueSseEvent,
   QueueResponse,
   ProviderModelsResponse,
   OAuthDebuggerSessionConfig,
@@ -652,6 +653,45 @@ export const workspaceApiClient = {
       method: 'POST'
     }),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
+  subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
+    const source = new EventSource(`${BASE}/api/runs/queue/events`);
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      source.close();
+    };
+    const messageHandler = (event: MessageEvent) => {
+      if (closed) return;
+      if (typeof event.data !== 'string' || !event.data) return;
+      try {
+        const parsed = JSON.parse(event.data) as RunQueueSseEvent;
+        onEvent(parsed);
+      } catch {
+        // Ignore malformed or non-JSON SSE payloads.
+      }
+    };
+    source.addEventListener('queue_event', messageHandler);
+    source.onerror = () => {
+      if (closed) return;
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: {
+          message: 'SSE connection error',
+          reconnecting: source.readyState !== 2
+        }
+      });
+      if (source.readyState !== 2) {
+        // Let EventSource keep auto-reconnecting on transient failures.
+        return;
+      }
+      close();
+    };
+    return () => {
+      close();
+    };
+  },
   removeQueuedRun: (jobId: string) =>
     request<{ ok: boolean }>(`/api/runs/queue/${jobId}`, { method: 'DELETE' }).then(
       () => undefined

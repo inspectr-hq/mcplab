@@ -87,6 +87,62 @@ describe('workspaceApiClient SSE subscriptions', () => {
 
     unsubscribe();
   });
+
+  it('parses queue events and handles terminal SSE failure', () => {
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    const onEvent = vi.fn();
+
+    const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
+    const source = MockEventSource.instances[0]!;
+
+    source.emit('queue_event', {
+      type: 'queue_event',
+      ts: '2026-01-01T00:00:00.000Z',
+      payload: {
+        event: {
+          active: null,
+          queued: [{ jobId: 'job-1', status: 'queued', runParams: { configPath: '/tmp/x.yaml' } }]
+        }
+      }
+    });
+    source.readyState = 2;
+    source.fail();
+
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'queue_event'
+      })
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        payload: expect.objectContaining({ reconnecting: false })
+      })
+    );
+    expect(source.closed).toBe(true);
+
+    unsubscribe();
+  });
+
+  it('emits transient SSE error without closing EventSource', () => {
+    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    const onEvent = vi.fn();
+
+    const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
+    const source = MockEventSource.instances[0]!;
+    source.readyState = 0;
+    source.fail();
+
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        payload: expect.objectContaining({ reconnecting: true })
+      })
+    );
+    expect(source.closed).toBe(false);
+
+    unsubscribe();
+  });
 });
 
 describe('workspaceApiClient assistant request cancellation', () => {

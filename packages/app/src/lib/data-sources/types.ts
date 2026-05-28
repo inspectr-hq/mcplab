@@ -14,7 +14,10 @@ import type {
   ServerConfig as CoreServerConfig,
   TraceMessage as CoreTraceMessage,
   TraceMessageContentBlock as CoreTraceMessageContentBlock,
-  HealthMcpConnectionInfo
+  HealthMcpConnectionInfo,
+  QueueEntry,
+  QueueResponse,
+  RunQueueEvent
 } from '@inspectr/mcplab-core';
 
 export type {
@@ -107,26 +110,8 @@ export interface RunJobEvent {
   payload: Record<string, unknown>;
 }
 
-export interface QueueEntry {
-  jobId: string;
-  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
-  blockedReason?: 'oauth_required';
-  requiredServers?: string[];
-  runParams: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioIds: string[] | null;
-    agents: string[] | null;
-    runNote: string | null;
-    serverOverrideAll: string[] | null;
-    scenarioServerOverrides: Record<string, string[]> | null;
-  };
-}
-
-export interface QueueResponse {
-  active: QueueEntry | null;
-  queued: QueueEntry[];
-}
+export type { QueueEntry, QueueResponse };
+export type RunQueueSseEvent = RunQueueEvent;
 
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';
@@ -718,6 +703,7 @@ export interface EvalDataSource {
   }) => Promise<{ jobId: string }>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
+  subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;
   resumeQueue: () => Promise<{ ok: boolean }>;
   subscribeRunJob: (jobId: string, onEvent: (event: RunJobEvent) => void) => () => void;

@@ -64,6 +64,7 @@ export interface RunQueueState {
   activeJobId: string | null;
   queue: string[]; // ordered jobIds waiting to run
   isAdvancingQueue: boolean; // re-entrancy lock for async advanceQueue()
+  clients: Set<ServerResponse>; // subscribers of /api/runs/queue/events
 }
 
 export interface HttpDeps {
