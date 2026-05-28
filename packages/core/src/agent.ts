@@ -194,7 +194,9 @@ export async function runAgentScenario(params: {
       let perTurnServerHeaders: Record<string, Record<string, string>> = {};
       let perTurnHeaderResolveError: unknown;
       if (typeof params.resolveServerRequestHeaders === 'function') {
-        const turnServers = Array.from(new Set(resolvedToolCalls.map((entry) => entry.resolved.server)));
+        const turnServers = Array.from(
+          new Set(resolvedToolCalls.map((entry) => entry.resolved.server))
+        );
         try {
           throwIfAborted(params.signal);
           perTurnServerHeaders = (await params.resolveServerRequestHeaders(turnServers)) ?? {};

@@ -22,10 +22,6 @@ export function useRunQueueStatus() {
   const revisionRef = useRef(0);
 
   useEffect(() => {
-    streamStatusRef.current = streamStatus;
-  }, [streamStatus]);
-
-  useEffect(() => {
     let disposed = false;
     let reconnectAttempts = 0;
     let reconnectTimer: number | null = null;
@@ -42,17 +38,20 @@ export function useRunQueueStatus() {
       if (disposed) return;
       clearReconnectTimer();
       setStreamStatus('connecting');
+      streamStatusRef.current = 'connecting';
       unsubscribeCurrent?.();
       unsubscribeCurrent = source.subscribeRunQueue((event) => {
         const queueEvent = event.payload.event;
         if (event.type === 'connected') {
           reconnectAttempts = 0;
           setStreamStatus('connected');
+          streamStatusRef.current = 'connected';
           return;
         }
         if (event.type === 'queue_event' && queueEvent) {
           revisionRef.current += 1;
           setStreamStatus('connected');
+          streamStatusRef.current = 'connected';
           setQueueState(queueEvent);
           return;
         }
@@ -61,10 +60,12 @@ export function useRunQueueStatus() {
           unsubscribeCurrent = null;
           if (reconnectAttempts >= MAX_SSE_RECONNECT_ATTEMPTS) {
             setStreamStatus('disconnected');
+            streamStatusRef.current = 'disconnected';
             return;
           }
           reconnectAttempts += 1;
           setStreamStatus('connecting');
+          streamStatusRef.current = 'connecting';
           const delay = SSE_RECONNECT_DELAY_MS * 2 ** (reconnectAttempts - 1);
           reconnectTimer = window.setTimeout(() => {
             connectStream();
