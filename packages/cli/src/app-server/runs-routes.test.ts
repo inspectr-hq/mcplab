@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mergeLibraryAgentsIntoConfig, applyLibraryAgents } from './runs-routes.js';
 import { hashConfig } from '@inspectr/mcplab-core';
 import type { EvalConfig } from '@inspectr/mcplab-core';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -591,5 +591,246 @@ describe('queue event emission', () => {
     expect(runQueueState.clients.size).toBe(1);
     closeHandler?.();
     expect(runQueueState.clients.size).toBe(0);
+  });
+});
+
+describe('queue OAuth admission', () => {
+  function createOauthEvalFixture() {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-queue-oauth-'));
+    const evalsDir = join(root, 'evals');
+    const runsDir = join(root, 'runs');
+    const librariesDir = join(root, 'libs');
+    mkdirSync(evalsDir, { recursive: true });
+    mkdirSync(runsDir, { recursive: true });
+    mkdirSync(librariesDir, { recursive: true });
+    const configPath = join(evalsDir, 'eval.yaml');
+    writeFileSync(
+      configPath,
+      [
+        'servers:',
+        '  - id: oauth-server',
+        '    transport: http',
+        '    url: http://localhost:3300/mcp',
+        '    auth:',
+        '      type: oauth_authorization_code',
+        '      client_id: client-id',
+        'agents:',
+        '  - id: mini',
+        '    provider: openai',
+        '    model: gpt-5-mini',
+        'scenarios:',
+        '  - id: s1',
+        '    prompt: test',
+        '    servers: [oauth-server]'
+      ].join('\n'),
+      'utf8'
+    );
+    return { root, evalsDir, runsDir, librariesDir, configPath };
+  }
+
+  function makeDeps(eventSink: Array<{ jobId: string; type: string; message?: string }> = []) {
+    return {
+      parseBody: async () => ({}),
+      asJson: (res: any, _status: number, body: unknown) => {
+        res.__body = body;
+      },
+      addJobEvent: (job: any, event: any) => {
+        eventSink.push({
+          jobId: job.id,
+          type: event.type,
+          message: String(event?.payload?.message ?? '')
+        });
+      },
+      sendSseEvent: () => undefined,
+      ensureInsideRoot: (_root: string, path: string) => path,
+      listRuns: () => [],
+      getRunResults: () => ({}),
+      getScenarioRunTraceRecords: () => [],
+      selectScenarioIds: (c: any) => c,
+      expandConfigForAgents: (c: any) => c,
+      resolveRunSelectedAgents: () => ['mini'],
+      readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),
+      pickDefaultAssistantAgentName: () => undefined,
+      pkgVersion: 'test'
+    };
+  }
+
+  it('blocks queued job when OAuth is still required', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const fixture = createOauthEvalFixture();
+    const jobs = new Map<string, any>();
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+    const deps: any = makeDeps(events);
+    const oauthSessionManager = {
+      ensureServersAuthorized: vi.fn().mockResolvedValue({
+        servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
+        allReady: false
+      })
+    } as any;
+    const req = { url: '/api/runs', headers: {}, on: () => undefined } as any;
+    deps.parseBody = async () => ({ configPath: fixture.configPath, runsPerScenario: 1 });
+    const res = {} as any;
+
+    try {
+      await handleRunsRoutes({
+        req,
+        res,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root
+        },
+        jobs,
+        runQueueState,
+        oauthSessionManager,
+        deps
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const [job] = Array.from(jobs.values());
+      expect(job.status).toBe('blocked_auth');
+      expect(job.blockedAuthServers).toEqual(['oauth-server']);
+      expect(events.some((e) => e.type === 'oauth_required')).toBe(true);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('auto-refresh-ready path does not block and emits OAuth readiness log', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const fixture = createOauthEvalFixture();
+    const jobs = new Map<string, any>();
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+    const deps: any = makeDeps(events);
+    const oauthSessionManager = {
+      ensureServersAuthorized: vi.fn().mockResolvedValue({
+        servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'refreshed' }],
+        allReady: true
+      }),
+      getAuthHeadersForServers: vi.fn().mockRejectedValue(new Error('stop test run'))
+    } as any;
+    const req = { url: '/api/runs', headers: {}, on: () => undefined } as any;
+    deps.parseBody = async () => ({ configPath: fixture.configPath, runsPerScenario: 1 });
+    const res = {} as any;
+
+    try {
+      await handleRunsRoutes({
+        req,
+        res,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root
+        },
+        jobs,
+        runQueueState,
+        oauthSessionManager,
+        deps
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(events.some((e) => e.type === 'oauth_required')).toBe(false);
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'log' &&
+            (e.message ?? '').includes('OAuth credentials ready for queued run: oauth-server')
+        )
+      ).toBe(true);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('resume unblocks queue after OAuth becomes ready', async () => {
+    const { handleRunsRoutes } = await import('./runs-routes.js');
+    const fixture = createOauthEvalFixture();
+    const jobs = new Map<string, any>();
+    const runQueueState = {
+      queue: [] as string[],
+      activeJobId: null as string | null,
+      isAdvancingQueue: false,
+      clients: new Set<any>()
+    };
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+    const deps: any = makeDeps(events);
+    const oauthSessionManager = {
+      ensureServersAuthorized: vi
+        .fn()
+        .mockResolvedValueOnce({
+          servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
+          allReady: false
+        })
+        .mockResolvedValueOnce({
+          servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+          allReady: true
+        }),
+      getAuthHeadersForServers: vi.fn().mockRejectedValue(new Error('stop test run'))
+    } as any;
+    const postReq = { url: '/api/runs', headers: {}, on: () => undefined } as any;
+    deps.parseBody = async () => ({ configPath: fixture.configPath, runsPerScenario: 1 });
+
+    try {
+      await handleRunsRoutes({
+        req: postReq,
+        res: {} as any,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root
+        },
+        jobs,
+        runQueueState,
+        oauthSessionManager,
+        deps
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const [job] = Array.from(jobs.values());
+      expect(job.status).toBe('blocked_auth');
+
+      await handleRunsRoutes({
+        req: { url: '/api/runs/queue/resume', headers: {}, on: () => undefined } as any,
+        res: {} as any,
+        pathname: '/api/runs/queue/resume',
+        method: 'POST',
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root
+        },
+        jobs,
+        runQueueState,
+        oauthSessionManager,
+        deps
+      } as any);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(events.filter((e) => e.type === 'started').length).toBeGreaterThan(0);
+      expect(events.filter((e) => e.type === 'oauth_required').length).toBe(1);
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
   });
 });

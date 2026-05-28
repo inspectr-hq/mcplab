@@ -12,6 +12,7 @@ import type {
   TraceMessageUsage
 } from './types.js';
 import type { McpClientManager } from './mcp.js';
+import { isAbortError, throwIfAborted } from './abort.js';
 
 export interface AgentRunResult {
   finalText: string;
@@ -86,6 +87,9 @@ export async function runAgentScenario(params: {
   agent: AgentConfig;
   mcp: McpClientManager;
   requestId?: string;
+  resolveServerRequestHeaders?: (
+    serverNames: string[]
+  ) => Promise<Record<string, Record<string, string>>>;
   maxTurns?: number;
   signal?: AbortSignal;
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
@@ -187,6 +191,21 @@ export async function runAgentScenario(params: {
         tool_calls: response.tool_calls
       });
       const toolResultBlocks: TraceMessageContentBlock[] = [];
+      let perTurnServerHeaders: Record<string, Record<string, string>> = {};
+      let perTurnHeaderResolveError: unknown;
+      if (typeof params.resolveServerRequestHeaders === 'function') {
+        const turnServers = Array.from(new Set(resolvedToolCalls.map((entry) => entry.resolved.server)));
+        try {
+          throwIfAborted(params.signal);
+          perTurnServerHeaders = (await params.resolveServerRequestHeaders(turnServers)) ?? {};
+          throwIfAborted(params.signal);
+        } catch (err) {
+          if (isAbortError(err, params.signal)) {
+            throw err;
+          }
+          perTurnHeaderResolveError = err;
+        }
+      }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
         await emitProgress({
           type: 'tool_call_started',
@@ -200,13 +219,26 @@ export async function runAgentScenario(params: {
 
         let ok = true;
         let result: any;
-        try {
-          result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments, {
-            requestHeaders: params.requestId ? { 'x-request-id': params.requestId } : undefined
-          });
-        } catch (err: any) {
+        if (perTurnHeaderResolveError) {
           ok = false;
-          result = { error: String(err?.message ?? err) };
+          result = {
+            error: `Failed to resolve MCP auth headers: ${String(
+              (perTurnHeaderResolveError as any)?.message ?? perTurnHeaderResolveError
+            )}`
+          };
+        } else {
+          try {
+            const requestHeaders = {
+              ...(params.requestId ? { 'x-request-id': params.requestId } : {}),
+              ...(perTurnServerHeaders[resolved.server] ?? {})
+            };
+            result = await mcp.callTool(resolved.server, toolCall.name, toolCall.arguments, {
+              requestHeaders: Object.keys(requestHeaders).length > 0 ? requestHeaders : undefined
+            });
+          } catch (err: any) {
+            ok = false;
+            result = { error: String(err?.message ?? err) };
+          }
         }
 
         const tsEnd = new Date();
