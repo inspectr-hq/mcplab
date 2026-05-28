@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -91,6 +91,7 @@ import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
+import { formatDurationMs, getScenarioTotalDurationMs } from '@/lib/run-duration';
 import type {
   ConversationItem,
   EvalResult,
@@ -178,6 +179,8 @@ const ResultDetail = () => {
   const [deleteRunOpen, setDeleteRunOpen] = useState(false);
   const [deletingRun, setDeletingRun] = useState(false);
   const [rerunningRun, setRerunningRun] = useState(false);
+  const rootContainerRef = useRef<HTMLDivElement | null>(null);
+  const [hideDeleteLabel, setHideDeleteLabel] = useState(false);
   const {
     assistantMessages,
     assistantPendingToolCalls,
@@ -253,6 +256,24 @@ const ResultDetail = () => {
       active = false;
     };
   }, [id, source, resetAssistantSession]);
+
+  useEffect(() => {
+    const node = rootContainerRef.current;
+    if (!node) return;
+
+    const update = () => {
+      setHideDeleteLabel(node.clientWidth < 840);
+    };
+
+    update();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => update());
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     if (!result?.id) {
@@ -387,6 +408,7 @@ const ResultDetail = () => {
     displayPassRate,
     displayAvgToolCalls,
     displayAvgLatency,
+    displayDurationMs,
     displayToolTokenUsage
   } = useMemo(() => {
     if (!result) {
@@ -397,6 +419,7 @@ const ResultDetail = () => {
         displayPassRate: 0,
         displayAvgToolCalls: 0,
         displayAvgLatency: 0,
+        displayDurationMs: 0,
         displayToolTokenUsage: null
       };
     }
@@ -427,6 +450,7 @@ const ResultDetail = () => {
       displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
       displayAvgLatency: totalRuns === 0 ? 0 : Math.round(totalDuration / totalRuns),
+      displayDurationMs: totalDuration,
       displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
     };
   }, [result, requestedAgentId]);
@@ -712,6 +736,7 @@ const ResultDetail = () => {
 
   return (
     <div
+      ref={rootContainerRef}
       className={`${
         assistantOpen
           ? 'xl:flex xl:h-[calc(100vh-2rem-48px)] xl:min-h-0 xl:flex-col xl:overflow-hidden'
@@ -845,9 +870,10 @@ const ResultDetail = () => {
                 className="max-w-full gap-1.5 text-destructive"
                 onClick={() => setDeleteRunOpen(true)}
                 disabled={deletingRun}
+                aria-label={deletingRun ? 'Deleting run' : 'Delete run'}
               >
                 <XCircle className="h-4 w-4" />
-                {deletingRun ? 'Deleting...' : 'Delete'}
+                {!hideDeleteLabel ? (deletingRun ? 'Deleting...' : 'Delete') : null}
               </Button>
             </div>
           </div>
@@ -870,7 +896,7 @@ const ResultDetail = () => {
         >
           <div
             className={`grid gap-4 ${
-              assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-6'
+              assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-7'
             }`}
           >
             <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
@@ -886,6 +912,7 @@ const ResultDetail = () => {
               icon={CheckCircle2}
             />
             <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
+            <StatCard title="Duration" value={formatDurationMs(displayDurationMs)} icon={Clock} />
             <StatCard
               title="Tool Tokens"
               value={formatTokenCount(displayToolTokenUsage?.totalTokens)}
@@ -974,6 +1001,7 @@ const ResultDetail = () => {
                     <TableHead>Pass Rate</TableHead>
                     <TableHead>Tool Calls</TableHead>
                     <TableHead>Tool Tokens</TableHead>
+                    <TableHead>Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1020,11 +1048,16 @@ const ResultDetail = () => {
                               <TableCell className="font-mono text-sm">
                                 {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
                               </TableCell>
+                              <TableCell className="font-mono text-sm">
+                                {formatDurationMs(getScenarioTotalDurationMs(sc), {
+                                  preciseUnderTenSeconds: true
+                                })}
+                              </TableCell>
                             </TableRow>
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={7} className="p-0">
+                              <td colSpan={8} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">
@@ -1033,7 +1066,11 @@ const ResultDetail = () => {
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
-                                        tokens
+                                        tokens ·{' '}
+                                        {formatDurationMs(getScenarioTotalDurationMs(sc), {
+                                          preciseUnderTenSeconds: true
+                                        })}{' '}
+                                        duration
                                       </p>
                                     </div>
                                     <Button

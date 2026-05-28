@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react';
 import { ArrowLeftRight, ExternalLink } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import type { EvalResult } from '@/types/eval';
+import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 const resultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
   const params = new URLSearchParams();
@@ -20,6 +24,7 @@ const openResultUrl = (runId: string, configId?: string | null, agentId?: string
 };
 
 const CompareResultDetails = () => {
+  const { source } = useDataSource();
   const [searchParams] = useSearchParams();
   const left = searchParams.get('left') ?? '';
   const right = searchParams.get('right') ?? '';
@@ -30,6 +35,36 @@ const CompareResultDetails = () => {
 
   const leftLabel = leftAgent ? `${left} · ${leftAgent}` : left;
   const rightLabel = rightAgent ? `${right} · ${rightAgent}` : right;
+  const [leftResult, setLeftResult] = useState<EvalResult | null>(null);
+  const [rightResult, setRightResult] = useState<EvalResult | null>(null);
+
+  useEffect(() => {
+    if (!left || typeof source.getResult !== 'function') {
+      setLeftResult(null);
+      return;
+    }
+    let active = true;
+    void source.getResult(left).then((result) => {
+      if (active) setLeftResult(result ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [left, source]);
+
+  useEffect(() => {
+    if (!right || typeof source.getResult !== 'function') {
+      setRightResult(null);
+      return;
+    }
+    let active = true;
+    void source.getResult(right).then((result) => {
+      if (active) setRightResult(result ?? null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [right, source]);
 
   if (!left || !right) {
     return (
@@ -84,6 +119,31 @@ const CompareResultDetails = () => {
             </a>
           </Button>
         </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Left Duration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-mono text-sm">
+              {leftResult ? formatDurationMs(getRunTotalDurationMs(leftResult)) : '—'}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">
+              Right Duration
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-mono text-sm">
+              {rightResult ? formatDurationMs(getRunTotalDurationMs(rightResult)) : '—'}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">

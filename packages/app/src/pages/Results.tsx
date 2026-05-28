@@ -68,6 +68,7 @@ import type { EvalResult } from '@/types/eval';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -1054,9 +1055,14 @@ const Results = () => {
                           })()}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(item.run.timestamp).toLocaleString()}
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(item.run.timestamp).toLocaleString()}
+                            </div>
+                            <div className="font-mono text-[11px] text-muted-foreground/90">
+                              Duration: {formatDurationMs(getRunTotalDurationMs(item.run))}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">

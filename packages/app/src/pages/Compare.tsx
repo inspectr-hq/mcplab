@@ -49,6 +49,7 @@ import { toast } from '@/hooks/use-toast';
 import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 const colors = [
   'hsl(38, 92%, 50%)',
@@ -1235,9 +1236,14 @@ const Compare = () => {
                         })()}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(item.run.timestamp).toLocaleString()}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(item.run.timestamp).toLocaleString()}
+                          </div>
+                          <div className="font-mono text-[11px] text-muted-foreground/90">
+                            Duration: {formatDurationMs(getRunTotalDurationMs(item.run))}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -1369,6 +1375,14 @@ const Compare = () => {
                     {selectedRuns.map((r) => (
                       <TableCell key={r.id} className="font-mono">
                         {r.avgLatency}ms
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Duration</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {formatDurationMs(getRunTotalDurationMs(r))}
                       </TableCell>
                     ))}
                   </TableRow>
