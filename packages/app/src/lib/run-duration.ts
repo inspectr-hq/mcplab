@@ -33,14 +33,16 @@ export function getRunTotalDurationMs(run: EvalResult): number | null {
   if (hasScenarioRuns) {
     return run.scenarios.reduce((sum, scenario) => sum + getScenarioTotalDurationMs(scenario), 0);
   }
-  if (typeof run.totalDurationMs === 'number' && run.totalDurationMs >= 0) return run.totalDurationMs;
+  if (typeof run.totalDurationMs === 'number' && run.totalDurationMs >= 0)
+    return run.totalDurationMs;
   return null;
 }
 
 export function getScenarioToolTimeMs(scenario: ScenarioResult): number {
   if (scenario.runs.length > 0) {
     return scenario.runs.reduce(
-      (sum, run) => sum + run.toolCalls.reduce((toolSum, toolCall) => toolSum + toolCall.duration, 0),
+      (sum, run) =>
+        sum + run.toolCalls.reduce((toolSum, toolCall) => toolSum + toolCall.duration, 0),
       0
     );
   }

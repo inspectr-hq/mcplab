@@ -1082,7 +1082,9 @@ const Results = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="space-y-0.5">
-                            <div className="font-mono text-sm">{formatToolTokenTotal(item.run)}</div>
+                            <div className="font-mono text-sm">
+                              {formatToolTokenTotal(item.run)}
+                            </div>
                             {(() => {
                               const toolTimeMs = getRunToolTimeMs(item.run);
                               if (toolTimeMs === null) return null;

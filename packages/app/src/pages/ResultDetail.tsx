@@ -924,7 +924,11 @@ const ResultDetail = () => {
             />
             <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
             {displayDurationMs !== null ? (
-              <StatCard title="Total Time" value={formatDurationMs(displayDurationMs)} icon={Clock} />
+              <StatCard
+                title="Total Time"
+                value={formatDurationMs(displayDurationMs)}
+                icon={Clock}
+              />
             ) : null}
             {displayToolTimeMs !== null ? (
               <StatCard

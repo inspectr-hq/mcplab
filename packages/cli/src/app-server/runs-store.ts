@@ -100,16 +100,21 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         avgToolCalls: results.summary.avg_tool_calls_per_run,
         avgLatencyMs: results.summary.avg_tool_latency_ms ?? 0,
         totalToolDurationMs:
-          typeof (results.metadata as { total_tool_duration_ms?: unknown }).total_tool_duration_ms ===
-          'number'
+          typeof (results.metadata as { total_tool_duration_ms?: unknown })
+            .total_tool_duration_ms === 'number'
             ? Math.max(
                 0,
-                (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
+                (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ??
+                  0
               )
             : undefined,
         totalDurationMs:
-          typeof (results.metadata as { total_duration_ms?: unknown }).total_duration_ms === 'number'
-            ? Math.max(0, (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0)
+          typeof (results.metadata as { total_duration_ms?: unknown }).total_duration_ms ===
+          'number'
+            ? Math.max(
+                0,
+                (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0
+              )
             : undefined
       });
     } catch {

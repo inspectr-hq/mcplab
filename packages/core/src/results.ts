@@ -115,7 +115,8 @@ export function aggregateResults(params: {
     (sum, scenario) =>
       sum +
       scenario.runs.reduce((runSum, run) => {
-        if (typeof run.run_duration_ms === 'number') return runSum + Math.max(0, run.run_duration_ms);
+        if (typeof run.run_duration_ms === 'number')
+          return runSum + Math.max(0, run.run_duration_ms);
         return (
           runSum +
           run.tool_durations_ms.reduce((toolSum, toolDuration) => toolSum + toolDuration, 0)
