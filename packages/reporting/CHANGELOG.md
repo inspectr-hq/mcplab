@@ -1,5 +1,12 @@
 # @inspectr/mcplab-reporting
 
+## 1.1.15
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.14.0
+
 ## 1.1.14
 
 ### Patch Changes

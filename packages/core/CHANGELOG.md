@@ -1,5 +1,12 @@
 # @inspectr/mcplab-core
 
+## 1.14.0
+
+### Minor Changes
+
+- feat: Add global run-queue indicator
+- feat: Cleanup failed runs on startup
+
 ## 1.13.0
 
 ### Minor Changes

@@ -1,5 +1,25 @@
 # @inspectr/mcplab
 
+## 1.18.0
+
+### Minor Changes
+
+- feat: Add global run-queue indicator
+- feat: Cleanup failed runs on startup
+- feat: Auto-refresh OAuth token during job turns
+- feat: Reconnecting state
+- chore: Capture MCP tool status code on Error
+- chore: Keep date time filter on run history
+- chore: Highlight active filters
+- chore: Add "Edit test" option in scenario editor
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.14.0
+  - @inspectr/mcplab-mcp-server@1.4.2
+  - @inspectr/mcplab-reporting@1.1.15
+
 ## 1.17.0
 
 ### Minor Changes

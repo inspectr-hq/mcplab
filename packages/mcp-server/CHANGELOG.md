@@ -1,5 +1,13 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.14.0
+  - @inspectr/mcplab-reporting@1.1.15
+
 ## 1.4.1
 
 ### Patch Changes
