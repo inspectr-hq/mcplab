@@ -42,6 +42,10 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     avgToolCalls: summary.avgToolCalls,
     avgLatency: Math.round(summary.avgLatencyMs ?? 0),
     totalDurationMs:
-      typeof summary.totalDurationMs === 'number' ? Math.max(0, summary.totalDurationMs) : 0
+      typeof summary.totalDurationMs === 'number' ? Math.max(0, summary.totalDurationMs) : undefined,
+    totalToolDurationMs:
+      typeof summary.totalToolDurationMs === 'number'
+        ? Math.max(0, summary.totalToolDurationMs)
+        : undefined
   };
 }

@@ -186,6 +186,7 @@ export interface EvalResult {
   avgToolCalls: number;
   avgLatency: number;
   totalDurationMs?: number;
+  totalToolDurationMs?: number;
 }
 
 // App state

@@ -91,7 +91,13 @@ import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
-import { formatDurationMs, getScenarioTotalDurationMs } from '@/lib/run-duration';
+import {
+  formatDurationMs,
+  getRunToolTimeMs,
+  getRunTotalDurationMs,
+  getScenarioToolTimeMs,
+  getScenarioTotalDurationMs
+} from '@/lib/run-duration';
 import type {
   ConversationItem,
   EvalResult,
@@ -409,6 +415,7 @@ const ResultDetail = () => {
     displayAvgToolCalls,
     displayAvgLatency,
     displayDurationMs,
+    displayToolTimeMs,
     displayToolTokenUsage
   } = useMemo(() => {
     if (!result) {
@@ -419,7 +426,8 @@ const ResultDetail = () => {
         displayPassRate: 0,
         displayAvgToolCalls: 0,
         displayAvgLatency: 0,
-        displayDurationMs: 0,
+        displayDurationMs: null as number | null,
+        displayToolTimeMs: null as number | null,
         displayToolTokenUsage: null
       };
     }
@@ -439,18 +447,18 @@ const ResultDetail = () => {
         sum + scenario.runs.reduce((runsSum, run) => runsSum + run.toolCalls.length, 0),
       0
     );
-    const totalDuration = scenarios.reduce(
-      (sum, scenario) => sum + scenario.runs.reduce((runsSum, run) => runsSum + run.duration, 0),
-      0
-    );
+    const totalDuration = getRunTotalDurationMs({ ...result, scenarios });
+    const totalToolDuration = getRunToolTimeMs({ ...result, scenarios });
     return {
       filteredScenarios: scenarios,
       filteredTotalRuns: totalRuns,
       filteredPassCount: passCount,
       displayPassRate: totalRuns === 0 ? 0 : passCount / totalRuns,
       displayAvgToolCalls: totalRuns === 0 ? 0 : totalToolCalls / totalRuns,
-      displayAvgLatency: totalRuns === 0 ? 0 : Math.round(totalDuration / totalRuns),
+      displayAvgLatency:
+        totalRuns === 0 || totalDuration === null ? 0 : Math.round(totalDuration / totalRuns),
       displayDurationMs: totalDuration,
+      displayToolTimeMs: totalToolDuration,
       displayToolTokenUsage: sumTokenUsages(scenarios.map((scenario) => scenario.toolTokenUsage))
     };
   }, [result, requestedAgentId]);
@@ -871,7 +879,11 @@ const ResultDetail = () => {
                 disabled={deletingRun}
                 aria-label={deletingRun ? 'Deleting run' : 'Delete run'}
               >
-                <XCircle className="h-4 w-4" />
+                {deletingRun ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <XCircle className="h-4 w-4" />
+                )}
                 {!hideDeleteLabel ? (deletingRun ? 'Deleting...' : 'Delete') : null}
               </Button>
             </div>
@@ -895,7 +907,7 @@ const ResultDetail = () => {
         >
           <div
             className={`grid gap-4 ${
-              assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-7'
+              assistantOpen ? 'grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-8'
             }`}
           >
             <StatCard title="Scenarios" value={filteredScenarios.length} icon={Layers} />
@@ -911,7 +923,16 @@ const ResultDetail = () => {
               icon={CheckCircle2}
             />
             <StatCard title="Avg Latency" value={`${displayAvgLatency}ms`} icon={Timer} />
-            <StatCard title="Duration" value={formatDurationMs(displayDurationMs)} icon={Clock} />
+            {displayDurationMs !== null ? (
+              <StatCard title="Total Time" value={formatDurationMs(displayDurationMs)} icon={Clock} />
+            ) : null}
+            {displayToolTimeMs !== null ? (
+              <StatCard
+                title="Tool Duration"
+                value={formatDurationMs(displayToolTimeMs)}
+                icon={Clock}
+              />
+            ) : null}
             <StatCard
               title="Tool Tokens"
               value={formatTokenCount(displayToolTokenUsage?.totalTokens)}
@@ -998,9 +1019,10 @@ const ResultDetail = () => {
                     <TableHead>Agent</TableHead>
                     <TableHead>Runs</TableHead>
                     <TableHead>Pass Rate</TableHead>
+                    <TableHead>Total Time</TableHead>
                     <TableHead>Tool Calls</TableHead>
                     <TableHead>Tool Tokens</TableHead>
-                    <TableHead>Duration</TableHead>
+                    <TableHead>Tool Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1042,13 +1064,18 @@ const ResultDetail = () => {
                                 <PassRateBadge rate={sc.passRate} />
                               </TableCell>
                               <TableCell className="font-mono text-sm">
+                                {formatDurationMs(getScenarioTotalDurationMs(sc), {
+                                  preciseUnderTenSeconds: true
+                                })}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
                                 {formatCompactOneDecimal(sc.avgToolCalls)}
                               </TableCell>
                               <TableCell className="font-mono text-sm">
                                 {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
                               </TableCell>
                               <TableCell className="font-mono text-sm">
-                                {formatDurationMs(getScenarioTotalDurationMs(sc), {
+                                {formatDurationMs(getScenarioToolTimeMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
                               </TableCell>
@@ -1056,7 +1083,7 @@ const ResultDetail = () => {
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={8} className="p-0">
+                              <td colSpan={9} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">
@@ -1069,7 +1096,11 @@ const ResultDetail = () => {
                                         {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                           preciseUnderTenSeconds: true
                                         })}{' '}
-                                        duration
+                                        wall-clock ·{' '}
+                                        {formatDurationMs(getScenarioToolTimeMs(sc), {
+                                          preciseUnderTenSeconds: true
+                                        })}{' '}
+                                        tool time
                                       </p>
                                     </div>
                                     <Button

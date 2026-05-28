@@ -28,12 +28,32 @@ export function getScenarioTotalDurationMs(scenario: ScenarioResult): number {
   return scenario.avgDuration;
 }
 
-export function getRunTotalDurationMs(run: EvalResult): number {
-  const fromScenarios = run.scenarios.reduce((sum, scenario) => sum + getScenarioTotalDurationMs(scenario), 0);
-  if (fromScenarios > 0) return fromScenarios;
-  if (typeof run.totalDurationMs === 'number' && run.totalDurationMs > 0) return run.totalDurationMs;
-  if (run.totalRuns > 0 && Number.isFinite(run.avgLatency) && run.avgLatency > 0) {
-    return run.avgLatency * run.totalRuns;
+export function getRunTotalDurationMs(run: EvalResult): number | null {
+  const hasScenarioRuns = run.scenarios.some((scenario) => scenario.runs.length > 0);
+  if (hasScenarioRuns) {
+    return run.scenarios.reduce((sum, scenario) => sum + getScenarioTotalDurationMs(scenario), 0);
+  }
+  if (typeof run.totalDurationMs === 'number' && run.totalDurationMs >= 0) return run.totalDurationMs;
+  return null;
+}
+
+export function getScenarioToolTimeMs(scenario: ScenarioResult): number {
+  if (scenario.runs.length > 0) {
+    return scenario.runs.reduce(
+      (sum, run) => sum + run.toolCalls.reduce((toolSum, toolCall) => toolSum + toolCall.duration, 0),
+      0
+    );
   }
   return 0;
+}
+
+export function getRunToolTimeMs(run: EvalResult): number | null {
+  const hasScenarioRuns = run.scenarios.some((scenario) => scenario.runs.length > 0);
+  if (hasScenarioRuns) {
+    return run.scenarios.reduce((sum, scenario) => sum + getScenarioToolTimeMs(scenario), 0);
+  }
+  if (typeof run.totalToolDurationMs === 'number' && run.totalToolDurationMs >= 0) {
+    return run.totalToolDurationMs;
+  }
+  return null;
 }

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult } from '@/types/eval';
-import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
+import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 const resultUrl = (runId: string, configId?: string | null, agentId?: string | null) => {
   const params = new URLSearchParams();
@@ -128,7 +128,19 @@ const CompareResultDetails = () => {
           </CardHeader>
           <CardContent>
             <div className="font-mono text-sm">
-              {leftResult ? formatDurationMs(getRunTotalDurationMs(leftResult)) : '—'}
+              {(() => {
+                if (!leftResult) return '—';
+                const totalTimeMs = getRunTotalDurationMs(leftResult);
+                return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);
+              })()}
+            </div>
+            <div className="mt-1 font-mono text-xs text-muted-foreground">
+              Tool time:{' '}
+              {(() => {
+                if (!leftResult) return '—';
+                const toolTimeMs = getRunToolTimeMs(leftResult);
+                return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -140,7 +152,19 @@ const CompareResultDetails = () => {
           </CardHeader>
           <CardContent>
             <div className="font-mono text-sm">
-              {rightResult ? formatDurationMs(getRunTotalDurationMs(rightResult)) : '—'}
+              {(() => {
+                if (!rightResult) return '—';
+                const totalTimeMs = getRunTotalDurationMs(rightResult);
+                return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);
+              })()}
+            </div>
+            <div className="mt-1 font-mono text-xs text-muted-foreground">
+              Tool time:{' '}
+              {(() => {
+                if (!rightResult) return '—';
+                const toolTimeMs = getRunToolTimeMs(rightResult);
+                return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);
+              })()}
             </div>
           </CardContent>
         </Card>

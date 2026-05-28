@@ -24,6 +24,7 @@ export interface RunSummary {
   avgToolCalls: number;
   avgLatencyMs: number;
   totalDurationMs: number;
+  totalToolDurationMs: number;
 }
 
 export interface ListRunsFilter {
@@ -98,25 +99,18 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         passRate: results.summary.pass_rate,
         avgToolCalls: results.summary.avg_tool_calls_per_run,
         avgLatencyMs: results.summary.avg_tool_latency_ms ?? 0,
-        totalDurationMs: scenarioItems.reduce(
-          (sum, scenario) =>
-            sum +
-            (Array.isArray(scenario.runs)
-              ? scenario.runs.reduce(
-                  (runSum, run) =>
-                    runSum +
-                    (Array.isArray(run.tool_durations_ms)
-                      ? run.tool_durations_ms.reduce(
-                          (toolSum, toolDuration) =>
-                            toolSum + (typeof toolDuration === 'number' ? toolDuration : 0),
-                          0
-                        )
-                      : 0),
-                  0
-                )
-              : 0),
-          0
-        )
+        totalToolDurationMs:
+          typeof (results.metadata as { total_tool_duration_ms?: unknown }).total_tool_duration_ms ===
+          'number'
+            ? Math.max(
+                0,
+                (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
+              )
+            : 0,
+        totalDurationMs:
+          typeof (results.metadata as { total_duration_ms?: unknown }).total_duration_ms === 'number'
+            ? Math.max(0, (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0)
+            : 0
       });
     } catch {
       // Ignore malformed runs.
