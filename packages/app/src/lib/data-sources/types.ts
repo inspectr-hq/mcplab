@@ -111,16 +111,7 @@ export interface RunJobEvent {
 }
 
 export type { QueueEntry, QueueResponse };
-export type RunQueueSseEvent =
-  | RunQueueEvent
-  | {
-      type: 'queue_snapshot' | (string & {});
-      ts: string;
-      payload: {
-        snapshot?: QueueResponse;
-        [key: string]: unknown;
-      };
-    };
+export type RunQueueSseEvent = RunQueueEvent;
 
 export interface ProviderModelsResponse {
   provider: 'anthropic' | 'openai' | 'azure';
