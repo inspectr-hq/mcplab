@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { advanceQueue } from './run-queue-domain.js';
 import {
   cleanupFixtureRoot,
   createOauthEvalFixture,
   createQueuedJob,
   createRunQueueState,
+  createRunQueueServiceForTest,
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
 
@@ -38,26 +38,25 @@ describe('queue OAuth concurrency', () => {
     const runQueueState = createRunQueueState({ queue: ['job-1', 'job-2'] });
 
     try {
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockResolvedValue({
             servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
             allReady: true
           }),
           getAuthHeadersForServers: vi.fn().mockRejectedValue(new Error('stop test run'))
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runQueueState.queue).not.toContain('job-1');
@@ -101,24 +100,17 @@ describe('queue OAuth concurrency', () => {
         toolAnalysisResultsDir: fixture.root
       } as any;
       const deps = makeDeps(events) as any;
-      const firstAdvance = advanceQueue(
+      const service = createRunQueueServiceForTest({
         jobs,
         runQueueState,
         settings,
         oauthSessionManager,
-        deps,
-        { hostHeader: 'localhost' }
-      );
+        deps
+      });
+      const firstAdvance = service.advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const secondAdvance = advanceQueue(
-        jobs,
-        runQueueState,
-        settings,
-        oauthSessionManager,
-        deps,
-        { hostHeader: 'localhost' }
-      );
+      const secondAdvance = service.advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(runQueueState.admittingJobIds.has('job-1')).toBe(true);
@@ -169,20 +161,19 @@ describe('queue OAuth concurrency', () => {
     } as any;
 
     try {
-      void advanceQueue(
+      void createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
+        },
         oauthSessionManager,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(oauthSessionManager.ensureServersAuthorized).toHaveBeenCalledTimes(2);
@@ -220,20 +211,19 @@ describe('queue OAuth concurrency', () => {
     } as any;
 
     try {
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
+        },
         oauthSessionManager,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
       await new Promise((resolve) => setTimeout(resolve, 0));
       await new Promise((resolve) => setTimeout(resolve, 0));

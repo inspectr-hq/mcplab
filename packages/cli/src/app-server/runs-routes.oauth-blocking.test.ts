@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { advanceQueue } from './run-queue-domain.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import {
   cleanupFixtureRoot,
   createOauthEvalFixture,
   createQueuedJob,
   createRunQueueState,
+  createRunQueueServiceForTest,
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
 
@@ -32,25 +32,25 @@ describe('queue OAuth blocking', () => {
     const events: Array<{ jobId: string; type: string; message?: string }> = [];
 
     try {
-      await advanceQueue(
-        new Map([[job.id, job]]),
-        createRunQueueState({ queue: [job.id] }),
-        {
+      await createRunQueueServiceForTest({
+        jobs: new Map([[job.id, job]]),
+        runQueueState: createRunQueueState({ queue: [job.id] }),
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockResolvedValue({
             servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
             allReady: false
           })
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(job.status).toBe('blocked_auth');
       expect(job.blockedAuthServers).toEqual(['oauth-server']);
@@ -66,26 +66,25 @@ describe('queue OAuth blocking', () => {
     const events: Array<{ jobId: string; type: string; message?: string }> = [];
 
     try {
-      await advanceQueue(
-        new Map([[job.id, job]]),
-        createRunQueueState({ queue: [job.id] }),
-        {
+      await createRunQueueServiceForTest({
+        jobs: new Map([[job.id, job]]),
+        runQueueState: createRunQueueState({ queue: [job.id] }),
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockResolvedValue({
             servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'refreshed' }],
             allReady: true
           }),
           getAuthHeadersForServers: vi.fn().mockRejectedValue(new Error('stop test run'))
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(events.some((event) => event.type === 'oauth_required')).toBe(false);
@@ -129,15 +128,18 @@ describe('queue OAuth blocking', () => {
         workspaceRoot: fixture.root,
         toolAnalysisResultsDir: fixture.root
       } as any;
-      await advanceQueue(jobs, runQueueState, settings, oauthSessionManager, makeDeps(events) as any, {
-        hostHeader: 'localhost'
+      const service = createRunQueueServiceForTest({
+        jobs,
+        runQueueState,
+        settings,
+        oauthSessionManager,
+        deps: makeDeps(events) as any
       });
+      await service.advance({ hostHeader: 'localhost' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(job.status).toBe('blocked_auth');
 
-      await advanceQueue(jobs, runQueueState, settings, oauthSessionManager, makeDeps(events) as any, {
-        hostHeader: 'localhost',
-        retryBlockedAuth: true
-      });
+      await service.advance({ hostHeader: 'localhost', retryBlockedAuth: true });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(events.filter((event) => event.type === 'started').length).toBeGreaterThan(0);
@@ -157,25 +159,25 @@ describe('queue OAuth blocking', () => {
     const events: Array<{ jobId: string; type: string; message?: string }> = [];
 
     try {
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockResolvedValue({
             servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
             allReady: false
           })
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost', retryBlockedAuth: true }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost', retryBlockedAuth: true });
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(job.status).toBe('blocked_auth');
       expect(
@@ -198,17 +200,17 @@ describe('queue OAuth blocking', () => {
     const events: Array<{ jobId: string; type: string; message?: string }> = [];
 
     try {
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockResolvedValue({
             servers: [{ serverName: 'oauth-server', status: 'ready' }],
             allReady: true
@@ -218,10 +220,9 @@ describe('queue OAuth blocking', () => {
               { serverName: null as any, message: 'OAuth login required' }
             ])
           )
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost' }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(job.status).toBe('blocked_auth');
@@ -273,26 +274,25 @@ describe('queue OAuth blocking', () => {
 
     try {
       runQueueState.clients.add(queueClient);
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn()
-        } as any,
-        makeRunsRouteDeps({
+        },
+        deps: makeRunsRouteDeps({
           sendSseEvent: (_target: any, event: any) => {
             queueEvents.push(event);
           }
-        }) as any,
-        { hostHeader: 'localhost' }
-      );
+        }) as any
+      }).advance({ hostHeader: 'localhost' });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(jobs.has('old-error-job')).toBe(false);
@@ -312,22 +312,21 @@ describe('queue OAuth blocking', () => {
     job.status = 'stopped';
 
     try {
-      await advanceQueue(
+      await createRunQueueServiceForTest({
         jobs,
         runQueueState,
-        {
+        settings: {
           evalsDir: fixture.evalsDir,
           runsDir: fixture.runsDir,
           librariesDir: fixture.librariesDir,
           workspaceRoot: fixture.root,
           toolAnalysisResultsDir: fixture.root
-        } as any,
-        {
+        },
+        oauthSessionManager: {
           ensureServersAuthorized: vi.fn().mockRejectedValue(new Error('oauth check failed'))
-        } as any,
-        makeDeps(events) as any,
-        { hostHeader: 'localhost', retryBlockedAuth: true }
-      );
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost', retryBlockedAuth: true });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(job.status).toBe('stopped');

@@ -431,21 +431,3 @@ export function createRunQueueService(params: {
     }
   };
 }
-
-export async function advanceQueue(
-  jobs: Map<string, RunJob>,
-  runQueueState: RunQueueState,
-  settings: AppRouteRequestContext['settings'],
-  oauthSessionManager: OAuthSessionManager,
-  deps: QueueServiceDeps,
-  options?: QueueAdvanceOptions
-): Promise<void> {
-  const service = createRunQueueService({
-    settings,
-    oauthSessionManager,
-    deps,
-    jobs,
-    state: runQueueState
-  });
-  return service.advance(options);
-}
