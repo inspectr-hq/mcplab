@@ -473,6 +473,116 @@ describe('queue event emission', () => {
     }
   });
 
+  it('does not admit a third queued job while two blocked_auth jobs still hold both worker slots', async () => {
+    const fixture = createOauthEvalFixture();
+    const blockedJobA: any = {
+      id: 'blocked-job-a',
+      status: 'blocked_auth',
+      blockedAuthServers: ['oauth-server'],
+      clients: new Set(),
+      events: [],
+      abortController: new AbortController(),
+      runParams: {
+        configPath: fixture.configPath,
+        runsPerScenario: 1,
+        scenarioIds: null,
+        requestedAgents: null,
+        runNote: null,
+        serverOverrideAll: null,
+        scenarioServerOverrides: null
+      }
+    };
+    const blockedJobB = { ...blockedJobA, id: 'blocked-job-b' };
+    const jobs = new Map([
+      [blockedJobA.id, blockedJobA],
+      [blockedJobB.id, blockedJobB]
+    ]);
+    const runQueueState = createRunQueueState({
+      queue: [blockedJobA.id, blockedJobB.id],
+      blockedJobIds: new Set([blockedJobA.id, blockedJobB.id]),
+      queueWorkerCount: 2
+    });
+    const events: Array<{ jobId: string; type: string }> = [];
+    const res = { __body: null } as any;
+
+    try {
+      await handleRunsRoutes({
+        req: { url: '/api/runs', headers: { host: 'localhost' }, on: () => undefined } as any,
+        res,
+        pathname: '/api/runs',
+        method: 'POST',
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root,
+          defaultQueueWorkers: 2
+        } as any,
+        runQueueService: createRunQueueServiceForTest({
+          jobs,
+          runQueueState,
+          settings: {
+            evalsDir: fixture.evalsDir,
+            runsDir: fixture.runsDir,
+            librariesDir: fixture.librariesDir,
+            workspaceRoot: fixture.root,
+            toolAnalysisResultsDir: fixture.root,
+            defaultQueueWorkers: 2
+          },
+          oauthSessionManager: {
+            ensureServersAuthorized: async () => ({
+              servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+              allReady: true
+            }),
+            getAuthHeadersForServers: async () => {
+              throw new Error('stop test run');
+            }
+          },
+          deps: makeRunsRouteDeps({
+            parseBody: async () => ({
+              configPath: fixture.configPath,
+              runsPerScenario: 1
+            }),
+            asJson: (target: any, _status: number, body: any) => {
+              target.__body = body;
+            },
+            addJobEvent: (job: any, event: any) => {
+              events.push({ jobId: job.id, type: event.type });
+            }
+          })
+        }),
+        oauthSessionManager: {
+          ensureServersAuthorized: async () => ({
+            servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+            allReady: true
+          }),
+          getAuthHeadersForServers: async () => {
+            throw new Error('stop test run');
+          }
+        } as any,
+        deps: makeRunsRouteDeps({
+          parseBody: async () => ({
+            configPath: fixture.configPath,
+            runsPerScenario: 1
+          }),
+          asJson: (target: any, _status: number, body: any) => {
+            target.__body = body;
+          },
+          addJobEvent: (job: any, event: any) => {
+            events.push({ jobId: job.id, type: event.type });
+          }
+        }) as any
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(res.__body).toMatchObject({ queued: true, position: 3 });
+      expect(events.some((event) => event.type === 'started')).toBe(false);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
   it('client removed from SSE clients set on request close', async () => {
     const sseEvents: Array<{ target: any; event: any }> = [];
     const runQueueState = createRunQueueState();

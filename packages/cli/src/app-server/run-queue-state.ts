@@ -34,6 +34,7 @@ export type RunJob = {
 export interface RunQueueState {
   activeJobIds: Set<string>;
   admittingJobIds: Set<string>;
+  blockedJobIds: Set<string>;
   queueWorkerCount: number;
   queue: string[];
   isAdvancingQueue: boolean;
@@ -57,6 +58,7 @@ export function createRunQueueState(queueWorkerCount = 1): RunQueueState {
     queue: [],
     activeJobIds: new Set<string>(),
     admittingJobIds: new Set<string>(),
+    blockedJobIds: new Set<string>(),
     queueWorkerCount,
     isAdvancingQueue: false,
     needsAdvanceQueue: false,
@@ -65,5 +67,9 @@ export function createRunQueueState(queueWorkerCount = 1): RunQueueState {
 }
 
 export function currentWorkerUsage(runQueueState: RunQueueState): number {
-  return runQueueState.activeJobIds.size + runQueueState.admittingJobIds.size;
+  return (
+    runQueueState.activeJobIds.size +
+    runQueueState.admittingJobIds.size +
+    runQueueState.blockedJobIds.size
+  );
 }

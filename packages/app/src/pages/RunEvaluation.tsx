@@ -426,17 +426,35 @@ const RunEvaluation = () => {
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
-      // Restore blocked-auth state for page-load / reconnect scenarios where SSE was missed
-      const blockedEntry = q.queued.find(
-        (e) => e.status === 'blocked_auth' && e.blockedReason === 'oauth_required'
-      );
+      // Restore blocked-auth state for the currently attached job on page-load / reconnect
+      // scenarios where SSE was missed. Do not surface a global OAuth banner for unrelated
+      // queued jobs; those keep their own per-job queue action.
+      const blockedEntry =
+        activeJobId == null
+          ? undefined
+          : q.queued.find(
+              (e) =>
+                e.jobId === activeJobId &&
+                e.status === 'blocked_auth' &&
+                e.blockedReason === 'oauth_required'
+            );
       if (blockedEntry && (blockedEntry.requiredServers ?? []).length > 0) {
         setOauthRequired((prev) =>
           prev?.jobId === blockedEntry.jobId
             ? prev
             : { jobId: blockedEntry.jobId, servers: blockedEntry.requiredServers! }
         );
-      } else if (!q.queued.some((e) => e.status === 'blocked_auth')) {
+      } else if (oauthRequired?.jobId && oauthRequired.jobId !== activeJobId) {
+        setOauthRequired(null);
+      } else if (
+        activeJobId != null &&
+        !q.queued.some(
+          (e) =>
+            e.jobId === activeJobId &&
+            e.status === 'blocked_auth' &&
+            e.blockedReason === 'oauth_required'
+        )
+      ) {
         setOauthRequired(null);
       }
     } catch {

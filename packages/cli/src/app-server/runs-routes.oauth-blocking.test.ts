@@ -192,6 +192,51 @@ describe('queue OAuth blocking', () => {
     }
   });
 
+  it('retries blocked_auth jobs automatically after another job frees a worker slot', async () => {
+    const fixture = createOauthEvalFixture();
+    const firstJob = createQueuedJob(fixture.configPath, 'job-1');
+    const blockedJob = createQueuedJob(fixture.configPath, 'job-2');
+    blockedJob.status = 'blocked_auth';
+    blockedJob.blockedAuthServers = ['oauth-server'];
+    const jobs = new Map([
+      [firstJob.id, firstJob],
+      [blockedJob.id, blockedJob]
+    ]);
+    const runQueueState = createRunQueueState({ queue: [firstJob.id, blockedJob.id] });
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+
+    try {
+      void createRunQueueServiceForTest({
+        jobs,
+        runQueueState,
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
+        },
+        oauthSessionManager: {
+          ensureServersAuthorized: vi.fn().mockResolvedValue({
+            servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+            allReady: true
+          }),
+          getAuthHeadersForServers: vi.fn().mockRejectedValue(new Error('stop test run'))
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(events.some((event) => event.jobId === 'job-2' && event.type === 'started')).toBe(
+        true
+      );
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
   it('re-queues OAuthAuthorizationRequiredError jobs even when detail server names are missing', async () => {
     const fixture = createOauthEvalFixture();
     const job = createQueuedJob(fixture.configPath);

@@ -76,6 +76,7 @@ export function createRunQueueService(params: {
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
     state.admittingJobIds.delete(job.id);
+    state.blockedJobIds.delete(job.id);
     job.status = 'stopped';
     addStopEvent(job, message);
     closeJobClients(job);
@@ -96,7 +97,12 @@ export function createRunQueueService(params: {
   function pruneOldJobs(): void {
     const maxAgeMs = 30 * 60_000;
     const now = Date.now();
-    const activeIds = new Set([...state.activeJobIds, ...state.admittingJobIds, ...state.queue]);
+    const activeIds = new Set([
+      ...state.activeJobIds,
+      ...state.admittingJobIds,
+      ...state.blockedJobIds,
+      ...state.queue
+    ]);
     for (const [id, job] of jobs) {
       if (activeIds.has(id)) continue;
       if (job.status !== 'completed' && job.status !== 'error' && job.status !== 'stopped') continue;
@@ -110,6 +116,7 @@ export function createRunQueueService(params: {
 
   function finalizeClaimedJobError(job: RunJob, error: unknown): void {
     state.admittingJobIds.delete(job.id);
+    state.blockedJobIds.delete(job.id);
     const queueIndex = state.queue.indexOf(job.id);
     if (queueIndex !== -1) {
       state.queue.splice(queueIndex, 1);
@@ -138,6 +145,7 @@ export function createRunQueueService(params: {
     if (outcome.status === 'blocked_auth') {
       job.blockedAuthServers = outcome.blockedServers;
       job.status = 'blocked_auth';
+      state.blockedJobIds.add(job.id);
       if (!state.queue.includes(job.id)) {
         state.queue.unshift(job.id);
       }
@@ -153,11 +161,16 @@ export function createRunQueueService(params: {
       void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
       return;
     }
+    state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
     closeJobClients(job);
     emit();
     pruneOldJobs();
-    void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
+    void advance({
+      emitWhenIdle: true,
+      hostHeader: options?.hostHeader,
+      retryBlockedAuth: true
+    });
   }
 
   async function executeRunningJob(job: RunJob, options?: { hostHeader?: string }): Promise<void> {
@@ -184,6 +197,7 @@ export function createRunQueueService(params: {
 
       if (job.status === 'stopped') {
         state.admittingJobIds.delete(job.id);
+        state.blockedJobIds.delete(job.id);
         emit();
         void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
         return;
@@ -198,6 +212,7 @@ export function createRunQueueService(params: {
         job.blockedAuthServers = admission.blockedServers;
         job.status = 'blocked_auth';
         state.admittingJobIds.delete(job.id);
+        state.blockedJobIds.add(job.id);
         if (!wasBlocked || blockedSetChanged) {
           deps.addJobEvent(job, {
             type: 'oauth_required',
@@ -232,6 +247,7 @@ export function createRunQueueService(params: {
       }
 
       state.admittingJobIds.delete(job.id);
+      state.blockedJobIds.delete(job.id);
       const queueIndex = state.queue.indexOf(job.id);
       if (queueIndex !== -1) {
         state.queue.splice(queueIndex, 1);
@@ -270,41 +286,49 @@ export function createRunQueueService(params: {
     state.needsAdvanceQueue = false;
     let queueMutated = false;
     const claimedJobs: RunJob[] = [];
-    try {
-      while (currentWorkerUsage(state) < state.queueWorkerCount) {
-        let claimedJob = false;
-        for (let index = 0; index < state.queue.length; index += 1) {
-          const nextId = state.queue[index];
-          const nextJob = jobs.get(nextId);
-          if (!nextJob) {
-            state.queue.splice(index, 1);
-            queueMutated = true;
-            index -= 1;
-            continue;
-          }
-          if (nextJob.status === 'stopped') {
-            state.queue.splice(index, 1);
-            state.admittingJobIds.delete(nextId);
-            queueMutated = true;
-            index -= 1;
-            continue;
-          }
-          if (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth') {
-            state.queue.splice(index, 1);
-            queueMutated = true;
-            index -= 1;
-            continue;
-          }
-          if (nextJob.status === 'blocked_auth' && !options?.retryBlockedAuth) {
-            continue;
-          }
-          if (state.admittingJobIds.has(nextId)) continue;
-          state.admittingJobIds.add(nextId);
-          claimedJobs.push(nextJob);
+    const claimNextJob = (allowBlockedAuth: boolean): boolean => {
+      for (let index = 0; index < state.queue.length; index += 1) {
+        const nextId = state.queue[index];
+        const nextJob = jobs.get(nextId);
+        if (!nextJob) {
+          state.queue.splice(index, 1);
           queueMutated = true;
-          claimedJob = true;
-          break;
+          index -= 1;
+          continue;
         }
+        if (nextJob.status === 'stopped') {
+          state.queue.splice(index, 1);
+          state.admittingJobIds.delete(nextId);
+          queueMutated = true;
+          index -= 1;
+          continue;
+        }
+        if (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth') {
+          state.queue.splice(index, 1);
+          queueMutated = true;
+          index -= 1;
+          continue;
+        }
+        if (nextJob.status === 'blocked_auth' && !allowBlockedAuth) {
+          continue;
+        }
+        if (nextJob.status === 'queued' && currentWorkerUsage(state) >= state.queueWorkerCount) {
+          continue;
+        }
+        if (state.admittingJobIds.has(nextId)) continue;
+        if (nextJob.status === 'blocked_auth') {
+          state.blockedJobIds.delete(nextId);
+        }
+        state.admittingJobIds.add(nextId);
+        claimedJobs.push(nextJob);
+        queueMutated = true;
+        return true;
+      }
+      return false;
+    };
+    try {
+      while (options?.retryBlockedAuth || currentWorkerUsage(state) < state.queueWorkerCount) {
+        const claimedJob = claimNextJob(Boolean(options?.retryBlockedAuth));
         if (!claimedJob) break;
       }
       if (queueMutated || options?.emitWhenIdle) emit();

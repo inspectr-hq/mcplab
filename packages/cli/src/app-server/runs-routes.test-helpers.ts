@@ -8,6 +8,7 @@ export function createRunQueueState(overrides: Record<string, unknown> = {}) {
     queue: [] as string[],
     activeJobIds: new Set<string>(),
     admittingJobIds: new Set<string>(),
+    blockedJobIds: new Set<string>(),
     queueWorkerCount: 1,
     isAdvancingQueue: false,
     needsAdvanceQueue: false,

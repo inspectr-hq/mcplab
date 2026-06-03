@@ -6,6 +6,7 @@ import type { EvalConfig, AgentConfig } from '@/types/eval';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
+const activeJobStorageKey = 'mcplab.runEvaluation.activeJobId';
 
 const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAgentsRef } =
   vi.hoisted(() => {
@@ -70,6 +71,7 @@ beforeEach(() => {
   });
   configsRef.value = [];
   libraryAgentsRef.value = [];
+  sessionStorage.removeItem(activeJobStorageKey);
   sourceMock.getRunQueue.mockResolvedValue({ active: null, active_jobs: [], admitting_jobs: [], queued: [] });
 });
 
@@ -244,5 +246,46 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Starting')).toBeInTheDocument();
       expect(screen.getByText('#1 Queued')).toBeInTheDocument();
     });
+  });
+
+  it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
+    sessionStorage.setItem(activeJobStorageKey, 'job-running');
+    sourceMock.getRunQueue.mockResolvedValueOnce({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [
+        {
+          jobId: 'job-blocked',
+          status: 'blocked_auth',
+          blockedReason: 'oauth_required',
+          requiredServers: ['srv-1776925640074'],
+          runParams: {
+            configPath: '/tmp/eval.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Reattached to in-progress evaluation run/)).toBeInTheDocument();
+      expect(screen.getByText('Connect & Resume')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
   });
 });
