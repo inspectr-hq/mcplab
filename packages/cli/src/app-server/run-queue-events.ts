@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { QueueEntry, QueueResponse } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 import type { RunJob, RunQueueState } from './run-queue-state.js';
@@ -50,7 +51,7 @@ export function buildQueueState(
 export function emitQueueEvent(
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
-  sendSseEvent: (target: NodeJS.WritableStream, event: SseEvent) => void
+  sendSseEvent: (target: ServerResponse, event: SseEvent) => void
 ) {
   const event: SseEvent = {
     type: 'queue_event',

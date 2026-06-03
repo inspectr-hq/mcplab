@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRunQueueService } from './run-queue-domain.js';
 
 export function createRunQueueState(overrides: Record<string, unknown> = {}) {
   return {
@@ -13,6 +14,32 @@ export function createRunQueueState(overrides: Record<string, unknown> = {}) {
     clients: new Set(),
     ...overrides
   };
+}
+
+export function createRunQueueServiceForTest(overrides: {
+  jobs?: Map<string, any>;
+  runQueueState?: any;
+  settings?: Record<string, unknown>;
+  oauthSessionManager?: any;
+  deps?: Record<string, unknown>;
+} = {}) {
+  const deps = makeRunsRouteDeps(overrides.deps ?? {});
+  const settings = {
+    evalsDir: '/tmp',
+    runsDir: '/tmp',
+    librariesDir: '/tmp',
+    workspaceRoot: '/tmp',
+    toolAnalysisResultsDir: '/tmp',
+    defaultQueueWorkers: 1,
+    ...(overrides.settings ?? {})
+  } as any;
+  return createRunQueueService({
+    settings,
+    oauthSessionManager: (overrides.oauthSessionManager ?? {}) as any,
+    deps: deps as any,
+    jobs: (overrides.jobs ?? new Map()) as any,
+    state: (overrides.runQueueState ?? createRunQueueState()) as any
+  });
 }
 
 export function makeRunsRouteDeps(overrides: Record<string, unknown> = {}) {

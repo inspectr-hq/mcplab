@@ -3,6 +3,7 @@ import { handleRunsRoutes } from './runs-routes.js';
 import {
   cleanupFixtureRoot,
   createOauthEvalFixture,
+  createRunQueueServiceForTest,
   createRunQueueState,
   makeRunsRouteDeps
 } from './runs-routes.test-helpers.js';
@@ -25,6 +26,12 @@ describe('run queue SSE endpoint', () => {
     } as any;
 
     let closeHandler: (() => void) | undefined;
+    const deps = makeRunsRouteDeps({
+      sendSseEvent: (target: any, event: any) => {
+        target.write(`event: ${event.type}\n`);
+        target.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    });
     const handled = await handleRunsRoutes({
       req: {
         url: '/api/runs/queue/events',
@@ -43,15 +50,9 @@ describe('run queue SSE endpoint', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ deps }),
       oauthSessionManager: {} as any,
-      deps: makeRunsRouteDeps({
-        sendSseEvent: (target: any, event: any) => {
-          target.write(`event: ${event.type}\n`);
-          target.write(`data: ${JSON.stringify(event)}\n\n`);
-        }
-      }) as any
+      deps: deps as any
     });
 
     expect(handled).toBe(true);
@@ -75,6 +76,7 @@ describe('queue event emission', () => {
 
   it('SSE endpoint sends initial queue_event to new client', async () => {
     const sseEvents: Array<{ target: any; event: any }> = [];
+    const deps = makeDeps(sseEvents) as any;
     const res = {
       statusCode: 0,
       headers: {} as Record<string, string>,
@@ -101,16 +103,16 @@ describe('queue event emission', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ deps }),
       oauthSessionManager: {} as any,
-      deps: makeDeps(sseEvents) as any
+      deps
     });
 
     expect(sseEvents).toHaveLength(1);
     expect(sseEvents[0].event.payload.event).toMatchObject({
       active: null,
       active_jobs: [],
+      admitting_jobs: [],
       queued: []
     });
   });
@@ -148,13 +150,15 @@ describe('queue event emission', () => {
         toolAnalysisResultsDir: '/tmp',
         defaultQueueWorkers: 1
       } as any,
-      jobs: new Map([
-        ['job-1', runningJob],
-        ['job-2', queuedJob]
-      ]),
-      runQueueState: createRunQueueState({
-        queue: ['job-2'],
-        activeJobIds: new Set(['job-1'])
+      runQueueService: createRunQueueServiceForTest({
+        jobs: new Map([
+          ['job-1', runningJob],
+          ['job-2', queuedJob]
+        ]),
+        runQueueState: createRunQueueState({
+          queue: ['job-2'],
+          activeJobIds: new Set(['job-1'])
+        })
       }),
       oauthSessionManager: {} as any,
       deps: makeDeps([]) as any
@@ -163,7 +167,60 @@ describe('queue event emission', () => {
     expect(res.__body).toMatchObject({
       active: expect.objectContaining({ jobId: 'job-1' }),
       active_jobs: [expect.objectContaining({ jobId: 'job-1' })],
+      admitting_jobs: [],
       queued: [expect.objectContaining({ jobId: 'job-2' })]
+    });
+  });
+
+  it('queue payload keeps retrying blocked jobs only in admitting_jobs', async () => {
+    const res = { __body: null } as any;
+    const retryingJob = {
+      id: 'job-3',
+      status: 'blocked_auth',
+      blockedAuthServers: ['oauth-server'],
+      clients: new Set(),
+      events: [],
+      abortController: new AbortController(),
+      runParams: {
+        configPath: '/tmp/eval.yaml',
+        runsPerScenario: 1,
+        scenarioIds: undefined,
+        requestedAgents: undefined,
+        runNote: undefined,
+        serverOverrideAll: undefined,
+        scenarioServerOverrides: undefined
+      }
+    } as any;
+
+    await handleRunsRoutes({
+      req: { url: '/api/runs/queue', headers: {}, on: () => undefined } as any,
+      res,
+      pathname: '/api/runs/queue',
+      method: 'GET',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp',
+        defaultQueueWorkers: 1
+      } as any,
+      runQueueService: createRunQueueServiceForTest({
+        jobs: new Map([['job-3', retryingJob]]),
+        runQueueState: createRunQueueState({
+          queue: ['job-3'],
+          admittingJobIds: new Set(['job-3'])
+        })
+      }),
+      oauthSessionManager: {} as any,
+      deps: makeDeps([]) as any
+    });
+
+    expect(res.__body).toMatchObject({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [expect.objectContaining({ jobId: 'job-3', status: 'blocked_auth' })],
+      queued: []
     });
   });
 
@@ -171,6 +228,7 @@ describe('queue event emission', () => {
     const sseEvents: Array<{ target: any; event: any }> = [];
     const deps = makeDeps(sseEvents) as any;
     const runQueueState = createRunQueueState();
+    const runQueueService = createRunQueueServiceForTest({ runQueueState, deps });
 
     for (let i = 0; i < 2; i += 1) {
       const res = {
@@ -198,8 +256,7 @@ describe('queue event emission', () => {
           workspaceRoot: '/tmp',
           toolAnalysisResultsDir: '/tmp'
         } as any,
-        jobs: new Map(),
-        runQueueState,
+        runQueueService,
         oauthSessionManager: {} as any,
         deps
       });
@@ -225,6 +282,7 @@ describe('queue event emission', () => {
     };
     const jobs = new Map([[jobId, job]]);
     runQueueState.queue.push(jobId);
+    const queueServiceWithJob = createRunQueueServiceForTest({ jobs, runQueueState, deps });
 
     const stopRes = { __body: null, statusCode: 0 } as any;
     stopRes.setHeader = () => undefined;
@@ -243,8 +301,7 @@ describe('queue event emission', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs,
-      runQueueState,
+      runQueueService: queueServiceWithJob,
       oauthSessionManager: {} as any,
       deps: {
         ...deps,
@@ -292,8 +349,11 @@ describe('queue event emission', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map([[jobId, job]]),
-      runQueueState: createRunQueueState({ queue: [jobId] }),
+      runQueueService: createRunQueueServiceForTest({
+        jobs: new Map([[jobId, job]]),
+        runQueueState: createRunQueueState({ queue: [jobId] }),
+        deps: makeDeps([])
+      }),
       oauthSessionManager: {} as any,
       deps: makeDeps([]) as any
     });
@@ -342,8 +402,40 @@ describe('queue event emission', () => {
           toolAnalysisResultsDir: fixture.root,
           defaultQueueWorkers: 2
         } as any,
-        jobs,
-        runQueueState,
+        runQueueService: createRunQueueServiceForTest({
+          jobs,
+          runQueueState,
+          settings: {
+            evalsDir: fixture.evalsDir,
+            runsDir: fixture.runsDir,
+            librariesDir: fixture.librariesDir,
+            workspaceRoot: fixture.root,
+            toolAnalysisResultsDir: fixture.root,
+            defaultQueueWorkers: 2
+          },
+          oauthSessionManager: {
+            ensureServersAuthorized: async () => ({
+              servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+              allReady: true
+            }),
+            getAuthHeadersForServers: async () => {
+              throw new Error('stop test run');
+            }
+          },
+          deps: makeRunsRouteDeps({
+            parseBody: async () => ({
+              configPath: fixture.configPath,
+              runsPerScenario: 1
+            }),
+            asJson: (target: any, _status: number, body: any) => {
+              target.__body = body;
+            },
+            addJobEvent: (job: any, event: any) => {
+              events.push({ jobId: job.id, type: event.type });
+            },
+            resolveRunSelectedAgents: () => ['mini']
+          })
+        }),
         oauthSessionManager: {
           ensureServersAuthorized: async () => ({
             servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
@@ -384,6 +476,8 @@ describe('queue event emission', () => {
   it('client removed from SSE clients set on request close', async () => {
     const sseEvents: Array<{ target: any; event: any }> = [];
     const runQueueState = createRunQueueState();
+    const deps = makeDeps(sseEvents) as any;
+    const runQueueService = createRunQueueServiceForTest({ runQueueState, deps });
     let closeHandler: (() => void) | undefined;
     const res = {
       statusCode: 0,
@@ -417,10 +511,9 @@ describe('queue event emission', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState,
+      runQueueService,
       oauthSessionManager: {} as any,
-      deps: makeDeps(sseEvents) as any
+      deps
     });
 
     closeHandler?.();

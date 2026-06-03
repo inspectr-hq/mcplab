@@ -74,6 +74,7 @@ const RunEvaluation = () => {
   const [runNote, setRunNote] = useState('');
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
+  const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -424,6 +425,7 @@ const RunEvaluation = () => {
       const q = await source.getRunQueue();
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
+      setAdmittingQueueEntries(q.admitting_jobs ?? []);
       // Restore blocked-auth state for page-load / reconnect scenarios where SSE was missed
       const blockedEntry = q.queued.find(
         (e) => e.status === 'blocked_auth' && e.blockedReason === 'oauth_required'
@@ -1039,7 +1041,7 @@ const RunEvaluation = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {!activeQueueEntry && queuedJobs.length === 0 ? (
+          {!activeQueueEntry && admittingQueueEntries.length === 0 && queuedJobs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No active or queued runs. Start a run above.
             </p>
@@ -1124,6 +1126,47 @@ const RunEvaluation = () => {
                   </Button>
                 </div>
               ))}
+              {admittingQueueEntries.map((entry) => {
+                const configName = formatQueueConfigPath(
+                  entry.runParams.configPath,
+                  queueRelativePathBySourcePath
+                );
+                const scenarioLabel = formatQueueScenarioLabel(
+                  entry.runParams.scenarioIds,
+                  queueScenarioLabelByConfigPath,
+                  entry.runParams.configPath
+                );
+                const evalLabel =
+                  queueEvalNameBySourcePath.get(entry.runParams.configPath) || scenarioLabel;
+                const isBlockedRetry = entry.status === 'blocked_auth';
+                return (
+                  <div
+                    key={entry.jobId}
+                    className={`flex items-center justify-between rounded-md border p-2 text-sm ${
+                      isBlockedRetry ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'
+                    }`}
+                  >
+                    <div className="min-w-0 flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          isBlockedRetry
+                            ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
+                            : 'bg-primary/10 text-primary'
+                        }`}
+                      >
+                        {isBlockedRetry ? 'Retrying OAuth' : 'Starting'}
+                      </span>
+                      <span className="text-xs font-bold">{evalLabel}</span>
+                      <span className="font-mono text-xs">{configName}</span>
+                      {isBlockedRetry && (entry.requiredServers ?? []).length > 0 && (
+                        <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                          OAuth: {entry.requiredServers!.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               {queuedJobs.map((entry, i) => {
                 const configName = formatQueueConfigPath(
                   entry.runParams.configPath,

@@ -14,10 +14,12 @@ function countOAuthBlockedQueued(queue: QueueResponse['queued']): number {
 function normalizeQueueState(value: Partial<QueueResponse> | undefined): QueueResponse {
   const active = value?.active ?? null;
   const activeJobs = Array.isArray(value?.active_jobs) ? value.active_jobs : active ? [active] : [];
+  const admittingJobs = Array.isArray(value?.admitting_jobs) ? value.admitting_jobs : [];
   const queued = Array.isArray(value?.queued) ? value.queued : [];
   return {
     active,
     active_jobs: activeJobs,
+    admitting_jobs: admittingJobs,
     queued
   };
 }
@@ -27,6 +29,7 @@ export function useRunQueueStatus() {
   const [queueState, setQueueState] = useState<QueueResponse>({
     active: null,
     active_jobs: [],
+    admitting_jobs: [],
     queued: []
   });
   const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected'>(
@@ -107,8 +110,8 @@ export function useRunQueueStatus() {
   }, [source, reconnectNonce]);
 
   return useMemo(() => {
-    const isRunning = queueState.active_jobs.length > 0;
-    const queuedCount = queueState.queued.length;
+    const isRunning = queueState.active_jobs.length > 0 || queueState.admitting_jobs.length > 0;
+    const queuedCount = queueState.queued.length + queueState.admitting_jobs.length;
     const oauthBlockedCount = countOAuthBlockedQueued(queueState.queued);
     return {
       isRunning,

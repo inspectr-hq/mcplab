@@ -61,6 +61,7 @@ vi.mock('@/contexts/LibraryContext', () => ({
 beforeEach(() => {
   configsRef.value = [];
   libraryAgentsRef.value = [];
+  sourceMock.getRunQueue.mockResolvedValue({ active: null, active_jobs: [], admitting_jobs: [], queued: [] });
 });
 
 describe('RunEvaluation', () => {
@@ -171,5 +172,55 @@ describe('RunEvaluation', () => {
 
     expect(screen.getByText('(suite-a)')).toBeInTheDocument();
     expect(screen.getByText('(suite-b)')).toBeInTheDocument();
+  });
+
+  it('renders admitting jobs separately from queued jobs', async () => {
+    sourceMock.getRunQueue.mockResolvedValueOnce({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [
+        {
+          jobId: 'job-admitting',
+          status: 'queued',
+          runParams: {
+            configPath: '/tmp/eval.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ],
+      queued: [
+        {
+          jobId: 'job-queued',
+          status: 'queued',
+          runParams: {
+            configPath: '/tmp/eval-2.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Starting')).toBeInTheDocument();
+      expect(screen.getByText('#1 Queued')).toBeInTheDocument();
+    });
   });
 });

@@ -33,6 +33,7 @@ describe('useRunQueueStatus', () => {
         payload: {
           event: {
             active: null,
+            admitting_jobs: [],
             queued: []
           }
         }
@@ -75,6 +76,7 @@ describe('useRunQueueStatus', () => {
                 scenarioServerOverrides: null
               }
             },
+            admitting_jobs: [],
             queued: []
           }
         }
@@ -83,6 +85,53 @@ describe('useRunQueueStatus', () => {
 
     await waitFor(() => {
       expect(result.current.isRunning).toBe(true);
+    });
+  });
+
+  it('treats admitting jobs as in-flight work', async () => {
+    let emit: ((event: any) => void) | null = null;
+    sourceRef.current = {
+      subscribeRunQueue: (onEvent: (event: any) => void) => {
+        emit = onEvent;
+        return () => undefined;
+      }
+    };
+
+    const { result } = renderHook(() => useRunQueueStatus());
+
+    act(() => {
+      emit?.({
+        type: 'queue_event',
+        ts: new Date().toISOString(),
+        payload: {
+          event: {
+            active: null,
+            active_jobs: [],
+            admitting_jobs: [
+              {
+                jobId: 'job-2',
+                status: 'blocked_auth',
+                requiredServers: ['oauth-server'],
+                runParams: {
+                  configPath: '/tmp/eval.yaml',
+                  runsPerScenario: 1,
+                  scenarioIds: null,
+                  agents: null,
+                  runNote: null,
+                  serverOverrideAll: null,
+                  scenarioServerOverrides: null
+                }
+              }
+            ],
+            queued: []
+          }
+        }
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.queuedCount).toBe(1);
     });
   });
 });

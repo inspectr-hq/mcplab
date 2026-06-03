@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { handleRunsRoutes } from './runs-routes.js';
-import { createRunQueueState, makeRunsRouteDeps } from './runs-routes.test-helpers.js';
+import {
+  createRunQueueServiceForTest,
+  createRunQueueState,
+  makeRunsRouteDeps
+} from './runs-routes.test-helpers.js';
 
 describe('run request validation', () => {
   it('returns 400 when serverOverrideAll is an empty array', async () => {
@@ -20,8 +24,7 @@ describe('run request validation', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
       oauthSessionManager: {} as any,
       deps: makeRunsRouteDeps({
         parseBody: async () => ({
@@ -55,8 +58,7 @@ describe('run request validation', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
       oauthSessionManager: {} as any,
       deps: makeRunsRouteDeps({
         parseBody: async () => ({
@@ -90,8 +92,7 @@ describe('run request validation', () => {
         workspaceRoot: '/tmp',
         toolAnalysisResultsDir: '/tmp'
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
       oauthSessionManager: {} as any,
       deps: makeRunsRouteDeps({
         parseBody: async () => ({
@@ -150,8 +151,7 @@ describe('run request validation', () => {
         workspaceRoot: root,
         toolAnalysisResultsDir: root
       } as any,
-      jobs: new Map(),
-      runQueueState: createRunQueueState(),
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
       oauthSessionManager: {} as any,
       deps: makeRunsRouteDeps({
         parseBody: async () => ({

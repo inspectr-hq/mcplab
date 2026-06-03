@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { advanceQueue } from './runs-routes.js';
+import { advanceQueue } from './run-queue-domain.js';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
 import {
   cleanupFixtureRoot,

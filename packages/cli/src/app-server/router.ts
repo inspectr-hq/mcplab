@@ -11,7 +11,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
-import type { AppRouteDeps, RunQueueState } from './app-context.js';
+import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
@@ -61,7 +61,7 @@ import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import { createRunQueueService } from './run-queue-domain.js';
-import { createRunQueueState } from './run-queue-state.js';
+import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
   cleanupAssistantSessions,
@@ -117,27 +117,6 @@ const mcpServerPkgVersion = (() => {
     return '1.0.0';
   }
 })();
-
-interface JobEvent {
-  type: 'queued' | 'started' | 'log' | 'completed' | 'error';
-  ts: string;
-  payload: Record<string, unknown>;
-}
-
-interface RunJob {
-  id: string;
-  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
-  events: JobEvent[];
-  clients: Set<ServerResponse>;
-  abortController: AbortController;
-  runParams: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioId?: string;
-    scenarioIds?: string[];
-    requestedAgents?: string[];
-  };
-}
 
 function resolveRunSelectedAgents(
   config: EvalConfig,
@@ -338,7 +317,6 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
-        let shouldAdvanceQueue = false;
         if (body.evalsDir) {
           settings.evalsDir = resolve(String(body.evalsDir));
           mkdirSync(settings.evalsDir, { recursive: true });
@@ -372,9 +350,6 @@ export async function startAppServer(options: AppServerOptions) {
         }
         if (settingsChanged) {
           persistSettingsOverrides(settings);
-        }
-        if (shouldAdvanceQueue) {
-          runQueueService.resumeBlockedJobs({ hostHeader: req.headers.host });
         }
         asJson(res, 200, settings);
         return;
