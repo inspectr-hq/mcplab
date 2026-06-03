@@ -147,6 +147,49 @@ describe('queue OAuth blocking', () => {
     }
   });
 
+  it('emits a retry log when OAuth retry still blocks on the same servers', async () => {
+    const fixture = createOauthEvalFixture();
+    const job = createQueuedJob(fixture.configPath);
+    job.status = 'blocked_auth';
+    job.blockedAuthServers = ['oauth-server'];
+    const jobs = new Map([[job.id, job]]);
+    const runQueueState = createRunQueueState({ queue: [job.id] });
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+
+    try {
+      await advanceQueue(
+        jobs,
+        runQueueState,
+        {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
+        } as any,
+        {
+          ensureServersAuthorized: vi.fn().mockResolvedValue({
+            servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
+            allReady: false
+          })
+        } as any,
+        makeDeps(events) as any,
+        { hostHeader: 'localhost', retryBlockedAuth: true }
+      );
+
+      expect(job.status).toBe('blocked_auth');
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'log' &&
+            (event.message ?? '').includes('OAuth retry attempted; still waiting')
+        )
+      ).toBe(true);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
   it('re-queues OAuthAuthorizationRequiredError jobs even when detail server names are missing', async () => {
     const fixture = createOauthEvalFixture();
     const job = createQueuedJob(fixture.configPath);
@@ -255,6 +298,40 @@ describe('queue OAuth blocking', () => {
       expect(jobs.has('old-error-job')).toBe(false);
       expect(job.status).toBe('error');
       expect(queueEvents.filter((event) => event.type === 'queue_event')).toHaveLength(2);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
+  it('keeps a stopped job stopped when admission fails after user stop', async () => {
+    const fixture = createOauthEvalFixture();
+    const job = createQueuedJob(fixture.configPath);
+    const jobs = new Map([[job.id, job]]);
+    const runQueueState = createRunQueueState({ queue: [job.id], admittingJobIds: new Set([job.id]) });
+    const events: Array<{ jobId: string; type: string; message?: string }> = [];
+    job.status = 'stopped';
+
+    try {
+      await advanceQueue(
+        jobs,
+        runQueueState,
+        {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
+        } as any,
+        {
+          ensureServersAuthorized: vi.fn().mockRejectedValue(new Error('oauth check failed'))
+        } as any,
+        makeDeps(events) as any,
+        { hostHeader: 'localhost', retryBlockedAuth: true }
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(job.status).toBe('stopped');
+      expect(events.some((event) => event.type === 'error')).toBe(false);
     } finally {
       cleanupFixtureRoot(fixture.root);
     }

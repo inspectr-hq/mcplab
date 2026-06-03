@@ -114,14 +114,16 @@ export function createRunQueueService(params: {
     if (queueIndex !== -1) {
       state.queue.splice(queueIndex, 1);
     }
-    job.status = 'error';
-    deps.addJobEvent(job, {
-      type: 'error',
-      ts: new Date().toISOString(),
-      payload: {
-        message: error instanceof Error ? error.message : String(error)
-      }
-    });
+    if (job.status !== 'stopped') {
+      job.status = 'error';
+      deps.addJobEvent(job, {
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: {
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+    }
     closeJobClients(job);
     pruneOldJobs();
   }
@@ -148,7 +150,6 @@ export function createRunQueueService(params: {
           message: `OAuth login required for server(s): ${outcome.blockedServers.join(', ')}.`
         }
       });
-      emit();
       void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
       return;
     }
@@ -207,8 +208,15 @@ export function createRunQueueService(params: {
               message: `OAuth login required for server(s): ${admission.blockedServers.join(', ')}.`
             }
           });
+        } else if (options?.retryBlockedAuth) {
+          deps.addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `OAuth retry attempted; still waiting for server(s): ${admission.blockedServers.join(', ')}`
+            }
+          });
         }
-        emit();
         void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
         return;
       }
