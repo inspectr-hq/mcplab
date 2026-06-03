@@ -2,11 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import { emitQueueEvent, buildQueueState, closeJobClients } from './run-queue-events.js';
-import {
-  admitQueuedJob,
-  executeRunJob,
-  resolveOAuthServersForJob
-} from './run-queue-executor.js';
+import { admitQueuedJob, executeRunJob, resolveOAuthServersForJob } from './run-queue-executor.js';
 import {
   createRunQueueState,
   currentWorkerUsage,
@@ -105,7 +101,8 @@ export function createRunQueueService(params: {
     ]);
     for (const [id, job] of jobs) {
       if (activeIds.has(id)) continue;
-      if (job.status !== 'completed' && job.status !== 'error' && job.status !== 'stopped') continue;
+      if (job.status !== 'completed' && job.status !== 'error' && job.status !== 'stopped')
+        continue;
       const lastEvent = job.events[job.events.length - 1];
       if (!lastEvent) continue;
       if (now - new Date(lastEvent.ts).getTime() > maxAgeMs) {
@@ -183,10 +180,7 @@ export function createRunQueueService(params: {
     await handleExecutionOutcome(job, outcome, options);
   }
 
-  async function processClaimedJob(
-    job: RunJob,
-    options?: QueueAdvanceOptions
-  ): Promise<void> {
+  async function processClaimedJob(job: RunJob, options?: QueueAdvanceOptions): Promise<void> {
     try {
       const admission = await admitQueuedJob({
         job,
@@ -228,7 +222,9 @@ export function createRunQueueService(params: {
             type: 'log',
             ts: new Date().toISOString(),
             payload: {
-              message: `OAuth retry attempted; still waiting for server(s): ${admission.blockedServers.join(', ')}`
+              message: `OAuth retry attempted; still waiting for server(s): ${admission.blockedServers.join(
+                ', '
+              )}`
             }
           });
         }
@@ -415,7 +411,10 @@ export function createRunQueueService(params: {
       const job = jobs.get(jobId);
       if (!job) return null;
       if (state.activeJobIds.has(jobId)) {
-        return { error: 'Cannot remove a running job. Use the /stop endpoint instead.', statusCode: 400 };
+        return {
+          error: 'Cannot remove a running job. Use the /stop endpoint instead.',
+          statusCode: 400
+        };
       }
       if (job.status !== 'queued' && job.status !== 'blocked_auth') {
         return { error: 'Job is not queued', statusCode: 404 };

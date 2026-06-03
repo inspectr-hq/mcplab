@@ -17,13 +17,15 @@ export function createRunQueueState(overrides: Record<string, unknown> = {}) {
   };
 }
 
-export function createRunQueueServiceForTest(overrides: {
-  jobs?: Map<string, any>;
-  runQueueState?: any;
-  settings?: Record<string, unknown>;
-  oauthSessionManager?: any;
-  deps?: Record<string, unknown>;
-} = {}) {
+export function createRunQueueServiceForTest(
+  overrides: {
+    jobs?: Map<string, any>;
+    runQueueState?: any;
+    settings?: Record<string, unknown>;
+    oauthSessionManager?: any;
+    deps?: Record<string, unknown>;
+  } = {}
+) {
   const deps = makeRunsRouteDeps(overrides.deps ?? {});
   const settings = {
     evalsDir: '/tmp',
@@ -54,7 +56,9 @@ export function makeRunsRouteDeps(overrides: Record<string, unknown> = {}) {
     getRunResults: () => ({}),
     getScenarioRunTraceRecords: () => [],
     selectScenarioIds: (config: any, ids?: string[]) =>
-      ids?.length ? { ...config, scenarios: config.scenarios.filter((s: any) => ids.includes(s.id)) } : config,
+      ids?.length
+        ? { ...config, scenarios: config.scenarios.filter((s: any) => ids.includes(s.id)) }
+        : config,
     expandConfigForAgents: (config: any) => config,
     resolveRunSelectedAgents: () => [],
     readLibraries: () => ({ agents: {}, servers: {}, scenarios: {} }),

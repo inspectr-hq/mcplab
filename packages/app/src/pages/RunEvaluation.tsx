@@ -1161,7 +1161,9 @@ const RunEvaluation = () => {
                   <div
                     key={entry.jobId}
                     className={`flex items-center justify-between rounded-md border p-2 text-sm ${
-                      isBlockedRetry ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'
+                      isBlockedRetry
+                        ? 'border-yellow-500/40 bg-yellow-500/5'
+                        : 'border-primary/20 bg-primary/5'
                     }`}
                   >
                     <div className="min-w-0 flex items-center gap-2 flex-wrap">

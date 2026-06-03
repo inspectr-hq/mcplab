@@ -261,11 +261,13 @@ describe('queue OAuth blocking', () => {
             servers: [{ serverName: 'oauth-server', status: 'ready' }],
             allReady: true
           }),
-          getAuthHeadersForServers: vi.fn().mockRejectedValue(
-            new OAuthAuthorizationRequiredError([
-              { serverName: null as any, message: 'OAuth login required' }
-            ])
-          )
+          getAuthHeadersForServers: vi
+            .fn()
+            .mockRejectedValue(
+              new OAuthAuthorizationRequiredError([
+                { serverName: null as any, message: 'OAuth login required' }
+              ])
+            )
         },
         deps: makeDeps(events) as any
       }).advance({ hostHeader: 'localhost' });
@@ -353,7 +355,10 @@ describe('queue OAuth blocking', () => {
     const fixture = createOauthEvalFixture();
     const job = createQueuedJob(fixture.configPath);
     const jobs = new Map([[job.id, job]]);
-    const runQueueState = createRunQueueState({ queue: [job.id], admittingJobIds: new Set([job.id]) });
+    const runQueueState = createRunQueueState({
+      queue: [job.id],
+      admittingJobIds: new Set([job.id])
+    });
     const events: Array<{ jobId: string; type: string; message?: string }> = [];
     job.status = 'stopped';
 
@@ -429,7 +434,10 @@ describe('queue OAuth blocking', () => {
 
     try {
       await createRunQueueServiceForTest({
-        jobs: new Map([[job.id, job], [secondJob.id, secondJob]]),
+        jobs: new Map([
+          [job.id, job],
+          [secondJob.id, secondJob]
+        ]),
         runQueueState,
         settings: {
           evalsDir: fixture.evalsDir,
@@ -443,11 +451,13 @@ describe('queue OAuth blocking', () => {
             servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
             allReady: true
           }),
-          getAuthHeadersForServers: vi.fn().mockRejectedValue(
-            new OAuthAuthorizationRequiredError([
-              { serverName: 'oauth-server', message: 'token expired' }
-            ])
-          )
+          getAuthHeadersForServers: vi
+            .fn()
+            .mockRejectedValue(
+              new OAuthAuthorizationRequiredError([
+                { serverName: 'oauth-server', message: 'token expired' }
+              ])
+            )
         },
         deps: makeDeps(events) as any
       }).advance({ hostHeader: 'localhost' });

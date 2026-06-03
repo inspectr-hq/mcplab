@@ -72,7 +72,12 @@ beforeEach(() => {
   configsRef.value = [];
   libraryAgentsRef.value = [];
   sessionStorage.removeItem(activeJobStorageKey);
-  sourceMock.getRunQueue.mockResolvedValue({ active: null, active_jobs: [], admitting_jobs: [], queued: [] });
+  sourceMock.getRunQueue.mockResolvedValue({
+    active: null,
+    active_jobs: [],
+    admitting_jobs: [],
+    queued: []
+  });
 });
 
 afterEach(() => {

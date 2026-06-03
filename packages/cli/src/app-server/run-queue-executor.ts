@@ -17,11 +17,7 @@ import {
   type OAuthSessionManager
 } from './oauth-session-manager.js';
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
-import type {
-  ExecutionOutcome,
-  RunJob,
-  RunParams
-} from './run-queue-state.js';
+import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
 
 export function mergeLibraryEntriesIntoConfig(
   config: EvalConfig,
@@ -270,7 +266,9 @@ export async function executeRunJob(params: {
         message: `Expanded to ${expandedConfig.scenarios.length} executable scenario run(s) across selected agents`
       }
     });
-    const usedServerNames = new Set(expandedConfig.scenarios.flatMap((scenario) => scenario.servers));
+    const usedServerNames = new Set(
+      expandedConfig.scenarios.flatMap((scenario) => scenario.servers)
+    );
     const oauthServers = Array.from(usedServerNames).filter(
       (serverName) => expandedConfig.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
