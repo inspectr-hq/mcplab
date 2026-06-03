@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
 import type { EvalConfig, AgentConfig } from '@/types/eval';
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
 
 const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAgentsRef } =
   vi.hoisted(() => {
@@ -59,9 +62,26 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  scrollIntoViewSpy = vi.fn();
+  Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoViewSpy
+  });
   configsRef.value = [];
   libraryAgentsRef.value = [];
   sourceMock.getRunQueue.mockResolvedValue({ active: null, active_jobs: [], admitting_jobs: [], queued: [] });
+});
+
+afterEach(() => {
+  const actWarnings =
+    consoleErrorSpy?.mock.calls.filter(([message]) =>
+      String(message).includes('not wrapped in act')
+    ) ?? [];
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
+  scrollIntoViewSpy = null;
+  expect(actWarnings).toHaveLength(0);
 });
 
 describe('RunEvaluation', () => {
@@ -168,10 +188,12 @@ describe('RunEvaluation', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('combobox'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('combobox'));
+    });
 
-    expect(screen.getByText('(suite-a)')).toBeInTheDocument();
-    expect(screen.getByText('(suite-b)')).toBeInTheDocument();
+    expect(await screen.findByText('(suite-a)')).toBeInTheDocument();
+    expect(await screen.findByText('(suite-b)')).toBeInTheDocument();
   });
 
   it('renders admitting jobs separately from queued jobs', async () => {

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from './Settings';
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
   const agentsRef = {
@@ -46,9 +48,20 @@ vi.mock('@/contexts/LibraryContext', () => ({
 
 describe('SettingsPage', () => {
   beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     sourceMock.getWorkspaceSettings.mockClear();
     sourceMock.updateWorkspaceSettings.mockClear();
     reloadMock.mockClear();
+  });
+
+  afterEach(() => {
+    const actWarnings =
+      consoleErrorSpy?.mock.calls.filter(([message]) =>
+        String(message).includes('not wrapped in act')
+      ) ?? [];
+    consoleErrorSpy?.mockRestore();
+    consoleErrorSpy = null;
+    expect(actWarnings).toHaveLength(0);
   });
 
   it('loads and saves the evaluation workers setting', async () => {
