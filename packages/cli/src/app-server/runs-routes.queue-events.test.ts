@@ -383,6 +383,7 @@ describe('queue event emission', () => {
     const jobs = new Map([[blockedJob.id, blockedJob]]);
     const runQueueState = createRunQueueState({
       queue: [blockedJob.id],
+      blockedJobIds: new Set([blockedJob.id]),
       queueWorkerCount: 2
     });
     const events: Array<{ jobId: string; type: string }> = [];
