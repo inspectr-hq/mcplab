@@ -1334,7 +1334,8 @@ export function registerTools(server: McpServer): void {
           scenarioId: scenario_id,
           configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
-          runsDir: resolveRunsDir()
+          runsDir: resolveRunsDir(),
+          cwd: process.cwd()
         });
 
         const reportHtml = renderReport(results);

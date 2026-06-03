@@ -23,6 +23,7 @@ export interface RunOptions {
   gitCommit?: string;
   cliVersion: string;
   runsDir?: string;
+  cwd?: string;
   mcpServerAuthHeaders?: Record<string, Record<string, string>>;
   oauthTokens?: Record<string, string>;
   resolveMcpServerAuthHeaders?: (
@@ -93,7 +94,8 @@ export async function runAll(
   };
   const runId = createRunId();
   const runRoot = options.runsDir?.trim() || 'runs';
-  const runsBaseDir = isAbsolute(runRoot) ? runRoot : resolve(process.cwd(), runRoot);
+  const baseCwd = options.cwd?.trim() || process.cwd();
+  const runsBaseDir = isAbsolute(runRoot) ? runRoot : resolve(baseCwd, runRoot);
   const runDir = join(runsBaseDir, runId);
   mkdirSync(runDir, { recursive: true });
 
@@ -378,18 +380,31 @@ export async function runAll(
   }
 }
 
-function createRunId(): string {
-  const now = new Date();
+let lastRunIdPrefix = '';
+let lastRunIdCollisionCount = 0;
+
+export function createRunId(now: Date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, '0');
-  return [
+  const prefix = [
     now.getFullYear(),
     pad(now.getMonth() + 1),
     pad(now.getDate()),
     '-',
     pad(now.getHours()),
     pad(now.getMinutes()),
-    pad(now.getSeconds())
+    pad(now.getSeconds()),
+    '-',
+    String(now.getMilliseconds()).padStart(3, '0')
   ].join('');
+
+  if (prefix !== lastRunIdPrefix) {
+    lastRunIdPrefix = prefix;
+    lastRunIdCollisionCount = 0;
+    return prefix;
+  }
+
+  lastRunIdCollisionCount += 1;
+  return `${prefix}-${lastRunIdCollisionCount.toString(36).padStart(2, '0')}`;
 }
 
 const MAX_REQUEST_ID_LENGTH = 180;

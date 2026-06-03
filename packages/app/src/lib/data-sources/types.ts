@@ -136,7 +136,14 @@ export interface WorkspaceSettings {
   evalsDir: string;
   runsDir: string;
   librariesDir: string;
+  defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
+}
+
+export interface StartRunResponse {
+  jobId: string;
+  queued?: boolean;
+  position?: number;
 }
 
 export interface LibraryBundle {
@@ -704,7 +711,7 @@ export interface EvalDataSource {
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
-  }) => Promise<{ jobId: string }>;
+  }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
@@ -753,6 +760,7 @@ export interface EvalDataSource {
   ) => Promise<ProviderModelsResponse>;
   getWorkspaceSettings: () => Promise<WorkspaceSettings | null>;
   updateWorkspaceSettings: (patch: {
+    defaultQueueWorkers?: number;
     scenarioAssistantAgentName?: string;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (

@@ -18,8 +18,9 @@ const SettingsPage = () => {
   const { source } = useDataSource();
   const { agents, reload: reloadLibraries, loading: librariesLoading } = useLibraries();
   const [loadingSettings, setLoadingSettings] = useState(false);
-  const [savingAssistantAgent, setSavingAssistantAgent] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
+  const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
 
   const effectiveAssistantAgentName = useMemo(
     () => scenarioAssistantAgentName || agents[0]?.name || '',
@@ -31,8 +32,10 @@ const SettingsPage = () => {
     try {
       const settings = await source.getWorkspaceSettings();
       setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
+      setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
     } catch (error: unknown) {
       setScenarioAssistantAgentName('');
+      setDefaultQueueWorkers('1');
       toast({
         title: 'Could not load settings',
         description: error instanceof Error ? error.message : String(error),
@@ -48,8 +51,9 @@ const SettingsPage = () => {
   }, [loadSettings]);
 
   const saveAssistantAgentSetting = async (nextAgentName: string) => {
+    const previousAgentName = scenarioAssistantAgentName;
     setScenarioAssistantAgentName(nextAgentName);
-    setSavingAssistantAgent(true);
+    setSavingSettings(true);
     try {
       await source.updateWorkspaceSettings({
         scenarioAssistantAgentName: nextAgentName || undefined
@@ -61,13 +65,38 @@ const SettingsPage = () => {
           : 'Default assistant agent cleared (will use first available agent by default).'
       });
     } catch (error: unknown) {
+      setScenarioAssistantAgentName(previousAgentName);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
     } finally {
-      setSavingAssistantAgent(false);
+      setSavingSettings(false);
+    }
+  };
+
+  const saveDefaultQueueWorkers = async (nextValue: string) => {
+    const previousValue = defaultQueueWorkers;
+    setDefaultQueueWorkers(nextValue);
+    setSavingSettings(true);
+    try {
+      await source.updateWorkspaceSettings({
+        defaultQueueWorkers: Number(nextValue)
+      });
+      toast({
+        title: 'Settings updated',
+        description: `Evaluation workers set to ${nextValue}.`
+      });
+    } catch (error: unknown) {
+      setDefaultQueueWorkers(previousValue);
+      toast({
+        title: 'Could not save settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -115,7 +144,7 @@ const SettingsPage = () => {
               onValueChange={(value) =>
                 void saveAssistantAgentSetting(value === '__none__' ? '' : value)
               }
-              disabled={savingAssistantAgent}
+              disabled={savingSettings}
             >
               <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select assistant agent" />
@@ -132,6 +161,40 @@ const SettingsPage = () => {
             <p className="text-xs text-muted-foreground">
               Applies to the assistant flows that use the workspace default. MCP Evaluation editors
               can still override the assistant agent from their evaluation context.
+            </p>
+          </div>
+          <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Evaluation Queue</CardTitle>
+          <CardDescription>
+            Control how many queued evaluation runs may execute in parallel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Evaluation workers</Label>
+            <Select
+              value={defaultQueueWorkers}
+              onValueChange={(value) => void saveDefaultQueueWorkers(value)}
+              disabled={savingSettings}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select worker count" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 8 }, (_, index) => String(index + 1)).map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Number of queued evaluation runs that may execute in parallel.
             </p>
           </div>
           <div className="text-xs text-muted-foreground">Saved in workspace settings</div>

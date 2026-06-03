@@ -73,7 +73,7 @@ const RunEvaluation = () => {
   >({});
   const [runNote, setRunNote] = useState('');
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
-  const [activeQueueEntry, setActiveQueueEntry] = useState<QueueEntry | null>(null);
+  const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -105,6 +105,7 @@ const RunEvaluation = () => {
     () => buildScenarioLabelByConfigPath(configs, libraryScenarios),
     [configs, libraryScenarios]
   );
+  const activeQueueEntry = activeQueueEntries[0] ?? null;
   const requestedConfigId = searchParams.get('configId');
   const availableAgents = useMemo(() => {
     if (!selectedConfig) return [];
@@ -422,7 +423,7 @@ const RunEvaluation = () => {
     try {
       const q = await source.getRunQueue();
       setQueuedJobs(q.queued);
-      setActiveQueueEntry(q.active);
+      setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       // Restore blocked-auth state for page-load / reconnect scenarios where SSE was missed
       const blockedEntry = q.queued.find(
         (e) => e.status === 'blocked_auth' && e.blockedReason === 'oauth_required'
@@ -1044,40 +1045,37 @@ const RunEvaluation = () => {
             </p>
           ) : (
             <div className="space-y-2">
-              {activeQueueEntry && (
+              {activeQueueEntries.map((entry) => (
                 <div
+                  key={entry.jobId}
                   role="button"
                   tabIndex={0}
                   className={`flex items-center justify-between rounded-md border border-primary/30 bg-primary/5 p-2 text-sm cursor-pointer hover:bg-primary/10 transition-colors ${
-                    activeJobId === activeQueueEntry.jobId ? 'ring-2 ring-primary/40' : ''
+                    activeJobId === entry.jobId ? 'ring-2 ring-primary/40' : ''
                   }`}
                   onClick={() => {
-                    if (activeJobId === activeQueueEntry.jobId) return;
-                    setActiveJobId(activeQueueEntry.jobId);
-                    setActiveRunJob(activeQueueEntry.jobId);
+                    if (activeJobId === entry.jobId) return;
+                    setActiveJobId(entry.jobId);
+                    setActiveRunJob(entry.jobId);
                     setRunning(true);
                     setDone(false);
                     setStopped(false);
-                    setLogs([
-                      `[${nowTime()}] Attached to running job ${activeQueueEntry.jobId}...`
-                    ]);
+                    setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
                     setProgress(10);
-                    attachRunJob(activeQueueEntry.jobId);
+                    attachRunJob(entry.jobId);
                   }}
                   onKeyDown={(e) => {
                     if (e.key !== 'Enter' && e.key !== ' ') return;
-                    if (activeJobId === activeQueueEntry.jobId) return;
+                    if (activeJobId === entry.jobId) return;
                     e.preventDefault();
-                    setActiveJobId(activeQueueEntry.jobId);
-                    setActiveRunJob(activeQueueEntry.jobId);
+                    setActiveJobId(entry.jobId);
+                    setActiveRunJob(entry.jobId);
                     setRunning(true);
                     setDone(false);
                     setStopped(false);
-                    setLogs([
-                      `[${nowTime()}] Attached to running job ${activeQueueEntry.jobId}...`
-                    ]);
+                    setLogs([`[${nowTime()}] Attached to running job ${entry.jobId}...`]);
                     setProgress(10);
-                    attachRunJob(activeQueueEntry.jobId);
+                    attachRunJob(entry.jobId);
                   }}
                   title="Click to view progress"
                 >
@@ -1086,27 +1084,27 @@ const RunEvaluation = () => {
                       Running
                     </span>
                     <span className="text-xs font-bold">
-                      {queueEvalNameBySourcePath.get(activeQueueEntry.runParams.configPath) ||
+                      {queueEvalNameBySourcePath.get(entry.runParams.configPath) ||
                         formatQueueScenarioLabel(
-                          activeQueueEntry.runParams.scenarioIds,
+                          entry.runParams.scenarioIds,
                           queueScenarioLabelByConfigPath,
-                          activeQueueEntry.runParams.configPath
+                          entry.runParams.configPath
                         )}
                     </span>
                     <span className="font-mono text-xs">
                       {formatQueueConfigPath(
-                        activeQueueEntry.runParams.configPath,
+                        entry.runParams.configPath,
                         queueRelativePathBySourcePath
                       )}
                     </span>
-                    {activeQueueEntry.runParams.agents && (
+                    {entry.runParams.agents && (
                       <span className="text-xs text-muted-foreground">
-                        agents: {activeQueueEntry.runParams.agents.join(', ')}
+                        agents: {entry.runParams.agents.join(', ')}
                       </span>
                     )}
-                    {activeQueueEntry.runParams.runNote && (
+                    {entry.runParams.runNote && (
                       <span className="text-xs text-muted-foreground truncate">
-                        note: {activeQueueEntry.runParams.runNote}
+                        note: {entry.runParams.runNote}
                       </span>
                     )}
                   </div>
@@ -1116,10 +1114,8 @@ const RunEvaluation = () => {
                     className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (activeQueueEntry) {
-                        void source.stopRun(activeQueueEntry.jobId);
-                        void refreshQueue();
-                      }
+                      void source.stopRun(entry.jobId);
+                      void refreshQueue();
                     }}
                     title="Stop running job"
                   >
@@ -1127,7 +1123,7 @@ const RunEvaluation = () => {
                     Stop
                   </Button>
                 </div>
-              )}
+              ))}
               {queuedJobs.map((entry, i) => {
                 const configName = formatQueueConfigPath(
                   entry.runParams.configPath,

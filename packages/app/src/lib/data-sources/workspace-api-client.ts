@@ -168,14 +168,16 @@ export const workspaceApiClient = {
       evalsDir: string;
       runsDir: string;
       librariesDir: string;
+      defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
     }>('/api/settings'),
-  updateSettings: (patch: { scenarioAssistantAgentName?: string }) =>
+  updateSettings: (patch: { defaultQueueWorkers?: number; scenarioAssistantAgentName?: string }) =>
     request<{
       workspaceRoot: string;
       evalsDir: string;
       runsDir: string;
       librariesDir: string;
+      defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
     }>('/api/settings', {
       method: 'PUT',
@@ -347,7 +349,7 @@ export const workspaceApiClient = {
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) =>
-    request<{ jobId: string }>('/api/runs', {
+    request<{ jobId: string; queued?: boolean; position?: number }>('/api/runs', {
       method: 'POST',
       body: JSON.stringify(params)
     }),

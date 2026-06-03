@@ -18,6 +18,7 @@ export interface QueueEntry {
 
 export interface QueueResponse {
   active: QueueEntry | null;
+  active_jobs: QueueEntry[];
   queued: QueueEntry[];
 }
 

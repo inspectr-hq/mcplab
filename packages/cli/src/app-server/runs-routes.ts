@@ -170,13 +170,17 @@ function toQueueEntry(job: RunJob): QueueEntry {
 }
 
 function buildQueueState(jobs: Map<string, RunJob>, runQueueState: RunQueueState): QueueState {
-  const activeJob = runQueueState.activeJobId ? jobs.get(runQueueState.activeJobId) : null;
+  const activeJobs = Array.from(runQueueState.activeJobIds)
+    .map((id) => jobs.get(id))
+    .filter((job): job is RunJob => !!job && job.status === 'running')
+    .map((job) => toQueueEntry(job));
   const queuedEntries = runQueueState.queue
     .map((id) => jobs.get(id))
     .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
     .map((job) => toQueueEntry(job));
   return {
-    active: activeJob ? toQueueEntry(activeJob) : null,
+    active: activeJobs[0] ?? null,
+    active_jobs: activeJobs,
     queued: queuedEntries
   };
 }
@@ -202,6 +206,57 @@ function emitQueueEvent(
       runQueueState.clients.delete(client);
     }
   }
+}
+
+function closeJobClients(job: RunJob): void {
+  for (const client of job.clients) client.end();
+  job.clients.clear();
+}
+
+function currentWorkerUsage(runQueueState: RunQueueState): number {
+  return runQueueState.activeJobIds.size + runQueueState.admittingJobIds.size;
+}
+
+function shouldStartQueuedJobImmediately(
+  jobId: string,
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState
+): boolean {
+  if (currentWorkerUsage(runQueueState) >= runQueueState.queueWorkerCount) return false;
+  for (const queuedJobId of runQueueState.queue) {
+    if (queuedJobId === jobId) return true;
+    const queuedJob = jobs.get(queuedJobId);
+    if (queuedJob?.status === 'queued' && !runQueueState.admittingJobIds.has(queuedJobId)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function stopQueuedJob(
+  job: RunJob,
+  runQueueState: RunQueueState,
+  deps: Pick<RunsRouteDeps, 'addJobEvent'>,
+  message = 'Run stopped before it started'
+): void {
+  const idx = runQueueState.queue.indexOf(job.id);
+  if (idx !== -1) runQueueState.queue.splice(idx, 1);
+  runQueueState.admittingJobIds.delete(job.id);
+  job.status = 'stopped';
+  addStopEvent(deps, job, message);
+  closeJobClients(job);
+}
+
+function addStopEvent(
+  deps: Pick<RunsRouteDeps, 'addJobEvent'>,
+  job: RunJob,
+  message: string
+): void {
+  deps.addJobEvent(job, {
+    type: 'error',
+    ts: new Date().toISOString(),
+    payload: { message }
+  });
 }
 
 export async function handleRunsRoutes(params: {
@@ -348,17 +403,8 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Job not found' });
       return true;
     }
-    if (job.status === 'queued') {
-      const idx = runQueueState.queue.indexOf(jobId);
-      if (idx !== -1) runQueueState.queue.splice(idx, 1);
-      job.status = 'stopped';
-      addJobEvent(job, {
-        type: 'error',
-        ts: new Date().toISOString(),
-        payload: { message: 'Run stopped before it started' }
-      });
-      for (const client of job.clients) client.end();
-      job.clients.clear();
+    if (job.status === 'queued' || job.status === 'blocked_auth') {
+      stopQueuedJob(job, runQueueState, deps);
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
         emitWhenIdle: true,
         hostHeader: req.headers.host
@@ -412,7 +458,7 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Job not found' });
       return true;
     }
-    if (job.status === 'running') {
+    if (runQueueState.activeJobIds.has(jobId)) {
       asJson(res, 400, { error: 'Cannot remove a running job. Use the /stop endpoint instead.' });
       return true;
     }
@@ -420,16 +466,7 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: 'Job is not queued' });
       return true;
     }
-    const idx = runQueueState.queue.indexOf(jobId);
-    if (idx !== -1) runQueueState.queue.splice(idx, 1);
-    job.status = 'stopped';
-    addJobEvent(job, {
-      type: 'error',
-      ts: new Date().toISOString(),
-      payload: { message: 'Removed from queue by user' }
-    });
-    for (const client of job.clients) client.end();
-    job.clients.clear();
+    stopQueuedJob(job, runQueueState, deps, 'Removed from queue by user');
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
       emitWhenIdle: true,
       hostHeader: req.headers.host
@@ -441,7 +478,8 @@ export async function handleRunsRoutes(params: {
   if (pathname === '/api/runs/queue/resume' && method === 'POST') {
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
       emitWhenIdle: true,
-      hostHeader: req.headers.host
+      hostHeader: req.headers.host,
+      retryBlockedAuth: true
     });
     asJson(res, 200, { ok: true });
     return true;
@@ -565,9 +603,13 @@ export async function handleRunsRoutes(params: {
     };
     jobs.set(jobId, job);
 
-    if (runQueueState.activeJobId) {
-      // Another job is running — queue and emit position
-      runQueueState.queue.push(jobId);
+    runQueueState.queue.push(jobId);
+    const queuedPosition = runQueueState.queue.length;
+    const shouldAttemptAdvance =
+      currentWorkerUsage(runQueueState) < runQueueState.queueWorkerCount;
+    const shouldStartImmediately = shouldStartQueuedJobImmediately(jobId, jobs, runQueueState);
+
+    if (!shouldStartImmediately) {
       addJobEvent(job, {
         type: 'queued',
         ts: new Date().toISOString(),
@@ -580,14 +622,17 @@ export async function handleRunsRoutes(params: {
           runNote: runNote ?? null,
           serverOverrideAll: serverOverrideAll ?? null,
           scenarioServerOverrides: scenarioServerOverrides ?? null,
-          position: runQueueState.queue.length
+          position: queuedPosition
         }
       });
       emitQueueEvent(jobs, runQueueState, deps);
-      asJson(res, 202, { jobId, queued: true, position: runQueueState.queue.length });
+      asJson(res, 202, { jobId, queued: true, position: queuedPosition });
+      if (shouldAttemptAdvance) {
+        void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+          hostHeader: req.headers.host
+        });
+      }
     } else {
-      // No active job — add to queue and let advanceQueue handle start (with OAuth pre-check)
-      runQueueState.queue.push(jobId);
       asJson(res, 202, { jobId });
       void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
         hostHeader: req.headers.host
@@ -692,6 +737,7 @@ export async function handleRunsRoutes(params: {
         configHash: hashConfig(previewConfigBase),
         cliVersion: pkgVersion,
         runsDir: resolve(previewRunsRoot),
+        cwd: settings.workspaceRoot,
         mcpServerAuthHeaders
       });
       const scenario = results.scenarios[0];
@@ -987,7 +1033,87 @@ function resolveOAuthServersForJob(job: RunJob, librariesDir: string): string[] 
   }
 }
 
-async function advanceQueue(
+export async function advanceQueue(
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState,
+  settings: AppRouteRequestContext['settings'],
+  oauthSessionManager: OAuthSessionManager,
+  deps: RunsRouteDeps,
+  options?: { emitWhenIdle?: boolean; hostHeader?: string; retryBlockedAuth?: boolean }
+): Promise<void> {
+  if (runQueueState.isAdvancingQueue) {
+    runQueueState.needsAdvanceQueue = true;
+    if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
+    return;
+  }
+  runQueueState.isAdvancingQueue = true;
+  runQueueState.needsAdvanceQueue = false;
+  let queueMutated = false;
+  const claimedJobs: RunJob[] = [];
+  try {
+    while (currentWorkerUsage(runQueueState) < runQueueState.queueWorkerCount) {
+      let claimedJob = false;
+      for (let index = 0; index < runQueueState.queue.length; index += 1) {
+        const nextId = runQueueState.queue[index];
+        const nextJob = jobs.get(nextId);
+        if (!nextJob) {
+          runQueueState.queue.splice(index, 1);
+          queueMutated = true;
+          index -= 1;
+          continue;
+        }
+        if (nextJob.status === 'stopped') {
+          runQueueState.queue.splice(index, 1);
+          runQueueState.admittingJobIds.delete(nextId);
+          queueMutated = true;
+          index -= 1;
+          continue;
+        }
+        if (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth') {
+          runQueueState.queue.splice(index, 1);
+          queueMutated = true;
+          index -= 1;
+          continue;
+        }
+        if (nextJob.status === 'blocked_auth' && !options?.retryBlockedAuth) {
+          continue;
+        }
+        if (runQueueState.admittingJobIds.has(nextId)) continue;
+        runQueueState.admittingJobIds.add(nextId);
+        claimedJobs.push(nextJob);
+        queueMutated = true;
+        claimedJob = true;
+        break;
+      }
+
+      if (!claimedJob) break;
+    }
+    if (queueMutated || options?.emitWhenIdle) {
+      emitQueueEvent(jobs, runQueueState, deps);
+    }
+  } finally {
+    runQueueState.isAdvancingQueue = false;
+    const shouldAdvanceAgain = runQueueState.needsAdvanceQueue;
+    runQueueState.needsAdvanceQueue = false;
+    if (shouldAdvanceAgain) {
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, options).catch(
+        (error) => {
+          console.warn(
+            `[mcplab] Failed to continue advancing run queue: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      );
+    }
+  }
+  for (const job of claimedJobs) {
+    void processClaimedJob(job, jobs, runQueueState, settings, oauthSessionManager, deps, options);
+  }
+}
+
+async function processClaimedJob(
+  job: RunJob,
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
   settings: AppRouteRequestContext['settings'],
@@ -995,125 +1121,146 @@ async function advanceQueue(
   deps: RunsRouteDeps,
   options?: { emitWhenIdle?: boolean; hostHeader?: string }
 ): Promise<void> {
-  if (runQueueState.activeJobId) {
-    if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
-    return;
-  }
-  if (runQueueState.isAdvancingQueue) {
-    if (options?.emitWhenIdle) emitQueueEvent(jobs, runQueueState, deps);
-    return;
-  }
-  runQueueState.isAdvancingQueue = true;
-  let queueMutated = false;
   try {
-    while (runQueueState.queue.length > 0) {
-      const nextId = runQueueState.queue[0]; // peek — do not shift yet
-      const nextJob = jobs.get(nextId);
-      if (!nextJob || (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth')) {
-        runQueueState.queue.shift();
-        queueMutated = true;
-        continue;
-      }
-
-      // Pre-check OAuth before starting
-      let oauthServers: string[] = [];
-      try {
-        oauthServers = resolveOAuthServersForJob(nextJob, settings.librariesDir);
-      } catch (error) {
-        runQueueState.queue.shift();
-        nextJob.status = 'error';
-        deps.addJobEvent(nextJob, {
-          type: 'error',
-          ts: new Date().toISOString(),
-          payload: {
-            message: error instanceof Error ? error.message : String(error)
-          }
-        });
-        for (const client of nextJob.clients) client.end();
-        nextJob.clients.clear();
-        queueMutated = true;
-        continue;
-      }
-      if (oauthServers.length > 0) {
-        const ensureResult = await oauthSessionManager.ensureServersAuthorized(
-          oauthServers,
-          options?.hostHeader
-        );
-        const needsAuth = ensureResult.servers.filter((s) => s.status === 'auth_required');
-        if (needsAuth.length > 0) {
-          const needsAuthNames = needsAuth.map((s) => s.serverName);
-          const wasBlocked = nextJob.status === 'blocked_auth';
-          const prevBlockedServers = nextJob.blockedAuthServers ?? [];
-          const prevKey = [...prevBlockedServers].sort().join('|');
-          const nextKey = [...needsAuthNames].sort().join('|');
-          const blockedSetChanged = prevKey !== nextKey;
-
-          nextJob.blockedAuthServers = needsAuthNames; // always refresh to current missing subset
-          if (!wasBlocked) {
-            nextJob.status = 'blocked_auth';
-          }
-          if (!wasBlocked || blockedSetChanged) {
-            deps.addJobEvent(nextJob, {
-              type: 'oauth_required',
-              ts: new Date().toISOString(),
-              payload: {
-                jobId: nextJob.id,
-                servers: needsAuthNames,
-                message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
-              }
-            });
-          }
-          queueMutated = true;
-          emitQueueEvent(jobs, runQueueState, deps);
-          return; // pause — frontend must call /api/runs/queue/resume after auth
-        }
-
-        const readyServers = ensureResult.servers
-          .filter((s) => s.status === 'ready')
-          .map((s) => {
-            const mode = s.debugState ?? 'unknown';
-            return `${s.serverName} (${mode})`;
-          });
-        if (readyServers.length > 0) {
-          deps.addJobEvent(nextJob, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: {
-              message: `OAuth credentials ready for queued run: ${readyServers.join(', ')}`
-            }
-          });
-        }
-      }
-
-      // OAuth ready (or not required) — start the job
-      runQueueState.queue.shift();
-      nextJob.status = 'running';
-      runQueueState.activeJobId = nextId;
-      deps.addJobEvent(nextJob, {
-        type: 'started',
-        ts: new Date().toISOString(),
-        payload: {
-          configPath: nextJob.runParams.configPath,
-          runsPerScenario: nextJob.runParams.runsPerScenario,
-          scenarioId: nextJob.runParams.scenarioId ?? null,
-          scenarioIds: nextJob.runParams.scenarioIds ?? null,
-          agents: nextJob.runParams.requestedAgents ?? null,
-          runNote: nextJob.runParams.runNote ?? null,
-          serverOverrideAll: nextJob.runParams.serverOverrideAll ?? null,
-          scenarioServerOverrides: nextJob.runParams.scenarioServerOverrides ?? null
-        }
+    let oauthServers: string[] = [];
+    try {
+      oauthServers = resolveOAuthServersForJob(job, settings.librariesDir);
+    } catch (error) {
+      finalizeClaimedJobError(job, jobs, runQueueState, deps, error);
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+        emitWhenIdle: true,
+        hostHeader: options?.hostHeader
       });
-      queueMutated = true;
-      emitQueueEvent(jobs, runQueueState, deps);
-      void executeRunJob(nextJob, settings, jobs, runQueueState, oauthSessionManager, deps);
       return;
     }
-    if (queueMutated || options?.emitWhenIdle) {
-      emitQueueEvent(jobs, runQueueState, deps);
+
+    let readyServers: string[] = [];
+    let needsAuthNames: string[] = [];
+    if (oauthServers.length > 0) {
+      const ensureResult = await oauthSessionManager.ensureServersAuthorized(
+        oauthServers,
+        options?.hostHeader
+      );
+      needsAuthNames = ensureResult.servers
+        .filter((server) => server.status === 'auth_required')
+        .map((server) => server.serverName);
+      readyServers = ensureResult.servers
+        .filter((server) => server.status === 'ready')
+        .map((server) => `${server.serverName} (${server.debugState ?? 'unknown'})`);
     }
-  } finally {
-    runQueueState.isAdvancingQueue = false;
+
+    if (job.status === 'stopped') {
+      runQueueState.admittingJobIds.delete(job.id);
+      emitQueueEvent(jobs, runQueueState, deps);
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+        emitWhenIdle: true,
+        hostHeader: options?.hostHeader
+      });
+      return;
+    }
+
+    if (needsAuthNames.length > 0) {
+      const wasBlocked = job.status === 'blocked_auth';
+      const prevBlockedServers = job.blockedAuthServers ?? [];
+      const prevKey = [...prevBlockedServers].sort().join('|');
+      const nextKey = [...needsAuthNames].sort().join('|');
+      const blockedSetChanged = prevKey !== nextKey;
+
+      job.blockedAuthServers = needsAuthNames;
+      job.status = 'blocked_auth';
+      runQueueState.admittingJobIds.delete(job.id);
+      if (!wasBlocked || blockedSetChanged) {
+        deps.addJobEvent(job, {
+          type: 'oauth_required',
+          ts: new Date().toISOString(),
+          payload: {
+            jobId: job.id,
+            servers: needsAuthNames,
+            message: `OAuth login required for server(s): ${needsAuthNames.join(', ')}.`
+          }
+        });
+      }
+      emitQueueEvent(jobs, runQueueState, deps);
+      void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+        emitWhenIdle: true,
+        hostHeader: options?.hostHeader
+      });
+      return;
+    }
+
+    if (readyServers.length > 0) {
+      deps.addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: {
+          message: `OAuth credentials ready for queued run: ${readyServers.join(', ')}`
+        }
+      });
+    }
+
+    runQueueState.admittingJobIds.delete(job.id);
+    const queueIndex = runQueueState.queue.indexOf(job.id);
+    if (queueIndex !== -1) {
+      runQueueState.queue.splice(queueIndex, 1);
+    }
+    job.status = 'running';
+    runQueueState.activeJobIds.add(job.id);
+    deps.addJobEvent(job, {
+      type: 'started',
+      ts: new Date().toISOString(),
+      payload: {
+        configPath: job.runParams.configPath,
+        runsPerScenario: job.runParams.runsPerScenario,
+        scenarioId: job.runParams.scenarioId ?? null,
+        scenarioIds: job.runParams.scenarioIds ?? null,
+        agents: job.runParams.requestedAgents ?? null,
+        runNote: job.runParams.runNote ?? null,
+        serverOverrideAll: job.runParams.serverOverrideAll ?? null,
+        scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null
+      }
+    });
+    emitQueueEvent(jobs, runQueueState, deps);
+    void executeRunJob(
+      job,
+      settings,
+      jobs,
+      runQueueState,
+      oauthSessionManager,
+      deps,
+      options?.hostHeader
+    );
+    return;
+  } catch (error) {
+    finalizeClaimedJobError(job, jobs, runQueueState, deps, error);
+    void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
+      emitWhenIdle: true,
+      hostHeader: options?.hostHeader
+    });
   }
+}
+
+function finalizeClaimedJobError(
+  job: RunJob,
+  jobs: Map<string, RunJob>,
+  runQueueState: RunQueueState,
+  deps: Pick<RunsRouteDeps, 'addJobEvent' | 'sendSseEvent'>,
+  error: unknown
+): void {
+  runQueueState.admittingJobIds.delete(job.id);
+  const queueIndex = runQueueState.queue.indexOf(job.id);
+  if (queueIndex !== -1) {
+    runQueueState.queue.splice(queueIndex, 1);
+  }
+  job.status = 'error';
+  deps.addJobEvent(job, {
+    type: 'error',
+    ts: new Date().toISOString(),
+    payload: {
+      message: error instanceof Error ? error.message : String(error)
+    }
+  });
+  closeJobClients(job);
+  pruneOldJobs(jobs, runQueueState);
 }
 
 async function executeRunJob(
@@ -1122,7 +1269,8 @@ async function executeRunJob(
   jobs: Map<string, RunJob>,
   runQueueState: RunQueueState,
   oauthSessionManager: OAuthSessionManager,
-  deps: RunsRouteDeps
+  deps: RunsRouteDeps,
+  hostHeader?: string
 ) {
   const {
     addJobEvent,
@@ -1259,126 +1407,133 @@ async function executeRunJob(
         }
       });
     }
-    const cwdBefore = process.cwd();
-    process.chdir(settings.workspaceRoot);
-    try {
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
+      }
+    });
+    if (runNote) {
       addJobEvent(job, {
         type: 'log',
         ts: new Date().toISOString(),
-        payload: {
-          message: `Running evaluation (${runsPerScenario} run(s) per scenario) ...`
-        }
+        payload: { message: `Run note: ${runNote}` }
       });
-      if (runNote) {
+    }
+    const { runDir, results } = await runAll(expandedConfig, {
+      runsPerScenario,
+      scenarioId,
+      runNote,
+      configHash: effectiveConfigHash,
+      cliVersion: pkgVersion,
+      runsDir: settings.runsDir,
+      cwd: settings.workspaceRoot,
+      mcpServerAuthHeaders,
+      resolveMcpServerAuthHeaders:
+        oauthServers.length > 0
+          ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {
+              if (options?.signal?.aborted) return {};
+              const namesToRefresh = serverNames.filter((name) => oauthServerSet.has(name));
+              if (namesToRefresh.length === 0) return {};
+              return oauthSessionManager.getAuthHeadersForServers(namesToRefresh);
+            }
+          : undefined,
+      signal: job.abortController.signal,
+      onProgress: async (event: RunProgressEvent) => {
+        const message = formatRunProgressMessage(event);
+        if (!message) return;
         addJobEvent(job, {
           type: 'log',
           ts: new Date().toISOString(),
-          payload: { message: `Run note: ${runNote}` }
+          payload: { message }
         });
       }
-      const { runDir, results } = await runAll(expandedConfig, {
-        runsPerScenario,
-        scenarioId,
-        runNote,
-        configHash: effectiveConfigHash,
-        cliVersion: pkgVersion,
-        runsDir: settings.runsDir,
-        mcpServerAuthHeaders,
-        resolveMcpServerAuthHeaders:
-          oauthServers.length > 0
-            ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {
-                if (options?.signal?.aborted) return {};
-                const namesToRefresh = serverNames.filter((name) => oauthServerSet.has(name));
-                if (namesToRefresh.length === 0) return {};
-                return oauthSessionManager.getAuthHeadersForServers(namesToRefresh);
-              }
-            : undefined,
-        signal: job.abortController.signal,
-        onProgress: async (event: RunProgressEvent) => {
-          const message = formatRunProgressMessage(event);
-          if (!message) return;
-          addJobEvent(job, {
-            type: 'log',
-            ts: new Date().toISOString(),
-            payload: { message }
-          });
-        }
-      });
-      const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
-      const relativeConfigPath = relativeConfigPathRaw.replace(/\\/g, '/').replace(/^\.\/+/, '');
-      results.metadata.config_path = relativeConfigPath || configPath;
-      if (loaded.config.name && loaded.config.name.trim().length > 0) {
-        results.metadata.config_name = loaded.config.name.trim();
-      }
-      results.metadata.rerun_agents = [...resolvedAgentList];
-      results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
-        (scenario) => scenario.id
-      );
-      if (serverOverrideAll && serverOverrideAll.length > 0) {
-        results.metadata.rerun_server_override_all = [...serverOverrideAll];
-      } else {
-        delete results.metadata.rerun_server_override_all;
-      }
-      if (filteredScenarioOverrides && Object.keys(filteredScenarioOverrides).length > 0) {
-        results.metadata.rerun_scenario_server_overrides = Object.fromEntries(
-          Object.entries(filteredScenarioOverrides).map(([scenarioKey, serverIds]) => [
-            scenarioKey,
-            [...serverIds]
-          ])
-        );
-      } else {
-        delete results.metadata.rerun_scenario_server_overrides;
-      }
-      addJobEvent(job, {
-        type: 'log',
-        ts: new Date().toISOString(),
-        payload: {
-          message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
-        }
-      });
-      addJobEvent(job, {
-        type: 'log',
-        ts: new Date().toISOString(),
-        payload: { message: `Writing results to ${runDir}` }
-      });
-      const traceRecords = getScenarioRunTraceRecords(
-        results.metadata.run_id,
-        settings.runsDir
-      ) as ScenarioRunTraceRecord[];
-      results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
-      writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-      writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-      writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
-      addJobEvent(job, {
-        type: 'log',
-        ts: new Date().toISOString(),
-        payload: {
-          message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
-            results.summary.pass_rate * 100
-          )}%`
-        }
-      });
-      addJobEvent(job, {
-        type: 'completed',
-        ts: new Date().toISOString(),
-        payload: {
-          runId: results.metadata.run_id,
-          runDir,
-          summary: results.summary
-        }
-      });
-      job.status = 'completed';
-    } finally {
-      process.chdir(cwdBefore);
+    });
+    const relativeConfigPathRaw = relative(settings.evalsDir, configPath);
+    const relativeConfigPath = relativeConfigPathRaw.replace(/\\/g, '/').replace(/^\.\/+/, '');
+    results.metadata.config_path = relativeConfigPath || configPath;
+    if (loaded.config.name && loaded.config.name.trim().length > 0) {
+      results.metadata.config_name = loaded.config.name.trim();
     }
+    results.metadata.rerun_agents = [...resolvedAgentList];
+    results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
+      (scenario) => scenario.id
+    );
+    if (serverOverrideAll && serverOverrideAll.length > 0) {
+      results.metadata.rerun_server_override_all = [...serverOverrideAll];
+    } else {
+      delete results.metadata.rerun_server_override_all;
+    }
+    if (filteredScenarioOverrides && Object.keys(filteredScenarioOverrides).length > 0) {
+      results.metadata.rerun_scenario_server_overrides = Object.fromEntries(
+        Object.entries(filteredScenarioOverrides).map(([scenarioKey, serverIds]) => [
+          scenarioKey,
+          [...serverIds]
+        ])
+      );
+    } else {
+      delete results.metadata.rerun_scenario_server_overrides;
+    }
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Evaluation execution finished (run id: ${results.metadata.run_id})`
+      }
+    });
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: { message: `Writing results to ${runDir}` }
+    });
+    const traceRecords = getScenarioRunTraceRecords(
+      results.metadata.run_id,
+      settings.runsDir
+    ) as ScenarioRunTraceRecord[];
+    results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
+    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
+    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
+    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    addJobEvent(job, {
+      type: 'log',
+      ts: new Date().toISOString(),
+      payload: {
+        message: `Run finished: ${results.summary.total_runs} run(s), pass rate ${Math.round(
+          results.summary.pass_rate * 100
+        )}%`
+      }
+    });
+    addJobEvent(job, {
+      type: 'completed',
+      ts: new Date().toISOString(),
+      payload: {
+        runId: results.metadata.run_id,
+        runDir,
+        summary: results.summary
+      }
+    });
+    job.status = 'completed';
   } catch (error: unknown) {
     if (error instanceof OAuthAuthorizationRequiredError) {
       const blockedServers = Array.from(
-        new Set(error.details.map((detail) => detail.serverName).filter(Boolean))
+        new Set(
+          error.details
+            .map((detail) => detail.serverName)
+            .filter((serverName): serverName is string => typeof serverName === 'string')
+        )
       );
+      let fallbackBlockedServers = blockedServers;
+      if (fallbackBlockedServers.length === 0) {
+        try {
+          fallbackBlockedServers = resolveOAuthServersForJob(job, settings.librariesDir);
+        } catch {
+          fallbackBlockedServers = [];
+        }
+      }
       const aborted = job.abortController.signal.aborted || job.status === 'stopped';
-      if (!aborted && blockedServers.length > 0) {
-        job.blockedAuthServers = blockedServers;
+      if (!aborted && fallbackBlockedServers.length > 0) {
+        job.blockedAuthServers = fallbackBlockedServers;
         job.status = 'blocked_auth';
         if (!runQueueState.queue.includes(job.id)) {
           runQueueState.queue.unshift(job.id);
@@ -1388,8 +1543,8 @@ async function executeRunJob(
           ts: new Date().toISOString(),
           payload: {
             jobId: job.id,
-            servers: blockedServers,
-            message: `OAuth login required for server(s): ${blockedServers.join(', ')}.`
+            servers: fallbackBlockedServers,
+            message: `OAuth login required for server(s): ${fallbackBlockedServers.join(', ')}.`
           }
         });
         return;
@@ -1413,13 +1568,14 @@ async function executeRunJob(
     });
     job.status = aborted ? 'stopped' : 'error';
   } finally {
-    runQueueState.activeJobId = null;
+    runQueueState.activeJobIds.delete(job.id);
+    runQueueState.admittingJobIds.delete(job.id);
     if (job.status !== 'blocked_auth') {
-      for (const client of job.clients) client.end();
-      job.clients.clear();
+      closeJobClients(job);
     }
     void advanceQueue(jobs, runQueueState, settings, oauthSessionManager, deps, {
-      emitWhenIdle: true
+      emitWhenIdle: true,
+      hostHeader
     }).catch((error) => {
       console.warn(
         `[mcplab] Failed to advance run queue after job '${job.id}': ${
@@ -1505,7 +1661,11 @@ function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number |
 function pruneOldJobs(jobs: Map<string, RunJob>, runQueueState: RunQueueState) {
   const maxAgeMs = 30 * 60_000;
   const now = Date.now();
-  const activeIds = new Set([runQueueState.activeJobId, ...runQueueState.queue].filter(Boolean));
+  const activeIds = new Set([
+    ...runQueueState.activeJobIds,
+    ...runQueueState.admittingJobIds,
+    ...runQueueState.queue
+  ]);
   for (const [id, job] of jobs) {
     if (activeIds.has(id)) continue;
     if (job.status !== 'completed' && job.status !== 'error' && job.status !== 'stopped') continue;
