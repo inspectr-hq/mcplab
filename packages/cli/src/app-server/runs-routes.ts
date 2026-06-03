@@ -237,7 +237,7 @@ export async function handleRunsRoutes(params: {
   }
 
   if (pathname === '/api/runs/queue' && method === 'GET') {
-    asJson(res, 200, runQueueService.getQueueSnapshot());
+    asJson(res, 200, runQueueService.getQueueState());
     return true;
   }
 

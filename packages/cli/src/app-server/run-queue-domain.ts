@@ -42,7 +42,7 @@ export interface RunQueueService {
     options?: { hostHeader?: string }
   ): { ok: true; jobId: string; status: 'stopped' } | { error: string; statusCode: number } | null;
   resumeBlockedJobs(options?: { hostHeader?: string }): void;
-  getQueueSnapshot(): ReturnType<typeof buildQueueState>;
+  getQueueState(): ReturnType<typeof buildQueueState>;
   subscribeQueue(req: IncomingMessage, res: ServerResponse): void;
   advance(options?: QueueAdvanceOptions): Promise<void>;
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
@@ -395,7 +395,7 @@ export function createRunQueueService(params: {
     resumeBlockedJobs(options) {
       void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader, retryBlockedAuth: true });
     },
-    getQueueSnapshot() {
+    getQueueState() {
       return buildQueueState(jobs, state);
     },
     subscribeQueue(req, res) {
