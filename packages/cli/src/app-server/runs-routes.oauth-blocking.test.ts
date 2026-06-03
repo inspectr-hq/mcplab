@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OAuthAuthorizationRequiredError } from './oauth-session-manager.js';
+import { currentWorkerUsage } from './run-queue-state.js';
 import {
   cleanupFixtureRoot,
   createOauthEvalFixture,
@@ -379,5 +380,112 @@ describe('queue OAuth blocking', () => {
     } finally {
       cleanupFixtureRoot(fixture.root);
     }
+  });
+
+  it('adds job to blockedJobIds (not admittingJobIds) when admission is blocked by OAuth', async () => {
+    const fixture = createOauthEvalFixture();
+    const job = createQueuedJob(fixture.configPath);
+    const runQueueState = createRunQueueState({ queue: [job.id] });
+
+    try {
+      await createRunQueueServiceForTest({
+        jobs: new Map([[job.id, job]]),
+        runQueueState,
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
+        },
+        oauthSessionManager: {
+          ensureServersAuthorized: vi.fn().mockResolvedValue({
+            servers: [{ serverName: 'oauth-server', status: 'auth_required' }],
+            allReady: false
+          })
+        },
+        deps: makeDeps() as any
+      }).advance({ hostHeader: 'localhost' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(runQueueState.blockedJobIds.has(job.id)).toBe(true);
+      expect(runQueueState.admittingJobIds.has(job.id)).toBe(false);
+      expect(runQueueState.activeJobIds.has(job.id)).toBe(false);
+      expect(currentWorkerUsage(runQueueState)).toBe(1);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
+  it('adds job to blockedJobIds when execution is blocked at runtime and still occupies the worker slot', async () => {
+    const fixture = createOauthEvalFixture();
+    const job = createQueuedJob(fixture.configPath, 'job-1');
+    const secondJob = createQueuedJob(fixture.configPath, 'job-2');
+    const runQueueState = createRunQueueState({
+      queue: [job.id, secondJob.id],
+      queueWorkerCount: 1
+    });
+    const events: Array<{ jobId: string; type: string }> = [];
+
+    try {
+      await createRunQueueServiceForTest({
+        jobs: new Map([[job.id, job], [secondJob.id, secondJob]]),
+        runQueueState,
+        settings: {
+          evalsDir: fixture.evalsDir,
+          runsDir: fixture.runsDir,
+          librariesDir: fixture.librariesDir,
+          workspaceRoot: fixture.root,
+          toolAnalysisResultsDir: fixture.root
+        },
+        oauthSessionManager: {
+          ensureServersAuthorized: vi.fn().mockResolvedValue({
+            servers: [{ serverName: 'oauth-server', status: 'ready', debugState: 'reused' }],
+            allReady: true
+          }),
+          getAuthHeadersForServers: vi.fn().mockRejectedValue(
+            new OAuthAuthorizationRequiredError([
+              { serverName: 'oauth-server', message: 'token expired' }
+            ])
+          )
+        },
+        deps: makeDeps(events) as any
+      }).advance({ hostHeader: 'localhost' });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(job.status).toBe('blocked_auth');
+      expect(runQueueState.blockedJobIds.has(job.id)).toBe(true);
+      expect(runQueueState.activeJobIds.has(job.id)).toBe(false);
+      expect(currentWorkerUsage(runQueueState)).toBe(1);
+      expect(secondJob.status).toBe('queued');
+      expect(events.some((e) => e.jobId === secondJob.id && e.type === 'started')).toBe(false);
+    } finally {
+      cleanupFixtureRoot(fixture.root);
+    }
+  });
+
+  it('clears blockedJobIds and frees the worker slot when a blocked_auth job is stopped', async () => {
+    const job = createQueuedJob('/tmp/config.yaml');
+    job.status = 'blocked_auth';
+    job.blockedAuthServers = ['oauth-server'];
+    const runQueueState = createRunQueueState({
+      queue: [job.id],
+      blockedJobIds: new Set([job.id]),
+      queueWorkerCount: 1
+    });
+    const service = createRunQueueServiceForTest({
+      jobs: new Map([[job.id, job]]),
+      runQueueState
+    });
+
+    expect(currentWorkerUsage(runQueueState)).toBe(1);
+
+    const result = service.stopJob(job.id);
+
+    expect(result).toMatchObject({ ok: true, status: 'stopped' });
+    expect(runQueueState.blockedJobIds.has(job.id)).toBe(false);
+    expect(runQueueState.queue).not.toContain(job.id);
+    expect(currentWorkerUsage(runQueueState)).toBe(0);
   });
 });
