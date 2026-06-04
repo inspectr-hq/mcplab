@@ -862,6 +862,7 @@ async function executeSingleConfigRun(params: {
     gitCommit: getGitCommit(),
     cliVersion: pkgVersion,
     runsDir: String(options.runsDir),
+    cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);

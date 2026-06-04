@@ -1,8 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
 import type { EvalConfig, AgentConfig } from '@/types/eval';
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
+const activeJobStorageKey = 'mcplab.runEvaluation.activeJobId';
 
 const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAgentsRef } =
   vi.hoisted(() => {
@@ -59,8 +63,32 @@ vi.mock('@/contexts/LibraryContext', () => ({
 }));
 
 beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  scrollIntoViewSpy = vi.fn();
+  Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoViewSpy
+  });
   configsRef.value = [];
   libraryAgentsRef.value = [];
+  sessionStorage.removeItem(activeJobStorageKey);
+  sourceMock.getRunQueue.mockResolvedValue({
+    active: null,
+    active_jobs: [],
+    admitting_jobs: [],
+    queued: []
+  });
+});
+
+afterEach(() => {
+  const actWarnings =
+    consoleErrorSpy?.mock.calls.filter(([message]) =>
+      String(message).includes('not wrapped in act')
+    ) ?? [];
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
+  scrollIntoViewSpy = null;
+  expect(actWarnings).toHaveLength(0);
 });
 
 describe('RunEvaluation', () => {
@@ -167,9 +195,102 @@ describe('RunEvaluation', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole('combobox'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('combobox'));
+    });
 
-    expect(screen.getByText('(suite-a)')).toBeInTheDocument();
-    expect(screen.getByText('(suite-b)')).toBeInTheDocument();
+    expect(await screen.findByText('(suite-a)')).toBeInTheDocument();
+    expect(await screen.findByText('(suite-b)')).toBeInTheDocument();
+  });
+
+  it('renders admitting jobs separately from queued jobs', async () => {
+    sourceMock.getRunQueue.mockResolvedValueOnce({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [
+        {
+          jobId: 'job-admitting',
+          status: 'queued',
+          runParams: {
+            configPath: '/tmp/eval.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ],
+      queued: [
+        {
+          jobId: 'job-queued',
+          status: 'queued',
+          runParams: {
+            configPath: '/tmp/eval-2.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Starting')).toBeInTheDocument();
+      expect(screen.getByText('#1 Queued')).toBeInTheDocument();
+    });
+  });
+
+  it('does not show the global OAuth banner for a different blocked queued job during reattach', async () => {
+    sessionStorage.setItem(activeJobStorageKey, 'job-running');
+    sourceMock.getRunQueue.mockResolvedValueOnce({
+      active: null,
+      active_jobs: [],
+      admitting_jobs: [],
+      queued: [
+        {
+          jobId: 'job-blocked',
+          status: 'blocked_auth',
+          blockedReason: 'oauth_required',
+          requiredServers: ['srv-1776925640074'],
+          runParams: {
+            configPath: '/tmp/eval.yaml',
+            runsPerScenario: 1,
+            scenarioIds: null,
+            agents: null,
+            runNote: null,
+            serverOverrideAll: null,
+            scenarioServerOverrides: null
+          }
+        }
+      ]
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Reattached to in-progress evaluation run/)).toBeInTheDocument();
+      expect(screen.getByText('Connect & Resume')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/OAuth required for:/)).not.toBeInTheDocument();
   });
 });

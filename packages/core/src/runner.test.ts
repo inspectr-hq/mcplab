@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFallbackScenarioRequestId,
   buildMcpServerAuthHeaders,
-  buildScenarioRequestId
+  buildScenarioRequestId,
+  createRunId
 } from './runner.js';
 
 describe('buildScenarioRequestId', () => {
@@ -121,5 +122,18 @@ describe('buildFallbackScenarioRequestId', () => {
     expect(requestId.length).toBeLessThanOrEqual(180);
     expect(requestId.startsWith('mcplab-run:run-123:unknown:')).toBe(true);
     expect(requestId.endsWith(':run1')).toBe(true);
+  });
+});
+
+describe('createRunId', () => {
+  it('keeps the timestamp-readable prefix while including milliseconds', () => {
+    const runId = createRunId(new Date(2026, 5, 3, 12, 34, 56, 789));
+    expect(runId).toBe('20260603-123456-789');
+  });
+
+  it('keeps ids distinct across rapid successive calls', () => {
+    const first = createRunId(new Date(2026, 5, 3, 12, 34, 56, 789));
+    const second = createRunId(new Date(2026, 5, 3, 12, 34, 56, 790));
+    expect(first).not.toBe(second);
   });
 });

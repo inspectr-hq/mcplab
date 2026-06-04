@@ -3,6 +3,7 @@ import type { AppSettings } from './types.js';
 import type { parseBody, asHtml, asJson, asText } from './http.js';
 import type { addJobEvent, sendSseEvent } from './jobs.js';
 import type { readLibraries } from './libraries-store.js';
+import type { RunQueueState } from './run-queue-state.js';
 import type {
   discoverMcpToolsForServers,
   runToolAnalysisJob,
@@ -58,13 +59,6 @@ export interface AppRouteRequestContext {
 export interface ActiveJobState {
   get(): string | null;
   set(value: string | null): void;
-}
-
-export interface RunQueueState {
-  activeJobId: string | null;
-  queue: string[]; // ordered jobIds waiting to run
-  isAdvancingQueue: boolean; // re-entrancy lock for async advanceQueue()
-  clients: Set<ServerResponse>; // subscribers of /api/runs/queue/events
 }
 
 export interface HttpDeps {

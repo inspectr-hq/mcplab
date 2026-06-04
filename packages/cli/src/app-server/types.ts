@@ -19,6 +19,7 @@ export interface AppSettings {
   runsDir: string;
   toolAnalysisResultsDir: string;
   librariesDir: string;
+  defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
 }
 

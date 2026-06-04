@@ -11,7 +11,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -33,11 +33,15 @@ import {
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
 import type { AppServerOptions, AppSettings, DevMcpServerRuntime } from './types.js';
-import type { AppRouteDeps, RunQueueState } from './app-context.js';
+import type { AppRouteDeps } from './app-context.js';
 import { asHtml, asJson, asText, parseBody } from './http.js';
 import { addJobEvent, sendSseEvent } from './jobs.js';
 import { maybeStartDevMcpServer } from './dev-mcp.js';
-import { applySettingsOverrides, persistSettingsOverrides } from './settings-store.js';
+import {
+  applySettingsOverrides,
+  normalizeQueueWorkerCount,
+  persistSettingsOverrides
+} from './settings-store.js';
 import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
 import { readLibraries, writeLibraries } from './libraries-store.js';
@@ -56,6 +60,8 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
+import { createRunQueueService } from './run-queue-domain.js';
+import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
 import {
   cleanupAssistantSessions,
@@ -112,27 +118,6 @@ const mcpServerPkgVersion = (() => {
   }
 })();
 
-interface JobEvent {
-  type: 'queued' | 'started' | 'log' | 'completed' | 'error';
-  ts: string;
-  payload: Record<string, unknown>;
-}
-
-interface RunJob {
-  id: string;
-  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
-  events: JobEvent[];
-  clients: Set<ServerResponse>;
-  abortController: AbortController;
-  runParams: {
-    configPath: string;
-    runsPerScenario: number;
-    scenarioId?: string;
-    scenarioIds?: string[];
-    requestedAgents?: string[];
-  };
-}
-
 function resolveRunSelectedAgents(
   config: EvalConfig,
   requestedAgents?: string[]
@@ -176,7 +161,8 @@ export async function startAppServer(options: AppServerOptions) {
     evalsDir: resolve(options.evalsDir),
     runsDir: resolve(options.runsDir),
     toolAnalysisResultsDir: resolve(options.toolAnalysisResultsDir),
-    librariesDir: resolve(options.librariesDir)
+    librariesDir: resolve(options.librariesDir),
+    defaultQueueWorkers: 1
   };
   mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
@@ -199,12 +185,7 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
-  const runQueueState: RunQueueState = {
-    activeJobId: null,
-    queue: [],
-    isAdvancingQueue: false,
-    clients: new Set()
-  };
+  const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
   const routeDeps: AppRouteDeps = {
     parseBody,
     asHtml,
@@ -253,6 +234,13 @@ export async function startAppServer(options: AppServerOptions) {
     chatWithAgent,
     pkgVersion
   };
+  const runQueueService = createRunQueueService({
+    settings,
+    oauthSessionManager,
+    deps: routeDeps,
+    jobs: jobs as any,
+    state: runQueueState
+  });
 
   const server = createServer(async (req, res) => {
     try {
@@ -342,11 +330,25 @@ export async function startAppServer(options: AppServerOptions) {
           mkdirSync(settings.librariesDir, { recursive: true });
           mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
           applySettingsOverrides(settings);
+          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
+            hostHeader: req.headers.host
+          });
           oauthSessionManager.setLibrariesDir(settings.librariesDir);
         }
+        let settingsChanged = false;
         if (Object.prototype.hasOwnProperty.call(body, 'scenarioAssistantAgentName')) {
           const next = String(body.scenarioAssistantAgentName ?? '').trim();
           settings.scenarioAssistantAgentName = next || undefined;
+          settingsChanged = true;
+        }
+        if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
+          settings.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
+          runQueueService.setWorkerCount(settings.defaultQueueWorkers, {
+            hostHeader: req.headers.host
+          });
+          settingsChanged = true;
+        }
+        if (settingsChanged) {
           persistSettingsOverrides(settings);
         }
         asJson(res, 200, settings);
@@ -476,8 +478,7 @@ export async function startAppServer(options: AppServerOptions) {
           pathname,
           method,
           settings,
-          jobs,
-          runQueueState,
+          runQueueService,
           oauthSessionManager,
           deps: routeDeps
         })
@@ -514,10 +515,7 @@ export async function startAppServer(options: AppServerOptions) {
   });
 
   server.on('close', () => {
-    for (const client of runQueueState.clients) {
-      client.end();
-    }
-    runQueueState.clients.clear();
+    runQueueService.closeSubscribers();
     devMcp?.stop();
   });
 
