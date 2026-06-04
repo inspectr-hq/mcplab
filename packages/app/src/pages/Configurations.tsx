@@ -51,6 +51,8 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { resolveConfigRunAgents } from '@/lib/config-run-agents';
+import type { EvalConfig } from '@/types/eval';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
@@ -330,11 +332,14 @@ const Configurations = () => {
 
   const runConfig = async (configId: string, sourcePath: string, configName: string) => {
     if (queuingConfigIds.has(configId)) return;
+    const config = configs.find((cfg) => cfg.id === configId);
+    const agents = config ? resolveConfigRunAgents(config) : [];
     setQueuingConfigIds((prev) => new Set(prev).add(configId));
     try {
       await source.startRun({
         configPath: sourcePath,
-        runsPerScenario: 1
+        runsPerScenario: 1,
+        ...(agents.length > 0 ? { agents } : {})
       });
       setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
       window.setTimeout(() => {
@@ -388,12 +393,14 @@ const Configurations = () => {
       }
 
       const outcomes = await Promise.allSettled(
-        runnable.map((cfg) =>
-          source.startRun({
+        runnable.map((cfg) => {
+          const agents = resolveConfigRunAgents(cfg);
+          return source.startRun({
             configPath: String(cfg.sourcePath),
-            runsPerScenario: 1
-          })
-        )
+            runsPerScenario: 1,
+            ...(agents.length > 0 ? { agents } : {})
+          });
+        })
       );
       const successCount = outcomes.filter((item) => item.status === 'fulfilled').length;
       const failureCount = outcomes.length - successCount;

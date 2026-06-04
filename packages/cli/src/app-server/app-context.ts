@@ -143,10 +143,7 @@ export interface RunDeps {
   getScenarioRunTraceRecords: typeof getScenarioRunTraceRecords;
   selectScenarioIds: typeof selectScenarioIds;
   expandConfigForAgents: (config: EvalConfig, requestedAgents?: string[]) => ExecutableEvalConfig;
-  resolveRunSelectedAgents: (
-    config: EvalConfig,
-    requestedAgents?: string[]
-  ) => string[] | undefined;
+  resolveRunSelectedAgents: (config: EvalConfig, requestedAgents?: string[]) => string[];
   readLibraries: typeof readLibraries;
   pickDefaultAssistantAgentName: typeof pickDefaultAssistantAgentName;
   resolveAssistantAgentFromLibraries: typeof resolveAssistantAgentFromLibraries;

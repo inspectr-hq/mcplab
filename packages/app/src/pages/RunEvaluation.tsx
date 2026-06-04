@@ -28,6 +28,7 @@ import {
   formatQueueConfigPath,
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
+import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
@@ -180,13 +181,9 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredDefaultAgentIds = availableAgents
-      .filter((agent) => (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.id))
-      .map((agent) => agent.id);
+    const configuredAgentIds = resolveConfigRunAgents(selectedConfig);
     setSelectedAgentIds(
-      configuredDefaultAgentIds.length > 0
-        ? configuredDefaultAgentIds
-        : availableAgents.map((agent) => agent.id)
+      configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
     );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
@@ -560,7 +557,8 @@ const RunEvaluation = () => {
             if (lower.startsWith('selected ')) return Math.max(prev, 30);
             if (
               lower.startsWith('using requested agents') ||
-              lower.startsWith('using resolved default agents')
+              lower.startsWith('using run default agents') ||
+              lower.startsWith('using config-declared agents')
             )
               return Math.max(prev, 35);
             if (lower.startsWith('expanded to ')) return Math.max(prev, 45);

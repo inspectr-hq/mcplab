@@ -247,15 +247,17 @@ export async function executeRunJob(params: {
       }
     });
     const resolvedAgents = resolveRunSelectedAgents(runtimeOverriddenConfig, requestedAgents);
-    const resolvedAgentList = Array.isArray(resolvedAgents) ? resolvedAgents : [];
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
       payload: {
         message:
           requestedAgents && requestedAgents.length > 0
-            ? `Using requested agents: ${resolvedAgentList.join(', ')}`
-            : `Using resolved default agents: ${resolvedAgentList.join(', ')}`
+            ? `Using requested agents: ${resolvedAgents.join(', ')}`
+            : runtimeOverriddenConfig.run_defaults?.selected_agents &&
+              runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
+            ? `Using run default agents: ${resolvedAgents.join(', ')}`
+            : `Using config-declared agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
@@ -335,7 +337,8 @@ export async function executeRunJob(params: {
     if (loaded.config.name && loaded.config.name.trim().length > 0) {
       results.metadata.config_name = loaded.config.name.trim();
     }
-    results.metadata.rerun_agents = [...resolvedAgentList];
+    // Persist the fully resolved agent set so reruns replay the original execution scope exactly.
+    results.metadata.rerun_agents = [...resolvedAgents];
     results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
       (scenario) => scenario.id
     );

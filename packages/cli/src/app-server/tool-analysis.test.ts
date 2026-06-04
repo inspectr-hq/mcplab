@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleToolAnalysisRoutes } from './tool-analysis.js';
+import { writeToolAnalysisReportRecord } from './tool-analysis-storage.js';
+
+const tempRoots: string[] = [];
 
 function createBaseDeps() {
   return {
@@ -14,6 +20,15 @@ function createBaseDeps() {
 }
 
 describe('handleToolAnalysisRoutes', () => {
+  afterEach(async () => {
+    while (tempRoots.length > 0) {
+      const root = tempRoots.pop();
+      if (!root) continue;
+      const { rmSync } = await import('node:fs');
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('returns outputSchema in discover-tools response payload', async () => {
     const deps = createBaseDeps();
     deps.parseBody.mockResolvedValue({ serverNames: ['demo-server'] });
@@ -92,6 +107,59 @@ describe('handleToolAnalysisRoutes', () => {
             ]
           })
         ]
+      })
+    );
+  });
+
+  it('includes legacy tool analysis reports when results dir is the default new path', async () => {
+    const deps = createBaseDeps();
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-tool-analysis-'));
+    tempRoots.push(root);
+    const newDir = join(root, 'mcplab/results/tool-analysis');
+    const legacyDir = join(root, 'mcplab/tool-analysis-results');
+    mkdirSync(newDir, { recursive: true });
+    mkdirSync(legacyDir, { recursive: true });
+
+    writeToolAnalysisReportRecord(legacyDir, {
+      recordVersion: 1,
+      reportId: 'ta-legacy',
+      createdAt: '2026-06-05T00:00:00.000Z',
+      sourceJobId: 'job-1',
+      serverNames: ['legacy-server'],
+      report: {
+        assistantAgentName: 'Agent',
+        assistantAgentModel: 'model',
+        serverName: 'legacy-server',
+        serverVersion: '1.0.0',
+        tools: [],
+        modes: [],
+        summary: { totalTools: 0, safeTools: 0, warningTools: 0, blockedTools: 0 }
+      } as any
+    });
+
+    await handleToolAnalysisRoutes({
+      req: {
+        url: '/api/tool-analysis-results',
+        headers: { host: 'localhost' }
+      } as any,
+      res: {} as any,
+      pathname: '/api/tool-analysis-results',
+      method: 'GET',
+      settings: {
+        workspaceRoot: root,
+        toolAnalysisResultsDir: newDir,
+        librariesDir: join(root, 'libraries')
+      } as any,
+      toolAnalysisJobs: new Map(),
+      oauthSessionManager: {} as any,
+      deps: deps as any
+    });
+
+    expect(deps.asJson).toHaveBeenCalledWith(
+      {},
+      200,
+      expect.objectContaining({
+        data: [expect.objectContaining({ reportId: 'ta-legacy', serverNames: ['legacy-server'] })]
       })
     );
   });
