@@ -71,6 +71,12 @@ beforeEach(() => {
   });
   configsRef.value = [];
   libraryAgentsRef.value = [];
+  sourceMock.startRun.mockReset();
+  sourceMock.startRun.mockResolvedValue({ jobId: 'job-1' });
+  sourceMock.subscribeRunJob.mockReset();
+  sourceMock.subscribeRunJob.mockImplementation(() => () => {});
+  sourceMock.stopRun.mockReset();
+  sourceMock.removeQueuedRun.mockReset();
   sessionStorage.removeItem(activeJobStorageKey);
   sourceMock.getRunQueue.mockResolvedValue({
     active: null,
@@ -250,6 +256,141 @@ describe('RunEvaluation', () => {
         agents: ['agent-a', 'agent-b']
       })
     );
+  });
+
+  it('trims referenced agent ids when initializing selected agents', async () => {
+    const configAgent: AgentConfig = {
+      id: 'agent-a',
+      name: 'Agent A',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const testConfig: EvalConfig = {
+      id: 'test-config',
+      name: 'Test Config',
+      agents: [configAgent],
+      agentEntries: [{ kind: 'referenced', ref: ' agent-a ' }],
+      scenarios: [
+        {
+          id: 'scenario-1',
+          name: 'Scenario 1',
+          prompt: 'Do thing',
+          serverIds: [],
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      scenarioEntries: [
+        {
+          kind: 'inline',
+          scenario: {
+            id: 'scenario-1',
+            name: 'Scenario 1',
+            prompt: 'Do thing',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          }
+        }
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      sourcePath: '/path/to/test.yaml'
+    };
+
+    configsRef.value = [testConfig];
+    libraryAgentsRef.value = [configAgent];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent A')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => {
+      expect(sourceMock.startRun).toHaveBeenCalledTimes(1);
+    });
+    expect(sourceMock.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agents: ['agent-a']
+      })
+    );
+  });
+
+  it('advances progress for config-declared agent runs', async () => {
+    const testConfig: EvalConfig = {
+      id: 'test-config',
+      name: 'Test Config',
+      agents: [
+        {
+          id: 'agent-a',
+          name: 'Agent A',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          temperature: 0,
+          maxTokens: 4096
+        }
+      ],
+      scenarios: [
+        {
+          id: 'scenario-1',
+          name: 'Scenario 1',
+          prompt: 'Do thing',
+          serverIds: [],
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      sourcePath: '/path/to/test.yaml'
+    };
+    let onEvent: ((event: any) => void) | null = null;
+    sourceMock.startRun.mockResolvedValueOnce({ jobId: 'job-1' });
+    sourceMock.subscribeRunJob.mockImplementationOnce((_jobId, callback) => {
+      onEvent = callback;
+      return () => {};
+    });
+    configsRef.value = [testConfig];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Run' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => {
+      expect(sourceMock.subscribeRunJob).toHaveBeenCalledWith('job-1', expect.any(Function));
+    });
+
+    await act(async () => {
+      onEvent?.({
+        type: 'log',
+        ts: '2026-06-07T00:00:00.000Z',
+        payload: { message: 'Using config-declared agents: agent-a' }
+      });
+    });
+
+    const progressbar = screen.getByRole('progressbar');
+    expect(progressbar.firstElementChild).toHaveStyle({ transform: 'translateX(-65%)' });
   });
 
   it('shows suite path context in config dropdown labels', async () => {

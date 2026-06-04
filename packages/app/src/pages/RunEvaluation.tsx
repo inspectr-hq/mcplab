@@ -62,6 +62,7 @@ function resolveConfigAgentIds(config: {
       : config.agents.map((agent) => ({ kind: 'inline' as const, agent }));
   const configuredAgentIds = entries
     .map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
+    .map((id) => id.trim())
     .filter(Boolean);
   const configuredDefaultAgentIds = (config.runDefaults?.selectedAgentNames ?? []).filter((id) =>
     configuredAgentIds.includes(id)
@@ -575,7 +576,8 @@ const RunEvaluation = () => {
             if (lower.startsWith('selected ')) return Math.max(prev, 30);
             if (
               lower.startsWith('using requested agents') ||
-              lower.startsWith('using resolved default agents')
+              lower.startsWith('using run default agents') ||
+              lower.startsWith('using config-declared agents')
             )
               return Math.max(prev, 35);
             if (lower.startsWith('expanded to ')) return Math.max(prev, 45);
