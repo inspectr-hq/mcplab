@@ -4,7 +4,6 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   renameSync,
   rmSync,
   statSync,
@@ -12,9 +11,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { createServer, type IncomingMessage } from 'node:http';
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { basename, extname, isAbsolute, join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type {
   AgentConfig,
@@ -103,46 +100,12 @@ import {
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import { OAuthSessionManager } from './oauth-session-manager.js';
 import { resolveRunSelectedAgents } from './run-agent-selection.js';
+import { resolveAppDist } from './app-dist.js';
+import { startBrowser } from './browser-launch.js';
+import { getAppServerVersionInfo } from './version-info.js';
 
-const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
-  ?.version as string;
-const mcpServerPkgVersion = (() => {
-  try {
-    // Resolve the package entry (e.g. .../dist/index.js), then step up one level to reach package.json
-    const entryUrl = import.meta.resolve('@inspectr/mcplab-mcp-server');
-    return (
-      (JSON.parse(readFileSync(new URL('../package.json', entryUrl), 'utf8'))?.version as string) ??
-      '1.0.0'
-    );
-  } catch {
-    return '1.0.0';
-  }
-})();
-
-function startBrowser(url: string) {
-  const platform = process.platform;
-  if (platform === 'darwin') {
-    spawn('open', [url], { stdio: 'ignore', detached: true }).unref();
-    return;
-  }
-  if (platform === 'win32') {
-    spawn('cmd', ['/c', 'start', url], { stdio: 'ignore', detached: true }).unref();
-    return;
-  }
-  spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
-}
-
-function defaultNewRunsDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'mcplab/results/evaluation-runs');
-}
-
-function defaultNewToolAnalysisResultsDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'mcplab/results/tool-analysis');
-}
-
-function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'mcplab/tool-analysis-results');
-}
+const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
+  getAppServerVersionInfo();
 
 export async function startAppServer(options: AppServerOptions) {
   // Re-read .env before each connection so new/changed vars are picked up,
@@ -531,13 +494,4 @@ export async function startAppServer(options: AppServerOptions) {
   if (options.open) {
     startBrowser(url);
   }
-}
-
-function resolveAppDist(workspaceRoot: string): string {
-  const repoAppDist = resolve(workspaceRoot, 'packages', 'app', 'dist');
-  if (existsSync(repoAppDist)) return repoAppDist;
-
-  // When installed from npm, serve the packaged frontend bundled into CLI dist/app.
-  const thisFileDir = dirname(fileURLToPath(import.meta.url));
-  return resolve(thisFileDir, '..', 'app');
 }

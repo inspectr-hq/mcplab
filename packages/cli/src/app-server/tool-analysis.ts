@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { resolve } from 'node:path';
 import type { AppRouteDeps, AppRouteRequestContext, ToolAnalysisJobsMap } from './app-context.js';
 import type { ToolAnalysisJob } from './tool-analysis-domain.js';
 import {
@@ -16,6 +15,10 @@ import {
   readToolAnalysisReportRecordFromDirs,
   writeToolAnalysisReportRecord
 } from './tool-analysis-storage.js';
+import {
+  defaultLegacyToolAnalysisResultsDir,
+  defaultNewToolAnalysisResultsDir
+} from './workspace-paths.js';
 
 export type ToolAnalysisRouteDeps = Pick<
   AppRouteDeps,
@@ -44,14 +47,6 @@ function normalizeToolAnalysisReportSafety<
     }
   }
   return report;
-}
-
-function defaultNewToolAnalysisResultsDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'mcplab/results/tool-analysis');
-}
-
-function defaultLegacyToolAnalysisResultsDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'mcplab/tool-analysis-results');
 }
 
 function resolveToolAnalysisReadDirs(settings: AppRouteRequestContext['settings']): string[] {
