@@ -30,6 +30,7 @@ import {
 } from '@/lib/run-queue-display';
 import type { QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import type { AgentEntry } from '@/types/eval';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
@@ -48,6 +49,24 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
 
 function nowTime(): string {
   return new Date().toLocaleTimeString();
+}
+
+function resolveConfigAgentIds(config: {
+  agents: Array<{ id: string }>;
+  agentEntries?: AgentEntry[];
+  runDefaults?: { selectedAgentNames?: string[] };
+}): string[] {
+  const entries =
+    config.agentEntries && config.agentEntries.length > 0
+      ? config.agentEntries
+      : config.agents.map((agent) => ({ kind: 'inline' as const, agent }));
+  const configuredAgentIds = entries
+    .map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
+    .filter(Boolean);
+  const configuredDefaultAgentIds = (config.runDefaults?.selectedAgentNames ?? []).filter((id) =>
+    configuredAgentIds.includes(id)
+  );
+  return configuredDefaultAgentIds.length > 0 ? configuredDefaultAgentIds : configuredAgentIds;
 }
 
 const RunEvaluation = () => {
@@ -180,13 +199,9 @@ const RunEvaluation = () => {
       setScenarioServerOverrideMap({});
       return;
     }
-    const configuredDefaultAgentIds = availableAgents
-      .filter((agent) => (selectedConfig.runDefaults?.selectedAgentNames ?? []).includes(agent.id))
-      .map((agent) => agent.id);
+    const configuredAgentIds = resolveConfigAgentIds(selectedConfig);
     setSelectedAgentIds(
-      configuredDefaultAgentIds.length > 0
-        ? configuredDefaultAgentIds
-        : availableAgents.map((agent) => agent.id)
+      configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
     );
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);

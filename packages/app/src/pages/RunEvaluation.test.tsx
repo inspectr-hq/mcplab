@@ -162,6 +162,96 @@ describe('RunEvaluation', () => {
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
   });
 
+  it('defaults the run selection to config-scoped agents instead of all library agents', async () => {
+    const configAgentA: AgentConfig = {
+      id: 'agent-a',
+      name: 'Agent A',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const configAgentB: AgentConfig = {
+      id: 'agent-b',
+      name: 'Agent B',
+      provider: 'openai',
+      model: 'gpt-4o',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const libraryOnlyAgent: AgentConfig = {
+      id: 'agent-library-only',
+      name: 'Library Only Agent',
+      provider: 'azure',
+      model: 'gpt-5-mini',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const testConfig: EvalConfig = {
+      id: 'test-config',
+      name: 'Test Config',
+      agents: [configAgentA, configAgentB],
+      agentEntries: [
+        { kind: 'referenced', ref: 'agent-a' },
+        { kind: 'referenced', ref: 'agent-b' }
+      ],
+      scenarios: [
+        {
+          id: 'scenario-1',
+          name: 'Scenario 1',
+          prompt: 'Do thing',
+          serverIds: [],
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      scenarioEntries: [
+        {
+          kind: 'inline',
+          scenario: {
+            id: 'scenario-1',
+            name: 'Scenario 1',
+            prompt: 'Do thing',
+            serverIds: [],
+            evalRules: [],
+            extractRules: []
+          }
+        }
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      sourcePath: '/path/to/test.yaml'
+    };
+
+    configsRef.value = [testConfig];
+    libraryAgentsRef.value = [configAgentA, configAgentB, libraryOnlyAgent];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Agent A')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => {
+      expect(sourceMock.startRun).toHaveBeenCalledTimes(1);
+    });
+    expect(sourceMock.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configPath: '/path/to/test.yaml',
+        scenarioIds: ['scenario-1'],
+        agents: ['agent-a', 'agent-b']
+      })
+    );
+  });
+
   it('shows suite path context in config dropdown labels', async () => {
     const configA: EvalConfig = {
       id: 'cfg-a',

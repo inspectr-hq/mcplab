@@ -46,7 +46,8 @@ describe('Configurations suites', () => {
         suitePath: '',
         relativePath: 'root.yaml',
         sourcePath: '/path/root.yaml',
-        agents: [],
+        agents: [{ id: 'root-agent', name: 'Root Agent', provider: 'anthropic', model: 'claude-sonnet-4-6', temperature: 0, maxTokens: 4096 }],
+        agentEntries: [{ kind: 'referenced', ref: 'root-agent' }],
         scenarios: [],
         createdAt: '2026-04-23T08:00:00.000Z',
         updatedAt: '2026-04-23T08:00:00.000Z'
@@ -57,7 +58,10 @@ describe('Configurations suites', () => {
         suitePath: 'trendminer/tags',
         relativePath: 'trendminer/tags/tag-search.yaml',
         sourcePath: '/path/trendminer/tags/tag-search.yaml',
-        agents: [],
+        agents: [
+          { id: 'claude-sonnet-46', name: 'Claude Sonnet 4.6', provider: 'anthropic', model: 'claude-sonnet-4-6', temperature: 0, maxTokens: 4096 }
+        ],
+        agentEntries: [{ kind: 'referenced', ref: 'claude-sonnet-46' }],
         scenarios: [],
         createdAt: '2026-04-23T08:00:00.000Z',
         updatedAt: '2026-04-23T08:00:00.000Z'
@@ -68,7 +72,15 @@ describe('Configurations suites', () => {
         suitePath: 'trendminer/alerts',
         relativePath: 'trendminer/alerts/alert-check.yaml',
         sourcePath: '/path/trendminer/alerts/alert-check.yaml',
-        agents: [],
+        agents: [
+          { id: 'agent-a', name: 'Agent A', provider: 'openai', model: 'gpt-4o-mini', temperature: 0, maxTokens: 4096 },
+          { id: 'agent-b', name: 'Agent B', provider: 'azure', model: 'gpt-5-mini', temperature: 0, maxTokens: 4096 }
+        ],
+        agentEntries: [
+          { kind: 'referenced', ref: 'agent-a' },
+          { kind: 'referenced', ref: 'agent-b' }
+        ],
+        runDefaults: { selectedAgentNames: ['agent-b'] },
         scenarios: [],
         createdAt: '2026-04-23T08:00:00.000Z',
         updatedAt: '2026-04-23T08:00:00.000Z'
@@ -164,7 +176,81 @@ describe('Configurations suites', () => {
     await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
     expect(sourceMock.startRun).toHaveBeenCalledWith({
       configPath: '/path/trendminer/tags/tag-search.yaml',
-      runsPerScenario: 1
+      runsPerScenario: 1,
+      agents: ['claude-sonnet-46']
+    });
+  });
+
+  it('quick run passes only the config-scoped agents', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/mcp-evaluations" element={<Configurations />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(reloadMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Queue Root Config' }));
+
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun).toHaveBeenCalledWith({
+      configPath: '/path/root.yaml',
+      runsPerScenario: 1,
+      agents: ['root-agent']
+    });
+  });
+
+  it('run suite resolves each config agent list independently and honors run defaults', async () => {
+    configsRef.value = [
+      {
+        ...configsRef.value[1],
+        suitePath: 'trendminer',
+        relativePath: 'trendminer/tag-search.yaml'
+      },
+      {
+        ...configsRef.value[2],
+        suitePath: 'trendminer',
+        relativePath: 'trendminer/alert-check.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter
+        initialEntries={['/mcp-evaluations']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/mcp-evaluations" element={<Configurations />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(reloadMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('combobox'));
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find(
+      (node) => node.textContent?.trim() === 'trendminer'
+    ) as HTMLElement | undefined;
+    expect(option).toBeDefined();
+    fireEvent.click(option!);
+
+    const suiteHeader = screen.getByLabelText('Collapse suite trendminer').closest('tr');
+    expect(suiteHeader).toBeTruthy();
+    fireEvent.click(within(suiteHeader as HTMLElement).getByRole('button', { name: 'Run Suite' }));
+
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(2));
+    expect(sourceMock.startRun).toHaveBeenNthCalledWith(1, {
+      configPath: '/path/trendminer/alerts/alert-check.yaml',
+      runsPerScenario: 1,
+      agents: ['agent-b']
+    });
+    expect(sourceMock.startRun).toHaveBeenNthCalledWith(2, {
+      configPath: '/path/trendminer/tags/tag-search.yaml',
+      runsPerScenario: 1,
+      agents: ['claude-sonnet-46']
     });
   });
 });

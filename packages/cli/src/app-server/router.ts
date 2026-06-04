@@ -118,12 +118,15 @@ const mcpServerPkgVersion = (() => {
   }
 })();
 
-function resolveRunSelectedAgents(
+export function resolveRunSelectedAgents(
   config: EvalConfig,
   requestedAgents?: string[]
-): string[] | undefined {
+): string[] {
   if (requestedAgents && requestedAgents.length > 0) return requestedAgents;
-  return config.run_defaults?.selected_agents;
+  if (config.run_defaults?.selected_agents && config.run_defaults.selected_agents.length > 0) {
+    return config.run_defaults.selected_agents;
+  }
+  return Object.keys(config.agents);
 }
 
 function startBrowser(url: string) {

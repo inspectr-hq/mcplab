@@ -51,6 +51,7 @@ import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import type { AgentEntry, EvalConfig } from '@/types/eval';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
@@ -117,6 +118,23 @@ const resultsLinkForConfig = (cfg: {
         tooltipLabel: `Open results filtered by scenario ${firstScenarioId}`
       }
     : { href: '/results', tooltipLabel: 'Open results' };
+};
+
+const resolveConfigRunAgents = (
+  cfg: Pick<EvalConfig, 'agents' | 'agentEntries' | 'runDefaults'>
+): string[] => {
+  const entries: AgentEntry[] =
+    cfg.agentEntries && cfg.agentEntries.length > 0
+      ? cfg.agentEntries
+      : cfg.agents.map((agent) => ({ kind: 'inline' as const, agent }));
+  const configuredAgents = entries
+    .map((entry) => (entry.kind === 'inline' ? entry.agent.id : entry.ref))
+    .map((agentId) => agentId.trim())
+    .filter(Boolean);
+  const defaultAgents = (cfg.runDefaults?.selectedAgentNames ?? []).filter((agentId) =>
+    configuredAgents.includes(agentId)
+  );
+  return defaultAgents.length > 0 ? defaultAgents : configuredAgents;
 };
 
 const SUITE_ACCENT_CLASSES = [
@@ -330,11 +348,14 @@ const Configurations = () => {
 
   const runConfig = async (configId: string, sourcePath: string, configName: string) => {
     if (queuingConfigIds.has(configId)) return;
+    const config = configs.find((cfg) => cfg.id === configId);
+    const agents = config ? resolveConfigRunAgents(config) : [];
     setQueuingConfigIds((prev) => new Set(prev).add(configId));
     try {
       await source.startRun({
         configPath: sourcePath,
-        runsPerScenario: 1
+        runsPerScenario: 1,
+        ...(agents.length > 0 ? { agents } : {})
       });
       setRecentlyQueuedConfigIds((prev) => new Set(prev).add(configId));
       window.setTimeout(() => {
@@ -388,12 +409,14 @@ const Configurations = () => {
       }
 
       const outcomes = await Promise.allSettled(
-        runnable.map((cfg) =>
-          source.startRun({
+        runnable.map((cfg) => {
+          const agents = resolveConfigRunAgents(cfg);
+          return source.startRun({
             configPath: String(cfg.sourcePath),
-            runsPerScenario: 1
-          })
-        )
+            runsPerScenario: 1,
+            ...(agents.length > 0 ? { agents } : {})
+          });
+        })
       );
       const successCount = outcomes.filter((item) => item.status === 'fulfilled').length;
       const failureCount = outcomes.length - successCount;
