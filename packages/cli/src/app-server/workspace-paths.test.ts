@@ -7,7 +7,9 @@ import {
 
 describe('workspace path helpers', () => {
   it('resolves the default runs directory', () => {
-    expect(defaultNewRunsDir('/tmp/workspace')).toBe('/tmp/workspace/mcplab/results/evaluation-runs');
+    expect(defaultNewRunsDir('/tmp/workspace')).toBe(
+      '/tmp/workspace/mcplab/results/evaluation-runs'
+    );
   });
 
   it('resolves the default new tool analysis directory', () => {

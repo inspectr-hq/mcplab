@@ -7,10 +7,7 @@ interface ResolveAppDistDeps {
   moduleUrl?: string;
 }
 
-export function resolveAppDist(
-  workspaceRoot: string,
-  deps: ResolveAppDistDeps = {}
-): string {
+export function resolveAppDist(workspaceRoot: string, deps: ResolveAppDistDeps = {}): string {
   const exists = deps.existsSync ?? existsSync;
   const moduleUrl = deps.moduleUrl ?? import.meta.url;
   const repoAppDist = resolve(workspaceRoot, 'packages', 'app', 'dist');

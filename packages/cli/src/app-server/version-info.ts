@@ -6,14 +6,16 @@ interface VersionInfoDeps {
   resolveImportMeta?: (specifier: string) => string;
 }
 
-export function getAppServerVersionInfo(
-  deps: VersionInfoDeps = {}
-): { cliVersion: string; mcpServerPackageVersion: string } {
+export function getAppServerVersionInfo(deps: VersionInfoDeps = {}): {
+  cliVersion: string;
+  mcpServerPackageVersion: string;
+} {
   const moduleUrl = deps.moduleUrl ?? import.meta.url;
   const readText =
     deps.readText ??
     ((url: URL | string) => readFileSync(url instanceof URL ? url : new URL(url), 'utf8'));
-  const resolveImportMeta = deps.resolveImportMeta ?? ((specifier: string) => import.meta.resolve(specifier));
+  const resolveImportMeta =
+    deps.resolveImportMeta ?? ((specifier: string) => import.meta.resolve(specifier));
 
   const cliVersion = (JSON.parse(readText(new URL('../../package.json', moduleUrl)))?.version ??
     '0.0.0') as string;
