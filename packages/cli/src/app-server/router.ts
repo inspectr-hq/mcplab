@@ -102,6 +102,7 @@ import {
 } from './oauth-debugger-domain.js';
 import type { OAuthRuntimeSession } from './oauth-runtime-domain.js';
 import { OAuthSessionManager } from './oauth-session-manager.js';
+import { resolveRunSelectedAgents } from './run-agent-selection.js';
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
   ?.version as string;
@@ -117,17 +118,6 @@ const mcpServerPkgVersion = (() => {
     return '1.0.0';
   }
 })();
-
-export function resolveRunSelectedAgents(
-  config: EvalConfig,
-  requestedAgents?: string[]
-): string[] {
-  if (requestedAgents && requestedAgents.length > 0) return requestedAgents;
-  if (config.run_defaults?.selected_agents && config.run_defaults.selected_agents.length > 0) {
-    return config.run_defaults.selected_agents;
-  }
-  return Object.keys(config.agents);
-}
 
 function startBrowser(url: string) {
   const platform = process.platform;

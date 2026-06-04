@@ -46,7 +46,16 @@ describe('Configurations suites', () => {
         suitePath: '',
         relativePath: 'root.yaml',
         sourcePath: '/path/root.yaml',
-        agents: [{ id: 'root-agent', name: 'Root Agent', provider: 'anthropic', model: 'claude-sonnet-4-6', temperature: 0, maxTokens: 4096 }],
+        agents: [
+          {
+            id: 'root-agent',
+            name: 'Root Agent',
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            temperature: 0,
+            maxTokens: 4096
+          }
+        ],
         agentEntries: [{ kind: 'referenced', ref: 'root-agent' }],
         scenarios: [],
         createdAt: '2026-04-23T08:00:00.000Z',
@@ -59,7 +68,14 @@ describe('Configurations suites', () => {
         relativePath: 'trendminer/tags/tag-search.yaml',
         sourcePath: '/path/trendminer/tags/tag-search.yaml',
         agents: [
-          { id: 'claude-sonnet-46', name: 'Claude Sonnet 4.6', provider: 'anthropic', model: 'claude-sonnet-4-6', temperature: 0, maxTokens: 4096 }
+          {
+            id: 'claude-sonnet-46',
+            name: 'Claude Sonnet 4.6',
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            temperature: 0,
+            maxTokens: 4096
+          }
         ],
         agentEntries: [{ kind: 'referenced', ref: 'claude-sonnet-46' }],
         scenarios: [],
@@ -73,8 +89,22 @@ describe('Configurations suites', () => {
         relativePath: 'trendminer/alerts/alert-check.yaml',
         sourcePath: '/path/trendminer/alerts/alert-check.yaml',
         agents: [
-          { id: 'agent-a', name: 'Agent A', provider: 'openai', model: 'gpt-4o-mini', temperature: 0, maxTokens: 4096 },
-          { id: 'agent-b', name: 'Agent B', provider: 'azure', model: 'gpt-5-mini', temperature: 0, maxTokens: 4096 }
+          {
+            id: 'agent-a',
+            name: 'Agent A',
+            provider: 'openai',
+            model: 'gpt-4o-mini',
+            temperature: 0,
+            maxTokens: 4096
+          },
+          {
+            id: 'agent-b',
+            name: 'Agent B',
+            provider: 'azure',
+            model: 'gpt-5-mini',
+            temperature: 0,
+            maxTokens: 4096
+          }
         ],
         agentEntries: [
           { kind: 'referenced', ref: 'agent-a' },

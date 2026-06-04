@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRunSelectedAgents } from './router.js';
+import { resolveRunSelectedAgents } from './run-agent-selection.js';
 
 describe('resolveRunSelectedAgents', () => {
   it('prefers explicitly requested agents', () => {

@@ -255,9 +255,9 @@ export async function executeRunJob(params: {
           requestedAgents && requestedAgents.length > 0
             ? `Using requested agents: ${resolvedAgents.join(', ')}`
             : runtimeOverriddenConfig.run_defaults?.selected_agents &&
-                runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
-              ? `Using run default agents: ${resolvedAgents.join(', ')}`
-              : `Using config-declared agents: ${resolvedAgents.join(', ')}`
+              runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
+            ? `Using run default agents: ${resolvedAgents.join(', ')}`
+            : `Using config-declared agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
