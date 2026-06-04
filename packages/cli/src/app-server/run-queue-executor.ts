@@ -337,6 +337,7 @@ export async function executeRunJob(params: {
     if (loaded.config.name && loaded.config.name.trim().length > 0) {
       results.metadata.config_name = loaded.config.name.trim();
     }
+    // Persist the fully resolved agent set so reruns replay the original execution scope exactly.
     results.metadata.rerun_agents = [...resolvedAgents];
     results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
       (scenario) => scenario.id
