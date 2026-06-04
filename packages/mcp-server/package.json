@@ -51,7 +51,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "4.1.0"
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@inspectr/mcplab-core": "1.15.0",

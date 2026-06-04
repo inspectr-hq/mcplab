@@ -36,7 +36,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "4.1.0"
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
