@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.20.0
+
+### Minor Changes
+
+- feat: Queue workers
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.16.0
+  - @inspectr/mcplab-mcp-server@1.5.0
+  - @inspectr/mcplab-reporting@1.1.17
+
 ## 1.19.0
 
 ### Minor Changes

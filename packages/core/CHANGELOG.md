@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.16.0
+
+### Minor Changes
+
+- feat: Queue workers
+
 ## 1.15.0
 
 ### Minor Changes
