@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.20.1
+
+### Patch Changes
+
+- fix: Improve agent selection
+
 ## 1.20.0
 
 ### Minor Changes
