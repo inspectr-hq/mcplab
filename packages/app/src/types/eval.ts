@@ -137,6 +137,7 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
+  error?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;

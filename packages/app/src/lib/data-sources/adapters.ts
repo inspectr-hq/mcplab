@@ -1170,6 +1170,7 @@ export function fromCoreResultsJson(
       return {
         runIndex: run.run_index,
         passed: run.pass,
+        error: run.error,
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
         toolTokenUsage: tokenUsage.tool,
@@ -1277,6 +1278,7 @@ export function fromCoreScenarioRunPreview(
   return {
     runIndex: run.run_index,
     passed: run.pass,
+    error: run.error,
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,
     toolTokenUsage: tokenUsage.tool,

@@ -59,6 +59,7 @@ import {
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
@@ -1072,7 +1073,10 @@ const Results = () => {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <PassRateBadge rate={item.run.overallPassRate} />
+                          <div className="flex flex-col items-end gap-1">
+                            <PassRateBadge rate={item.run.overallPassRate} />
+                            <RunFailureSignalBadge run={item.run} />
+                          </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
                           {item.run.totalScenarios}
