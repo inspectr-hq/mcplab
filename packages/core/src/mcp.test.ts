@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  McpClientManager,
   extractHttpStatusCode,
   mergeRequestHeaders,
   normalizeListedTool,
@@ -139,5 +140,43 @@ describe('normalizeListedTool', () => {
       annotations: []
     });
     expect(normalized.annotations).toBeUndefined();
+  });
+});
+
+describe('McpClientManager.listTools', () => {
+  it('uses a scoped client when request headers are provided', async () => {
+    const manager = new McpClientManager();
+    const scopedListTools = vi.fn().mockResolvedValue({
+      tools: [{ name: 'search_tags', description: 'Search tags' }]
+    });
+    const baseListTools = vi.fn();
+
+    vi.spyOn(manager as any, 'getOrCreateScopedClient').mockResolvedValue({
+      listTools: scopedListTools
+    });
+    vi.spyOn(manager as any, 'getClient').mockReturnValue({
+      listTools: baseListTools
+    });
+
+    const tools = await manager.listTools('oauth-server', undefined, {
+      authorization: 'Bearer refreshed-token'
+    });
+
+    expect(tools).toEqual([
+      {
+        name: 'search_tags',
+        title: undefined,
+        description: 'Search tags',
+        inputSchema: undefined,
+        outputSchema: undefined,
+        annotations: undefined
+      }
+    ]);
+    expect((manager as any).getOrCreateScopedClient).toHaveBeenCalledWith(
+      'oauth-server',
+      { authorization: 'Bearer refreshed-token' },
+      undefined
+    );
+    expect(baseListTools).not.toHaveBeenCalled();
   });
 });
