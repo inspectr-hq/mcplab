@@ -135,6 +135,11 @@ export interface ResponseAssertionJsonPathNotExists {
   path: string;
 }
 
+export interface AgentAssertion {
+  label: string;
+  prompt: string;
+}
+
 export type ResponseAssertion =
   | ResponseAssertionRegex
   | ResponseAssertionContains
@@ -150,6 +155,17 @@ export interface EvalRules {
   tool_constraints?: ToolConstraints;
   tool_sequence?: ToolSequenceRules;
   response_assertions?: ResponseAssertion[];
+  agent_assertions?: AgentAssertion[];
+}
+
+export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated';
+
+export interface CheckResult {
+  type: string;
+  label: string;
+  status: CheckResultStatus;
+  reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ExtractRule {
@@ -324,6 +340,7 @@ export interface ScenarioRunResult {
   pass: boolean;
   error?: string;
   failures: string[];
+  check_results?: CheckResult[];
   tool_calls: string[];
   tool_call_count: number;
   tool_sequence: string[];

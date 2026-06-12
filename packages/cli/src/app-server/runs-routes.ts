@@ -21,7 +21,8 @@ import {
 import {
   applyLibraryEntries,
   filterScenarioOverridesToSelectedScenarios,
-  mergeLibraryEntriesIntoConfig
+  mergeLibraryEntriesIntoConfig,
+  resolveEvaluationJudge
 } from './run-queue-executor.js';
 import type { RunQueueService } from './run-queue-domain.js';
 
@@ -419,6 +420,16 @@ export async function handleRunsRoutes(params: {
     }
 
     const libraries = readLibraries(settings.librariesDir);
+    let evaluationJudge;
+    try {
+      evaluationJudge = resolveEvaluationJudge({
+        agents: libraries.agents,
+        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+      });
+    } catch (error: unknown) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     const selectedAgentName = pickDefaultAssistantAgentName({
       requested: String(body.selectedAgentName ?? '').trim(),
       settingsDefault: settings.scenarioAssistantAgentName,
@@ -491,7 +502,8 @@ export async function handleRunsRoutes(params: {
         cliVersion: pkgVersion,
         runsDir: resolve(previewRunsRoot),
         cwd: settings.workspaceRoot,
-        mcpServerAuthHeaders
+        mcpServerAuthHeaders,
+        evaluationJudge
       });
       const scenario = results.scenarios[0];
       const run = scenario?.runs?.[0];
@@ -640,6 +652,7 @@ function toCoreEvalRules(
 ): EvalConfig['scenarios'][number]['eval'] | undefined {
   const requiredTools: string[] = [];
   const forbiddenTools: string[] = [];
+  const agentAssertions: Array<{ label: string; prompt: string }> = [];
   const responseAssertions: Array<
     | { type: 'contains'; value: string }
     | { type: 'not_contains'; value: string }
@@ -654,10 +667,19 @@ function toCoreEvalRules(
 
   for (const raw of evalRules) {
     if (!raw || typeof raw !== 'object') continue;
-    const rule = raw as { type?: unknown; value?: unknown; path?: unknown; equals?: unknown };
+    const rule = raw as {
+      type?: unknown;
+      value?: unknown;
+      path?: unknown;
+      equals?: unknown;
+      label?: unknown;
+      prompt?: unknown;
+    };
     const type = String(rule.type ?? '').trim();
     const value = String(rule.value ?? '').trim();
     const path = String(rule.path ?? '').trim();
+    const label = String(rule.label ?? '').trim();
+    const prompt = String(rule.prompt ?? '').trim();
     if (!type) continue;
     if (type === 'required_tool' && value) {
       requiredTools.push(value);
@@ -711,11 +733,16 @@ function toCoreEvalRules(
       responseAssertions.push({ type: 'jsonpath_not_exists', path });
       continue;
     }
+    if (type === 'agent_check' && label && prompt) {
+      agentAssertions.push({ label, prompt });
+      continue;
+    }
   }
 
   const hasToolConstraints = requiredTools.length > 0 || forbiddenTools.length > 0;
   const hasResponseAssertions = responseAssertions.length > 0;
-  if (!hasToolConstraints && !hasResponseAssertions) return undefined;
+  const hasAgentAssertions = agentAssertions.length > 0;
+  if (!hasToolConstraints && !hasResponseAssertions && !hasAgentAssertions) return undefined;
   return {
     ...(hasToolConstraints
       ? {
@@ -725,7 +752,8 @@ function toCoreEvalRules(
           }
         }
       : {}),
-    ...(hasResponseAssertions ? { response_assertions: responseAssertions } : {})
+    ...(hasResponseAssertions ? { response_assertions: responseAssertions } : {}),
+    ...(hasAgentAssertions ? { agent_assertions: agentAssertions } : {})
   };
 }
 

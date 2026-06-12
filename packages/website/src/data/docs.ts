@@ -1867,12 +1867,14 @@ const refToolAndResponseAssertions: DocPage = {
   slug: 'reference-tool-and-response-assertions',
   label: 'Tool and Response Assertions',
   href: '/docs/reference/tool-and-response-assertions/',
-  description: 'Complete assertion guide with examples for tool checks and response checks.',
+  description:
+    'Complete assertion guide with examples for tool checks, response checks, and semantic agent checks.',
   keywords: [
     'assertions',
     'tool constraints',
     'tool sequence',
     'response assertions',
+    'agent checks',
     'jsonpath',
     'regex',
     'contains'
@@ -1886,6 +1888,7 @@ const refToolAndResponseAssertions: DocPage = {
       bullets: [
         'Use tool assertions when behavior depends on action correctness (which tools were called, and in which order).',
         'Use response assertions when behavior depends on final answer quality or format.',
+        'Use agent checks when the validation is semantic or fuzzy and strict string/regex checks would be too brittle.',
         'Use both together for high-confidence checks: action correctness plus answer correctness.'
       ]
     },
@@ -2000,13 +2003,32 @@ const refToolAndResponseAssertions: DocPage = {
       ]
     },
     {
+      id: 'agent-checks',
+      title: 'Agent Checks',
+      paragraphs: [
+        'Agent checks use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.'
+      ],
+      codeBlocks: [
+        {
+          title: 'agent_assertions',
+          language: 'yaml',
+          code: `eval:
+  agent_assertions:
+    - label: logical_time_range
+      prompt: Confirm the final answer includes an earliest and latest timestamp, and that both values are present and logically ordered.`
+        }
+      ]
+    },
+    {
       id: 'behavior-notes',
       title: 'Behavior Notes and Edge Cases',
       bullets: [
         'contains/not_contains/starts_with/ends_with/equals are literal, case-insensitive string checks.',
         'regex is case-insensitive by default and uses JavaScript regular expressions.',
         'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
-        'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.'
+        'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.',
+        'Agent checks judge final answer text only in v1 and require a default evaluation judge to be configured in workspace settings.',
+        'Agent checks are more flexible, but they are also less reproducible and more expensive than deterministic checks.'
       ]
     }
   ]

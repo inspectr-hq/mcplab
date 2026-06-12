@@ -53,10 +53,21 @@ export interface EvalRule {
     | 'response_regex'
     | 'response_jsonpath'
     | 'response_jsonpath_exists'
-    | 'response_jsonpath_not_exists';
+    | 'response_jsonpath_not_exists'
+    | 'agent_check';
   value?: string;
   path?: string;
   equals?: string | number | boolean;
+  label?: string;
+  prompt?: string;
+}
+
+export interface CheckResult {
+  type: string;
+  label: string;
+  status: 'passed' | 'failed' | 'not_evaluated';
+  reason?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ExtractRule {
@@ -147,6 +158,7 @@ export interface ScenarioRun {
   duration: number;
   extractedValues: Record<string, string>;
   failureReasons: string[];
+  checkResults?: CheckResult[];
 }
 
 export interface ScenarioResult {

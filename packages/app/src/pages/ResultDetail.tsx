@@ -89,6 +89,7 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
+import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import {
@@ -1146,7 +1147,8 @@ const ResultDetail = () => {
                                             ? buildRunCheckItems(
                                                 scenarioDef.evalRules,
                                                 run.failureReasons,
-                                                run.error
+                                                run.error,
+                                                run.checkResults
                                               )
                                             : [];
                                           const failedChecks = checks.filter(
@@ -1312,7 +1314,7 @@ const ResultDetail = () => {
                                                                 </span>
                                                               </div>
                                                               {check.failureReason && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
                                                                   {formatFailureReason(
                                                                     check.failureReason
                                                                   )}
@@ -2661,83 +2663,18 @@ function ExpandableText({
   );
 }
 
-function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[], runError?: string) {
-  const scenarioError =
-    runError || failureReasons.find((reason) => reason.startsWith('Scenario error:'));
-  if (scenarioError) {
-    return evalRules.map((rule) => ({
-      rule,
-      status: 'not_evaluated' as const,
-      failureReason: undefined
-    }));
-  }
-  return evalRules.map((rule) => {
-    const failureReason = matchFailureReasonForRule(rule, failureReasons);
-    return {
-      rule,
-      status: failureReason ? ('failed' as const) : ('passed' as const),
-      failureReason
-    };
-  });
-}
-
-function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): string | undefined {
-  const expectedPrefix = (() => {
-    if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
-    if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
-    if (rule.type === 'response_contains') return `Contains assertion failed: ${rule.value}`;
-    if (rule.type === 'response_not_contains')
-      return `Not-contains assertion failed: ${rule.value}`;
-    if (rule.type === 'response_starts_with') return `Starts-with assertion failed: ${rule.value}`;
-    if (rule.type === 'response_ends_with') return `Ends-with assertion failed: ${rule.value}`;
-    if (rule.type === 'response_equals') return `Equals assertion failed: ${rule.value}`;
-    if (rule.type === 'response_regex') return `Regex assertion failed: ${rule.value}`;
-    if (rule.type === 'response_jsonpath')
-      return rule.equals !== undefined
-        ? `JSONPath equals assertion failed: ${rule.path}`
-        : `JSONPath assertion failed: ${rule.path}`;
-    if (rule.type === 'response_jsonpath_exists') return `JSONPath assertion failed: ${rule.path}`;
-    if (rule.type === 'response_jsonpath_not_exists')
-      return `JSONPath not-exists assertion failed: ${rule.path}`;
-    return '';
-  })();
-
-  const exact = failureReasons.find((reason) => reason === expectedPrefix);
-  if (exact) return exact;
-
-  if (rule.type === 'response_regex') {
-    return failureReasons.find(
-      (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(rule.value ?? '')
-    );
-  }
-
-  if (
-    rule.type === 'response_jsonpath' ||
-    rule.type === 'response_jsonpath_exists' ||
-    rule.type === 'response_jsonpath_not_exists'
-  ) {
-    return failureReasons.find((reason) => reason.includes(rule.path ?? ''));
-  }
-
-  return undefined;
-}
-
-function formatEvalRuleLabel(rule: EvalRule): string {
-  if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
-  if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
-  if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
-  if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
-  if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
-  if (rule.type === 'response_ends_with') return `Text ends with · ${rule.value}`;
-  if (rule.type === 'response_equals') return `Text equals · ${rule.value}`;
-  if (rule.type === 'response_regex') return `Text matches regex · ${rule.value}`;
-  if (rule.type === 'response_jsonpath')
-    return rule.equals !== undefined
-      ? `JSONPath equals · ${rule.path} == ${String(rule.equals)}`
-      : `JSONPath exists · ${rule.path}`;
-  if (rule.type === 'response_jsonpath_exists') return `JSONPath exists · ${rule.path}`;
-  if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
-  return `${rule.type} · ${rule.value}`;
+function buildRunCheckItems(
+  evalRules: EvalRule[],
+  failureReasons: string[],
+  runError?: string,
+  checkResults?: Array<{
+    type: string;
+    label: string;
+    status: 'passed' | 'failed' | 'not_evaluated';
+    reason?: string;
+  }>
+) {
+  return buildCheckItems({ evalRules, failureReasons, runError, checkResults });
 }
 
 function formatFailureReason(reason: string): string {

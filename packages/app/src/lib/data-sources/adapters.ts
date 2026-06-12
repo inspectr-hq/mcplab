@@ -80,7 +80,12 @@ function toCoreResponseAssertion(
   | { type: 'jsonpath_exists'; path: string }
   | { type: 'jsonpath_not_exists'; path: string }
   | null {
-  if (rule.type === 'required_tool' || rule.type === 'forbidden_tool') return null;
+  if (
+    rule.type === 'required_tool' ||
+    rule.type === 'forbidden_tool' ||
+    rule.type === 'agent_check'
+  )
+    return null;
   if (rule.type === 'response_contains') {
     return rule.value ? { type: 'contains', value: rule.value } : null;
   }
@@ -131,6 +136,7 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         | { type: 'jsonpath_exists'; path: string }
         | { type: 'jsonpath_not_exists'; path: string }
       >;
+      agent_assertions?: Array<{ label: string; prompt: string }>;
     }
   | undefined {
   const required_tools = evalRules
@@ -144,6 +150,13 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
+  const agent_assertions = evalRules
+    .filter((rule) => rule.type === 'agent_check')
+    .flatMap((rule) =>
+      rule.label?.trim() && rule.prompt?.trim()
+        ? [{ label: rule.label.trim(), prompt: rule.prompt.trim() }]
+        : []
+    );
 
   const tool_constraints =
     required_tools.length > 0 || forbidden_tools.length > 0
@@ -153,11 +166,13 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         }
       : undefined;
 
-  if (!tool_constraints && response_assertions.length === 0) return undefined;
+  if (!tool_constraints && response_assertions.length === 0 && agent_assertions.length === 0)
+    return undefined;
 
   return {
     ...(tool_constraints ? { tool_constraints } : {}),
-    ...(response_assertions.length > 0 ? { response_assertions } : {})
+    ...(response_assertions.length > 0 ? { response_assertions } : {}),
+    ...(agent_assertions.length > 0 ? { agent_assertions } : {})
   };
 }
 
@@ -399,6 +414,13 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     }
     for (const assertion of scenario.eval?.response_assertions ?? []) {
       evalRules.push(toUiEvalRule(assertion));
+    }
+    for (const assertion of scenario.eval?.agent_assertions ?? []) {
+      evalRules.push({
+        type: 'agent_check',
+        label: assertion.label,
+        prompt: assertion.prompt
+      });
     }
 
     const mappedScenario = {
@@ -1181,7 +1203,8 @@ export function fromCoreResultsJson(
         extractedValues: Object.fromEntries(
           Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
         ),
-        failureReasons: run.failures
+        failureReasons: run.failures,
+        checkResults: run.check_results
       };
     });
 
@@ -1289,6 +1312,7 @@ export function fromCoreScenarioRunPreview(
     extractedValues: Object.fromEntries(
       Object.entries(run.extracted).map(([k, v]) => [k, String(v ?? '')])
     ),
-    failureReasons: run.failures
+    failureReasons: run.failures,
+    checkResults: run.check_results
   };
 }

@@ -427,6 +427,8 @@ export function ScenarioAssistantDialog({
           value?: string;
           path?: string;
           equals?: string | number | boolean;
+          label?: string;
+          prompt?: string;
         }>
       });
     }

@@ -5,6 +5,7 @@ import type { AppSettings } from './types.js';
 
 interface AppSettingsOverrides {
   scenario_assistant_agent_name?: string;
+  evaluation_judge_agent_name?: string;
   default_queue_workers?: unknown;
 }
 
@@ -39,8 +40,8 @@ function settingsOverridesFilePath(settings: AppSettings): string {
   return join(settings.librariesDir, '.mcplab-app-settings.yaml');
 }
 
-function loadSettingsOverrides(settings: AppSettings): AppSettingsOverrides {
-  const filePath = settingsOverridesFilePath(settings);
+export function loadWorkspaceSettingsOverrides(librariesDir: string): AppSettingsOverrides {
+  const filePath = join(librariesDir, '.mcplab-app-settings.yaml');
   if (!existsSync(filePath)) return {};
   try {
     const parsed = parseYaml(readFileSync(filePath, 'utf8')) as AppSettingsOverrides | undefined;
@@ -51,12 +52,13 @@ function loadSettingsOverrides(settings: AppSettings): AppSettingsOverrides {
 }
 
 export function applySettingsOverrides(settings: AppSettings): void {
-  const overrides = loadSettingsOverrides(settings);
+  const overrides = loadWorkspaceSettingsOverrides(settings.librariesDir);
   settings.defaultQueueWorkers = normalizeQueueWorkerCount(overrides.default_queue_workers);
   const envQueueWorkers = resolveEnvQueueWorkers();
   if (envQueueWorkers !== undefined) settings.defaultQueueWorkers = envQueueWorkers;
   settings.scenarioAssistantAgentName =
     overrides.scenario_assistant_agent_name?.trim() || undefined;
+  settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
 }
 
 export function persistSettingsOverrides(settings: AppSettings): void {
@@ -64,6 +66,9 @@ export function persistSettingsOverrides(settings: AppSettings): void {
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
     ...(settings.scenarioAssistantAgentName
       ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
+      : {}),
+    ...(settings.evaluationJudgeAgentName
+      ? { evaluation_judge_agent_name: settings.evaluationJudgeAgentName }
       : {})
   };
   writeFileSync(settingsOverridesFilePath(settings), `${stringifyYaml(payload)}\n`, 'utf8');

@@ -1025,6 +1025,43 @@ describe('loadConfig normalization', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('preserves agent_assertions when loading config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'agents: []',
+          'scenarios:',
+          '  - id: scn-agent-check',
+          '    servers: []',
+          '    prompt: test',
+          '    eval:',
+          '      agent_assertions:',
+          '        - label: Logical range',
+          '          prompt: Confirm the answer includes a valid logical time range.'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig } = loadConfig(configPath);
+      expect(sourceConfig.scenarios[0] && !('ref' in sourceConfig.scenarios[0])).toBe(true);
+      const inlineScenario = sourceConfig.scenarios[0] as Exclude<
+        (typeof sourceConfig.scenarios)[number],
+        { ref: string }
+      >;
+      expect(inlineScenario.eval?.agent_assertions).toEqual([
+        {
+          label: 'Logical range',
+          prompt: 'Confirm the answer includes a valid logical time range.'
+        }
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('readLibraryAgentsAndServers', () => {

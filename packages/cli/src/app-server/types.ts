@@ -21,6 +21,7 @@ export interface AppSettings {
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
+  evaluationJudgeAgentName?: string;
 }
 
 // Source of truth: packages/core/src/types.ts HealthMcpConnectionInfo

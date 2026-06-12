@@ -170,8 +170,13 @@ export const workspaceApiClient = {
       librariesDir: string;
       defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
+      evaluationJudgeAgentName?: string;
     }>('/api/settings'),
-  updateSettings: (patch: { defaultQueueWorkers?: number; scenarioAssistantAgentName?: string }) =>
+  updateSettings: (patch: {
+    defaultQueueWorkers?: number;
+    scenarioAssistantAgentName?: string;
+    evaluationJudgeAgentName?: string;
+  }) =>
     request<{
       workspaceRoot: string;
       evalsDir: string;
@@ -179,6 +184,7 @@ export const workspaceApiClient = {
       librariesDir: string;
       defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
+      evaluationJudgeAgentName?: string;
     }>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(patch)
@@ -365,6 +371,8 @@ export const workspaceApiClient = {
         value?: string;
         path?: string;
         equals?: string | number | boolean;
+        label?: string;
+        prompt?: string;
       }>;
       extractRules: Array<{ name: string; pattern: string }>;
     };

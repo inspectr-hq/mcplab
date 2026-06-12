@@ -52,4 +52,26 @@ describe('applySettingsOverrides', () => {
 
     expect(settings.defaultQueueWorkers).toBe(8);
   });
+
+  it('loads evaluation judge agent name from the overrides file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-settings-'));
+    roots.push(root);
+    const settings = {
+      workspaceRoot: root,
+      evalsDir: join(root, 'evals'),
+      runsDir: join(root, 'runs'),
+      toolAnalysisResultsDir: join(root, 'analysis'),
+      librariesDir: join(root, 'libs')
+    } as AppSettings;
+    mkdirSync(settings.librariesDir, { recursive: true });
+    writeFileSync(
+      join(settings.librariesDir, '.mcplab-app-settings.yaml'),
+      'evaluation_judge_agent_name: judge-1\n',
+      'utf8'
+    );
+
+    applySettingsOverrides(settings);
+
+    expect(settings.evaluationJudgeAgentName).toBe('judge-1');
+  });
 });

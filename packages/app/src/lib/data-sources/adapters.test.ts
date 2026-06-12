@@ -1283,6 +1283,56 @@ describe('config adapters round-trip', () => {
     );
   });
 
+  it('round-trips agent_check rules via core agent_assertions', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-agent-check',
+      name: 'agent-check-roundtrip',
+      path: '/tmp/agent-check.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-agent-check',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-agent-check',
+            name: 'Agent Check',
+            servers: [],
+            prompt: 'test',
+            eval: {
+              agent_assertions: [
+                {
+                  label: 'Logical range',
+                  prompt: 'Confirm the answer includes a valid logical time range.'
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    expect(uiConfig.scenarios[0]?.evalRules).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        prompt: 'Confirm the answer includes a valid logical time range.'
+      }
+    ]);
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-agent-check'
+    );
+    expect(scenario?.eval?.agent_assertions).toEqual([
+      {
+        label: 'Logical range',
+        prompt: 'Confirm the answer includes a valid logical time range.'
+      }
+    ]);
+  });
+
   it('maps legacy response_contains/not_contains to new core contains/not_contains', () => {
     const roundTripped = toCoreConfigYaml({
       id: 'cfg-legacy',
