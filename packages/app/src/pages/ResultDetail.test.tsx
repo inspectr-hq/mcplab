@@ -10,34 +10,34 @@ import type {
 
 const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLibraryScenarios } =
   vi.hoisted(() => {
-  const getResult = vi.fn();
-  const listMarkdownReports = vi.fn().mockResolvedValue([]);
-  const updateRunNote = vi.fn().mockResolvedValue(undefined);
-  const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-  const configs: EvalConfig[] = [];
-  const libraryScenarios: EvalConfig['scenarios'] = [];
-  const assistantState = {
-    assistantMessages: [] as ResultAssistantSessionView['messages'],
-    assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
-    assistantInput: '',
-    assistantLoading: false,
-    assistantChatEndRef: { current: null as HTMLDivElement | null },
-    assistantInputRef: { current: null as HTMLTextAreaElement | null },
-    setAssistantInput: vi.fn(),
-    askResultAssistant: vi.fn(),
-    approveResultAssistantToolCall: vi.fn(),
-    denyResultAssistantToolCall: vi.fn(),
-    applyResultAssistantSnippet: vi.fn(),
-    ensureIntroMessage: vi.fn(),
-    resetAssistantSession: vi.fn()
-  };
-  return {
-    getResultMock: getResult,
-    sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
-    mockResultAssistantState: assistantState,
-    mockConfigs: configs,
-    mockLibraryScenarios: libraryScenarios
-  };
+    const getResult = vi.fn();
+    const listMarkdownReports = vi.fn().mockResolvedValue([]);
+    const updateRunNote = vi.fn().mockResolvedValue(undefined);
+    const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
+    const configs: EvalConfig[] = [];
+    const libraryScenarios: EvalConfig['scenarios'] = [];
+    const assistantState = {
+      assistantMessages: [] as ResultAssistantSessionView['messages'],
+      assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
+      assistantInput: '',
+      assistantLoading: false,
+      assistantChatEndRef: { current: null as HTMLDivElement | null },
+      assistantInputRef: { current: null as HTMLTextAreaElement | null },
+      setAssistantInput: vi.fn(),
+      askResultAssistant: vi.fn(),
+      approveResultAssistantToolCall: vi.fn(),
+      denyResultAssistantToolCall: vi.fn(),
+      applyResultAssistantSnippet: vi.fn(),
+      ensureIntroMessage: vi.fn(),
+      resetAssistantSession: vi.fn()
+    };
+    return {
+      getResultMock: getResult,
+      sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
+      mockResultAssistantState: assistantState,
+      mockConfigs: configs,
+      mockLibraryScenarios: libraryScenarios
+    };
   });
 
 vi.mock('@/hooks/use-result-assistant', () => ({

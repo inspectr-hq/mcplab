@@ -228,7 +228,7 @@ describe('Results', () => {
     sourceMock.listResults.mockResolvedValue([
       withScenarioFailure(makeRun('run-auth', 1200), {
         error:
-          "Failed to list tools for server 'trendminer-v1' after 3 retries. Streamable HTTP error: Error POSTing to endpoint: {\"error\":\"invalid_token\",\"error_description\":\"Authentication failed\"}"
+          'Failed to list tools for server \'trendminer-v1\' after 3 retries. Streamable HTTP error: Error POSTing to endpoint: {"error":"invalid_token","error_description":"Authentication failed"}'
       }),
       withScenarioFailure(makeRun('run-rate', 900), {
         error: '429 Too Many Requests',

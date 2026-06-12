@@ -97,7 +97,7 @@ export async function runAgentScenario(params: {
   const { scenario, agent, mcp } = params;
   const serverRequestHeaders =
     typeof params.resolveServerRequestHeaders === 'function'
-      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
+      ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
       : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {

@@ -38,10 +38,8 @@ describe('runAgentScenario', () => {
     });
 
     expect(resolveServerRequestHeaders).toHaveBeenCalledWith(['oauth-server']);
-    expect(mcp.listTools).toHaveBeenCalledWith(
-      'oauth-server',
-      undefined,
-      { authorization: 'Bearer refreshed-token' }
-    );
+    expect(mcp.listTools).toHaveBeenCalledWith('oauth-server', undefined, {
+      authorization: 'Bearer refreshed-token'
+    });
   });
 });
