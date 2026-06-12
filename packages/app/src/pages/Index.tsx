@@ -79,7 +79,7 @@ const Dashboard = () => {
     const previousUntil = new Date(currentSinceMs - 1).toISOString();
     const currentUntil = new Date(nowMs).toISOString();
 
-    const loadWindow = async (since: string, until: string) => {
+    const loadSummaryWindow = async (since: string, until: string) => {
       if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({ since, until });
         return summaries.map(summaryToResult);
@@ -88,9 +88,9 @@ const Dashboard = () => {
     };
 
     Promise.all([
-      loadWindow(last30Since, currentUntil),
-      loadWindow(currentSince, currentUntil),
-      loadWindow(previousSince, previousUntil)
+      source.listResults({ since: last30Since, until: currentUntil }),
+      loadSummaryWindow(currentSince, currentUntil),
+      loadSummaryWindow(previousSince, previousUntil)
     ])
       .then(([last30WindowResults, currentWindowResults, previousWindowResults]) => {
         if (!active) return;
