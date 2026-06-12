@@ -13,7 +13,11 @@ import type {
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
 import { chatWithAgent, runAgentScenario, type AgentRunProgressEvent } from './agent.js';
-import { evaluateScenarioWithAgentChecks, extractValues } from './eval.js';
+import {
+  buildNotEvaluatedCheckResults,
+  evaluateScenarioWithAgentChecks,
+  extractValues
+} from './eval.js';
 import { aggregateResults, renderSummaryMarkdown } from './results.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 
@@ -335,12 +339,7 @@ export async function runAll(
             pass: false,
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
-            check_results:
-              scenario.eval?.agent_assertions?.map((assertion) => ({
-                type: 'agent_check',
-                label: assertion.label,
-                status: 'not_evaluated' as const
-              })) ?? [],
+            check_results: buildNotEvaluatedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],
@@ -448,7 +447,7 @@ async function judgeAgentAssertion(params: {
   const raw = String(response.content ?? '').trim();
   let parsed: { pass?: unknown; reason?: unknown };
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(extractJudgeJson(raw));
   } catch {
     throw new Error(
       `judge "${params.judge.name}" returned invalid JSON for check "${params.assertion.label}"`
@@ -473,6 +472,19 @@ async function judgeAgentAssertion(params: {
       judge_provider: params.judge.agent.provider
     }
   };
+}
+
+export function extractJudgeJson(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) return fencedMatch[1].trim();
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return trimmed.slice(objectStart, objectEnd + 1).trim();
+  }
+  return trimmed;
 }
 
 let lastRunIdPrefix = '';

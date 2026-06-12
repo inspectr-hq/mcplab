@@ -31,6 +31,7 @@ import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssi
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
+import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 interface ScenarioFormProps {
@@ -1324,7 +1325,7 @@ function buildPreviewCheckItems(
 ) {
   if (checkResults?.length) {
     return evalRules.map((rule) => {
-      const match = matchStructuredCheckResult(rule, checkResults);
+      const match = matchStructuredCheckResult(rule, checkResults, formatPreviewEvalRuleLabel);
       return {
         rule,
         status: match?.status ?? ('not_evaluated' as const),
@@ -1412,30 +1413,4 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
   })();
   if (!expectedPrefix) return undefined;
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));
-}
-
-function matchStructuredCheckResult(
-  rule: EvalRule,
-  checkResults: Array<{
-    type: string;
-    label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
-    reason?: string;
-  }>
-) {
-  const expectedType =
-    rule.type === 'agent_check'
-      ? 'agent_check'
-      : rule.type === 'required_tool' || rule.type === 'forbidden_tool'
-      ? rule.type
-      : rule.type;
-  const expectedLabel = formatPreviewEvalRuleLabel(rule);
-  return (
-    checkResults.find((result) => result.type === expectedType && result.label === expectedLabel) ??
-    (rule.type === 'agent_check'
-      ? checkResults.find(
-          (result) => result.type === 'agent_check' && result.label === String(rule.label ?? '')
-        )
-      : undefined)
-  );
 }

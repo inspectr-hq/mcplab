@@ -21,7 +21,8 @@ import {
 import {
   applyLibraryEntries,
   filterScenarioOverridesToSelectedScenarios,
-  mergeLibraryEntriesIntoConfig
+  mergeLibraryEntriesIntoConfig,
+  resolveEvaluationJudge
 } from './run-queue-executor.js';
 import type { RunQueueService } from './run-queue-domain.js';
 
@@ -419,7 +420,16 @@ export async function handleRunsRoutes(params: {
     }
 
     const libraries = readLibraries(settings.librariesDir);
-    const evaluationJudge = resolveEvaluationJudge(libraries.agents, settings);
+    let evaluationJudge;
+    try {
+      evaluationJudge = resolveEvaluationJudge({
+        agents: libraries.agents,
+        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+      });
+    } catch (error: unknown) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     const selectedAgentName = pickDefaultAssistantAgentName({
       requested: String(body.selectedAgentName ?? '').trim(),
       settingsDefault: settings.scenarioAssistantAgentName,
@@ -767,19 +777,6 @@ function localMcplabMcpUrl(): string {
   const port = process.env.MCP_PORT || '3011';
   const path = process.env.MCP_PATH || '/mcp';
   return `http://${host}:${port}${path}`;
-}
-
-function resolveEvaluationJudge(
-  agents: EvalConfig['agents'],
-  settings: { evaluationJudgeAgentName?: string }
-): { name: string; agent: EvalConfig['agents'][string] } | undefined {
-  const selected = settings.evaluationJudgeAgentName?.trim();
-  if (!selected) return undefined;
-  const agent = agents[selected];
-  if (!agent) {
-    throw new Error(`Evaluation judge agent not found: ${selected}`);
-  }
-  return { name: selected, agent };
 }
 
 function defaultResultAssistantReportPath(runId: string, now: Date): string {

@@ -89,6 +89,7 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
+import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import {
@@ -2693,7 +2694,7 @@ function buildRunCheckItems(
   }
   if (checkResults?.length) {
     return evalRules.map((rule) => {
-      const match = matchStructuredCheckResult(rule, checkResults);
+      const match = matchStructuredCheckResult(rule, checkResults, formatEvalRuleLabel);
       return {
         rule,
         status: match?.status ?? ('not_evaluated' as const),
@@ -2779,26 +2780,6 @@ function formatFailureReason(reason: string): string {
     return `Text match failed: ${regexMatch[1]}`;
   }
   return trimmed;
-}
-
-function matchStructuredCheckResult(
-  rule: EvalRule,
-  checkResults: Array<{
-    type: string;
-    label: string;
-    status: 'passed' | 'failed' | 'not_evaluated';
-    reason?: string;
-  }>
-) {
-  const expectedLabel = formatEvalRuleLabel(rule);
-  return (
-    checkResults.find((result) => result.type === rule.type && result.label === expectedLabel) ??
-    (rule.type === 'agent_check'
-      ? checkResults.find(
-          (result) => result.type === 'agent_check' && result.label === String(rule.label ?? '')
-        )
-      : undefined)
-  );
 }
 
 export default ResultDetail;

@@ -23,6 +23,36 @@ export interface EvaluateScenarioWithAgentChecksOptions {
   judgeAgentAssertion?: (assertion: AgentAssertion) => Promise<AgentAssertionJudgeResult>;
 }
 
+export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
+  if (!evalRules) return [];
+  const results: CheckResult[] = [];
+  for (const rule of evaluateToolConstraints([], evalRules.tool_constraints ?? {}).check_results) {
+    results.push({ ...rule, status: 'not_evaluated', reason: undefined });
+  }
+  const hasSequence = Boolean(evalRules.tool_sequence?.allow?.length);
+  if (hasSequence) {
+    results.push({
+      type: 'tool_sequence',
+      label: 'Allowed tool sequence',
+      status: 'not_evaluated',
+      metadata: { actual: [], allowed: evalRules.tool_sequence?.allow ?? [] }
+    });
+  }
+  for (const rule of (evalRules.response_assertions ?? []).map(
+    toCheckResultTemplateForResponseAssertion
+  )) {
+    results.push({ ...rule, status: 'not_evaluated', reason: undefined });
+  }
+  for (const assertion of evalRules.agent_assertions ?? []) {
+    results.push({
+      type: 'agent_check',
+      label: assertion.label,
+      status: 'not_evaluated'
+    });
+  }
+  return results;
+}
+
 export function evaluateScenario(
   finalText: string,
   toolSequence: string[],
@@ -175,7 +205,8 @@ function evaluateResponseAssertions(
   const normalizedText = text.toLowerCase();
   for (const assertion of assertions) {
     let reason: string | undefined;
-    let label: string = assertion.type;
+    const template = toCheckResultTemplateForResponseAssertion(assertion);
+    let label: string = template.label;
     if (assertion.type === 'regex') {
       label = `Text matches regex · ${assertion.pattern}`;
       try {
@@ -246,12 +277,7 @@ function evaluateResponseAssertions(
       } catch {
         reason = `JSONPath assertion failed: invalid JSON for path ${assertion.path}`;
         failures.push(reason);
-        check_results.push({
-          type: toUiRuleType(assertion.type),
-          label,
-          status: 'failed',
-          reason
-        });
+        check_results.push({ ...template, label, status: 'failed', reason });
         continue;
       }
       const result = JSONPath({ path: assertion.path, json });
@@ -269,12 +295,7 @@ function evaluateResponseAssertions(
       }
     }
     if (reason) failures.push(reason);
-    check_results.push({
-      type: toUiRuleType(assertion.type),
-      label,
-      status: reason ? 'failed' : 'passed',
-      reason
-    });
+    check_results.push({ ...template, label, status: reason ? 'failed' : 'passed', reason });
   }
   return { failures, check_results };
 }
@@ -333,4 +354,71 @@ function toUiRuleType(assertionType: ResponseAssertion['type']): string {
     case 'jsonpath_not_exists':
       return 'response_jsonpath_not_exists';
   }
+}
+
+function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion): CheckResult {
+  if (assertion.type === 'regex') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text matches regex · ${assertion.pattern}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'contains') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text contains · ${assertion.value}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'not_contains') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text does not contain · ${assertion.value}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'starts_with') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text starts with · ${assertion.value}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'ends_with') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text ends with · ${assertion.value}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'equals') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `Text equals · ${assertion.value}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'jsonpath') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label:
+        assertion.equals !== undefined
+          ? `JSONPath equals · ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath exists · ${assertion.path}`,
+      status: 'passed'
+    };
+  }
+  if (assertion.type === 'jsonpath_exists') {
+    return {
+      type: toUiRuleType(assertion.type),
+      label: `JSONPath exists · ${assertion.path}`,
+      status: 'passed'
+    };
+  }
+  return {
+    type: toUiRuleType(assertion.type),
+    label: `JSONPath not exists · ${assertion.path}`,
+    status: 'passed'
+  };
 }

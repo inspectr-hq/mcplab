@@ -3,7 +3,8 @@ import {
   buildFallbackScenarioRequestId,
   buildMcpServerAuthHeaders,
   buildScenarioRequestId,
-  createRunId
+  createRunId,
+  extractJudgeJson
 } from './runner.js';
 
 describe('buildScenarioRequestId', () => {
@@ -135,5 +136,17 @@ describe('createRunId', () => {
     const first = createRunId(new Date(2026, 5, 3, 12, 34, 56, 789));
     const second = createRunId(new Date(2026, 5, 3, 12, 34, 56, 790));
     expect(first).not.toBe(second);
+  });
+});
+
+describe('extractJudgeJson', () => {
+  it('extracts JSON from fenced blocks with preamble text', () => {
+    const raw = 'Sure! Here is my evaluation:\n```json\n{"pass":true,"reason":"ok"}\n```';
+    expect(extractJudgeJson(raw)).toBe('{"pass":true,"reason":"ok"}');
+  });
+
+  it('falls back to the first object-shaped payload in plain text', () => {
+    const raw = 'Result follows: {"pass":false,"reason":"bad"} Thanks.';
+    expect(extractJudgeJson(raw)).toBe('{"pass":false,"reason":"bad"}');
   });
 });

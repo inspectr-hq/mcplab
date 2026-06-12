@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateScenario, evaluateScenarioWithAgentChecks, extractValues } from './eval.js';
+import {
+  buildNotEvaluatedCheckResults,
+  evaluateScenario,
+  evaluateScenarioWithAgentChecks,
+  extractValues
+} from './eval.js';
 
 describe('evaluateScenario — no rules', () => {
   it('passes when there are no eval rules', () => {
@@ -340,6 +345,30 @@ describe('evaluateScenarioWithAgentChecks', () => {
     expect(result.pass).toBe(false);
     expect(result.failures[0]).toContain('Agent check could not run');
     expect(result.check_results[0]?.status).toBe('failed');
+  });
+});
+
+describe('buildNotEvaluatedCheckResults', () => {
+  it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
+    const results = buildNotEvaluatedCheckResults({
+      tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
+      tool_sequence: { allow: [['search', 'fetch']] },
+      response_assertions: [
+        { type: 'contains', value: 'ok' },
+        { type: 'jsonpath_exists', path: '$.data.id' }
+      ],
+      agent_assertions: [{ label: 'semantic', prompt: 'Check semantics.' }]
+    });
+
+    expect(results.map((result) => result.type)).toEqual([
+      'forbidden_tool',
+      'required_tool',
+      'tool_sequence',
+      'response_contains',
+      'response_jsonpath_exists',
+      'agent_check'
+    ]);
+    expect(results.every((result) => result.status === 'not_evaluated')).toBe(true);
   });
 });
 

@@ -160,8 +160,8 @@ describe('ScenarioForm checks editor', () => {
     );
 
     fireEvent.click(screen.getAllByRole('combobox')[1]);
-    fireEvent.click(screen.getByText('Agent check'));
-    fireEvent.change(screen.getByPlaceholderText('Check label'), {
+    fireEvent.click(screen.getByText('Judge Agent'));
+    fireEvent.change(screen.getByPlaceholderText('Prompt name'), {
       target: { value: 'Logical range' }
     });
     fireEvent.change(

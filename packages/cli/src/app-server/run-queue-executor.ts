@@ -52,6 +52,19 @@ export function filterScenarioOverridesToSelectedScenarios(
   return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
 
+export function resolveEvaluationJudge(params: {
+  agents: EvalConfig['agents'];
+  evaluationJudgeAgentName?: string;
+}): { name: string; agent: EvalConfig['agents'][string] } | undefined {
+  const selected = params.evaluationJudgeAgentName?.trim();
+  if (!selected) return undefined;
+  const agent = params.agents[selected];
+  if (!agent) {
+    throw new Error(`Evaluation judge agent not found: ${selected}`);
+  }
+  return { name: selected, agent };
+}
+
 export type AdmissionResult =
   | { status: 'ready'; readyServers: string[] }
   | { status: 'blocked_auth'; blockedServers: string[] };
@@ -303,11 +316,10 @@ export async function executeRunJob(params: {
         payload: { message: `Run note: ${runNote}` }
       });
     }
-    const evaluationJudgeName = settings.evaluationJudgeAgentName?.trim();
-    const evaluationJudge =
-      evaluationJudgeName && libraryAgents[evaluationJudgeName]
-        ? { name: evaluationJudgeName, agent: libraryAgents[evaluationJudgeName] }
-        : undefined;
+    const evaluationJudge = resolveEvaluationJudge({
+      agents: libraryAgents,
+      evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+    });
     const { runDir, results } = await runAll(expandedConfig, {
       runsPerScenario,
       scenarioId,
