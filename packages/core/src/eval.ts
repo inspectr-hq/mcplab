@@ -139,23 +139,25 @@ function evaluateToolConstraints(
 ): Pick<EvalResult, 'failures' | 'check_results'> {
   const failures: string[] = [];
   const unique = new Set(toolSequence);
-  const check_results = buildToolConstraintCheckResults(constraints).map((template) => {
-    const reason =
-      template.type === 'forbidden_tool'
-        ? unique.has(template.tool)
-          ? `Forbidden tool used: ${template.tool}`
-          : undefined
-        : !unique.has(template.tool)
-        ? `Required tool not used: ${template.tool}`
-        : undefined;
-    if (reason) failures.push(reason);
-    return {
-      type: template.type,
-      label: template.label,
-      status: reason ? 'failed' : 'passed',
-      reason
-    };
-  });
+  const check_results: CheckResult[] = buildToolConstraintCheckResults(constraints).map(
+    (template): CheckResult => {
+      const reason =
+        template.type === 'forbidden_tool'
+          ? unique.has(template.tool)
+            ? `Forbidden tool used: ${template.tool}`
+            : undefined
+          : !unique.has(template.tool)
+          ? `Required tool not used: ${template.tool}`
+          : undefined;
+      if (reason) failures.push(reason);
+      return {
+        type: template.type,
+        label: template.label,
+        status: reason ? 'failed' : 'passed',
+        reason
+      };
+    }
+  );
   return { failures, check_results };
 }
 
