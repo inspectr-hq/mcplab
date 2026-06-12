@@ -95,9 +95,13 @@ export async function runAgentScenario(params: {
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
+  const serverRequestHeaders =
+    typeof params.resolveServerRequestHeaders === 'function'
+      ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
+      : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
-    const tools = await mcp.listTools(serverName, params.signal);
+    const tools = await mcp.listTools(serverName, params.signal, serverRequestHeaders[serverName]);
     for (const tool of tools) {
       if (toolsByName.has(tool.name)) {
         throw new Error(`Duplicate tool name across servers: ${tool.name}`);

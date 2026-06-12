@@ -190,6 +190,16 @@ describe('fromCoreResultsJson conversation mapping', () => {
     expect((mapped as { runNote?: string }).runNote).toBe('mcp-server v1.8.2 #staging');
   });
 
+  it('preserves scenario execution errors on mapped runs', () => {
+    const results = baseResults();
+    results.scenarios[0].runs[1].error = '429 Too Many Requests';
+
+    const mapped = fromCoreResultsJson(results, []);
+
+    expect(mapped.scenarios[0].runs[1].error).toBe('429 Too Many Requests');
+    expect(mapped.scenarios[0].runs[1].failureReasons).toEqual(['assertion failed']);
+  });
+
   it('maps MCP server versions from core results metadata', () => {
     const results = baseResults();
     results.metadata.mcp_server_versions = {

@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -87,7 +88,7 @@ const Dashboard = () => {
     };
 
     Promise.all([
-      loadWindow(last30Since, currentUntil),
+      source.listResults({ since: last30Since, until: currentUntil }),
       loadWindow(currentSince, currentUntil),
       loadWindow(previousSince, previousUntil)
     ])
@@ -392,7 +393,10 @@ const Dashboard = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <PassRateBadge rate={run.overallPassRate} />
+                      <div className="flex flex-col items-end gap-1">
+                        <PassRateBadge rate={run.overallPassRate} />
+                        <RunFailureSignalBadge run={run} />
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {run.totalScenarios}

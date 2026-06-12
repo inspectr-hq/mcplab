@@ -102,9 +102,5 @@ describe('CompareResultDetails', () => {
       'href',
       '/results/run-1?configId=cfg-1&agent=agent-b'
     );
-
-    expect(await screen.findByText('Left Duration')).toBeInTheDocument();
-    expect(screen.getByText('1s')).toBeInTheDocument();
-    expect(screen.getByText('2s')).toBeInTheDocument();
   });
 });

@@ -60,6 +60,40 @@ function makeRun(
   };
 }
 
+function withScenarioFailure(
+  run: EvalResult,
+  params: { error?: string; failureReasons?: string[] }
+): EvalResult {
+  return {
+    ...run,
+    overallPassRate: 0,
+    scenarios: [
+      {
+        scenarioId: 'scn-1',
+        scenarioName: 'Scenario 1',
+        agentId: 'agent-1',
+        agentName: 'Agent 1',
+        passRate: 0,
+        avgToolCalls: 0,
+        avgDuration: 0,
+        runs: [
+          {
+            runIndex: 0,
+            passed: false,
+            error: params.error,
+            toolCalls: [],
+            finalAnswer: '',
+            conversation: [],
+            duration: 0,
+            extractedValues: {},
+            failureReasons: params.failureReasons ?? []
+          }
+        ]
+      }
+    ]
+  };
+}
+
 function formatDayLabel(timestamp: string) {
   return new Date(timestamp).toLocaleDateString(undefined, {
     weekday: 'long',
@@ -188,6 +222,38 @@ describe('Results', () => {
         .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
       expect(runLinks.map((link) => link.textContent)).toEqual(['run-high', 'run-low', 'run-null']);
     });
+  });
+
+  it('surfaces auth and rate-limit failures differently from normal assertion failures', async () => {
+    sourceMock.listResults.mockResolvedValue([
+      withScenarioFailure(makeRun('run-auth', 1200), {
+        error:
+          'Failed to list tools for server \'trendminer-v1\' after 3 retries. Streamable HTTP error: Error POSTing to endpoint: {"error":"invalid_token","error_description":"Authentication failed"}'
+      }),
+      withScenarioFailure(makeRun('run-rate', 900), {
+        error: '429 Too Many Requests',
+        failureReasons: ['Scenario error: 429 Too Many Requests']
+      }),
+      withScenarioFailure(makeRun('run-assert', 800), {
+        failureReasons: ['Required tool not used: value_based_search']
+      })
+    ]);
+
+    render(
+      <MemoryRouter
+        initialEntries={['/results']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-auth');
+    expect(screen.getByText('Auth error')).toBeInTheDocument();
+    expect(screen.getByText('Rate limited')).toBeInTheDocument();
+    expect(screen.queryByText('Infra error')).not.toBeInTheDocument();
   });
 
   it('shows day separators between runs from different days', async () => {

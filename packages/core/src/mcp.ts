@@ -134,8 +134,15 @@ export class McpClientManager {
     return client;
   }
 
-  async listTools(serverName: string, signal?: AbortSignal): Promise<ToolDef[]> {
-    const client = this.getClient(serverName);
+  async listTools(
+    serverName: string,
+    signal?: AbortSignal,
+    requestHeaders?: Record<string, string>
+  ): Promise<ToolDef[]> {
+    const client =
+      requestHeaders && Object.keys(requestHeaders).length > 0
+        ? await this.getOrCreateScopedClient(serverName, requestHeaders, signal)
+        : this.getClient(serverName);
     let lastError: any;
     for (let attempt = 0; attempt <= McpClientManager.MAX_CONNECT_RETRIES; attempt += 1) {
       try {

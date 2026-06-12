@@ -121,56 +121,58 @@ const CompareResultDetails = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Left Duration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="font-mono text-sm">
-              {(() => {
-                if (!leftResult) return '—';
-                const totalTimeMs = getRunTotalDurationMs(leftResult);
-                return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);
-              })()}
-            </div>
-            <div className="mt-1 font-mono text-xs text-muted-foreground">
-              Tool time:{' '}
-              {(() => {
-                if (!leftResult) return '—';
-                const toolTimeMs = getRunToolTimeMs(leftResult);
-                return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Right Duration
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="font-mono text-sm">
-              {(() => {
-                if (!rightResult) return '—';
-                const totalTimeMs = getRunTotalDurationMs(rightResult);
-                return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);
-              })()}
-            </div>
-            <div className="mt-1 font-mono text-xs text-muted-foreground">
-              Tool time:{' '}
-              {(() => {
-                if (!rightResult) return '—';
-                const toolTimeMs = getRunToolTimeMs(rightResult);
-                return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/*<div className="grid gap-4 sm:grid-cols-2">*/}
+      {/*  <Card>*/}
+      {/*    <CardHeader className="pb-2">*/}
+      {/*      <CardTitle className="text-xs font-medium text-muted-foreground">*/}
+      {/*        Left Duration*/}
+      {/*      </CardTitle>*/}
+      {/*    </CardHeader>*/}
+      {/*    <CardContent>*/}
+      {/*      <div className="mt-1 font-mono text-xs text-muted-foreground">*/}
+      {/*        Total time:{' '}*/}
+      {/*        {(() => {*/}
+      {/*          if (!leftResult) return '—';*/}
+      {/*          const totalTimeMs = getRunTotalDurationMs(leftResult);*/}
+      {/*          return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);*/}
+      {/*        })()}*/}
+      {/*      </div>*/}
+      {/*      <div className="mt-1 font-mono text-xs text-muted-foreground">*/}
+      {/*        Tool time:{' '}*/}
+      {/*        {(() => {*/}
+      {/*          if (!leftResult) return '—';*/}
+      {/*          const toolTimeMs = getRunToolTimeMs(leftResult);*/}
+      {/*          return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);*/}
+      {/*        })()}*/}
+      {/*      </div>*/}
+      {/*    </CardContent>*/}
+      {/*  </Card>*/}
+      {/*  <Card>*/}
+      {/*    <CardHeader className="pb-2">*/}
+      {/*      <CardTitle className="text-xs font-medium text-muted-foreground">*/}
+      {/*        Right Duration*/}
+      {/*      </CardTitle>*/}
+      {/*    </CardHeader>*/}
+      {/*    <CardContent>*/}
+      {/*      <div className="mt-1 font-mono text-xs text-muted-foreground">*/}
+      {/*        Total time:{' '}*/}
+      {/*        {(() => {*/}
+      {/*          if (!rightResult) return '—';*/}
+      {/*          const totalTimeMs = getRunTotalDurationMs(rightResult);*/}
+      {/*          return totalTimeMs === null ? '—' : formatDurationMs(totalTimeMs);*/}
+      {/*        })()}*/}
+      {/*      </div>*/}
+      {/*      <div className="mt-1 font-mono text-xs text-muted-foreground">*/}
+      {/*        Tool time:{' '}*/}
+      {/*        {(() => {*/}
+      {/*          if (!rightResult) return '—';*/}
+      {/*          const toolTimeMs = getRunToolTimeMs(rightResult);*/}
+      {/*          return toolTimeMs === null ? '—' : formatDurationMs(toolTimeMs);*/}
+      {/*        })()}*/}
+      {/*      </div>*/}
+      {/*    </CardContent>*/}
+      {/*  </Card>*/}
+      {/*</div>*/}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="overflow-hidden">

@@ -2,38 +2,43 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultDetail from './ResultDetail';
-import type { EvalResult } from '@/types/eval';
+import type { EvalConfig, EvalResult } from '@/types/eval';
 import type {
   ResultAssistantPendingToolCall,
   ResultAssistantSessionView
 } from '@/lib/data-sources/types';
 
-const { getResultMock, sourceMock, mockResultAssistantState } = vi.hoisted(() => {
-  const getResult = vi.fn();
-  const listMarkdownReports = vi.fn().mockResolvedValue([]);
-  const updateRunNote = vi.fn().mockResolvedValue(undefined);
-  const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
-  const assistantState = {
-    assistantMessages: [] as ResultAssistantSessionView['messages'],
-    assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
-    assistantInput: '',
-    assistantLoading: false,
-    assistantChatEndRef: { current: null as HTMLDivElement | null },
-    assistantInputRef: { current: null as HTMLTextAreaElement | null },
-    setAssistantInput: vi.fn(),
-    askResultAssistant: vi.fn(),
-    approveResultAssistantToolCall: vi.fn(),
-    denyResultAssistantToolCall: vi.fn(),
-    applyResultAssistantSnippet: vi.fn(),
-    ensureIntroMessage: vi.fn(),
-    resetAssistantSession: vi.fn()
-  };
-  return {
-    getResultMock: getResult,
-    sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
-    mockResultAssistantState: assistantState
-  };
-});
+const { getResultMock, sourceMock, mockResultAssistantState, mockConfigs, mockLibraryScenarios } =
+  vi.hoisted(() => {
+    const getResult = vi.fn();
+    const listMarkdownReports = vi.fn().mockResolvedValue([]);
+    const updateRunNote = vi.fn().mockResolvedValue(undefined);
+    const startRun = vi.fn().mockResolvedValue({ jobId: 'job-1' });
+    const configs: EvalConfig[] = [];
+    const libraryScenarios: EvalConfig['scenarios'] = [];
+    const assistantState = {
+      assistantMessages: [] as ResultAssistantSessionView['messages'],
+      assistantPendingToolCalls: [] as ResultAssistantPendingToolCall[],
+      assistantInput: '',
+      assistantLoading: false,
+      assistantChatEndRef: { current: null as HTMLDivElement | null },
+      assistantInputRef: { current: null as HTMLTextAreaElement | null },
+      setAssistantInput: vi.fn(),
+      askResultAssistant: vi.fn(),
+      approveResultAssistantToolCall: vi.fn(),
+      denyResultAssistantToolCall: vi.fn(),
+      applyResultAssistantSnippet: vi.fn(),
+      ensureIntroMessage: vi.fn(),
+      resetAssistantSession: vi.fn()
+    };
+    return {
+      getResultMock: getResult,
+      sourceMock: { getResult, listMarkdownReports, updateRunNote, startRun },
+      mockResultAssistantState: assistantState,
+      mockConfigs: configs,
+      mockLibraryScenarios: libraryScenarios
+    };
+  });
 
 vi.mock('@/hooks/use-result-assistant', () => ({
   useResultAssistant: () => mockResultAssistantState
@@ -47,7 +52,7 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 
 vi.mock('@/contexts/ConfigContext', () => ({
   useConfigs: () => ({
-    configs: [],
+    configs: mockConfigs,
     loading: false,
     getConfig: () => undefined,
     addConfig: vi.fn(),
@@ -62,7 +67,7 @@ vi.mock('@/contexts/LibraryContext', () => ({
   useLibraries: () => ({
     servers: [],
     agents: [],
-    scenarios: [],
+    scenarios: mockLibraryScenarios,
     loading: false,
     setServers: vi.fn(),
     setAgents: vi.fn(),
@@ -153,6 +158,8 @@ function makeResult(): EvalResult {
 
 describe('ResultDetail conversation toggle', () => {
   beforeEach(() => {
+    mockConfigs.length = 0;
+    mockLibraryScenarios.length = 0;
     mockResultAssistantState.assistantMessages = [];
     mockResultAssistantState.assistantPendingToolCalls = [];
     mockResultAssistantState.assistantInput = '';
@@ -448,5 +455,67 @@ describe('ResultDetail conversation toggle', () => {
         })
       );
     });
+  });
+
+  it('marks checks as not evaluated when the run failed before evaluation and shows the scenario clock icon', async () => {
+    const result = makeResult();
+    result.configId = 'cfg-with-scenario';
+    result.overallPassRate = 0;
+    result.scenarios[0].passRate = 0;
+    result.scenarios[0].runs[0] = {
+      ...result.scenarios[0].runs[0],
+      passed: false,
+      error: '429 Too Many Requests',
+      failureReasons: ['Scenario error: 429 Too Many Requests']
+    };
+    mockConfigs.push({
+      id: 'cfg-with-scenario',
+      name: 'Config',
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Scenario 1',
+          prompt: 'Prompt',
+          serverIds: [],
+          evalRules: [
+            { type: 'required_tool', value: 'navigate_asset_hierarchy' },
+            { type: 'response_regex', value: 'ALPHA' }
+          ],
+          extractRules: []
+        }
+      ],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    getResultMock.mockResolvedValue(result);
+
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={['/results/run-1']}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/429 Too Many Requests/)).toBeInTheDocument();
+      expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('0 passed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('0 failed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('not_evaluated')).toHaveLength(2);
+    expect(
+      screen.getByText('Checks were not evaluated because this run failed before evaluation.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Required tool · navigate_asset_hierarchy')).toBeInTheDocument();
+    expect(screen.getByText('Text matches regex · ALPHA')).toBeInTheDocument();
+    expect(container.querySelector('svg.lucide-clock3')).toBeTruthy();
   });
 });

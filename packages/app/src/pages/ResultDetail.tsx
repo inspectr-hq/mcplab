@@ -268,7 +268,7 @@ const ResultDetail = () => {
     if (!node) return;
 
     const update = () => {
-      setHideDeleteLabel(node.clientWidth < 600);
+      setHideDeleteLabel(node.clientWidth < 800);
     };
 
     update();
@@ -279,7 +279,7 @@ const ResultDetail = () => {
     }
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
     if (!result?.id) {
@@ -844,16 +844,18 @@ const ResultDetail = () => {
                 variant="outline"
                 size="sm"
                 className="max-w-full gap-1.5"
+                aria-label="Run Note"
                 onClick={() => openRunNotePanel()}
               >
                 <NotepadText className="h-3.5 w-3.5" />
-                Run Note
+                {hideDeleteLabel ? 'Note' : 'Run Note'}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="max-w-full gap-1.5"
+                aria-label="MCP Lab Assistant"
                 onClick={() => openAssistantWithPrompt()}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
@@ -1100,7 +1102,7 @@ const ResultDetail = () => {
                                         {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                           preciseUnderTenSeconds: true
                                         })}{' '}
-                                        wall-clock ·{' '}
+                                        total time ·{' '}
                                         {formatDurationMs(getScenarioToolTimeMs(sc), {
                                           preciseUnderTenSeconds: true
                                         })}{' '}
@@ -1143,7 +1145,8 @@ const ResultDetail = () => {
                                           const checks = scenarioDef
                                             ? buildRunCheckItems(
                                                 scenarioDef.evalRules,
-                                                run.failureReasons
+                                                run.failureReasons,
+                                                run.error
                                               )
                                             : [];
                                           const failedChecks = checks.filter(
@@ -1151,6 +1154,9 @@ const ResultDetail = () => {
                                           );
                                           const passedChecks = checks.filter(
                                             (c) => c.status === 'passed'
+                                          );
+                                          const notEvaluatedChecks = checks.filter(
+                                            (c) => c.status === 'not_evaluated'
                                           );
                                           return (
                                             <>
@@ -1257,9 +1263,24 @@ const ResultDetail = () => {
                                                         >
                                                           {failedChecks.length} failed
                                                         </Badge>
+                                                        {notEvaluatedChecks.length > 0 && (
+                                                          <Badge
+                                                            variant="outline"
+                                                            className="h-5 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
+                                                          >
+                                                            {notEvaluatedChecks.length} not
+                                                            evaluated
+                                                          </Badge>
+                                                        )}
                                                       </button>
                                                     </CollapsibleTrigger>
                                                     <CollapsibleContent>
+                                                      {notEvaluatedChecks.length > 0 && (
+                                                        <p className="mb-2 text-[11px] text-muted-foreground">
+                                                          Checks were not evaluated because this run
+                                                          failed before evaluation.
+                                                        </p>
+                                                      )}
                                                       <div className="space-y-1">
                                                         {checks.map((check, idx) => (
                                                           <div
@@ -1271,6 +1292,8 @@ const ResultDetail = () => {
                                                             className={`flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-xs ${
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
+                                                                : check.status === 'not_evaluated'
+                                                                ? 'border-muted-foreground/20 bg-muted/40'
                                                                 : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
@@ -1278,6 +1301,9 @@ const ResultDetail = () => {
                                                               <div className="flex items-center gap-2">
                                                                 {check.status === 'failed' ? (
                                                                   <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                                                                ) : check.status ===
+                                                                  'not_evaluated' ? (
+                                                                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                                                 ) : (
                                                                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
                                                                 )}
@@ -1298,6 +1324,8 @@ const ResultDetail = () => {
                                                               className={`shrink-0 text-[10px] ${
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
+                                                                  : check.status === 'not_evaluated'
+                                                                  ? 'border-muted-foreground/30 text-muted-foreground'
                                                                   : 'border-success/30 text-success'
                                                               }`}
                                                             >
@@ -2633,7 +2661,16 @@ function ExpandableText({
   );
 }
 
-function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[], runError?: string) {
+  const scenarioError =
+    runError || failureReasons.find((reason) => reason.startsWith('Scenario error:'));
+  if (scenarioError) {
+    return evalRules.map((rule) => ({
+      rule,
+      status: 'not_evaluated' as const,
+      failureReason: undefined
+    }));
+  }
   return evalRules.map((rule) => {
     const failureReason = matchFailureReasonForRule(rule, failureReasons);
     return {
