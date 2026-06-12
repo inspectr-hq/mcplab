@@ -88,7 +88,7 @@ const Dashboard = () => {
     };
 
     Promise.all([
-      source.listResults({ since: last30Since, until: currentUntil }),
+      loadWindow(last30Since, currentUntil),
       loadWindow(currentSince, currentUntil),
       loadWindow(previousSince, previousUntil)
     ])
