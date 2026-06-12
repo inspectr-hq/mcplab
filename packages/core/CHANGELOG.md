@@ -1,5 +1,13 @@
 # @inspectr/mcplab-core
 
+## 1.17.0
+
+### Minor Changes
+
+- chore: Improve evaluation error handling
+- fix: resolve server request headers before listing tools
+- chore: Bump dependencies
+
 ## 1.16.0
 
 ### Minor Changes

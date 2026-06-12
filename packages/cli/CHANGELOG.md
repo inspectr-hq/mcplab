@@ -1,5 +1,20 @@
 # @inspectr/mcplab
 
+## 1.21.0
+
+### Minor Changes
+
+- chore: Improve evaluation error handling
+- fix: resolve server request headers before listing tools
+- chore: Bump dependencies
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.17.0
+  - @inspectr/mcplab-mcp-server@1.5.1
+  - @inspectr/mcplab-reporting@1.1.18
+
 ## 1.20.2
 
 ### Patch Changes
