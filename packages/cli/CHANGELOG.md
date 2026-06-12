@@ -1,5 +1,13 @@
 # @inspectr/mcplab
 
+## 1.21.1
+
+### Patch Changes
+
+- feat: SSE browser worker
+- fix: Result show agent counter
+- fix: Change compare view height
+
 ## 1.21.0
 
 ### Minor Changes
