@@ -139,6 +139,7 @@ export interface WorkspaceSettings {
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
+  evaluationJudgeAgentName?: string;
 }
 
 export interface StartRunResponse {
@@ -167,6 +168,8 @@ export interface ScenarioAssistantSuggestionBundle {
       value?: string;
       path?: string;
       equals?: string | number | boolean;
+      label?: string;
+      prompt?: string;
     }>;
     rationale?: string;
   };
@@ -763,6 +766,7 @@ export interface EvalDataSource {
   updateWorkspaceSettings: (patch: {
     defaultQueueWorkers?: number;
     scenarioAssistantAgentName?: string;
+    evaluationJudgeAgentName?: string;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (
     params: {
@@ -781,6 +785,8 @@ export interface EvalDataSource {
             value?: string;
             path?: string;
             equals?: string | number | boolean;
+            label?: string;
+            prompt?: string;
           }>;
           extractRules: Array<{ name: string; pattern: string }>;
         };
@@ -826,6 +832,8 @@ export interface EvalDataSource {
         value?: string;
         path?: string;
         equals?: string | number | boolean;
+        label?: string;
+        prompt?: string;
       }>;
       extractRules: Array<{ name: string; pattern: string }>;
     };

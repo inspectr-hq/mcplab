@@ -28,6 +28,8 @@ interface ScenarioAssistantContextInput {
       value?: string;
       path?: string;
       equals?: string | number | boolean;
+      label?: string;
+      prompt?: string;
     }>;
     extractRules: Array<{ name: string; pattern: string }>;
   };
@@ -43,6 +45,8 @@ interface ScenarioAssistantSuggestionBundle {
       value?: string;
       path?: string;
       equals?: string | number | boolean;
+      label?: string;
+      prompt?: string;
     }>;
     rationale?: string;
   };
@@ -58,6 +62,8 @@ interface ScenarioAssistantEvalRuleSuggestion {
   value?: string;
   path?: string;
   equals?: string | number | boolean;
+  label?: string;
+  prompt?: string;
 }
 
 interface ParsedAssistantToolCall {
@@ -170,11 +176,12 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
     'For suggestions, use keys: prompt, evalRules, extractRules, notes.',
     'prompt: { replacement: string, rationale?: string }',
-    'evalRules: { replacement: [{ type, value?, path?, equals? }...], rationale?: string }',
+    'evalRules: { replacement: [{ type, value?, path?, equals?, label?, prompt? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists.',
+    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Use agent_check when the validation is semantic, fuzzy, or intent-based and deterministic checks would be brittle. agent_check requires label and prompt.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
     'Use response_regex only for genuinely variable/complex patterns (IDs, dates, currency, alternation, optional tokens, quantifiers, character classes).',
     'Never include both response_regex and an equivalent literal check for the same intent.',

@@ -80,6 +80,29 @@ interface AdapterOptions {
   max_tokens?: number;
   system?: string;
   signal?: AbortSignal;
+  forceJsonResponse?: boolean;
+}
+
+export function buildForcedJsonResponseFormat() {
+  return {
+    type: 'json_schema' as const,
+    json_schema: {
+      name: 'judge_result',
+      schema: buildJudgeResultSchema()
+    }
+  };
+}
+
+function buildJudgeResultSchema() {
+  return {
+    type: 'object',
+    properties: {
+      pass: { type: 'boolean' },
+      reason: { type: 'string' }
+    },
+    required: ['pass', 'reason'],
+    additionalProperties: false
+  };
 }
 
 export async function runAgentScenario(params: {
@@ -335,6 +358,7 @@ export async function chatWithAgent(params: {
   tools?: ToolDef[];
   system?: string;
   signal?: AbortSignal;
+  forceJsonResponse?: boolean;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
   const tools = params.tools ?? [];
@@ -344,7 +368,8 @@ export async function chatWithAgent(params: {
     temperature: agent.temperature,
     max_tokens: agent.max_tokens,
     system: params.system ?? agent.system,
-    signal: params.signal
+    signal: params.signal,
+    forceJsonResponse: params.forceJsonResponse
   });
 }
 
@@ -385,7 +410,10 @@ class OpenAiAdapter implements LlmAdapter {
         messages: messages.map(toOpenAiMessage),
         tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
         temperature: options.temperature,
-        max_tokens: options.max_tokens
+        max_tokens: options.max_tokens,
+        ...(options.forceJsonResponse
+          ? { response_format: buildForcedJsonResponseFormat() as any }
+          : {})
       },
       options.signal ? { signal: options.signal } : undefined
     );
@@ -442,7 +470,10 @@ class AzureOpenAiAdapter implements LlmAdapter {
     const baseRequest = {
       model: this.deployment,
       messages: messages.map(toOpenAiMessage),
-      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+      ...(options.forceJsonResponse
+        ? { response_format: buildForcedJsonResponseFormat() as any }
+        : {})
     } as any;
     if (typeof options.temperature === 'number') {
       baseRequest.temperature = options.temperature;
@@ -533,7 +564,15 @@ class AnthropicAdapter implements LlmAdapter {
         max_tokens: options.max_tokens ?? 1024,
         system,
         messages: anthroMessages,
-        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
+        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
+        ...(options.forceJsonResponse && {
+          output_config: {
+            format: {
+              type: 'json_schema' as const,
+              schema: buildJudgeResultSchema()
+            }
+          }
+        })
       },
       options.signal
     );

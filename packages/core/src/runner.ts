@@ -2,6 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type {
+  AgentAssertion,
+  AgentConfig,
   ExecutableEvalConfig,
   ScenarioRunResult,
   ResultsJson,
@@ -10,8 +12,12 @@ import type {
 } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
-import { runAgentScenario, type AgentRunProgressEvent } from './agent.js';
-import { evaluateScenario, extractValues } from './eval.js';
+import { chatWithAgent, runAgentScenario, type AgentRunProgressEvent } from './agent.js';
+import {
+  buildNotEvaluatedCheckResults,
+  evaluateScenarioWithAgentChecks,
+  extractValues
+} from './eval.js';
 import { aggregateResults, renderSummaryMarkdown } from './results.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 
@@ -30,6 +36,10 @@ export interface RunOptions {
     serverNames: string[],
     options?: { signal?: AbortSignal }
   ) => Promise<Record<string, Record<string, string>>>;
+  evaluationJudge?: {
+    name: string;
+    agent: AgentConfig;
+  };
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
 }
@@ -88,6 +98,16 @@ export async function runAll(
   options: RunOptions
 ): Promise<{ runDir: string; results: ResultsJson }> {
   throwIfAborted(options.signal);
+  const scenariosWithAgentChecks = config.scenarios.filter(
+    (scenario) => (scenario.eval?.agent_assertions?.length ?? 0) > 0
+  );
+  if (scenariosWithAgentChecks.length > 0 && !options.evaluationJudge) {
+    throw new Error(
+      `Agent checks require a default evaluation judge agent. Configure one in workspace settings before running scenarios: ${scenariosWithAgentChecks
+        .map((scenario) => scenario.id)
+        .join(', ')}`
+    );
+  }
   const emitProgress = async (event: RunProgressEvent): Promise<void> => {
     if (!options.onProgress) return;
     await options.onProgress(event);
@@ -226,10 +246,23 @@ export async function runAll(
               });
             }
           });
-          const evalResult = evaluateScenario(
+          const evalResult = await evaluateScenarioWithAgentChecks(
             runResult.finalText,
             runResult.toolSequence,
-            scenario.eval
+            scenario.eval,
+            {
+              judgeAgentAssertion: options.evaluationJudge
+                ? async (assertion) => {
+                    const judge = options.evaluationJudge!;
+                    return judgeAgentAssertion({
+                      assertion,
+                      finalText: runResult.finalText,
+                      judge,
+                      signal: options.signal
+                    });
+                  }
+                : undefined
+            }
           );
           const extracted = extractValues(
             runResult.finalText,
@@ -246,6 +279,7 @@ export async function runAll(
             request_id: requestId,
             pass: evalResult.pass,
             failures: evalResult.failures,
+            check_results: evalResult.check_results,
             tool_calls: runResult.toolSequence,
             tool_call_count: runResult.toolSequence.length,
             tool_sequence: runResult.toolSequence,
@@ -305,6 +339,7 @@ export async function runAll(
             pass: false,
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
+            check_results: buildNotEvaluatedCheckResults(scenario.eval),
             tool_calls: [],
             tool_call_count: 0,
             tool_sequence: [],
@@ -378,6 +413,78 @@ export async function runAll(
   } finally {
     await mcp.disconnectAll();
   }
+}
+
+async function judgeAgentAssertion(params: {
+  assertion: AgentAssertion;
+  finalText: string;
+  judge: NonNullable<RunOptions['evaluationJudge']>;
+  signal?: AbortSignal;
+}): Promise<{ pass: boolean; reason: string; metadata?: Record<string, unknown> }> {
+  const system = [
+    'You evaluate whether a final answer satisfies a semantic check.',
+    'Return JSON only.',
+    'Schema: {"pass": boolean, "reason": string}.',
+    'Keep the reason short and concrete.'
+  ].join(' ');
+  const response = await chatWithAgent({
+    agent: params.judge.agent,
+    system,
+    tools: [],
+    signal: params.signal,
+    forceJsonResponse: true,
+    messages: [
+      {
+        role: 'user',
+        content: JSON.stringify({
+          check_label: params.assertion.label,
+          check_prompt: params.assertion.prompt,
+          final_answer: params.finalText
+        })
+      }
+    ]
+  });
+  const raw = String(response.content ?? '').trim();
+  let parsed: { pass?: unknown; reason?: unknown };
+  try {
+    parsed = JSON.parse(extractJudgeJson(raw));
+  } catch {
+    throw new Error(
+      `judge "${params.judge.name}" returned invalid JSON for check "${params.assertion.label}"`
+    );
+  }
+  if (typeof parsed.pass !== 'boolean') {
+    throw new Error(
+      `judge "${params.judge.name}" returned invalid pass value for check "${params.assertion.label}"`
+    );
+  }
+  return {
+    pass: parsed.pass,
+    reason:
+      typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
+        ? parsed.reason.trim()
+        : parsed.pass
+        ? `Agent check passed: ${params.assertion.label}`
+        : `Agent check failed: ${params.assertion.label}`,
+    metadata: {
+      judge_agent: params.judge.name,
+      judge_model: params.judge.agent.model,
+      judge_provider: params.judge.agent.provider
+    }
+  };
+}
+
+export function extractJudgeJson(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) return fencedMatch[1].trim();
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    return trimmed.slice(objectStart, objectEnd + 1).trim();
+  }
+  return trimmed;
 }
 
 let lastRunIdPrefix = '';
