@@ -103,6 +103,7 @@ import { resolveRunSelectedAgents } from './run-agent-selection.js';
 import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
 import { getAppServerVersionInfo } from './version-info.js';
+import { resolveEvaluationJudge } from './run-queue-executor.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -299,6 +300,17 @@ export async function startAppServer(options: AppServerOptions) {
         }
         if (Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName')) {
           const next = String(body.evaluationJudgeAgentName ?? '').trim();
+          if (next) {
+            try {
+              resolveEvaluationJudge({
+                agents: readLibraries(settings.librariesDir).agents,
+                evaluationJudgeAgentName: next
+              });
+            } catch (error: unknown) {
+              asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+              return;
+            }
+          }
           settings.evaluationJudgeAgentName = next || undefined;
           settingsChanged = true;
         }

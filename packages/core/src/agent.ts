@@ -83,6 +83,28 @@ interface AdapterOptions {
   forceJsonResponse?: boolean;
 }
 
+export function buildForcedJsonResponseFormat() {
+  return {
+    type: 'json_schema' as const,
+    json_schema: {
+      name: 'judge_result',
+      schema: buildJudgeResultSchema()
+    }
+  };
+}
+
+function buildJudgeResultSchema() {
+  return {
+    type: 'object',
+    properties: {
+      pass: { type: 'boolean' },
+      reason: { type: 'string' }
+    },
+    required: ['pass', 'reason'],
+    additionalProperties: false
+  };
+}
+
 export async function runAgentScenario(params: {
   scenario: ExecutableScenario;
   agent: AgentConfig;
@@ -388,7 +410,10 @@ class OpenAiAdapter implements LlmAdapter {
         messages: messages.map(toOpenAiMessage),
         tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
         temperature: options.temperature,
-        max_tokens: options.max_tokens
+        max_tokens: options.max_tokens,
+        ...(options.forceJsonResponse
+          ? { response_format: buildForcedJsonResponseFormat() as any }
+          : {})
       },
       options.signal ? { signal: options.signal } : undefined
     );
@@ -445,7 +470,10 @@ class AzureOpenAiAdapter implements LlmAdapter {
     const baseRequest = {
       model: this.deployment,
       messages: messages.map(toOpenAiMessage),
-      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined
+      tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
+      ...(options.forceJsonResponse
+        ? { response_format: buildForcedJsonResponseFormat() as any }
+        : {})
     } as any;
     if (typeof options.temperature === 'number') {
       baseRequest.temperature = options.temperature;
@@ -541,15 +569,7 @@ class AnthropicAdapter implements LlmAdapter {
           output_config: {
             format: {
               type: 'json_schema' as const,
-              schema: {
-                type: 'object',
-                properties: {
-                  pass: { type: 'boolean' },
-                  reason: { type: 'string' }
-                },
-                required: ['pass', 'reason'],
-                additionalProperties: false
-              }
+              schema: buildJudgeResultSchema()
             }
           }
         })

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAgentScenario } from './agent.js';
+import { buildForcedJsonResponseFormat, runAgentScenario } from './agent.js';
 
 describe('runAgentScenario', () => {
   beforeEach(() => {
@@ -40,6 +40,26 @@ describe('runAgentScenario', () => {
     expect(resolveServerRequestHeaders).toHaveBeenCalledWith(['oauth-server']);
     expect(mcp.listTools).toHaveBeenCalledWith('oauth-server', undefined, {
       authorization: 'Bearer refreshed-token'
+    });
+  });
+});
+
+describe('buildForcedJsonResponseFormat', () => {
+  it('returns json schema response format for compact judge contract', () => {
+    expect(buildForcedJsonResponseFormat()).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'judge_result',
+        schema: {
+          type: 'object',
+          properties: {
+            pass: { type: 'boolean' },
+            reason: { type: 'string' }
+          },
+          required: ['pass', 'reason'],
+          additionalProperties: false
+        }
+      }
     });
   });
 });
