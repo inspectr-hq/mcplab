@@ -370,6 +370,27 @@ describe('buildNotEvaluatedCheckResults', () => {
     ]);
     expect(results.every((result) => result.status === 'not_evaluated')).toBe(true);
   });
+
+  it('preserves tool-constraint labels without evaluating against an empty tool sequence', () => {
+    const results = buildNotEvaluatedCheckResults({
+      tool_constraints: { forbidden_tools: ['delete'], required_tools: ['search'] }
+    });
+
+    expect(results).toEqual([
+      {
+        type: 'forbidden_tool',
+        label: 'Forbidden tool · delete',
+        status: 'not_evaluated',
+        reason: undefined
+      },
+      {
+        type: 'required_tool',
+        label: 'Required tool · search',
+        status: 'not_evaluated',
+        reason: undefined
+      }
+    ]);
+  });
 });
 
 describe('extractValues', () => {

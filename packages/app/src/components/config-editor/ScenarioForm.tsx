@@ -52,6 +52,38 @@ interface ScenarioFormProps {
   allowStructureEdits?: boolean;
 }
 
+function RuleTypeSelect({
+  value,
+  onValueChange,
+  className
+}: {
+  value: EvalRule['type'];
+  onValueChange: (value: EvalRule['type']) => void;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => onValueChange(next as EvalRule['type'])}>
+      <SelectTrigger className={className}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="required_tool">Required Tool</SelectItem>
+        <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+        <SelectItem value="agent_check">Judge Agent</SelectItem>
+        <SelectItem value="response_contains">Text contains</SelectItem>
+        <SelectItem value="response_not_contains">Text does not contain</SelectItem>
+        <SelectItem value="response_starts_with">Text starts with</SelectItem>
+        <SelectItem value="response_ends_with">Text ends with</SelectItem>
+        <SelectItem value="response_equals">Text equals</SelectItem>
+        <SelectItem value="response_regex">Text matches regex</SelectItem>
+        <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
+        <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
+        <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 const emptyScenario = (): Scenario => ({
   id: `scn-${Date.now()}`,
   name: '',
@@ -997,38 +1029,11 @@ function ScenarioCard({
                         {isAgentCheckRule ? (
                           <div className="space-y-2">
                             <div className="flex items-end gap-2">
-                              <Select
+                              <RuleTypeSelect
                                 value={newRuleType}
-                                onValueChange={(v) => setNewRuleType(v as EvalRule['type'])}
-                              >
-                                <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="required_tool">Required Tool</SelectItem>
-                                  <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                                  <SelectItem value="agent_check">Judge Agent</SelectItem>
-                                  <SelectItem value="response_contains">Text contains</SelectItem>
-                                  <SelectItem value="response_not_contains">
-                                    Text does not contain
-                                  </SelectItem>
-                                  <SelectItem value="response_starts_with">
-                                    Text starts with
-                                  </SelectItem>
-                                  <SelectItem value="response_ends_with">Text ends with</SelectItem>
-                                  <SelectItem value="response_equals">Text equals</SelectItem>
-                                  <SelectItem value="response_regex">Text matches regex</SelectItem>
-                                  <SelectItem value="response_jsonpath">
-                                    JSONPath (optional equals)
-                                  </SelectItem>
-                                  <SelectItem value="response_jsonpath_exists">
-                                    JSONPath exists
-                                  </SelectItem>
-                                  <SelectItem value="response_jsonpath_not_exists">
-                                    JSONPath not exists
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
+                                onValueChange={setNewRuleType}
+                                className="h-8 w-[14.5rem] shrink-0 text-xs"
+                              />
                               <Input
                                 value={newRuleLabel}
                                 onChange={(e) => setNewRuleLabel(e.target.value)}
@@ -1054,38 +1059,11 @@ function ScenarioCard({
                           </div>
                         ) : (
                           <div className="flex gap-2 items-end">
-                            <Select
+                            <RuleTypeSelect
                               value={newRuleType}
-                              onValueChange={(v) => setNewRuleType(v as EvalRule['type'])}
-                            >
-                              <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="required_tool">Required Tool</SelectItem>
-                                <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                                <SelectItem value="agent_check">Judge Agent</SelectItem>
-                                <SelectItem value="response_contains">Text contains</SelectItem>
-                                <SelectItem value="response_not_contains">
-                                  Text does not contain
-                                </SelectItem>
-                                <SelectItem value="response_starts_with">
-                                  Text starts with
-                                </SelectItem>
-                                <SelectItem value="response_ends_with">Text ends with</SelectItem>
-                                <SelectItem value="response_equals">Text equals</SelectItem>
-                                <SelectItem value="response_regex">Text matches regex</SelectItem>
-                                <SelectItem value="response_jsonpath">
-                                  JSONPath (optional equals)
-                                </SelectItem>
-                                <SelectItem value="response_jsonpath_exists">
-                                  JSONPath exists
-                                </SelectItem>
-                                <SelectItem value="response_jsonpath_not_exists">
-                                  JSONPath not exists
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
+                              onValueChange={setNewRuleType}
+                              className="h-8 w-[14.5rem] shrink-0 text-xs"
+                            />
                             {isJsonPathRule ? (
                               <>
                                 <Input

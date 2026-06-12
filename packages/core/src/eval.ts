@@ -26,8 +26,13 @@ export interface EvaluateScenarioWithAgentChecksOptions {
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
   if (!evalRules) return [];
   const results: CheckResult[] = [];
-  for (const rule of evaluateToolConstraints([], evalRules.tool_constraints ?? {}).check_results) {
-    results.push({ ...rule, status: 'not_evaluated', reason: undefined });
+  for (const rule of buildToolConstraintCheckResults(evalRules.tool_constraints ?? {})) {
+    results.push({
+      type: rule.type,
+      label: rule.label,
+      status: 'not_evaluated',
+      reason: undefined
+    });
   }
   const hasSequence = Boolean(evalRules.tool_sequence?.allow?.length);
   if (hasSequence) {
@@ -133,32 +138,24 @@ function evaluateToolConstraints(
   constraints: ToolConstraints
 ): Pick<EvalResult, 'failures' | 'check_results'> {
   const failures: string[] = [];
-  const check_results: CheckResult[] = [];
   const unique = new Set(toolSequence);
-  if (constraints.forbidden_tools) {
-    for (const tool of constraints.forbidden_tools) {
-      const reason = unique.has(tool) ? `Forbidden tool used: ${tool}` : undefined;
-      if (reason) failures.push(reason);
-      check_results.push({
-        type: 'forbidden_tool',
-        label: `Forbidden tool · ${tool}`,
-        status: reason ? 'failed' : 'passed',
-        reason
-      });
-    }
-  }
-  if (constraints.required_tools) {
-    for (const tool of constraints.required_tools) {
-      const reason = !unique.has(tool) ? `Required tool not used: ${tool}` : undefined;
-      if (reason) failures.push(reason);
-      check_results.push({
-        type: 'required_tool',
-        label: `Required tool · ${tool}`,
-        status: reason ? 'failed' : 'passed',
-        reason
-      });
-    }
-  }
+  const check_results = buildToolConstraintCheckResults(constraints).map((template) => {
+    const reason =
+      template.type === 'forbidden_tool'
+        ? unique.has(template.tool)
+          ? `Forbidden tool used: ${template.tool}`
+          : undefined
+        : !unique.has(template.tool)
+        ? `Required tool not used: ${template.tool}`
+        : undefined;
+    if (reason) failures.push(reason);
+    return {
+      type: template.type,
+      label: template.label,
+      status: reason ? 'failed' : 'passed',
+      reason
+    };
+  });
   return { failures, check_results };
 }
 
@@ -206,9 +203,7 @@ function evaluateResponseAssertions(
   for (const assertion of assertions) {
     let reason: string | undefined;
     const template = toCheckResultTemplateForResponseAssertion(assertion);
-    let label: string = template.label;
     if (assertion.type === 'regex') {
-      label = `Text matches regex · ${assertion.pattern}`;
       try {
         // Default text pattern checks to case-insensitive to reduce brittle LLM-output casing failures.
         // Strip inline flags like (?i), (?m), (?s) — not valid in JS; 'i' is already applied.
@@ -224,35 +219,30 @@ function evaluateResponseAssertions(
     }
 
     if (assertion.type === 'contains') {
-      label = `Text contains · ${assertion.value}`;
       if (!normalizedText.includes(assertion.value.toLowerCase())) {
         reason = `Contains assertion failed: ${assertion.value}`;
       }
     }
 
     if (assertion.type === 'not_contains') {
-      label = `Text does not contain · ${assertion.value}`;
       if (normalizedText.includes(assertion.value.toLowerCase())) {
         reason = `Not-contains assertion failed: ${assertion.value}`;
       }
     }
 
     if (assertion.type === 'starts_with') {
-      label = `Text starts with · ${assertion.value}`;
       if (!normalizedText.startsWith(assertion.value.toLowerCase())) {
         reason = `Starts-with assertion failed: ${assertion.value}`;
       }
     }
 
     if (assertion.type === 'ends_with') {
-      label = `Text ends with · ${assertion.value}`;
       if (!normalizedText.endsWith(assertion.value.toLowerCase())) {
         reason = `Ends-with assertion failed: ${assertion.value}`;
       }
     }
 
     if (assertion.type === 'equals') {
-      label = `Text equals · ${assertion.value}`;
       if (normalizedText !== assertion.value.toLowerCase()) {
         reason = `Equals assertion failed: ${assertion.value}`;
       }
@@ -263,21 +253,13 @@ function evaluateResponseAssertions(
       assertion.type === 'jsonpath_exists' ||
       assertion.type === 'jsonpath_not_exists'
     ) {
-      label =
-        assertion.type === 'jsonpath'
-          ? assertion.equals !== undefined
-            ? `JSONPath equals · ${assertion.path} == ${String(assertion.equals)}`
-            : `JSONPath exists · ${assertion.path}`
-          : assertion.type === 'jsonpath_exists'
-          ? `JSONPath exists · ${assertion.path}`
-          : `JSONPath not exists · ${assertion.path}`;
       let json: any;
       try {
         json = JSON.parse(text);
       } catch {
         reason = `JSONPath assertion failed: invalid JSON for path ${assertion.path}`;
         failures.push(reason);
-        check_results.push({ ...template, label, status: 'failed', reason });
+        check_results.push({ ...template, status: 'failed', reason });
         continue;
       }
       const result = JSONPath({ path: assertion.path, json });
@@ -295,7 +277,7 @@ function evaluateResponseAssertions(
       }
     }
     if (reason) failures.push(reason);
-    check_results.push({ ...template, label, status: reason ? 'failed' : 'passed', reason });
+    check_results.push({ ...template, status: reason ? 'failed' : 'passed', reason });
   }
   return { failures, check_results };
 }
@@ -354,6 +336,28 @@ function toUiRuleType(assertionType: ResponseAssertion['type']): string {
     case 'jsonpath_not_exists':
       return 'response_jsonpath_not_exists';
   }
+}
+
+function buildToolConstraintCheckResults(
+  constraints: ToolConstraints
+): Array<{ type: 'forbidden_tool' | 'required_tool'; tool: string; label: string }> {
+  const results: Array<{ type: 'forbidden_tool' | 'required_tool'; tool: string; label: string }> =
+    [];
+  for (const tool of constraints.forbidden_tools ?? []) {
+    results.push({
+      type: 'forbidden_tool',
+      tool,
+      label: `Forbidden tool · ${tool}`
+    });
+  }
+  for (const tool of constraints.required_tools ?? []) {
+    results.push({
+      type: 'required_tool',
+      tool,
+      label: `Required tool · ${tool}`
+    });
+  }
+  return results;
 }
 
 function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion): CheckResult {

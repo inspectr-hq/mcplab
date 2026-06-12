@@ -24,6 +24,7 @@ import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
+import { resolveEvaluationJudge } from './app-server/run-queue-executor.js';
 import { loadWorkspaceSettingsOverrides } from './app-server/settings-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import {
@@ -866,14 +867,10 @@ async function executeSingleConfigRun(params: {
     runsDir: String(options.runsDir),
     cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
-    evaluationJudge:
-      workspaceSettings.evaluation_judge_agent_name &&
-      libraryAgents[workspaceSettings.evaluation_judge_agent_name]
-        ? {
-            name: workspaceSettings.evaluation_judge_agent_name,
-            agent: libraryAgents[workspaceSettings.evaluation_judge_agent_name]
-          }
-        : undefined,
+    evaluationJudge: resolveEvaluationJudge({
+      agents: libraryAgents,
+      evaluationJudgeAgentName: workspaceSettings.evaluation_judge_agent_name
+    }),
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);
       if (line) {
