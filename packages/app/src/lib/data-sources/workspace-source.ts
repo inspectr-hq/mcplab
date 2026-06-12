@@ -49,7 +49,15 @@ export const workspaceSource: EvalDataSource = {
     await workspaceApiClient.deleteConfig(id);
   },
   async listResults(filter) {
-    const summaries = (await workspaceApiClient.listRuns(filter)).data;
+    const pageSize = Math.max(1, Math.min(100, filter?.limit ?? 100));
+    let offset = Math.max(0, filter?.offset ?? 0);
+    const summaries: Awaited<ReturnType<typeof workspaceApiClient.listRuns>>['data'] = [];
+    while (true) {
+      const page = await workspaceApiClient.listRuns({ ...filter, limit: pageSize, offset });
+      summaries.push(...page.data);
+      if (!page.has_more || page.next_offset === null) break;
+      offset = page.next_offset;
+    }
     const resultPromises = summaries.map(async (summary) => {
       const [{ results }, trace] = await Promise.all([
         workspaceApiClient.getRun(summary.runId),
