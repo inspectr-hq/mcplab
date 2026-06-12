@@ -20,8 +20,11 @@ export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
         .filter((entry): entry is readonly [string, string] => Boolean(entry))
     ).values()
   );
+  const perScenarioAgents = run.scenarios
+    .map((scenario) => scenario.agentName || scenario.agentId)
+    .filter(Boolean);
   const agentNames = Array.from(
-    new Set(run.scenarios.map((scenario) => scenario.agentName || scenario.agentId).filter(Boolean))
+    new Set(perScenarioAgents.length > 0 ? perScenarioAgents : (run.rerunAgents ?? []))
   );
   const models = Array.from(
     new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
