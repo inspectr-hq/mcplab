@@ -80,6 +80,7 @@ interface AdapterOptions {
   max_tokens?: number;
   system?: string;
   signal?: AbortSignal;
+  forceJsonResponse?: boolean;
 }
 
 export async function runAgentScenario(params: {
@@ -335,6 +336,7 @@ export async function chatWithAgent(params: {
   tools?: ToolDef[];
   system?: string;
   signal?: AbortSignal;
+  forceJsonResponse?: boolean;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
   const tools = params.tools ?? [];
@@ -344,7 +346,8 @@ export async function chatWithAgent(params: {
     temperature: agent.temperature,
     max_tokens: agent.max_tokens,
     system: params.system ?? agent.system,
-    signal: params.signal
+    signal: params.signal,
+    forceJsonResponse: params.forceJsonResponse
   });
 }
 
@@ -533,7 +536,23 @@ class AnthropicAdapter implements LlmAdapter {
         max_tokens: options.max_tokens ?? 1024,
         system,
         messages: anthroMessages,
-        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined
+        tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
+        ...(options.forceJsonResponse && {
+          output_config: {
+            format: {
+              type: 'json_schema' as const,
+              schema: {
+                type: 'object',
+                properties: {
+                  pass: { type: 'boolean' },
+                  reason: { type: 'string' }
+                },
+                required: ['pass', 'reason'],
+                additionalProperties: false
+              }
+            }
+          }
+        })
       },
       options.signal
     );

@@ -166,7 +166,7 @@ describe('ScenarioForm checks editor', () => {
     });
     fireEvent.change(
       screen.getByPlaceholderText(
-        'Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is \'Not available\'.'
+        "Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is 'Not available'."
       ),
       {
         target: { value: 'Confirm the answer includes a valid logical time range.' }

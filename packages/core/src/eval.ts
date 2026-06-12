@@ -20,9 +20,7 @@ export interface AgentAssertionJudgeResult {
 }
 
 export interface EvaluateScenarioWithAgentChecksOptions {
-  judgeAgentAssertion?: (
-    assertion: AgentAssertion
-  ) => Promise<AgentAssertionJudgeResult>;
+  judgeAgentAssertion?: (assertion: AgentAssertion) => Promise<AgentAssertionJudgeResult>;
 }
 
 export function evaluateScenario(
@@ -84,7 +82,9 @@ export async function evaluateScenarioWithAgentChecks(
         ...(judged.metadata ? { metadata: judged.metadata } : {})
       });
     } catch (error) {
-      const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
+      const reason = `Agent check failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
       failures.push(reason);
       check_results.push({
         type: 'agent_check',

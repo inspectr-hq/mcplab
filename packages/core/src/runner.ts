@@ -433,6 +433,7 @@ async function judgeAgentAssertion(params: {
     system,
     tools: [],
     signal: params.signal,
+    forceJsonResponse: true,
     messages: [
       {
         role: 'user',

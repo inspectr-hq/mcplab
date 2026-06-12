@@ -293,11 +293,16 @@ describe('evaluateScenario — response_assertions mixed stack', () => {
 
 describe('evaluateScenarioWithAgentChecks', () => {
   it('passes when the judge returns pass=true', async () => {
-    const result = await evaluateScenarioWithAgentChecks('has valid timestamps', [], {
-      agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
-    }, {
-      judgeAgentAssertion: async () => ({ pass: true, reason: 'Range present and logical.' })
-    });
+    const result = await evaluateScenarioWithAgentChecks(
+      'has valid timestamps',
+      [],
+      {
+        agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
+      },
+      {
+        judgeAgentAssertion: async () => ({ pass: true, reason: 'Range present and logical.' })
+      }
+    );
 
     expect(result.pass).toBe(true);
     expect(result.check_results).toEqual([
@@ -311,11 +316,16 @@ describe('evaluateScenarioWithAgentChecks', () => {
   });
 
   it('fails when the judge returns pass=false', async () => {
-    const result = await evaluateScenarioWithAgentChecks('Not available', [], {
-      agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
-    }, {
-      judgeAgentAssertion: async () => ({ pass: false, reason: 'No valid range present.' })
-    });
+    const result = await evaluateScenarioWithAgentChecks(
+      'Not available',
+      [],
+      {
+        agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
+      },
+      {
+        judgeAgentAssertion: async () => ({ pass: false, reason: 'No valid range present.' })
+      }
+    );
 
     expect(result.pass).toBe(false);
     expect(result.failures).toContain('No valid range present.');
