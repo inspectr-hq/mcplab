@@ -125,9 +125,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
       payload: { event: { active: null, queued: [] } }
     });
 
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'queue_event' })
-    );
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue_event' }));
 
     unsubscribe();
     expect(worker.port.messages).toContainEqual({ type: 'close' });
@@ -155,9 +153,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
       payload: { message: 'SSE connection error', reconnecting: true }
     });
 
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'error' })
-    );
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
   });
 
   it('does not call onEvent after unsubscribe', () => {

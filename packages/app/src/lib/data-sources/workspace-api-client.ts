@@ -656,10 +656,9 @@ export const workspaceApiClient = {
     }),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
-    const worker = new SharedWorker(
-      new URL('./sse-queue-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    const worker = new SharedWorker(new URL('./sse-queue-worker.ts', import.meta.url), {
+      type: 'module'
+    });
     let closed = false;
 
     worker.port.onmessage = (event: MessageEvent) => {

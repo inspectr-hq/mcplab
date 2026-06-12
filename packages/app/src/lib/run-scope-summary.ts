@@ -24,7 +24,7 @@ export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
     .map((scenario) => scenario.agentName || scenario.agentId)
     .filter(Boolean);
   const agentNames = Array.from(
-    new Set(perScenarioAgents.length > 0 ? perScenarioAgents : (run.rerunAgents ?? []))
+    new Set(perScenarioAgents.length > 0 ? perScenarioAgents : run.rerunAgents ?? [])
   );
   const models = Array.from(
     new Set(run.scenarios.map((scenario) => scenario.model).filter((m): m is string => Boolean(m)))
