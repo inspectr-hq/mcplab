@@ -53,9 +53,13 @@ class MockEventSource {
 class MockSharedWorkerPort {
   readonly messages: unknown[] = [];
   onmessage: ((event: MessageEvent) => void) | null = null;
+  closed = false;
   start() {}
   postMessage(data: unknown) {
     this.messages.push(data);
+  }
+  close() {
+    this.closed = true;
   }
   emit(data: unknown) {
     this.onmessage?.({ data } as MessageEvent);
@@ -129,6 +133,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
 
     unsubscribe();
     expect(worker.port.messages).toContainEqual({ type: 'close' });
+    expect(worker.port.closed).toBe(true);
   });
 
   it('sends init message with baseUrl and starts port on subscribe', () => {
