@@ -662,14 +662,14 @@ export const workspaceApiClient = {
     );
     let closed = false;
 
-    worker.port.start();
-    worker.port.postMessage({ type: 'init', baseUrl: BASE });
-
     worker.port.onmessage = (event: MessageEvent) => {
       if (closed) return;
       if (typeof event.data !== 'object' || !event.data) return;
       onEvent(event.data as RunQueueSseEvent);
     };
+
+    worker.port.start();
+    worker.port.postMessage({ type: 'init', baseUrl: BASE });
 
     return () => {
       if (closed) return;

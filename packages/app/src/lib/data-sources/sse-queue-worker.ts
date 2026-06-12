@@ -49,7 +49,7 @@ self.addEventListener('connect', (e: Event) => {
 
   port.addEventListener('message', (msg: MessageEvent) => {
     if (msg.data?.type === 'init') {
-      baseUrl = msg.data.baseUrl ?? '';
+      if (!baseUrl) baseUrl = msg.data.baseUrl ?? '';
       openEventSource();
       // New tab connecting after SSE is already open: send connected immediately
       if (source?.readyState === 1) {

@@ -159,6 +159,24 @@ describe('workspaceApiClient SSE subscriptions', () => {
       expect.objectContaining({ type: 'error' })
     );
   });
+
+  it('does not call onEvent after unsubscribe', () => {
+    vi.stubGlobal('SharedWorker', MockSharedWorker as unknown as typeof SharedWorker);
+    const onEvent = vi.fn();
+
+    const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
+    const worker = MockSharedWorker.instances[0]!;
+
+    unsubscribe();
+
+    worker.port.emit({
+      type: 'queue_event',
+      ts: '2026-01-01T00:00:00.000Z',
+      payload: { event: { active: null, queued: [] } }
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('workspaceApiClient assistant request cancellation', () => {
