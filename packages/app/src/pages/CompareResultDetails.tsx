@@ -183,7 +183,7 @@ const CompareResultDetails = () => {
             <iframe
               title={`Result ${leftLabel}`}
               src={resultUrl(left, leftConfig, leftAgent)}
-              className="h-[calc(100vh-15rem)] w-full border-0"
+              className="h-[calc(100vh-12rem)] w-full border-0"
             />
           </CardContent>
         </Card>
@@ -196,7 +196,7 @@ const CompareResultDetails = () => {
             <iframe
               title={`Result ${rightLabel}`}
               src={resultUrl(right, rightConfig, rightAgent)}
-              className="h-[calc(100vh-15rem)] w-full border-0"
+              className="h-[calc(100vh-12rem)] w-full border-0"
             />
           </CardContent>
         </Card>
