@@ -854,6 +854,7 @@ const ResultDetail = () => {
                 variant="outline"
                 size="sm"
                 className="max-w-full gap-1.5"
+                aria-label="MCP Lab Assistant"
                 onClick={() => openAssistantWithPrompt()}
               >
                 <Sparkles className="h-4 w-4 text-amber-500" />
