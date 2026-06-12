@@ -147,6 +147,44 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('adds agent checks with label and prompt', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Agent check'));
+    fireEvent.change(screen.getByPlaceholderText('Check label'), {
+      target: { value: 'Logical range' }
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        'Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is \'Not available\'.'
+      ),
+      {
+        target: { value: 'Confirm the answer includes a valid logical time range.' }
+      }
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        prompt: 'Confirm the answer includes a valid logical time range.'
+      }
+    ]);
+  });
+
   it('ensures OAuth before running prompt preview', async () => {
     render(
       <ScenarioForm

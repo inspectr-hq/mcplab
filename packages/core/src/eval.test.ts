@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateScenario, extractValues } from './eval.js';
+import { evaluateScenario, evaluateScenarioWithAgentChecks, extractValues } from './eval.js';
 
 describe('evaluateScenario — no rules', () => {
   it('passes when there are no eval rules', () => {
@@ -288,6 +288,48 @@ describe('evaluateScenario — response_assertions mixed stack', () => {
     });
     expect(result.pass).toBe(false);
     expect(result.failures).toHaveLength(3);
+  });
+});
+
+describe('evaluateScenarioWithAgentChecks', () => {
+  it('passes when the judge returns pass=true', async () => {
+    const result = await evaluateScenarioWithAgentChecks('has valid timestamps', [], {
+      agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
+    }, {
+      judgeAgentAssertion: async () => ({ pass: true, reason: 'Range present and logical.' })
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        status: 'passed',
+        reason: 'Range present and logical.'
+      }
+    ]);
+  });
+
+  it('fails when the judge returns pass=false', async () => {
+    const result = await evaluateScenarioWithAgentChecks('Not available', [], {
+      agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
+    }, {
+      judgeAgentAssertion: async () => ({ pass: false, reason: 'No valid range present.' })
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.failures).toContain('No valid range present.');
+    expect(result.check_results[0]?.status).toBe('failed');
+  });
+
+  it('fails agent checks when no judge is configured', async () => {
+    const result = await evaluateScenarioWithAgentChecks('anything', [], {
+      agent_assertions: [{ label: 'Semantic', prompt: 'Check semantics.' }]
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.failures[0]).toContain('Agent check could not run');
+    expect(result.check_results[0]?.status).toBe('failed');
   });
 });
 

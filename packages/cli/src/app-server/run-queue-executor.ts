@@ -145,6 +145,7 @@ export async function executeRunJob(params: {
     runsDir: string;
     librariesDir: string;
     workspaceRoot: string;
+    evaluationJudgeAgentName?: string;
   };
   oauthSessionManager: OAuthSessionManager;
   deps: RunsRouteDeps;
@@ -302,6 +303,11 @@ export async function executeRunJob(params: {
         payload: { message: `Run note: ${runNote}` }
       });
     }
+    const evaluationJudgeName = settings.evaluationJudgeAgentName?.trim();
+    const evaluationJudge =
+      evaluationJudgeName && libraryAgents[evaluationJudgeName]
+        ? { name: evaluationJudgeName, agent: libraryAgents[evaluationJudgeName] }
+        : undefined;
     const { runDir, results } = await runAll(expandedConfig, {
       runsPerScenario,
       scenarioId,
@@ -311,6 +317,7 @@ export async function executeRunJob(params: {
       runsDir: settings.runsDir,
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
+      evaluationJudge,
       resolveMcpServerAuthHeaders:
         oauthServers.length > 0
           ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {

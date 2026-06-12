@@ -185,6 +185,8 @@ function ScenarioCard({
   const [newRuleValue, setNewRuleValue] = useState('');
   const [newRulePath, setNewRulePath] = useState('');
   const [newRuleEquals, setNewRuleEquals] = useState('');
+  const [newRuleLabel, setNewRuleLabel] = useState('');
+  const [newRulePrompt, setNewRulePrompt] = useState('');
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -240,6 +242,18 @@ function ScenarioCard({
       return;
     }
 
+    if (newRuleType === 'agent_check') {
+      const label = newRuleLabel.trim();
+      const prompt = newRulePrompt.trim();
+      if (!label || !prompt) return;
+      onUpdate({
+        evalRules: [...scenario.evalRules, { type: 'agent_check', label, prompt }]
+      });
+      setNewRuleLabel('');
+      setNewRulePrompt('');
+      return;
+    }
+
     if (!newRuleValue.trim()) return;
     onUpdate({
       evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }]
@@ -286,7 +300,8 @@ function ScenarioCard({
     response_regex: 'Regex',
     response_jsonpath: 'JSONPath',
     response_jsonpath_exists: 'JSONPath Exists',
-    response_jsonpath_not_exists: 'JSONPath Not Exists'
+    response_jsonpath_not_exists: 'JSONPath Not Exists',
+    agent_check: 'Agent'
   };
 
   const ruleTypeBadgeColor: Record<EvalRule['type'], string> = {
@@ -300,13 +315,15 @@ function ScenarioCard({
     response_regex: 'border-fuchsia-300/60 bg-fuchsia-500/10 text-fuchsia-700',
     response_jsonpath: 'border-emerald-300/60 bg-emerald-500/10 text-emerald-700',
     response_jsonpath_exists: 'border-green-300/60 bg-green-500/10 text-green-700',
-    response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700'
+    response_jsonpath_not_exists: 'border-orange-300/60 bg-orange-500/10 text-orange-700',
+    agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
   };
   const isToolRule = newRuleType === 'required_tool' || newRuleType === 'forbidden_tool';
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
     newRuleType === 'response_jsonpath_not_exists';
+  const isAgentCheckRule = newRuleType === 'agent_check';
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
@@ -379,7 +396,11 @@ function ScenarioCard({
 
   const sendPreviewToAssistant = () => {
     if (!previewResult) return;
-    const checkItems = buildPreviewCheckItems(scenario.evalRules, previewResult.run.failureReasons);
+    const checkItems = buildPreviewCheckItems(
+      scenario.evalRules,
+      previewResult.run.failureReasons,
+      previewResult.run.checkResults
+    );
     const checkSummary = checkItems.length
       ? checkItems
           .map(
@@ -755,7 +776,8 @@ function ScenarioCard({
                         (() => {
                           const checks = buildPreviewCheckItems(
                             scenario.evalRules,
-                            previewResult.run.failureReasons
+                            previewResult.run.failureReasons,
+                            previewResult.run.checkResults
                           );
                           const passedChecks = checks.filter((check) => check.status === 'passed');
                           const failedChecks = checks.filter((check) => check.status === 'failed');
@@ -804,7 +826,13 @@ function ScenarioCard({
                                         </span>
                                       </div>
                                       {check.failureReason && (
-                                        <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                        <p
+                                          className={`mt-1 pl-5 text-[11px] ${
+                                            check.status === 'failed'
+                                              ? 'text-destructive'
+                                              : 'text-success'
+                                          }`}
+                                        >
                                           {formatPreviewFailureReason(check.failureReason)}
                                         </p>
                                       )}
@@ -925,13 +953,26 @@ function ScenarioCard({
                                 >
                                   {ruleTypeLabel[rule.type]}
                                 </span>
-                                <span className="font-mono break-all">
-                                  {rule.path
-                                    ? rule.equals !== undefined
-                                      ? `${rule.path} == ${String(rule.equals)}`
-                                      : rule.path
-                                    : rule.value}
-                                </span>
+                                {rule.type === 'agent_check' ? (
+                                  <div className="min-w-0">
+                                    <div className="font-medium leading-tight">
+                                      {rule.label || 'Unnamed check'}
+                                    </div>
+                                    {rule.prompt && (
+                                      <div className="mt-0.5 break-words text-[11px] leading-snug text-muted-foreground">
+                                        {rule.prompt}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="font-mono break-all">
+                                    {rule.path
+                                      ? rule.equals !== undefined
+                                        ? `${rule.path} == ${String(rule.equals)}`
+                                        : rule.path
+                                      : rule.value}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             {!readOnly && (
@@ -952,80 +993,143 @@ function ScenarioCard({
                     </div>
                     {!readOnly && (
                       <div className="space-y-2">
-                        <div className="flex gap-2 items-end">
-                          <Select
-                            value={newRuleType}
-                            onValueChange={(v) => setNewRuleType(v as EvalRule['type'])}
-                          >
-                            <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="required_tool">Required Tool</SelectItem>
-                              <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-                              <SelectItem value="response_contains">Text contains</SelectItem>
-                              <SelectItem value="response_not_contains">
-                                Text does not contain
-                              </SelectItem>
-                              <SelectItem value="response_starts_with">Text starts with</SelectItem>
-                              <SelectItem value="response_ends_with">Text ends with</SelectItem>
-                              <SelectItem value="response_equals">Text equals</SelectItem>
-                              <SelectItem value="response_regex">Text matches regex</SelectItem>
-                              <SelectItem value="response_jsonpath">
-                                JSONPath (optional equals)
-                              </SelectItem>
-                              <SelectItem value="response_jsonpath_exists">
-                                JSONPath exists
-                              </SelectItem>
-                              <SelectItem value="response_jsonpath_not_exists">
-                                JSONPath not exists
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {isJsonPathRule ? (
-                            <>
+                        {isAgentCheckRule ? (
+                          <div className="space-y-2">
+                            <div className="flex items-end gap-2">
+                              <Select
+                                value={newRuleType}
+                                onValueChange={(v) => setNewRuleType(v as EvalRule['type'])}
+                              >
+                                <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="required_tool">Required Tool</SelectItem>
+                                  <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+                                  <SelectItem value="agent_check">Judge Agent</SelectItem>
+                                  <SelectItem value="response_contains">Text contains</SelectItem>
+                                  <SelectItem value="response_not_contains">
+                                    Text does not contain
+                                  </SelectItem>
+                                  <SelectItem value="response_starts_with">
+                                    Text starts with
+                                  </SelectItem>
+                                  <SelectItem value="response_ends_with">Text ends with</SelectItem>
+                                  <SelectItem value="response_equals">Text equals</SelectItem>
+                                  <SelectItem value="response_regex">Text matches regex</SelectItem>
+                                  <SelectItem value="response_jsonpath">
+                                    JSONPath (optional equals)
+                                  </SelectItem>
+                                  <SelectItem value="response_jsonpath_exists">
+                                    JSONPath exists
+                                  </SelectItem>
+                                  <SelectItem value="response_jsonpath_not_exists">
+                                    JSONPath not exists
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
                               <Input
-                                value={newRulePath}
-                                onChange={(e) => setNewRulePath(e.target.value)}
-                                placeholder="JSONPath (e.g. $.status)"
+                                value={newRuleLabel}
+                                onChange={(e) => setNewRuleLabel(e.target.value)}
+                                placeholder="Prompt name"
+                                className="h-8 text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 shrink-0"
+                                onClick={addRule}
+                              >
+                                Add
+                              </Button>
+                            </div>
+                            <Textarea
+                              value={newRulePrompt}
+                              onChange={(e) => setNewRulePrompt(e.target.value)}
+                              placeholder="Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is 'Not available'."
+                              className="min-h-[64px] text-xs"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex gap-2 items-end">
+                            <Select
+                              value={newRuleType}
+                              onValueChange={(v) => setNewRuleType(v as EvalRule['type'])}
+                            >
+                              <SelectTrigger className="h-8 w-[14.5rem] shrink-0 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="required_tool">Required Tool</SelectItem>
+                                <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+                                <SelectItem value="agent_check">Judge Agent</SelectItem>
+                                <SelectItem value="response_contains">Text contains</SelectItem>
+                                <SelectItem value="response_not_contains">
+                                  Text does not contain
+                                </SelectItem>
+                                <SelectItem value="response_starts_with">
+                                  Text starts with
+                                </SelectItem>
+                                <SelectItem value="response_ends_with">Text ends with</SelectItem>
+                                <SelectItem value="response_equals">Text equals</SelectItem>
+                                <SelectItem value="response_regex">Text matches regex</SelectItem>
+                                <SelectItem value="response_jsonpath">
+                                  JSONPath (optional equals)
+                                </SelectItem>
+                                <SelectItem value="response_jsonpath_exists">
+                                  JSONPath exists
+                                </SelectItem>
+                                <SelectItem value="response_jsonpath_not_exists">
+                                  JSONPath not exists
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {isJsonPathRule ? (
+                              <>
+                                <Input
+                                  value={newRulePath}
+                                  onChange={(e) => setNewRulePath(e.target.value)}
+                                  placeholder="JSONPath (e.g. $.status)"
+                                  className="h-8 text-xs font-mono"
+                                  onKeyDown={(e) =>
+                                    e.key === 'Enter' && (e.preventDefault(), addRule())
+                                  }
+                                />
+                                {newRuleType === 'response_jsonpath' && (
+                                  <Input
+                                    value={newRuleEquals}
+                                    onChange={(e) => setNewRuleEquals(e.target.value)}
+                                    placeholder="Equals (optional)"
+                                    className="h-8 w-[12rem] text-xs font-mono"
+                                    onKeyDown={(e) =>
+                                      e.key === 'Enter' && (e.preventDefault(), addRule())
+                                    }
+                                  />
+                                )}
+                              </>
+                            ) : (
+                              <Input
+                                value={newRuleValue}
+                                onChange={(e) => setNewRuleValue(e.target.value)}
+                                placeholder="Value"
                                 className="h-8 text-xs font-mono"
                                 onKeyDown={(e) =>
                                   e.key === 'Enter' && (e.preventDefault(), addRule())
                                 }
                               />
-                              {newRuleType === 'response_jsonpath' && (
-                                <Input
-                                  value={newRuleEquals}
-                                  onChange={(e) => setNewRuleEquals(e.target.value)}
-                                  placeholder="Equals (optional)"
-                                  className="h-8 w-[12rem] text-xs font-mono"
-                                  onKeyDown={(e) =>
-                                    e.key === 'Enter' && (e.preventDefault(), addRule())
-                                  }
-                                />
-                              )}
-                            </>
-                          ) : (
-                            <Input
-                              value={newRuleValue}
-                              onChange={(e) => setNewRuleValue(e.target.value)}
-                              placeholder="Value"
-                              className="h-8 text-xs font-mono"
-                              onKeyDown={(e) =>
-                                e.key === 'Enter' && (e.preventDefault(), addRule())
-                              }
-                            />
-                          )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 shrink-0"
-                            onClick={addRule}
-                          >
-                            Add
-                          </Button>
-                        </div>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 shrink-0"
+                              onClick={addRule}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        )}
                         {isToolRule && (
                           <div className="space-y-1">
                             <div className="flex items-end gap-2">
@@ -1208,7 +1312,26 @@ function ScenarioCard({
   );
 }
 
-function buildPreviewCheckItems(evalRules: EvalRule[], failureReasons: string[]) {
+function buildPreviewCheckItems(
+  evalRules: EvalRule[],
+  failureReasons: string[],
+  checkResults?: Array<{
+    type: string;
+    label: string;
+    status: 'passed' | 'failed' | 'not_evaluated';
+    reason?: string;
+  }>
+) {
+  if (checkResults?.length) {
+    return evalRules.map((rule) => {
+      const match = matchStructuredCheckResult(rule, checkResults);
+      return {
+        rule,
+        status: match?.status ?? ('not_evaluated' as const),
+        failureReason: match?.reason
+      };
+    });
+  }
   return evalRules.map((rule) => {
     const failureReason = matchFailureReasonForRule(rule, failureReasons);
     return {
@@ -1220,6 +1343,9 @@ function buildPreviewCheckItems(evalRules: EvalRule[], failureReasons: string[])
 }
 
 function renderEvalRulePreview(rule: EvalRule): string {
+  if (rule.type === 'agent_check') {
+    return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
+  }
   if (rule.path) {
     return rule.equals !== undefined
       ? `${rule.type}: ${rule.path} == ${String(rule.equals)}`
@@ -1243,6 +1369,7 @@ function formatPreviewEvalRuleLabel(rule: EvalRule): string {
       : `JSONPath exists · ${rule.path}`;
   if (rule.type === 'response_jsonpath_exists') return `JSONPath exists · ${rule.path}`;
   if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
+  if (rule.type === 'agent_check') return `Agent check · ${rule.label}`;
   return `${rule.type} · ${rule.value}`;
 }
 
@@ -1285,4 +1412,30 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
   })();
   if (!expectedPrefix) return undefined;
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));
+}
+
+function matchStructuredCheckResult(
+  rule: EvalRule,
+  checkResults: Array<{
+    type: string;
+    label: string;
+    status: 'passed' | 'failed' | 'not_evaluated';
+    reason?: string;
+  }>
+) {
+  const expectedType =
+    rule.type === 'agent_check'
+      ? 'agent_check'
+      : rule.type === 'required_tool' || rule.type === 'forbidden_tool'
+      ? rule.type
+      : rule.type;
+  const expectedLabel = formatPreviewEvalRuleLabel(rule);
+  return (
+    checkResults.find((result) => result.type === expectedType && result.label === expectedLabel) ??
+    (rule.type === 'agent_check'
+      ? checkResults.find(
+          (result) => result.type === 'agent_check' && result.label === String(rule.label ?? '')
+        )
+      : undefined)
+  );
 }

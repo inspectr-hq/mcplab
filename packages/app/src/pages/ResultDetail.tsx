@@ -1146,7 +1146,8 @@ const ResultDetail = () => {
                                             ? buildRunCheckItems(
                                                 scenarioDef.evalRules,
                                                 run.failureReasons,
-                                                run.error
+                                                run.error,
+                                                run.checkResults
                                               )
                                             : [];
                                           const failedChecks = checks.filter(
@@ -1312,7 +1313,16 @@ const ResultDetail = () => {
                                                                 </span>
                                                               </div>
                                                               {check.failureReason && (
-                                                                <p className="mt-1 pl-5 text-[11px] text-destructive">
+                                                                <p
+                                                                  className={`mt-1 pl-5 text-[11px] ${
+                                                                    check.status === 'failed'
+                                                                      ? 'text-destructive'
+                                                                      : check.status ===
+                                                                        'not_evaluated'
+                                                                      ? 'text-muted-foreground'
+                                                                      : 'text-success'
+                                                                  }`}
+                                                                >
                                                                   {formatFailureReason(
                                                                     check.failureReason
                                                                   )}
@@ -2661,7 +2671,17 @@ function ExpandableText({
   );
 }
 
-function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[], runError?: string) {
+function buildRunCheckItems(
+  evalRules: EvalRule[],
+  failureReasons: string[],
+  runError?: string,
+  checkResults?: Array<{
+    type: string;
+    label: string;
+    status: 'passed' | 'failed' | 'not_evaluated';
+    reason?: string;
+  }>
+) {
   const scenarioError =
     runError || failureReasons.find((reason) => reason.startsWith('Scenario error:'));
   if (scenarioError) {
@@ -2670,6 +2690,16 @@ function buildRunCheckItems(evalRules: EvalRule[], failureReasons: string[], run
       status: 'not_evaluated' as const,
       failureReason: undefined
     }));
+  }
+  if (checkResults?.length) {
+    return evalRules.map((rule) => {
+      const match = matchStructuredCheckResult(rule, checkResults);
+      return {
+        rule,
+        status: match?.status ?? ('not_evaluated' as const),
+        failureReason: match?.reason
+      };
+    });
   }
   return evalRules.map((rule) => {
     const failureReason = matchFailureReasonForRule(rule, failureReasons);
@@ -2699,6 +2729,7 @@ function matchFailureReasonForRule(rule: EvalRule, failureReasons: string[]): st
     if (rule.type === 'response_jsonpath_exists') return `JSONPath assertion failed: ${rule.path}`;
     if (rule.type === 'response_jsonpath_not_exists')
       return `JSONPath not-exists assertion failed: ${rule.path}`;
+    if (rule.type === 'agent_check') return String(rule.label ?? '');
     return '';
   })();
 
@@ -2737,6 +2768,7 @@ function formatEvalRuleLabel(rule: EvalRule): string {
       : `JSONPath exists · ${rule.path}`;
   if (rule.type === 'response_jsonpath_exists') return `JSONPath exists · ${rule.path}`;
   if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
+  if (rule.type === 'agent_check') return `Agent check · ${rule.label}`;
   return `${rule.type} · ${rule.value}`;
 }
 
@@ -2747,6 +2779,26 @@ function formatFailureReason(reason: string): string {
     return `Text match failed: ${regexMatch[1]}`;
   }
   return trimmed;
+}
+
+function matchStructuredCheckResult(
+  rule: EvalRule,
+  checkResults: Array<{
+    type: string;
+    label: string;
+    status: 'passed' | 'failed' | 'not_evaluated';
+    reason?: string;
+  }>
+) {
+  const expectedLabel = formatEvalRuleLabel(rule);
+  return (
+    checkResults.find((result) => result.type === rule.type && result.label === expectedLabel) ??
+    (rule.type === 'agent_check'
+      ? checkResults.find(
+          (result) => result.type === 'agent_check' && result.label === String(rule.label ?? '')
+        )
+      : undefined)
+  );
 }
 
 export default ResultDetail;

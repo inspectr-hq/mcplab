@@ -297,6 +297,11 @@ export async function startAppServer(options: AppServerOptions) {
           settings.scenarioAssistantAgentName = next || undefined;
           settingsChanged = true;
         }
+        if (Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName')) {
+          const next = String(body.evaluationJudgeAgentName ?? '').trim();
+          settings.evaluationJudgeAgentName = next || undefined;
+          settingsChanged = true;
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'defaultQueueWorkers')) {
           settings.defaultQueueWorkers = normalizeQueueWorkerCount(body.defaultQueueWorkers);
           runQueueService.setWorkerCount(settings.defaultQueueWorkers, {

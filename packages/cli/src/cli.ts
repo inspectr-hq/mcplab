@@ -24,6 +24,7 @@ import { execSync, spawn } from 'node:child_process';
 import { stringify as stringifyYaml, parse } from 'yaml';
 import { startAppServer } from './app-server/index.js';
 import { readLibraries } from './app-server/libraries-store.js';
+import { loadWorkspaceSettingsOverrides } from './app-server/settings-store.js';
 import { migrateSourceConfig } from './migrate-utils.js';
 import {
   resolveRunOptions,
@@ -787,6 +788,7 @@ async function executeSingleConfigRun(params: {
     selectedOverrides
   );
   const effectiveConfigHash = hashConfig(runtimeOverriddenConfig);
+  const workspaceSettings = loadWorkspaceSettingsOverrides(loaded.bundleRoot);
   const beforeExpandCount = runtimeOverriddenConfig.scenarios.length;
   const effectiveAgents = requestedAgents ?? runtimeOverriddenConfig.run_defaults?.selected_agents;
   const expanded = expandConfigForAgents(runtimeOverriddenConfig, effectiveAgents);
@@ -864,6 +866,14 @@ async function executeSingleConfigRun(params: {
     runsDir: String(options.runsDir),
     cwd: process.cwd(),
     oauthTokens: Object.keys(oauthTokens).length > 0 ? oauthTokens : undefined,
+    evaluationJudge:
+      workspaceSettings.evaluation_judge_agent_name &&
+      libraryAgents[workspaceSettings.evaluation_judge_agent_name]
+        ? {
+            name: workspaceSettings.evaluation_judge_agent_name,
+            agent: libraryAgents[workspaceSettings.evaluation_judge_agent_name]
+          }
+        : undefined,
     onProgress: async (event) => {
       const line = formatRunProgressEvent(event);
       if (line) {
