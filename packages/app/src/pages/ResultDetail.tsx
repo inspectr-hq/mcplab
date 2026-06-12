@@ -268,7 +268,7 @@ const ResultDetail = () => {
     if (!node) return;
 
     const update = () => {
-      setHideDeleteLabel(node.clientWidth < 600);
+      setHideDeleteLabel(node.clientWidth < 800);
     };
 
     update();
@@ -279,7 +279,7 @@ const ResultDetail = () => {
     }
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
     if (!result?.id) {
@@ -847,7 +847,7 @@ const ResultDetail = () => {
                 onClick={() => openRunNotePanel()}
               >
                 <NotepadText className="h-3.5 w-3.5" />
-                Run Note
+                {hideDeleteLabel ? 'Note' : 'Run Note'}
               </Button>
               <Button
                 type="button"
@@ -1100,7 +1100,7 @@ const ResultDetail = () => {
                                         {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                           preciseUnderTenSeconds: true
                                         })}{' '}
-                                        duration ·{' '}
+                                        total time ·{' '}
                                         {formatDurationMs(getScenarioToolTimeMs(sc), {
                                           preciseUnderTenSeconds: true
                                         })}{' '}
