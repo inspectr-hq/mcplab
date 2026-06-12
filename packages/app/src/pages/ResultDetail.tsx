@@ -844,6 +844,7 @@ const ResultDetail = () => {
                 variant="outline"
                 size="sm"
                 className="max-w-full gap-1.5"
+                aria-label="Run Note"
                 onClick={() => openRunNotePanel()}
               >
                 <NotepadText className="h-3.5 w-3.5" />
