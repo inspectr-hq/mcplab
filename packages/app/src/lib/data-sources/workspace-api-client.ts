@@ -656,50 +656,24 @@ export const workspaceApiClient = {
     }),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
-    const source = new EventSource(`${BASE}/api/runs/queue/events`);
+    const worker = new SharedWorker(new URL('./sse-queue-worker.ts', import.meta.url), {
+      type: 'module'
+    });
     let closed = false;
-    const close = () => {
+
+    worker.port.onmessage = (event: MessageEvent) => {
+      if (closed) return;
+      if (typeof event.data !== 'object' || !event.data) return;
+      onEvent(event.data as RunQueueSseEvent);
+    };
+
+    worker.port.start();
+    worker.port.postMessage({ type: 'init', baseUrl: BASE });
+
+    return () => {
       if (closed) return;
       closed = true;
-      source.close();
-    };
-    const messageHandler = (event: MessageEvent) => {
-      if (closed) return;
-      if (typeof event.data !== 'string' || !event.data) return;
-      try {
-        const parsed = JSON.parse(event.data) as RunQueueSseEvent;
-        onEvent(parsed);
-      } catch {
-        // Ignore malformed or non-JSON SSE payloads.
-      }
-    };
-    source.addEventListener('queue_event', messageHandler);
-    source.onopen = () => {
-      if (closed) return;
-      onEvent({
-        type: 'connected',
-        ts: new Date().toISOString(),
-        payload: { message: 'SSE connected' }
-      });
-    };
-    source.onerror = () => {
-      if (closed) return;
-      onEvent({
-        type: 'error',
-        ts: new Date().toISOString(),
-        payload: {
-          message: 'SSE connection error',
-          reconnecting: source.readyState !== 2
-        }
-      });
-      if (source.readyState !== 2) {
-        // Let EventSource keep auto-reconnecting on transient failures.
-        return;
-      }
-      close();
-    };
-    return () => {
-      close();
+      worker.port.postMessage({ type: 'close' });
     };
   },
   removeQueuedRun: (jobId: string) =>

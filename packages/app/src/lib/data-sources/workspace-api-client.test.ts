@@ -50,11 +50,35 @@ class MockEventSource {
   }
 }
 
+class MockSharedWorkerPort {
+  readonly messages: unknown[] = [];
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  start() {}
+  postMessage(data: unknown) {
+    this.messages.push(data);
+  }
+  emit(data: unknown) {
+    this.onmessage?.({ data } as MessageEvent);
+  }
+}
+
+class MockSharedWorker {
+  static instances: MockSharedWorker[] = [];
+  readonly port = new MockSharedWorkerPort();
+  constructor(public readonly url: unknown) {
+    MockSharedWorker.instances.push(this);
+  }
+  static reset() {
+    MockSharedWorker.instances = [];
+  }
+}
+
 describe('workspaceApiClient SSE subscriptions', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     MockEventSource.reset();
+    MockSharedWorker.reset();
   });
 
   it('closes terminal assistant subscriptions when the session endpoint returns 404', async () => {
@@ -88,60 +112,66 @@ describe('workspaceApiClient SSE subscriptions', () => {
     unsubscribe();
   });
 
-  it('parses queue events and handles terminal SSE failure', () => {
-    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+  it('forwards queue events from the SharedWorker port to the callback', () => {
+    vi.stubGlobal('SharedWorker', MockSharedWorker as unknown as typeof SharedWorker);
     const onEvent = vi.fn();
 
     const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
-    const source = MockEventSource.instances[0]!;
+    const worker = MockSharedWorker.instances[0]!;
 
-    source.emit('queue_event', {
+    worker.port.emit({
       type: 'queue_event',
       ts: '2026-01-01T00:00:00.000Z',
-      payload: {
-        event: {
-          active: null,
-          queued: [{ jobId: 'job-1', status: 'queued', runParams: { configPath: '/tmp/x.yaml' } }]
-        }
-      }
+      payload: { event: { active: null, queued: [] } }
     });
-    source.readyState = 2;
-    source.fail();
 
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'queue_event'
-      })
-    );
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'error',
-        payload: expect.objectContaining({ reconnecting: false })
-      })
-    );
-    expect(source.closed).toBe(true);
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'queue_event' }));
 
     unsubscribe();
+    expect(worker.port.messages).toContainEqual({ type: 'close' });
   });
 
-  it('emits transient SSE error without closing EventSource', () => {
-    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+  it('sends init message with baseUrl and starts port on subscribe', () => {
+    vi.stubGlobal('SharedWorker', MockSharedWorker as unknown as typeof SharedWorker);
+
+    workspaceApiClient.subscribeRunQueue(vi.fn());
+    const worker = MockSharedWorker.instances[0]!;
+
+    expect(worker.port.messages[0]).toEqual({ type: 'init', baseUrl: '' });
+  });
+
+  it('forwards error events from the SharedWorker port to the callback', () => {
+    vi.stubGlobal('SharedWorker', MockSharedWorker as unknown as typeof SharedWorker);
+    const onEvent = vi.fn();
+
+    workspaceApiClient.subscribeRunQueue(onEvent);
+    const worker = MockSharedWorker.instances[0]!;
+
+    worker.port.emit({
+      type: 'error',
+      ts: '2026-01-01T00:00:00.000Z',
+      payload: { message: 'SSE connection error', reconnecting: true }
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+  });
+
+  it('does not call onEvent after unsubscribe', () => {
+    vi.stubGlobal('SharedWorker', MockSharedWorker as unknown as typeof SharedWorker);
     const onEvent = vi.fn();
 
     const unsubscribe = workspaceApiClient.subscribeRunQueue(onEvent);
-    const source = MockEventSource.instances[0]!;
-    source.readyState = 0;
-    source.fail();
-
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'error',
-        payload: expect.objectContaining({ reconnecting: true })
-      })
-    );
-    expect(source.closed).toBe(false);
+    const worker = MockSharedWorker.instances[0]!;
 
     unsubscribe();
+
+    worker.port.emit({
+      type: 'queue_event',
+      ts: '2026-01-01T00:00:00.000Z',
+      payload: { event: { active: null, queued: [] } }
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
   });
 });
 
