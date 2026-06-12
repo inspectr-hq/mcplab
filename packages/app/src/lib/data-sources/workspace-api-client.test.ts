@@ -139,7 +139,7 @@ describe('workspaceApiClient SSE subscriptions', () => {
     workspaceApiClient.subscribeRunQueue(vi.fn());
     const worker = MockSharedWorker.instances[0]!;
 
-    expect(worker.port.messages[0]).toMatchObject({ type: 'init' });
+    expect(worker.port.messages[0]).toEqual({ type: 'init', baseUrl: '' });
   });
 
   it('forwards error events from the SharedWorker port to the callback', () => {
