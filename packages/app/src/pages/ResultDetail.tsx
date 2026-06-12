@@ -1314,16 +1314,7 @@ const ResultDetail = () => {
                                                                 </span>
                                                               </div>
                                                               {check.failureReason && (
-                                                                <p
-                                                                  className={`mt-1 pl-5 text-[11px] ${
-                                                                    check.status === 'failed'
-                                                                      ? 'text-destructive'
-                                                                      : check.status ===
-                                                                        'not_evaluated'
-                                                                      ? 'text-muted-foreground'
-                                                                      : 'text-success'
-                                                                  }`}
-                                                                >
+                                                                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">
                                                                   {formatFailureReason(
                                                                     check.failureReason
                                                                   )}
