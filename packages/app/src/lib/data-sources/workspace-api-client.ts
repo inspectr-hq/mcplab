@@ -656,14 +656,66 @@ export const workspaceApiClient = {
     }),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
+    if (typeof SharedWorker === 'undefined') {
+      // Fallback for Safari < 16 and other environments without SharedWorker support.
+      const sse = new EventSource(`${BASE}/api/runs/queue/events`);
+      let closed = false;
+      sse.onopen = () => {
+        if (closed) return;
+        onEvent({
+          type: 'connected',
+          ts: new Date().toISOString(),
+          payload: { message: 'SSE connected' }
+        });
+      };
+      sse.addEventListener('queue_event', (event: MessageEvent) => {
+        if (closed) return;
+        try {
+          onEvent(JSON.parse(event.data));
+        } catch {
+          /* ignore malformed */
+        }
+      });
+      sse.onerror = () => {
+        if (closed) return;
+        onEvent({
+          type: 'error',
+          ts: new Date().toISOString(),
+          payload: { message: 'SSE connection error', reconnecting: sse.readyState !== 2 }
+        });
+        if (sse.readyState === 2) {
+          sse.onerror = null;
+          closed = true;
+        }
+      };
+      return () => {
+        if (closed) return;
+        closed = true;
+        sse.close();
+      };
+    }
+
     const worker = new SharedWorker(new URL('./sse-queue-worker.ts', import.meta.url), {
       type: 'module'
     });
     let closed = false;
 
+    worker.onerror = () => {
+      if (closed) return;
+      onEvent({
+        type: 'error',
+        ts: new Date().toISOString(),
+        payload: { message: 'Queue worker failed to load' }
+      });
+    };
+
     worker.port.onmessage = (event: MessageEvent) => {
       if (closed) return;
       if (typeof event.data !== 'object' || !event.data) return;
+      if (event.data.type === 'ping') {
+        worker.port.postMessage({ type: 'pong' });
+        return;
+      }
       onEvent(event.data as RunQueueSseEvent);
     };
 
@@ -674,6 +726,8 @@ export const workspaceApiClient = {
       if (closed) return;
       closed = true;
       worker.port.postMessage({ type: 'close' });
+      worker.port.onmessage = null;
+      worker.port.close();
     };
   },
   removeQueuedRun: (jobId: string) =>
