@@ -371,10 +371,12 @@ describe('evaluateScenarioWithAgentChecks', () => {
     );
 
     expect(judgeAgentAssertions).toHaveBeenCalledTimes(1);
-    expect(judgeAgentAssertions).toHaveBeenCalledWith([
-      { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
-      { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
-    ]);
+    expect(judgeAgentAssertions).toHaveBeenCalledWith({
+      assertions: [
+        { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+        { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+      ]
+    });
     expect(result.pass).toBe(false);
     expect(result.check_results).toEqual([
       {

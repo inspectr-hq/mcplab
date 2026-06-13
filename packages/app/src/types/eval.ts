@@ -75,6 +75,11 @@ export interface ExtractRule {
   pattern: string;
 }
 
+export interface AgentContext {
+  include_prompt?: boolean;
+  include_tool_sequence?: boolean;
+}
+
 export interface Scenario {
   id: string;
   name: string;
@@ -83,6 +88,7 @@ export interface Scenario {
   prompt: string;
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
+  agentContext?: AgentContext;
 }
 
 export type ScenarioEntry =

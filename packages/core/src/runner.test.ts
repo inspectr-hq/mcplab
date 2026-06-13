@@ -196,6 +196,52 @@ describe('buildJudgeBatchPayload', () => {
       ]
     });
   });
+
+  it('omits context field when no context provided', () => {
+    const payload = buildJudgeBatchPayload('answer', [
+      { label: 'Check', prompt: 'Verify something.' }
+    ]);
+    expect(payload).not.toHaveProperty('context');
+  });
+
+  it('includes context.scenario_prompt when provided', () => {
+    const payload = buildJudgeBatchPayload(
+      'answer',
+      [{ label: 'Check', prompt: 'Verify something.' }],
+      { scenario_prompt: 'What is the tag profile?' }
+    );
+    expect(payload.context).toEqual({ scenario_prompt: 'What is the tag profile?' });
+  });
+
+  it('includes context.tool_sequence when provided', () => {
+    const payload = buildJudgeBatchPayload(
+      'answer',
+      [{ label: 'Check', prompt: 'Verify something.' }],
+      { tool_sequence: ['get_tag_profile', 'search_tags'] }
+    );
+    expect(payload.context).toEqual({ tool_sequence: ['get_tag_profile', 'search_tags'] });
+  });
+
+  it('includes both context fields when both provided', () => {
+    const payload = buildJudgeBatchPayload(
+      'answer',
+      [{ label: 'Check', prompt: 'Verify something.' }],
+      { scenario_prompt: 'What is the tag profile?', tool_sequence: ['get_tag_profile'] }
+    );
+    expect(payload.context).toEqual({
+      scenario_prompt: 'What is the tag profile?',
+      tool_sequence: ['get_tag_profile']
+    });
+  });
+
+  it('omits context field when empty context object provided', () => {
+    const payload = buildJudgeBatchPayload(
+      'answer',
+      [{ label: 'Check', prompt: 'Verify something.' }],
+      {}
+    );
+    expect(payload).not.toHaveProperty('context');
+  });
 });
 
 describe('mapJudgeBatchResults', () => {

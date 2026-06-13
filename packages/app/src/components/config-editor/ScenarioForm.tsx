@@ -23,8 +23,16 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { AgentConfig, ServerConfig, Scenario, EvalRule, ExtractRule } from '@/types/eval';
+import type {
+  AgentContext,
+  AgentConfig,
+  ServerConfig,
+  Scenario,
+  EvalRule,
+  ExtractRule
+} from '@/types/eval';
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
@@ -1278,6 +1286,73 @@ function ScenarioCard({
                 </CardContent>
               </Card>
             </div>
+            {scenario.evalRules.some((r) => r.type === 'agent_check') && (
+              <Card className="border bg-muted/10">
+                <CardHeader className="pb-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm">Judge context</CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Extra context is shared across all judge checks in this scenario and sent once
+                      in the batched judge request.
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id={`judge-ctx-prompt-${scenario.id}`}
+                      checked={scenario.agentContext?.include_prompt ?? false}
+                      disabled={readOnly}
+                      className="mt-0.5"
+                      onCheckedChange={(checked) => {
+                        const next: AgentContext = {
+                          ...scenario.agentContext,
+                          include_prompt: checked === true
+                        };
+                        onUpdate({ agentContext: next });
+                      }}
+                    />
+                    <div>
+                      <Label
+                        htmlFor={`judge-ctx-prompt-${scenario.id}`}
+                        className="cursor-pointer text-xs font-medium"
+                      >
+                        Include prompt
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sends the scenario prompt so the judge can verify the answer addresses the original question.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id={`judge-ctx-tools-${scenario.id}`}
+                      checked={scenario.agentContext?.include_tool_sequence ?? false}
+                      disabled={readOnly}
+                      className="mt-0.5"
+                      onCheckedChange={(checked) => {
+                        const next: AgentContext = {
+                          ...scenario.agentContext,
+                          include_tool_sequence: checked === true
+                        };
+                        onUpdate({ agentContext: next });
+                      }}
+                    />
+                    <div>
+                      <Label
+                        htmlFor={`judge-ctx-tools-${scenario.id}`}
+                        className="cursor-pointer text-xs font-medium"
+                      >
+                        Include tool sequence
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sends the list of called tool names so the judge can reason about which tools were used.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Card>

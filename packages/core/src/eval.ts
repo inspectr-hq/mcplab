@@ -2,6 +2,7 @@ import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
 import type {
   AgentAssertion,
+  AgentJudgeContext,
   CheckResult,
   EvalRules,
   ResponseAssertion,
@@ -21,8 +22,13 @@ export interface AgentAssertionJudgeResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface JudgeAgentAssertionsInput {
+  assertions: AgentAssertion[];
+  context?: AgentJudgeContext;
+}
+
 export interface EvaluateScenarioWithAgentChecksOptions {
-  judgeAgentAssertions?: (assertions: AgentAssertion[]) => Promise<AgentAssertionJudgeResult[]>;
+  judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
 }
 
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
@@ -115,7 +121,7 @@ export async function evaluateScenarioWithAgentChecks(
   }
 
   try {
-    const judgedResults = await options.judgeAgentAssertions(agentAssertions);
+    const judgedResults = await options.judgeAgentAssertions({ assertions: agentAssertions });
     for (const [index, assertion] of agentAssertions.entries()) {
       const judged = judgedResults[index];
       if (!judged) {

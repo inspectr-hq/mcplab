@@ -4,6 +4,7 @@ import { stringify as stringifyYaml } from 'yaml';
 import type {
   AgentAssertion,
   AgentConfig,
+  AgentJudgeContext,
   ExecutableEvalConfig,
   ScenarioRunResult,
   ResultsJson,
@@ -259,10 +260,20 @@ export async function runAll(
             scenario.eval,
             {
               judgeAgentAssertions: options.evaluationJudge
-                ? async (assertions) => {
+                ? async (input) => {
                     const judge = options.evaluationJudge!;
+                    const cfg = scenario.eval?.agent_context;
+                    const context: AgentJudgeContext | undefined = cfg
+                      ? {
+                          ...(cfg.include_prompt ? { scenario_prompt: scenario.prompt } : {}),
+                          ...(cfg.include_tool_sequence
+                            ? { tool_sequence: runResult.toolSequence }
+                            : {})
+                        }
+                      : undefined;
                     return judgeAgentAssertions({
-                      assertions,
+                      assertions: input.assertions,
+                      context,
                       finalText: runResult.finalText,
                       judge,
                       signal: options.signal
@@ -422,9 +433,14 @@ export async function runAll(
   }
 }
 
-export function buildJudgeBatchPayload(finalText: string, assertions: AgentAssertion[]) {
+export function buildJudgeBatchPayload(
+  finalText: string,
+  assertions: AgentAssertion[],
+  context?: AgentJudgeContext
+) {
   return {
     final_answer: finalText,
+    ...(context && Object.keys(context).length > 0 ? { context } : {}),
     checks: assertions.map((assertion, index) => ({
       id: `agent-check-${index + 1}`,
       label: assertion.label,
@@ -513,17 +529,22 @@ export function mapJudgeBatchResults(params: {
 async function judgeAgentAssertions(params: {
   assertions: AgentAssertion[];
   finalText: string;
+  context?: AgentJudgeContext;
   judge: NonNullable<RunOptions['evaluationJudge']>;
   signal?: AbortSignal;
 }): Promise<
   Array<{ label: string; pass: boolean; reason: string; metadata?: Record<string, unknown> }>
 > {
-  const batch = buildJudgeBatchPayload(params.finalText, params.assertions);
+  const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
   const system = [
-    'You evaluate whether a final answer satisfies a set of semantic checks.',
+    'You evaluate whether a final answer satisfies semantic checks.',
     'Evaluate each check independently.',
+    'Use final_answer as the primary answer being judged.',
+    'If context.scenario_prompt is provided, use it to decide whether the final answer addresses the original request.',
+    'If context.tool_sequence is provided, use it only to understand which tools were called.',
+    'Do not require context fields that are not provided.',
     'Return JSON only.',
-    'Schema: {"results":[{"id":string,"label":string,"pass":boolean,"reason":string}]}.',
+    'Schema: {"results":[{"id":"string","pass":boolean,"reason":"string"}]}.',
     'Keep each reason short and concrete.'
   ].join(' ');
   const response = await chatWithAgent({

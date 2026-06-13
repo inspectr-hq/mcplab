@@ -1,4 +1,5 @@
 import type {
+  AgentContext,
   ConversationItem,
   AgentEntry,
   EvalConfig,
@@ -119,7 +120,10 @@ function toCoreResponseAssertion(
   return null;
 }
 
-function buildCoreEvalBlock(evalRules: EvalRule[]):
+function buildCoreEvalBlock(
+  evalRules: EvalRule[],
+  agentContext?: AgentContext
+):
   | {
       tool_constraints?: {
         required_tools?: string[];
@@ -137,6 +141,7 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         | { type: 'jsonpath_not_exists'; path: string }
       >;
       agent_assertions?: Array<{ label: string; prompt: string }>;
+      agent_context?: AgentContext;
     }
   | undefined {
   const required_tools = evalRules
@@ -166,13 +171,24 @@ function buildCoreEvalBlock(evalRules: EvalRule[]):
         }
       : undefined;
 
-  if (!tool_constraints && response_assertions.length === 0 && agent_assertions.length === 0)
+  const agent_context: Record<string, boolean> = {};
+  if (agentContext?.include_prompt) agent_context.include_prompt = true;
+  if (agentContext?.include_tool_sequence) agent_context.include_tool_sequence = true;
+  const hasAgentContext = Object.keys(agent_context).length > 0;
+
+  if (
+    !tool_constraints &&
+    response_assertions.length === 0 &&
+    agent_assertions.length === 0 &&
+    !hasAgentContext
+  )
     return undefined;
 
   return {
     ...(tool_constraints ? { tool_constraints } : {}),
     ...(response_assertions.length > 0 ? { response_assertions } : {}),
-    ...(agent_assertions.length > 0 ? { agent_assertions } : {})
+    ...(agent_assertions.length > 0 ? { agent_assertions } : {}),
+    ...(hasAgentContext ? { agent_context } : {})
   };
 }
 
@@ -197,7 +213,7 @@ function buildCoreScenarioEntry(
     | Array<{ ref: string } | NonNullable<CoreSourceEvalConfig['servers']>[number]>
     | undefined
 ): NonNullable<CoreSourceEvalConfig['scenarios']>[number] {
-  const evalBlock = buildCoreEvalBlock(scenario.evalRules);
+  const evalBlock = buildCoreEvalBlock(scenario.evalRules, scenario.agentContext);
   const extract = buildCoreExtractBlock(scenario.extractRules);
 
   return {
@@ -423,6 +439,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       });
     }
 
+    const mappedAgentContext: AgentContext | undefined = scenario.eval?.agent_context
+      ? {
+          include_prompt: scenario.eval.agent_context.include_prompt ?? false,
+          include_tool_sequence: scenario.eval.agent_context.include_tool_sequence ?? false
+        }
+      : undefined;
     const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
@@ -457,7 +479,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,
         pattern: rule.regex
-      }))
+      })),
+      ...(mappedAgentContext ? { agentContext: mappedAgentContext } : {})
     };
     inlineScenarios.push(mappedScenario);
     scenarioEntries.push({ kind: 'inline', scenario: mappedScenario });
