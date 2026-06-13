@@ -140,7 +140,7 @@ function buildJudgeBatchResultSchema() {
             pass: { type: 'boolean' },
             reason: { type: 'string' }
           },
-          required: ['id', 'label', 'pass', 'reason'],
+          required: ['id', 'pass', 'reason'],
           additionalProperties: false
         }
       }

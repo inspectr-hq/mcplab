@@ -304,7 +304,9 @@ function ScenarioCard({
   };
 
   const removeRule = (ri: number) => {
-    onUpdate({ evalRules: scenario.evalRules.filter((_, i) => i !== ri) });
+    const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
+    const hasAgentChecks = nextRules.some((r) => r.type === 'agent_check');
+    onUpdate({ evalRules: nextRules, ...(!hasAgentChecks ? { agentContext: undefined } : {}) });
   };
 
   const addExtract = () => {

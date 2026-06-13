@@ -259,23 +259,14 @@ export async function runAll(
             runResult.toolSequence,
             scenario.eval,
             {
+              scenarioPrompt: scenario.prompt,
               judgeAgentAssertions: options.evaluationJudge
                 ? async (input) => {
-                    const judge = options.evaluationJudge!;
-                    const cfg = scenario.eval?.agent_context;
-                    const context: AgentJudgeContext | undefined = cfg
-                      ? {
-                          ...(cfg.include_prompt ? { scenario_prompt: scenario.prompt } : {}),
-                          ...(cfg.include_tool_sequence
-                            ? { tool_sequence: runResult.toolSequence }
-                            : {})
-                        }
-                      : undefined;
                     return judgeAgentAssertions({
                       assertions: input.assertions,
-                      context,
+                      context: input.context,
                       finalText: runResult.finalText,
-                      judge,
+                      judge: options.evaluationJudge!,
                       signal: options.signal
                     });
                   }
@@ -469,10 +460,7 @@ export function mapJudgeBatchResults(params: {
     );
   }
 
-  const resultsById = new Map<
-    string,
-    { id: string; label: string; pass: boolean; reason: string }
-  >();
+  const resultsById = new Map<string, { id: string; pass: boolean; reason: string }>();
   for (const item of parsed.results) {
     if (!item || typeof item !== 'object') {
       throw new Error(
@@ -482,7 +470,6 @@ export function mapJudgeBatchResults(params: {
     const candidate = item as Record<string, unknown>;
     if (
       typeof candidate.id !== 'string' ||
-      typeof candidate.label !== 'string' ||
       typeof candidate.pass !== 'boolean' ||
       typeof candidate.reason !== 'string'
     ) {
@@ -493,7 +480,6 @@ export function mapJudgeBatchResults(params: {
     if (!resultsById.has(candidate.id)) {
       resultsById.set(candidate.id, {
         id: candidate.id,
-        label: candidate.label,
         pass: candidate.pass,
         reason: candidate.reason
       });

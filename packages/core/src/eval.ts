@@ -29,6 +29,7 @@ export interface JudgeAgentAssertionsInput {
 
 export interface EvaluateScenarioWithAgentChecksOptions {
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
+  scenarioPrompt?: string;
 }
 
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
@@ -121,7 +122,16 @@ export async function evaluateScenarioWithAgentChecks(
   }
 
   try {
-    const judgedResults = await options.judgeAgentAssertions({ assertions: agentAssertions });
+    const cfg = evalRules?.agent_context;
+    const context: AgentJudgeContext | undefined = cfg
+      ? {
+          ...(cfg.include_prompt && options.scenarioPrompt
+            ? { scenario_prompt: options.scenarioPrompt }
+            : {}),
+          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
+        }
+      : undefined;
+    const judgedResults = await options.judgeAgentAssertions({ assertions: agentAssertions, context });
     for (const [index, assertion] of agentAssertions.entries()) {
       const judged = judgedResults[index];
       if (!judged) {
