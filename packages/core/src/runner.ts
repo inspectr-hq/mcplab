@@ -523,8 +523,8 @@ async function judgeAgentAssertions(params: {
 > {
   const batch = buildJudgeBatchPayload(params.finalText, params.assertions, params.context);
   const system = [
-    'You evaluate whether a final answer satisfies semantic checks.',
-    'Evaluate each check independently.',
+    'You evaluate whether a final answer satisfies a set of semantic checks.',
+    'Evaluate each check independently against final_answer.',
     'Use final_answer as the primary answer being judged.',
     'If context.scenario_prompt is provided, use it to decide whether the final answer addresses the original request.',
     'If context.tool_sequence is provided, use it only to understand which tools were called.',
