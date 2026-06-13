@@ -123,14 +123,16 @@ export async function evaluateScenarioWithAgentChecks(
 
   try {
     const cfg = evalRules?.agent_context;
-    const context: AgentJudgeContext | undefined = cfg
+    const builtContext: AgentJudgeContext = cfg
       ? {
           ...(cfg.include_prompt && options.scenarioPrompt
             ? { scenario_prompt: options.scenarioPrompt }
             : {}),
           ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
         }
-      : undefined;
+      : {};
+    const context: AgentJudgeContext | undefined =
+      Object.keys(builtContext).length > 0 ? builtContext : undefined;
     const judgedResults = await options.judgeAgentAssertions({
       assertions: agentAssertions,
       context
