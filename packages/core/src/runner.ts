@@ -10,6 +10,7 @@ import type {
   ExecutableScenario,
   ScenarioRunTraceRecord
 } from './types.js';
+import { isAbortError, throwIfAborted } from './abort.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
 import {
@@ -333,7 +334,7 @@ export async function runAll(
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
-          if (isAbortError(scenarioErr, options.signal)) {
+          if (options.signal?.aborted || isAbortError(scenarioErr)) {
             throw scenarioErr;
           }
           const errorMessage = scenarioErr?.message ?? String(scenarioErr);
@@ -701,16 +702,4 @@ function slugifyAgentName(agentName: string): string {
   const normalized = agentName.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
   const compact = normalized.replace(/^_+|_+$/g, '').replace(/_{2,}/g, '_');
   return compact || 'unknown-agent';
-}
-
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new Error('Run aborted by user');
-  }
-}
-
-function isAbortError(err: any, signal?: AbortSignal): boolean {
-  if (signal?.aborted) return true;
-  const message = err?.message ?? '';
-  return message === 'Run aborted by user' || err?.name === 'AbortError';
 }
