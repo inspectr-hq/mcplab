@@ -2007,7 +2007,8 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'agent-checks',
       title: 'Agent Checks (Agent Judge)',
       paragraphs: [
-        'Agent checks (also called agent judge) use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.'
+        'Agent checks (also called agent judge) use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.',
+        'By default the judge receives only the final answer. Use the optional agent_context block to send additional context — the original scenario prompt and/or the list of called tool names — shared once across all checks in the scenario.'
       ],
       codeBlocks: [
         {
@@ -2015,6 +2016,20 @@ const refToolAndResponseAssertions: DocPage = {
           language: 'yaml',
           code: `eval:
   agent_assertions:
+    - label: logical_time_range
+      prompt: Confirm the final answer includes an earliest and latest timestamp, and that both values are present and logically ordered.`
+        },
+        {
+          title: 'agent_assertions with agent_context',
+          language: 'yaml',
+          code: `eval:
+  agent_context:
+    include_prompt: true          # sends scenario prompt to the Agent Judge so that it can be included in the evaluation
+    include_tool_sequence: true   # sends called tool names as Agent Judge so that it can be included in the evaluation
+
+  agent_assertions:
+    - label: addresses_question
+      prompt: Confirm the answer directly addresses the original question.
     - label: logical_time_range
       prompt: Confirm the final answer includes an earliest and latest timestamp, and that both values are present and logically ordered.`
         }
@@ -2028,7 +2043,10 @@ const refToolAndResponseAssertions: DocPage = {
         'regex is case-insensitive by default and uses JavaScript regular expressions.',
         'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
         'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.',
-        'Agent checks (agent judge) evaluate final answer text only in v1, run in a single batched judge request per scenario run, and require a default evaluation judge to be configured in workspace settings.',
+        'Agent checks run in a single batched judge request per scenario run and require a default evaluation judge to be configured in workspace settings.',
+        'agent_context is optional and applies to all agent_assertions in the scenario. Omit it to evaluate the final answer only (default).',
+        'include_prompt sends the scenario prompt as context.scenario_prompt. include_tool_sequence sends the called tool names as context.tool_sequence.',
+        'agent_context fields default to false; omitting the block entirely is equivalent to both fields being false.',
         'Agent checks are more flexible, but they are also less reproducible and more expensive than deterministic checks.'
       ]
     }
