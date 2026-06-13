@@ -131,7 +131,10 @@ export async function evaluateScenarioWithAgentChecks(
           ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
         }
       : undefined;
-    const judgedResults = await options.judgeAgentAssertions({ assertions: agentAssertions, context });
+    const judgedResults = await options.judgeAgentAssertions({
+      assertions: agentAssertions,
+      context
+    });
     for (const [index, assertion] of agentAssertions.entries()) {
       const judged = judgedResults[index];
       if (!judged) {
