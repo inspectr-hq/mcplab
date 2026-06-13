@@ -1320,7 +1320,8 @@ function ScenarioCard({
                         Include prompt
                       </Label>
                       <p className="text-[11px] text-muted-foreground">
-                        Sends the scenario prompt so the judge can verify the answer addresses the original question.
+                        Sends the scenario prompt so the judge can verify the answer addresses the
+                        original question.
                       </p>
                     </div>
                   </div>
@@ -1346,7 +1347,8 @@ function ScenarioCard({
                         Include tool sequence
                       </Label>
                       <p className="text-[11px] text-muted-foreground">
-                        Sends the list of called tool names so the judge can reason about which tools were used.
+                        Sends the list of called tool names so the judge can reason about which
+                        tools were used.
                       </p>
                     </div>
                   </div>
