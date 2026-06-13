@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildForcedJsonResponseFormat, runAgentScenario } from './agent.js';
+import {
+  buildBatchJudgeResponseFormat,
+  buildSingleCheckJudgeResponseFormat,
+  runAgentScenario
+} from './agent.js';
 
 describe('runAgentScenario', () => {
   beforeEach(() => {
@@ -44,12 +48,13 @@ describe('runAgentScenario', () => {
   });
 });
 
-describe('buildForcedJsonResponseFormat', () => {
-  it('returns json schema response format for compact judge contract', () => {
-    expect(buildForcedJsonResponseFormat()).toEqual({
+describe('judge response formats', () => {
+  it('returns json schema response format for the single-check judge contract', () => {
+    expect(buildSingleCheckJudgeResponseFormat()).toEqual({
       type: 'json_schema',
       json_schema: {
         name: 'judge_result',
+        strict: true,
         schema: {
           type: 'object',
           properties: {
@@ -57,6 +62,37 @@ describe('buildForcedJsonResponseFormat', () => {
             reason: { type: 'string' }
           },
           required: ['pass', 'reason'],
+          additionalProperties: false
+        }
+      }
+    });
+  });
+
+  it('returns json schema response format for the batched judge contract', () => {
+    expect(buildBatchJudgeResponseFormat()).toEqual({
+      type: 'json_schema',
+      json_schema: {
+        name: 'judge_batch_result',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            results: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string' },
+                  pass: { type: 'boolean' },
+                  reason: { type: 'string' }
+                },
+                required: ['id', 'label', 'pass', 'reason'],
+                additionalProperties: false
+              }
+            }
+          },
+          required: ['results'],
           additionalProperties: false
         }
       }

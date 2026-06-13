@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { createAbortError } from './abort.js';
 import {
   buildNotEvaluatedCheckResults,
   evaluateScenario,
@@ -297,7 +298,7 @@ describe('evaluateScenario — response_assertions mixed stack', () => {
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {
-  it('passes when the judge returns pass=true', async () => {
+  it('passes when the batched judge returns pass=true for a single check', async () => {
     const result = await evaluateScenarioWithAgentChecks(
       'has valid timestamps',
       [],
@@ -305,7 +306,9 @@ describe('evaluateScenarioWithAgentChecks', () => {
         agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
       },
       {
-        judgeAgentAssertion: async () => ({ pass: true, reason: 'Range present and logical.' })
+        judgeAgentAssertions: async () => [
+          { label: 'Logical range', pass: true, reason: 'Range present and logical.' }
+        ]
       }
     );
 
@@ -320,7 +323,7 @@ describe('evaluateScenarioWithAgentChecks', () => {
     ]);
   });
 
-  it('fails when the judge returns pass=false', async () => {
+  it('fails when the batched judge returns pass=false', async () => {
     const result = await evaluateScenarioWithAgentChecks(
       'Not available',
       [],
@@ -328,7 +331,9 @@ describe('evaluateScenarioWithAgentChecks', () => {
         agent_assertions: [{ label: 'Logical range', prompt: 'Confirm there is a logical range.' }]
       },
       {
-        judgeAgentAssertion: async () => ({ pass: false, reason: 'No valid range present.' })
+        judgeAgentAssertions: async () => [
+          { label: 'Logical range', pass: false, reason: 'No valid range present.' }
+        ]
       }
     );
 
@@ -337,14 +342,168 @@ describe('evaluateScenarioWithAgentChecks', () => {
     expect(result.check_results[0]?.status).toBe('failed');
   });
 
+  it('invokes the batched judge once for multiple checks and preserves per-check results', async () => {
+    const judgeAgentAssertions = vi.fn().mockResolvedValue([
+      {
+        label: 'Logical range',
+        pass: true,
+        reason: 'Range present and logical.',
+        metadata: { check_id: 'agent-check-1' }
+      },
+      {
+        label: 'Mentions source',
+        pass: false,
+        reason: 'The answer does not mention the source.',
+        metadata: { check_id: 'agent-check-2' }
+      }
+    ]);
+
+    const result = await evaluateScenarioWithAgentChecks(
+      'Final answer text',
+      [],
+      {
+        agent_assertions: [
+          { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+          { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+        ]
+      },
+      { judgeAgentAssertions }
+    );
+
+    expect(judgeAgentAssertions).toHaveBeenCalledTimes(1);
+    expect(judgeAgentAssertions).toHaveBeenCalledWith([
+      { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+      { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+    ]);
+    expect(result.pass).toBe(false);
+    expect(result.check_results).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        status: 'passed',
+        reason: 'Range present and logical.',
+        metadata: { check_id: 'agent-check-1' }
+      },
+      {
+        type: 'agent_check',
+        label: 'Mentions source',
+        status: 'failed',
+        reason: 'The answer does not mention the source.',
+        metadata: { check_id: 'agent-check-2' }
+      }
+    ]);
+  });
+
+  it('fails only the missing check result returned by the batched judge', async () => {
+    const result = await evaluateScenarioWithAgentChecks(
+      'Final answer text',
+      [],
+      {
+        agent_assertions: [
+          { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+          { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+        ]
+      },
+      {
+        judgeAgentAssertions: async () => [
+          { label: 'Logical range', pass: true, reason: 'Range present and logical.' }
+        ]
+      }
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.check_results).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        status: 'passed',
+        reason: 'Range present and logical.'
+      },
+      {
+        type: 'agent_check',
+        label: 'Mentions source',
+        status: 'failed',
+        reason: 'Judge did not return a result for "Mentions source"'
+      }
+    ]);
+  });
+
   it('fails agent checks when no judge is configured', async () => {
     const result = await evaluateScenarioWithAgentChecks('anything', [], {
-      agent_assertions: [{ label: 'Semantic', prompt: 'Check semantics.' }]
+      agent_assertions: [
+        { label: 'Semantic', prompt: 'Check semantics.' },
+        { label: 'Logical range', prompt: 'Check range.' }
+      ]
     });
 
     expect(result.pass).toBe(false);
     expect(result.failures[0]).toContain('Agent check could not run');
-    expect(result.check_results[0]?.status).toBe('failed');
+    expect(result.check_results).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Semantic',
+        status: 'failed',
+        reason: 'Agent check could not run: no judge configured for "Semantic"'
+      },
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        status: 'failed',
+        reason: 'Agent check could not run: no judge configured for "Logical range"'
+      }
+    ]);
+  });
+
+  it('fails all agent checks when the batched judge throws once', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockRejectedValue(new Error('judge "critic" returned invalid JSON'));
+
+    const result = await evaluateScenarioWithAgentChecks(
+      'anything',
+      [],
+      {
+        agent_assertions: [
+          { label: 'Semantic', prompt: 'Check semantics.' },
+          { label: 'Logical range', prompt: 'Check range.' }
+        ]
+      },
+      { judgeAgentAssertions }
+    );
+
+    expect(judgeAgentAssertions).toHaveBeenCalledTimes(1);
+    expect(result.pass).toBe(false);
+    expect(result.check_results).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Semantic',
+        status: 'failed',
+        reason: 'Agent check failed: judge "critic" returned invalid JSON'
+      },
+      {
+        type: 'agent_check',
+        label: 'Logical range',
+        status: 'failed',
+        reason: 'Agent check failed: judge "critic" returned invalid JSON'
+      }
+    ]);
+  });
+
+  it('rethrows abort errors from batched judge calls', async () => {
+    await expect(
+      evaluateScenarioWithAgentChecks(
+        'anything',
+        [],
+        {
+          agent_assertions: [{ label: 'Semantic', prompt: 'Check semantics.' }]
+        },
+        {
+          judgeAgentAssertions: async () => {
+            throw createAbortError();
+          }
+        }
+      )
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 

@@ -1,4 +1,5 @@
 import { JSONPath } from 'jsonpath-plus';
+import { isAbortError } from './abort.js';
 import type {
   AgentAssertion,
   CheckResult,
@@ -14,13 +15,14 @@ export interface EvalResult {
 }
 
 export interface AgentAssertionJudgeResult {
+  label: string;
   pass: boolean;
   reason: string;
   metadata?: Record<string, unknown>;
 }
 
 export interface EvaluateScenarioWithAgentChecksOptions {
-  judgeAgentAssertion?: (assertion: AgentAssertion) => Promise<AgentAssertionJudgeResult>;
+  judgeAgentAssertions?: (assertions: AgentAssertion[]) => Promise<AgentAssertionJudgeResult[]>;
 }
 
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
@@ -93,8 +95,13 @@ export async function evaluateScenarioWithAgentChecks(
   const failures = [...base.failures];
   const check_results = [...base.check_results];
 
-  for (const assertion of evalRules?.agent_assertions ?? []) {
-    if (!options?.judgeAgentAssertion) {
+  const agentAssertions = evalRules?.agent_assertions ?? [];
+  if (agentAssertions.length === 0) {
+    return { pass: failures.length === 0, failures, check_results };
+  }
+
+  if (!options?.judgeAgentAssertions) {
+    for (const assertion of agentAssertions) {
       const reason = `Agent check could not run: no judge configured for "${assertion.label}"`;
       failures.push(reason);
       check_results.push({
@@ -103,11 +110,25 @@ export async function evaluateScenarioWithAgentChecks(
         status: 'failed',
         reason
       });
-      continue;
     }
+    return { pass: failures.length === 0, failures, check_results };
+  }
 
-    try {
-      const judged = await options.judgeAgentAssertion(assertion);
+  try {
+    const judgedResults = await options.judgeAgentAssertions(agentAssertions);
+    for (const [index, assertion] of agentAssertions.entries()) {
+      const judged = judgedResults[index];
+      if (!judged) {
+        const reason = `Judge did not return a result for "${assertion.label}"`;
+        failures.push(reason);
+        check_results.push({
+          type: 'agent_check',
+          label: assertion.label,
+          status: 'failed',
+          reason
+        });
+        continue;
+      }
       if (!judged.pass) failures.push(judged.reason);
       check_results.push({
         type: 'agent_check',
@@ -116,10 +137,11 @@ export async function evaluateScenarioWithAgentChecks(
         reason: judged.reason,
         ...(judged.metadata ? { metadata: judged.metadata } : {})
       });
-    } catch (error) {
-      const reason = `Agent check failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
+    }
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    const reason = `Agent check failed: ${error instanceof Error ? error.message : String(error)}`;
+    for (const assertion of agentAssertions) {
       failures.push(reason);
       check_results.push({
         type: 'agent_check',
@@ -337,7 +359,13 @@ function toUiRuleType(assertionType: ResponseAssertion['type']): string {
       return 'response_jsonpath_exists';
     case 'jsonpath_not_exists':
       return 'response_jsonpath_not_exists';
+    default:
+      return assertNever(assertionType);
   }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled response assertion type: ${String(value)}`);
 }
 
 function buildToolConstraintCheckResults(
