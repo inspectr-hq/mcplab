@@ -80,15 +80,36 @@ interface AdapterOptions {
   max_tokens?: number;
   system?: string;
   signal?: AbortSignal;
-  forceJsonResponse?: boolean;
+  responseFormat?: JsonSchemaResponseFormat;
 }
 
-export function buildForcedJsonResponseFormat() {
+export interface JsonSchemaResponseFormat {
+  type: 'json_schema';
+  json_schema: {
+    name: string;
+    strict: true;
+    schema: Record<string, unknown>;
+  };
+}
+
+export function buildSingleCheckJudgeResponseFormat(): JsonSchemaResponseFormat {
   return {
-    type: 'json_schema' as const,
+    type: 'json_schema',
     json_schema: {
       name: 'judge_result',
+      strict: true,
       schema: buildJudgeResultSchema()
+    }
+  };
+}
+
+export function buildBatchJudgeResponseFormat(): JsonSchemaResponseFormat {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'judge_batch_result',
+      strict: true,
+      schema: buildJudgeBatchResultSchema()
     }
   };
 }
@@ -101,6 +122,30 @@ function buildJudgeResultSchema() {
       reason: { type: 'string' }
     },
     required: ['pass', 'reason'],
+    additionalProperties: false
+  };
+}
+
+function buildJudgeBatchResultSchema() {
+  return {
+    type: 'object',
+    properties: {
+      results: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            label: { type: 'string' },
+            pass: { type: 'boolean' },
+            reason: { type: 'string' }
+          },
+          required: ['id', 'label', 'pass', 'reason'],
+          additionalProperties: false
+        }
+      }
+    },
+    required: ['results'],
     additionalProperties: false
   };
 }
@@ -358,7 +403,7 @@ export async function chatWithAgent(params: {
   tools?: ToolDef[];
   system?: string;
   signal?: AbortSignal;
-  forceJsonResponse?: boolean;
+  responseFormat?: JsonSchemaResponseFormat;
 }): Promise<LlmResponse> {
   const { agent, messages } = params;
   const tools = params.tools ?? [];
@@ -369,7 +414,7 @@ export async function chatWithAgent(params: {
     max_tokens: agent.max_tokens,
     system: params.system ?? agent.system,
     signal: params.signal,
-    forceJsonResponse: params.forceJsonResponse
+    responseFormat: params.responseFormat
   });
 }
 
@@ -411,9 +456,7 @@ class OpenAiAdapter implements LlmAdapter {
         tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
         temperature: options.temperature,
         max_tokens: options.max_tokens,
-        ...(options.forceJsonResponse
-          ? { response_format: buildForcedJsonResponseFormat() as any }
-          : {})
+        ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
       },
       options.signal ? { signal: options.signal } : undefined
     );
@@ -471,9 +514,7 @@ class AzureOpenAiAdapter implements LlmAdapter {
       model: this.deployment,
       messages: messages.map(toOpenAiMessage),
       tools: tools.length > 0 ? (tools.map(toOpenAiTool) as any) : undefined,
-      ...(options.forceJsonResponse
-        ? { response_format: buildForcedJsonResponseFormat() as any }
-        : {})
+      ...(options.responseFormat ? { response_format: options.responseFormat as any } : {})
     } as any;
     if (typeof options.temperature === 'number') {
       baseRequest.temperature = options.temperature;
@@ -565,11 +606,15 @@ class AnthropicAdapter implements LlmAdapter {
         system,
         messages: anthroMessages,
         tools: tools.length > 0 ? (tools.map(toAnthropicTool) as any) : undefined,
-        ...(options.forceJsonResponse && {
+        // output_config is an Anthropic-side structured-output field. It is not part of the
+        // stable MessageCreateParams type, so it is injected via object spread. If the model
+        // or API version does not honour it, the constraint is silently dropped and JSON
+        // enforcement falls back to prompt engineering + extractJudgeJson heuristics.
+        ...(options.responseFormat && {
           output_config: {
             format: {
               type: 'json_schema' as const,
-              schema: buildJudgeResultSchema()
+              schema: options.responseFormat.json_schema.schema
             }
           }
         })

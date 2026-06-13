@@ -12,7 +12,12 @@ import type {
 } from './types.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
-import { chatWithAgent, runAgentScenario, type AgentRunProgressEvent } from './agent.js';
+import {
+  buildBatchJudgeResponseFormat,
+  chatWithAgent,
+  runAgentScenario,
+  type AgentRunProgressEvent
+} from './agent.js';
 import {
   buildNotEvaluatedCheckResults,
   evaluateScenarioWithAgentChecks,
@@ -98,7 +103,8 @@ export async function runAll(
   options: RunOptions
 ): Promise<{ runDir: string; results: ResultsJson }> {
   throwIfAborted(options.signal);
-  const scenariosWithAgentChecks = config.scenarios.filter(
+  const scenariosToRun = filterScenariosForRun(config.scenarios, options.scenarioId);
+  const scenariosWithAgentChecks = scenariosToRun.filter(
     (scenario) => (scenario.eval?.agent_assertions?.length ?? 0) > 0
   );
   if (scenariosWithAgentChecks.length > 0 && !options.evaluationJudge) {
@@ -129,7 +135,7 @@ export async function runAll(
     run_id: runId,
     ts: new Date().toISOString()
   });
-  const totalScenarioRuns = config.scenarios.length * options.runsPerScenario;
+  const totalScenarioRuns = scenariosToRun.length * options.runsPerScenario;
   await emitProgress({
     type: 'run_started',
     runId,
@@ -140,7 +146,7 @@ export async function runAll(
   const mcp = new McpClientManager();
   try {
     const usedServerIds = Array.from(
-      new Set(config.scenarios.flatMap((scenario) => scenario.servers))
+      new Set(scenariosToRun.flatMap((scenario) => scenario.servers))
     );
     const usedServers = Object.fromEntries(
       usedServerIds.map((id) => {
@@ -179,7 +185,7 @@ export async function runAll(
     }> = [];
 
     let scenarioRunIndex = 0;
-    for (const scenario of config.scenarios) {
+    for (const scenario of scenariosToRun) {
       throwIfAborted(options.signal);
       if (!scenario.agent) {
         throw new Error(
@@ -251,11 +257,11 @@ export async function runAll(
             runResult.toolSequence,
             scenario.eval,
             {
-              judgeAgentAssertion: options.evaluationJudge
-                ? async (assertion) => {
+              judgeAgentAssertions: options.evaluationJudge
+                ? async (assertions) => {
                     const judge = options.evaluationJudge!;
-                    return judgeAgentAssertion({
-                      assertion,
+                    return judgeAgentAssertions({
+                      assertions,
                       finalText: runResult.finalText,
                       judge,
                       signal: options.signal
@@ -415,62 +421,137 @@ export async function runAll(
   }
 }
 
-async function judgeAgentAssertion(params: {
-  assertion: AgentAssertion;
+export function buildJudgeBatchPayload(finalText: string, assertions: AgentAssertion[]) {
+  return {
+    final_answer: finalText,
+    checks: assertions.map((assertion, index) => ({
+      id: `agent-check-${index + 1}`,
+      label: assertion.label,
+      prompt: assertion.prompt
+    }))
+  };
+}
+
+type JudgeBatchPayload = ReturnType<typeof buildJudgeBatchPayload>;
+
+export function mapJudgeBatchResults(params: {
+  judgeName: string;
+  judgeAgent: AgentConfig;
+  batch: JudgeBatchPayload;
+  raw: string;
+}): Array<{ label: string; pass: boolean; reason: string; metadata?: Record<string, unknown> }> {
+  let parsed: { results?: unknown };
+  try {
+    parsed = JSON.parse(extractJudgeJson(params.raw));
+  } catch {
+    throw new Error(`judge "${params.judgeName}" returned invalid JSON for batched agent checks`);
+  }
+  if (!Array.isArray(parsed.results)) {
+    throw new Error(
+      `judge "${params.judgeName}" returned invalid results array for batched agent checks`
+    );
+  }
+
+  const resultsById = new Map<
+    string,
+    { id: string; label: string; pass: boolean; reason: string }
+  >();
+  for (const item of parsed.results) {
+    if (!item || typeof item !== 'object') {
+      throw new Error(
+        `judge "${params.judgeName}" returned invalid result item for batched agent checks`
+      );
+    }
+    const candidate = item as Record<string, unknown>;
+    if (
+      typeof candidate.id !== 'string' ||
+      typeof candidate.label !== 'string' ||
+      typeof candidate.pass !== 'boolean' ||
+      typeof candidate.reason !== 'string'
+    ) {
+      throw new Error(
+        `judge "${params.judgeName}" returned invalid result item for batched agent checks`
+      );
+    }
+    if (!resultsById.has(candidate.id)) {
+      resultsById.set(candidate.id, {
+        id: candidate.id,
+        label: candidate.label,
+        pass: candidate.pass,
+        reason: candidate.reason
+      });
+    }
+  }
+
+  return params.batch.checks.map((check) => {
+    const matched = resultsById.get(check.id);
+    if (!matched) {
+      return {
+        label: check.label,
+        pass: false,
+        reason: `Judge did not return a result for "${check.label}"`,
+        metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
+      };
+    }
+
+    const trimmedReason = matched.reason.trim();
+    return {
+      label: check.label,
+      pass: matched.pass,
+      reason:
+        trimmedReason.length > 0
+          ? trimmedReason
+          : matched.pass
+          ? `Agent check passed: ${check.label}`
+          : `Agent check failed: ${check.label}`,
+      metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
+    };
+  });
+}
+
+async function judgeAgentAssertions(params: {
+  assertions: AgentAssertion[];
   finalText: string;
   judge: NonNullable<RunOptions['evaluationJudge']>;
   signal?: AbortSignal;
-}): Promise<{ pass: boolean; reason: string; metadata?: Record<string, unknown> }> {
+}): Promise<
+  Array<{ label: string; pass: boolean; reason: string; metadata?: Record<string, unknown> }>
+> {
+  const batch = buildJudgeBatchPayload(params.finalText, params.assertions);
   const system = [
-    'You evaluate whether a final answer satisfies a semantic check.',
+    'You evaluate whether a final answer satisfies a set of semantic checks.',
+    'Evaluate each check independently.',
     'Return JSON only.',
-    'Schema: {"pass": boolean, "reason": string}.',
-    'Keep the reason short and concrete.'
+    'Schema: {"results":[{"id":string,"label":string,"pass":boolean,"reason":string}]}.',
+    'Keep each reason short and concrete.'
   ].join(' ');
   const response = await chatWithAgent({
     agent: params.judge.agent,
     system,
     tools: [],
     signal: params.signal,
-    forceJsonResponse: true,
+    responseFormat: buildBatchJudgeResponseFormat(),
     messages: [
       {
         role: 'user',
-        content: JSON.stringify({
-          check_label: params.assertion.label,
-          check_prompt: params.assertion.prompt,
-          final_answer: params.finalText
-        })
+        content: JSON.stringify(batch)
       }
     ]
   });
-  const raw = String(response.content ?? '').trim();
-  let parsed: { pass?: unknown; reason?: unknown };
-  try {
-    parsed = JSON.parse(extractJudgeJson(raw));
-  } catch {
-    throw new Error(
-      `judge "${params.judge.name}" returned invalid JSON for check "${params.assertion.label}"`
-    );
-  }
-  if (typeof parsed.pass !== 'boolean') {
-    throw new Error(
-      `judge "${params.judge.name}" returned invalid pass value for check "${params.assertion.label}"`
-    );
-  }
+  return mapJudgeBatchResults({
+    judgeName: params.judge.name,
+    judgeAgent: params.judge.agent,
+    batch,
+    raw: String(response.content ?? '').trim()
+  });
+}
+
+function buildJudgeCheckMetadata(judgeName: string, judgeAgent: AgentConfig, checkId: string) {
   return {
-    pass: parsed.pass,
-    reason:
-      typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
-        ? parsed.reason.trim()
-        : parsed.pass
-        ? `Agent check passed: ${params.assertion.label}`
-        : `Agent check failed: ${params.assertion.label}`,
-    metadata: {
-      judge_agent: params.judge.name,
-      judge_model: params.judge.agent.model,
-      judge_provider: params.judge.agent.provider
-    }
+    check_id: checkId,
+    judge_agent: judgeName,
+    judge_model: judgeAgent.model,
+    judge_provider: judgeAgent.provider
   };
 }
 
@@ -480,11 +561,54 @@ export function extractJudgeJson(raw: string): string {
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fencedMatch?.[1]) return fencedMatch[1].trim();
   const objectStart = trimmed.indexOf('{');
-  const objectEnd = trimmed.lastIndexOf('}');
-  if (objectStart >= 0 && objectEnd > objectStart) {
-    return trimmed.slice(objectStart, objectEnd + 1).trim();
+  if (objectStart >= 0) {
+    const objectEnd = findMatchingJsonObjectEnd(trimmed, objectStart);
+    if (objectEnd > objectStart) {
+      return trimmed.slice(objectStart, objectEnd + 1).trim();
+    }
   }
   return trimmed;
+}
+
+function findMatchingJsonObjectEnd(text: string, startIndex: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return -1;
+}
+
+export function filterScenariosForRun(
+  scenarios: ExecutableScenario[],
+  scenarioId?: string
+): ExecutableScenario[] {
+  if (!scenarioId) return scenarios;
+  return scenarios.filter((scenario) => scenario.id === scenarioId);
 }
 
 let lastRunIdPrefix = '';

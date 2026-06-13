@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFallbackScenarioRequestId,
+  buildJudgeBatchPayload,
   buildMcpServerAuthHeaders,
+  filterScenariosForRun,
+  mapJudgeBatchResults,
   buildScenarioRequestId,
   createRunId,
   extractJudgeJson
@@ -148,5 +151,167 @@ describe('extractJudgeJson', () => {
   it('falls back to the first object-shaped payload in plain text', () => {
     const raw = 'Result follows: {"pass":false,"reason":"bad"} Thanks.';
     expect(extractJudgeJson(raw)).toBe('{"pass":false,"reason":"bad"}');
+  });
+
+  it('extracts only first complete object when multiple JSON objects exist', () => {
+    const raw = '{"pass":true,"reason":"ok"} Evaluation complete. {"summary":"done"}';
+    expect(extractJudgeJson(raw)).toBe('{"pass":true,"reason":"ok"}');
+  });
+});
+
+describe('filterScenariosForRun', () => {
+  it('limits run to selected scenario id', () => {
+    expect(
+      filterScenariosForRun(
+        [
+          { id: 'with-checks', eval: { agent_assertions: [{ label: 'x', prompt: 'y' }] } } as any,
+          { id: 'without-checks' } as any
+        ],
+        'without-checks'
+      ).map((scenario) => scenario.id)
+    ).toEqual(['without-checks']);
+  });
+});
+
+describe('buildJudgeBatchPayload', () => {
+  it('builds stable ordered check ids for a batched judge request', () => {
+    expect(
+      buildJudgeBatchPayload('Final answer text', [
+        { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+        { label: 'Logical range', prompt: 'Confirm the range is chronological.' }
+      ])
+    ).toEqual({
+      final_answer: 'Final answer text',
+      checks: [
+        {
+          id: 'agent-check-1',
+          label: 'Logical range',
+          prompt: 'Confirm there is a logical range.'
+        },
+        {
+          id: 'agent-check-2',
+          label: 'Logical range',
+          prompt: 'Confirm the range is chronological.'
+        }
+      ]
+    });
+  });
+});
+
+describe('mapJudgeBatchResults', () => {
+  it('maps results by id and preserves per-check metadata', () => {
+    const payload = buildJudgeBatchPayload('Final answer text', [
+      { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+      { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+    ]);
+
+    expect(
+      mapJudgeBatchResults({
+        judgeName: 'critic',
+        judgeAgent: { provider: 'openai', model: 'gpt-4o-mini' } as any,
+        batch: payload,
+        raw: JSON.stringify({
+          results: [
+            {
+              id: 'agent-check-2',
+              label: 'Mentions source',
+              pass: false,
+              reason: 'The answer does not mention the source.'
+            },
+            {
+              id: 'agent-check-1',
+              label: 'Unexpected duplicate label',
+              pass: true,
+              reason: 'Range present and logical.'
+            },
+            {
+              id: 'unknown-check',
+              label: 'Ignore me',
+              pass: true,
+              reason: 'unused'
+            }
+          ]
+        })
+      })
+    ).toEqual([
+      {
+        label: 'Logical range',
+        pass: true,
+        reason: 'Range present and logical.',
+        metadata: {
+          check_id: 'agent-check-1',
+          judge_agent: 'critic',
+          judge_model: 'gpt-4o-mini',
+          judge_provider: 'openai'
+        }
+      },
+      {
+        label: 'Mentions source',
+        pass: false,
+        reason: 'The answer does not mention the source.',
+        metadata: {
+          check_id: 'agent-check-2',
+          judge_agent: 'critic',
+          judge_model: 'gpt-4o-mini',
+          judge_provider: 'openai'
+        }
+      }
+    ]);
+  });
+
+  it('fails only missing known ids', () => {
+    const payload = buildJudgeBatchPayload('Final answer text', [
+      { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+      { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+    ]);
+
+    expect(
+      mapJudgeBatchResults({
+        judgeName: 'critic',
+        judgeAgent: { provider: 'openai', model: 'gpt-4o-mini' } as any,
+        batch: payload,
+        raw: JSON.stringify({
+          results: [{ id: 'agent-check-1', label: 'Logical range', pass: true, reason: 'ok' }]
+        })
+      })
+    ).toEqual([
+      {
+        label: 'Logical range',
+        pass: true,
+        reason: 'ok',
+        metadata: {
+          check_id: 'agent-check-1',
+          judge_agent: 'critic',
+          judge_model: 'gpt-4o-mini',
+          judge_provider: 'openai'
+        }
+      },
+      {
+        label: 'Mentions source',
+        pass: false,
+        reason: 'Judge did not return a result for "Mentions source"',
+        metadata: {
+          check_id: 'agent-check-2',
+          judge_agent: 'critic',
+          judge_model: 'gpt-4o-mini',
+          judge_provider: 'openai'
+        }
+      }
+    ]);
+  });
+
+  it('throws for invalid batch JSON', () => {
+    const payload = buildJudgeBatchPayload('Final answer text', [
+      { label: 'Logical range', prompt: 'Confirm there is a logical range.' }
+    ]);
+
+    expect(() =>
+      mapJudgeBatchResults({
+        judgeName: 'critic',
+        judgeAgent: { provider: 'openai', model: 'gpt-4o-mini' } as any,
+        batch: payload,
+        raw: 'not-json'
+      })
+    ).toThrow('judge "critic" returned invalid JSON for batched agent checks');
   });
 });

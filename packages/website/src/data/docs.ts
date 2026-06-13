@@ -1868,13 +1868,14 @@ const refToolAndResponseAssertions: DocPage = {
   label: 'Tool and Response Assertions',
   href: '/docs/reference/tool-and-response-assertions/',
   description:
-    'Complete assertion guide with examples for tool checks, response checks, and semantic agent checks.',
+    'Complete assertion guide with examples for tool checks, response checks, and semantic agent checks (also known as agent judge).',
   keywords: [
     'assertions',
     'tool constraints',
     'tool sequence',
     'response assertions',
     'agent checks',
+    'agent judge',
     'jsonpath',
     'regex',
     'contains'
@@ -1888,7 +1889,7 @@ const refToolAndResponseAssertions: DocPage = {
       bullets: [
         'Use tool assertions when behavior depends on action correctness (which tools were called, and in which order).',
         'Use response assertions when behavior depends on final answer quality or format.',
-        'Use agent checks when the validation is semantic or fuzzy and strict string/regex checks would be too brittle.',
+        'Use agent checks (agent judge) when the validation is semantic or fuzzy and strict string/regex checks would be too brittle.',
         'Use both together for high-confidence checks: action correctness plus answer correctness.'
       ]
     },
@@ -2004,9 +2005,9 @@ const refToolAndResponseAssertions: DocPage = {
     },
     {
       id: 'agent-checks',
-      title: 'Agent Checks',
+      title: 'Agent Checks (Agent Judge)',
       paragraphs: [
-        'Agent checks use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.'
+        'Agent checks (also called agent judge) use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.'
       ],
       codeBlocks: [
         {
@@ -2027,7 +2028,7 @@ const refToolAndResponseAssertions: DocPage = {
         'regex is case-insensitive by default and uses JavaScript regular expressions.',
         'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
         'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.',
-        'Agent checks judge final answer text only in v1 and require a default evaluation judge to be configured in workspace settings.',
+        'Agent checks (agent judge) evaluate final answer text only in v1, run in a single batched judge request per scenario run, and require a default evaluation judge to be configured in workspace settings.',
         'Agent checks are more flexible, but they are also less reproducible and more expensive than deterministic checks.'
       ]
     }
