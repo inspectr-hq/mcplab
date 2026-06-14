@@ -443,7 +443,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
 
     const mappedAgentContext: AgentContext | undefined =
       scenario.eval?.agent_context &&
-      (scenario.eval.agent_context.include_prompt || scenario.eval.agent_context.include_tool_sequence)
+      (scenario.eval.agent_context.include_prompt ||
+        scenario.eval.agent_context.include_tool_sequence)
         ? {
             include_prompt: scenario.eval.agent_context.include_prompt,
             include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
