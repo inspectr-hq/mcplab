@@ -25,12 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type {
-  AgentConfig,
-  ServerConfig,
-  Scenario,
-  EvalRule
-} from '@/types/eval';
+import type { AgentConfig, ServerConfig, Scenario, EvalRule } from '@/types/eval';
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
