@@ -318,7 +318,11 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
 
   it('merges live assistant session updates from SSE events', async () => {
     let onScenarioEvent:
-      | ((event: { payload: { session: ScenarioAssistantSessionView } }) => void)
+      | ((event: {
+          type: string;
+          ts: string;
+          payload: { sessionId: string; session: ScenarioAssistantSessionView };
+        }) => void)
       | undefined;
     mockSource.subscribeScenarioAssistantSessionEvents.mockImplementation(
       (_sessionId: string, onEvent: typeof onScenarioEvent) => {

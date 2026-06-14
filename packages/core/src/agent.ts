@@ -136,11 +136,10 @@ function buildJudgeBatchResultSchema() {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            label: { type: 'string' },
             pass: { type: 'boolean' },
             reason: { type: 'string' }
           },
-          required: ['id', 'label', 'pass', 'reason'],
+          required: ['id', 'pass', 'reason'],
           additionalProperties: false
         }
       }

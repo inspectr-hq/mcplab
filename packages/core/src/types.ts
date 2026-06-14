@@ -140,6 +140,17 @@ export interface AgentAssertion {
   prompt: string;
 }
 
+// Must stay structurally identical to AgentContext in packages/app/src/types/eval.ts
+export interface AgentContext {
+  include_prompt?: boolean;
+  include_tool_sequence?: boolean;
+}
+
+export interface AgentJudgeContext {
+  scenario_prompt?: string;
+  tool_sequence?: string[];
+}
+
 export type ResponseAssertion =
   | ResponseAssertionRegex
   | ResponseAssertionContains
@@ -156,6 +167,7 @@ export interface EvalRules {
   tool_sequence?: ToolSequenceRules;
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
+  agent_context?: AgentContext;
 }
 
 export type CheckResultStatus = 'passed' | 'failed' | 'not_evaluated';

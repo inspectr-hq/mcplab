@@ -371,10 +371,12 @@ describe('evaluateScenarioWithAgentChecks', () => {
     );
 
     expect(judgeAgentAssertions).toHaveBeenCalledTimes(1);
-    expect(judgeAgentAssertions).toHaveBeenCalledWith([
-      { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
-      { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
-    ]);
+    expect(judgeAgentAssertions).toHaveBeenCalledWith({
+      assertions: [
+        { label: 'Logical range', prompt: 'Confirm there is a logical range.' },
+        { label: 'Mentions source', prompt: 'Confirm the answer mentions its source.' }
+      ]
+    });
     expect(result.pass).toBe(false);
     expect(result.check_results).toEqual([
       {
@@ -504,6 +506,101 @@ describe('evaluateScenarioWithAgentChecks', () => {
         }
       )
     ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('passes no context when agent_context is omitted', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      ['tool_a'],
+      { agent_assertions: [{ label: 'Check', prompt: 'Verify.' }] },
+      { judgeAgentAssertions }
+    );
+
+    expect(judgeAgentAssertions).toHaveBeenCalledWith({ assertions: expect.any(Array) });
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toBeUndefined();
+  });
+
+  it('includes scenario_prompt in context when include_prompt is true', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      [],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_prompt: true }
+      },
+      { judgeAgentAssertions, scenarioPrompt: 'What is the tag profile?' }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
+      scenario_prompt: 'What is the tag profile?'
+    });
+  });
+
+  it('includes tool_sequence in context when include_tool_sequence is true', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      ['get_tag_profile', 'search_tags'],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_tool_sequence: true }
+      },
+      { judgeAgentAssertions }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
+      tool_sequence: ['get_tag_profile', 'search_tags']
+    });
+  });
+
+  it('includes both context fields when both flags are true', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      ['get_tag_profile'],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_prompt: true, include_tool_sequence: true }
+      },
+      { judgeAgentAssertions, scenarioPrompt: 'What is the tag profile?' }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
+      scenario_prompt: 'What is the tag profile?',
+      tool_sequence: ['get_tag_profile']
+    });
+  });
+
+  it('omits scenario_prompt from context when scenarioPrompt option not provided', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      [],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_prompt: true }
+      },
+      { judgeAgentAssertions }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toBeUndefined();
   });
 });
 

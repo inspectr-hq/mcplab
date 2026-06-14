@@ -2,6 +2,7 @@ import { JSONPath } from 'jsonpath-plus';
 import { isAbortError } from './abort.js';
 import type {
   AgentAssertion,
+  AgentJudgeContext,
   CheckResult,
   EvalRules,
   ResponseAssertion,
@@ -21,8 +22,14 @@ export interface AgentAssertionJudgeResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface JudgeAgentAssertionsInput {
+  assertions: AgentAssertion[];
+  context?: AgentJudgeContext;
+}
+
 export interface EvaluateScenarioWithAgentChecksOptions {
-  judgeAgentAssertions?: (assertions: AgentAssertion[]) => Promise<AgentAssertionJudgeResult[]>;
+  judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
+  scenarioPrompt?: string;
 }
 
 export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResult[] {
@@ -115,7 +122,21 @@ export async function evaluateScenarioWithAgentChecks(
   }
 
   try {
-    const judgedResults = await options.judgeAgentAssertions(agentAssertions);
+    const cfg = evalRules?.agent_context;
+    const builtContext: AgentJudgeContext = cfg
+      ? {
+          ...(cfg.include_prompt && options.scenarioPrompt != null && options.scenarioPrompt !== ''
+            ? { scenario_prompt: options.scenarioPrompt }
+            : {}),
+          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
+        }
+      : {};
+    const context: AgentJudgeContext | undefined =
+      Object.keys(builtContext).length > 0 ? builtContext : undefined;
+    const judgedResults = await options.judgeAgentAssertions({
+      assertions: agentAssertions,
+      context
+    });
     for (const [index, assertion] of agentAssertions.entries()) {
       const judged = judgedResults[index];
       if (!judged) {

@@ -49,8 +49,8 @@ export const workspaceSource: EvalDataSource = {
     await workspaceApiClient.deleteConfig(id);
   },
   async listResults(filter) {
-    const pageSize = Math.max(1, Math.min(100, filter?.limit ?? 100));
-    let offset = Math.max(0, filter?.offset ?? 0);
+    const pageSize = 100;
+    let offset = 0;
     const summaries: Awaited<ReturnType<typeof workspaceApiClient.listRuns>>['data'] = [];
     while (true) {
       const page = await workspaceApiClient.listRuns({ ...filter, limit: pageSize, offset });

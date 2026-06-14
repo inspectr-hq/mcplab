@@ -75,6 +75,12 @@ export interface ExtractRule {
   pattern: string;
 }
 
+// Must stay structurally identical to AgentContext in @inspectr/mcplab-core/types
+export interface AgentContext {
+  include_prompt?: boolean;
+  include_tool_sequence?: boolean;
+}
+
 export interface Scenario {
   id: string;
   name: string;
@@ -83,6 +89,7 @@ export interface Scenario {
   prompt: string;
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
+  agentContext?: AgentContext;
 }
 
 export type ScenarioEntry =

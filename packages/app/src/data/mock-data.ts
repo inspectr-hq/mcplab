@@ -29,7 +29,6 @@ export const mockConfigs: EvalConfig[] = [
       {
         id: 'scn-1',
         name: 'List directory',
-        agentId: 'agt-1',
         serverIds: ['srv-1'],
         prompt: 'List all files in the /tmp directory',
         evalRules: [{ type: 'required_tool', value: 'list_directory' }],
@@ -38,7 +37,6 @@ export const mockConfigs: EvalConfig[] = [
       {
         id: 'scn-2',
         name: 'Read file',
-        agentId: 'agt-1',
         serverIds: ['srv-1'],
         prompt: 'Read the contents of /tmp/test.txt',
         evalRules: [
@@ -87,7 +85,6 @@ export const mockConfigs: EvalConfig[] = [
       {
         id: 'scn-3',
         name: 'Web search',
-        agentId: 'agt-2',
         serverIds: ['srv-2'],
         prompt: 'Search for the latest TypeScript release version',
         evalRules: [
@@ -99,7 +96,6 @@ export const mockConfigs: EvalConfig[] = [
       {
         id: 'scn-4',
         name: 'Web search (Claude)',
-        agentId: 'agt-3',
         serverIds: ['srv-2'],
         prompt: 'Search for the latest TypeScript release version',
         evalRules: [
@@ -140,7 +136,6 @@ export const mockConfigs: EvalConfig[] = [
       {
         id: 'scn-5',
         name: 'Query users',
-        agentId: 'agt-4',
         serverIds: ['srv-3'],
         prompt: 'List all users in the database',
         evalRules: [{ type: 'required_tool', value: 'query' }],
@@ -175,6 +170,7 @@ export const mockResults: EvalResult[] = [
     id: 'run-a1b2c3',
     configId: 'cfg-001',
     configHash: 'e3b0c44298fc',
+    mcpServerVersions: {},
     timestamp: '2025-02-05T14:30:00Z',
     overallPassRate: 0.875,
     totalScenarios: 2,
@@ -224,6 +220,7 @@ export const mockResults: EvalResult[] = [
     id: 'run-d4e5f6',
     configId: 'cfg-002',
     configHash: 'a1b2c3d4e5f6',
+    mcpServerVersions: {},
     timestamp: '2025-02-04T10:15:00Z',
     overallPassRate: 0.667,
     totalScenarios: 2,
@@ -267,6 +264,7 @@ export const mockResults: EvalResult[] = [
     id: 'run-g7h8i9',
     configId: 'cfg-001',
     configHash: 'e3b0c44298fc',
+    mcpServerVersions: {},
     timestamp: '2025-02-03T08:45:00Z',
     overallPassRate: 1.0,
     totalScenarios: 2,
@@ -300,6 +298,7 @@ export const mockResults: EvalResult[] = [
     id: 'run-j0k1l2',
     configId: 'cfg-003',
     configHash: 'f6e5d4c3b2a1',
+    mcpServerVersions: {},
     timestamp: '2025-02-02T16:00:00Z',
     overallPassRate: 0.5,
     totalScenarios: 1,
@@ -326,6 +325,7 @@ export const mockResults: EvalResult[] = [
     id: 'run-m3n4o5',
     configId: 'cfg-002',
     configHash: 'a1b2c3d4e5f6',
+    mcpServerVersions: {},
     timestamp: '2025-01-30T12:00:00Z',
     overallPassRate: 0.833,
     totalScenarios: 2,

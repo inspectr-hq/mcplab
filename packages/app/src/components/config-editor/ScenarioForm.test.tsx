@@ -147,6 +147,59 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('clears agentContext when last agent_check rule is removed', async () => {
+    const onChange = vi.fn();
+    const scenario: Scenario = {
+      ...baseScenario(),
+      evalRules: [{ type: 'agent_check', label: 'Range', prompt: 'Check range.' }],
+      agentContext: { include_prompt: true, include_tool_sequence: false }
+    };
+
+    render(
+      <ScenarioForm
+        scenarios={[scenario]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove check 1' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([]);
+    expect(updated[0]?.agentContext).toBeUndefined();
+  });
+
+  it('preserves agentContext when a non-last agent_check rule is removed', async () => {
+    const onChange = vi.fn();
+    const scenario: Scenario = {
+      ...baseScenario(),
+      evalRules: [
+        { type: 'agent_check', label: 'Range', prompt: 'Check range.' },
+        { type: 'agent_check', label: 'Source', prompt: 'Check source.' }
+      ],
+      agentContext: { include_prompt: true }
+    };
+
+    render(
+      <ScenarioForm
+        scenarios={[scenario]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove check 1' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toHaveLength(1);
+    expect(updated[0]?.agentContext).toEqual({ include_prompt: true });
+  });
+
   it('adds agent checks with label and prompt', async () => {
     const onChange = vi.fn();
 

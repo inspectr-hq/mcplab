@@ -22,7 +22,7 @@ const { configReloadMock, librariesReloadMock, sourceMock, configsRef, libraryAg
       libraryAgentsRef,
       sourceMock: {
         getRunQueue,
-        subscribeRunJob: vi.fn(() => () => {}),
+        subscribeRunJob: vi.fn((_jobId: string, _callback: (event: unknown) => void) => () => {}),
         stopRun: vi.fn(),
         removeQueuedRun: vi.fn(),
         startRun: vi.fn()
