@@ -35,6 +35,7 @@ Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 - **HTTP SSE Transport** - Test MCP servers over Streamable HTTP
 - **Multi-LLM Support** - OpenAI, Anthropic Claude, Azure OpenAI
 - **Rich Assertions** - Validate tool usage, sequences, and response content
+- **Judge Agent Checks** - Semantic validation using an LLM judge for fuzzy, natural-language assertions
 - **Variance Testing** - Run multiple iterations to measure stability
 - **Detailed Traces** - JSONL logs of every tool call and LLM response
 
@@ -49,6 +50,7 @@ Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 - **Scenario Assistant** - AI chat to help design and refine eval scenarios
 - **Result Assistant** - AI chat to analyze and explain completed run results
 - **MCP Tool Analysis** - Automated review of MCP tool quality and safety
+- **Judge Agent Checks** - Configure a judge LLM in workspace settings to run semantic `agent_assertions` alongside your deterministic checks
 
 ### Developer Experience
 - **Watch Mode** - Auto-rerun tests when configs change
@@ -288,6 +290,18 @@ scenarios:
         - type: "jsonpath_exists"
           path: "$.summary.items"
 
+    # Semantic checks via LLM judge
+    agent_assertions:
+      - label: "response mentions a time range"
+        prompt: "Does the response include a valid time range (e.g. start and end date)?"
+      - label: "no error messages in response"
+        prompt: "Is the response free of error messages or failure indicators?"
+
+    # Optional: give the judge extra context
+    agent_context:
+      include_prompt: true           # send the scenario prompt to the judge
+      include_tool_sequence: true    # send the list of tools called
+
     # Extract metrics
     extract:
       - name: "item_count"
@@ -318,6 +332,15 @@ run_defaults:
   - `jsonpath`: Query and validate JSON responses (with optional `equals`)
   - `jsonpath_exists`: JSONPath must resolve at least one value
   - `jsonpath_not_exists`: JSONPath must resolve no values
+
+- **`agent_assertions`** - Semantic checks evaluated by an LLM judge
+  - Each assertion has a `label` and a freeform `prompt` describing what to verify
+  - All checks in a scenario are batched into a single judge request
+  - Requires a default evaluation judge configured in workspace settings
+
+- **`agent_context`** - Optional extra context sent to the judge alongside each check
+  - `include_prompt`: sends the original scenario prompt to the judge
+  - `include_tool_sequence`: sends the list of tool names called during the run
 
 - **`extract`** - Extract metrics from responses
   - Capture values using regex named groups: `(?<value>...)`
