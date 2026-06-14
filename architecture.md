@@ -317,6 +317,289 @@ After scenario run completes:
 
 ---
 
+## Domain Models: Runner, Evaluation & Storage in Depth
+
+This section explains how the core domain objects relate to each other and traces the lifecycle of a single evaluation run through all three subsystems.
+
+### Object lifecycle overview
+
+```
+YAML file on disk
+  │
+  ▼ loadConfig()
+SourceEvalConfig          ← raw, preserves $ref strings
+  │
+  ▼ resolveReferences()
+EvalConfig                ← fully inlined servers + agents + scenarios
+  │
+  ▼ expandConfigForAgents()
+ExecutableEvalConfig      ← one ExecutableScenario per scenario × agent
+  │
+  ▼ runAll()  ──────────────────────────────────────────────┐
+  │                                                         │
+  │  for each ExecutableScenario × run_index               │
+  │    │                                                   │
+  │    ▼ runAgentScenario()                                │
+  │  TraceMessage[]          ← turn-by-turn conversation   │
+  │    │                                                   │
+  │    ▼ evaluateScenario()                                │
+  │  EvalResult              ← pass/fail + check_results   │
+  │    │                                                   │
+  │    ▼ build ScenarioRunResult                           │
+  │  ScenarioRunResult       ← one record per run attempt  │
+  │    │  (written live to trace.jsonl)                    │
+  │    ▼                                                   │
+  │  ScenarioAggregate       ← aggregated across N runs    │
+  │                                                        │
+  └──────────── ResultsJson ◄──────────────────────────────┘
+                  │
+                  ▼ write to disk
+            results.json · trace.jsonl · report.html · summary.md
+```
+
+---
+
+### 1. Config domain
+
+Config objects move through three transformations before execution is possible.
+
+**`SourceEvalConfig`** — what the YAML file literally contains. May have `$ref(agents.yaml#my-agent)` strings, scenario lists as file paths, or objects instead of arrays. This is never used for execution.
+
+**`EvalConfig`** — the resolved form. All `$ref` strings are expanded inline. Library entries from `agents.yaml` and `servers.yaml` are merged in. Scenario YAML files are loaded and inlined. A SHA-256 hash of the stable-stringified object is computed and stored alongside (`config_hash` in `ResultsJson.metadata`), allowing two results to be compared for config equality.
+
+**`ExecutableEvalConfig`** — produced by `expandConfigForAgents()`. Flattens the scenario × agent matrix: if a scenario has two agents selected, it becomes two `ExecutableScenario` objects, each with a concrete `agent` ID bound. This is the shape the runner iterates over.
+
+```
+EvalConfig.scenarios × EvalConfig.run_defaults.selected_agents
+  → ExecutableScenario[]
+     { ...Scenario, agent: 'my-agent', scenario_exec_id: 'scenario-1::my-agent' }
+```
+
+---
+
+### 2. Runner domain (`runAll`)
+
+`runAll` in `packages/core/src/runner.ts` is the top-level orchestrator. It owns the run directory, connects MCP clients, iterates the scenario matrix, and writes every output file.
+
+**Phases:**
+
+**Setup**
+- Creates the run directory (`{runsDir}/{runId}/`)
+- Writes `resolved-config.yaml` immediately (before any scenarios run)
+- Initialises `trace.jsonl` with a metadata header line
+
+**MCP connection**
+- Calls `McpClientManager.connectAll(servers)` for every server referenced across all scenarios
+- Resolves auth headers from env vars or the OAuth session manager
+- Retries up to 3 times with 250 ms backoff per server
+- After this point, `McpClientManager.getClient(serverName)` returns a ready client for the rest of the run
+
+**Scenario loop**
+For every `ExecutableScenario` and every run index (1 … `runsPerScenario`):
+1. Calls `runAgentScenario()` → returns `TraceMessage[]` + metadata
+2. Calls `evaluateScenarioWithAgentChecks()` → returns `EvalResult`
+3. Calls `extractValues()` for any `extract` rules
+4. Assembles `ScenarioRunResult`
+5. Appends `ScenarioRunTraceRecord` to `trace.jsonl` (append, not rewrite — survives partial runs)
+6. Emits progress events to the queue SSE stream
+
+**Aggregation & output**
+- Groups `ScenarioRunResult[]` by `scenario_exec_id` → `ScenarioAggregate[]`
+- Computes `pass_rate`, `distinct_sequences`, `tool_usage_frequency`, `extracted_values`
+- Writes `results.json` (full `ResultsJson`)
+- Writes `summary.md` (markdown table)
+- Triggers `reporting` package to write `report.html`
+
+---
+
+### 3. Agent execution domain (`runAgentScenario`)
+
+Implements the agentic tool-use loop inside `packages/core/src/agent.ts`.
+
+```
+Initial messages: [ { role: 'user', content: scenario.prompt } ]
+
+Loop (up to max_turns, default 30):
+  │
+  ├─ send messages + tool definitions → LLM adapter
+  │
+  ├─ LLM responds with tool_use blocks?
+  │   YES → for each tool_use:
+  │           resolve tool → server name
+  │           McpClientManager.callTool(server, tool, args)
+  │           record { tool_name, server, duration_ms, result }
+  │           append tool_result message
+  │         continue loop
+  │
+  └─ LLM responds with text only?
+        → final_text captured
+        → break
+```
+
+**LLM adapters** implement a common `ChatAdapter` interface:
+
+| Provider | Adapter | SDK |
+|---|---|---|
+| `anthropic` | `AnthropicAdapter` | `@anthropic-ai/sdk` |
+| `openai` | `OpenAiAdapter` | `openai` |
+| `azure_openai` | `AzureOpenAiAdapter` | `openai` (Azure mode) |
+
+All adapters normalise to the same internal `LlmMessage` / `LlmResponse` types so the loop code is provider-agnostic.
+
+**Tool registry** — at the start of each scenario, `McpClientManager.listTools(serverName)` is called for each connected server. Tools are merged into a flat registry keyed by `tool_name → server_name`, which the loop uses to route tool calls.
+
+**Scoped MCP clients** — if a scenario injects per-call headers (e.g. a user identity), `McpClientManager` creates a separate client instance for that header set (LRU-evicted, up to `maxScopedClients`). This prevents header cross-contamination between concurrent runs.
+
+---
+
+### 4. Evaluation domain (`evaluateScenario`)
+
+Evaluation in `packages/core/src/eval.ts` runs four check layers in order. Each layer produces `CheckResult[]` entries that accumulate into `EvalResult.check_results`.
+
+```
+evaluateScenario(finalText, toolSequence, evalRules)
+  │
+  ├─ 1. Tool constraints
+  │       required_tools   → did these tool names appear in toolSequence?
+  │       forbidden_tools  → did any of these appear? (must not)
+  │
+  ├─ 2. Tool sequence
+  │       allowed sequences → does toolSequence exactly match one of the allowed sequences?
+  │       (exact JSON.stringify comparison)
+  │
+  ├─ 3. Response assertions  (each produces one CheckResult)
+  │       regex             → RegExp.test(finalText)  (case-insensitive, inline flags stripped)
+  │       contains          → finalText.includes(value)
+  │       not_contains      → !finalText.includes(value)
+  │       starts_with       → finalText.startsWith(value)
+  │       ends_with         → finalText.endsWith(value)
+  │       equals            → finalText === value
+  │       jsonpath          → JSONPath query result matches expected value
+  │       jsonpath_exists   → JSONPath query returns at least one result
+  │       jsonpath_not_exists → JSONPath query returns nothing
+  │
+  └─ 4. Agent assertions   (LLM-as-judge — async, batched)
+          Build judge context (configurable via agent_context):
+            include_prompt?        → prepend scenario prompt
+            include_tool_sequence? → prepend tool call history
+            extra fields?          → prepend any user-defined key/value pairs
+          Single LLM call with all assertions in one batch:
+            system: "You are an evaluation judge..."
+            user:   JSON array of { id, prompt, context }
+          Expected response: { results: [{ id, pass, reason }] }
+          Each result → one CheckResult
+```
+
+A scenario `pass`es only when **all** check layers produce no failures.
+
+**`EvalResult`** is the output:
+
+```typescript
+EvalResult {
+  pass: boolean
+  failures: string[]        // human-readable failure messages
+  check_results: CheckResult[]
+}
+
+CheckResult {
+  id: string                // assertion id or tool name
+  label?: string            // display label
+  status: 'passed' | 'failed' | 'not_evaluated'
+  reason?: string           // judge reason, or failure detail
+}
+```
+
+---
+
+### 5. Storage domain
+
+Storage in MCPLab is pure filesystem — no database, no migration tooling.
+
+#### Config storage (read/write)
+
+Files are written and read as YAML by the app server's config store. The UI sends JSON to `/api/configs`; the server serialises to YAML and writes back to disk. `loadConfig()` re-parses on every request (no in-memory cache) so changes on disk are always visible.
+
+```
+mcplab/
+  agents.yaml             ← agent library (all reusable agent defs)
+  servers.yaml            ← server library (all reusable server defs)
+  evals/
+    my-eval.yaml          ← individual eval config (may $ref library entries)
+  test-cases/
+    search/
+      basic.yaml          ← reusable scenario definitions (included via $ref)
+```
+
+#### Run storage (write-once)
+
+The runner writes a new directory per run. Files are written in this order:
+
+```
+results/evaluation-runs/{run-id}/
+  resolved-config.yaml    ← written first (before any scenarios run)
+  trace.jsonl             ← appended per scenario run (survives partial runs)
+  results.json            ← written last (complete aggregated results)
+  summary.md              ← written after results.json
+  report.html             ← written after results.json (by reporting package)
+```
+
+`trace.jsonl` uses newline-delimited JSON. The first line is a metadata record; each subsequent line is one `ScenarioRunTraceRecord`. Because it is appended incrementally, a crashed run still has all traces up to the point of failure, even if `results.json` is absent or incomplete.
+
+#### Run query (read-only)
+
+The app server's `runs-store.ts` never modifies the run directory.
+
+```
+listRuns(runsDir, filter?)
+  → fs.readdir(runsDir)
+  → for each subdir: read results.json → extract metadata + summary
+  → sort by timestamp desc
+  → apply filter (since/until/lastDays/scenario)
+  → return RunSummary[]
+
+getRunResults(runId, runsDir)
+  → read {runId}/results.json
+  → return ResultsJson
+
+getScenarioRunTraceRecords(runId, runsDir)
+  → open {runId}/trace.jsonl
+  → readline stream: parse each line, filter type === 'scenario_run'
+  → return ScenarioRunTraceRecord[]
+```
+
+#### In-memory state (ephemeral)
+
+These exist only for the lifetime of the app server process:
+
+| State | Owner | Notes |
+|---|---|---|
+| Job queue | `RunQueueService` | Jobs lost on restart; results on disk are still readable |
+| OAuth tokens | `OAuthSessionManager` | Must re-authenticate after restart |
+| MCP connections | `McpClientManager` | Re-established at the start of each run |
+| Assistant sessions | assistant domain | Cleaned up after idle timeout |
+| Tool analysis cache | tool-analysis domain | Rebuilt on next request |
+
+---
+
+### 6. Run queue domain
+
+The queue bridges the app server (HTTP) and the core engine (pure TS library). It is the only place where concurrency is managed.
+
+```
+Job lifecycle:
+  queued → [blocked_auth] → admitting → running → completed
+                                                 → error
+                                                 → stopped
+```
+
+**`RunQueueService`** maintains a list of jobs and a worker pool. `enqueueRun()` adds a job and calls `advance()`. `advance()` claims the next queued (or unblocked) job up to the configured `workerCount`, marks it `admitting`, resolves OAuth if needed (may transition to `blocked_auth`), then kicks off `runAll()` in the background.
+
+SSE subscribers receive every state transition and log event in real time via `/sse/queue`. The UI uses these to update progress indicators without polling.
+
+**OAuth blocking** — if `OAuthSessionManager.ensureServersReady()` throws `OAuthAuthorizationRequiredError`, the job transitions to `blocked_auth` and emits an SSE event containing the authorization URL. The UI opens the browser. Once the user completes the OAuth flow and the token is stored, `resumeBlockedJobs()` re-runs `advance()` for that job.
+
+---
+
 ## Storage
 
 MCPLab uses the **filesystem only** — no database.
