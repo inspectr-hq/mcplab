@@ -50,7 +50,7 @@ Visit [mcplab.inspectr.dev](https://mcplab.inspectr.dev/) to learn more.
 - **Scenario Assistant** - AI chat to help design and refine eval scenarios
 - **Result Assistant** - AI chat to analyze and explain completed run results
 - **MCP Tool Analysis** - Automated review of MCP tool quality and safety
-- **Judge Agent Checks** - Configure a judge LLM in workspace settings to run semantic `agent_assertions` alongside your deterministic checks
+- **Judge Agent Checks** - Configure a judge LLM alongside your deterministic checks
 
 ### Developer Experience
 - **Watch Mode** - Auto-rerun tests when configs change
