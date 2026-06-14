@@ -22,7 +22,6 @@ import type {
   CoreResultsJson,
   CoreScenarioRun,
   CoreSourceEvalConfig,
-  ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
   TraceMessageContentBlock,
   WorkspaceConfigRecord,
