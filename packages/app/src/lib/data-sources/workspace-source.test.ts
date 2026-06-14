@@ -80,6 +80,7 @@ describe('workspaceSource.listResults', () => {
           run_id: runId,
           timestamp: '2026-06-12T21:37:26.973Z',
           config_hash: `cfg-${runId}`,
+          cli_version: '',
           mcp_server_versions: {}
         },
         summary: {

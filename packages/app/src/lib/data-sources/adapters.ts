@@ -20,6 +20,7 @@ import {
 import type {
   CoreEvalConfig,
   CoreResultsJson,
+  CoreScenarioRun,
   CoreSourceEvalConfig,
   ScenarioRunTraceMessage,
   ScenarioRunTraceRecord,
@@ -38,7 +39,7 @@ function toUiEvalRule(assertion: {
   pattern?: string;
   value?: string;
   path?: string;
-  equals?: string;
+  equals?: string | number | boolean;
 }): EvalRule {
   switch (assertion.type) {
     case 'regex':
@@ -219,6 +220,7 @@ function buildCoreScenarioEntry(
   return {
     id: scenario.id,
     name: scenario.name || undefined,
+    servers: [],
     mcp_servers: mcpServers,
     prompt: scenario.prompt,
     eval: evalBlock,
@@ -237,16 +239,15 @@ function toUiServerConfigFromMcpEntry(
     name: String(entry.name || id),
     transport: 'streamable-http' as const,
     url: String(entry.url || ''),
-    authType:
-      auth?.type === 'bearer'
-        ? 'bearer'
-        : auth?.type === 'api_key'
-        ? 'api-key'
-        : auth?.type === 'oauth_client_credentials'
-        ? 'api-key'
-        : auth?.type === 'oauth_authorization_code'
-        ? 'oauth2'
-        : 'none',
+    authType: (auth?.type === 'bearer'
+      ? 'bearer'
+      : auth?.type === 'api_key'
+      ? 'api-key'
+      : auth?.type === 'oauth_client_credentials'
+      ? 'api-key'
+      : auth?.type === 'oauth_authorization_code'
+      ? 'oauth2'
+      : 'none') as 'none' | 'bearer' | 'api-key' | 'oauth2',
     authValue:
       auth?.type === 'bearer'
         ? String(auth.token || '') || (auth.env ? `\${${auth.env}}` : undefined)
@@ -406,7 +407,8 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       if (!ref) return;
       const mcpServers = scenario.mcp_servers;
       const mappedMcpServers: ServerEntry[] | undefined = Array.isArray(mcpServers)
-        ? mcpServers.flatMap((entry: Record<string, unknown>) => {
+        ? mcpServers.flatMap((rawEntry): ServerEntry[] => {
+            const entry = rawEntry as unknown as Record<string, unknown>;
             if ('ref' in entry && entry.ref)
               return [{ kind: 'referenced' as const, ref: String(entry.ref) }];
             const mapped = toUiServerConfigFromMcpEntry(entry);
@@ -454,7 +456,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
             .map((name) => serverIdByName.get(name) ?? name)
             .filter(Boolean) as string[];
         }
-        const mcpServers = (scenario as Record<string, unknown>).mcp_servers;
+        const mcpServers = (scenario as unknown as Record<string, unknown>).mcp_servers;
         if (Array.isArray(mcpServers)) {
           return mcpServers.flatMap((entry: Record<string, unknown>) => {
             if ('ref' in entry && entry.ref) return [String(entry.ref)];
@@ -529,7 +531,7 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         transport: server.transport,
         url: server.url,
         auth: server.auth
-      })),
+      })) as unknown as CoreSourceEvalConfig['servers'],
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
         id: name,
         name: agent.name || name,
@@ -539,8 +541,8 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         max_tokens: agent.max_tokens,
         max_turns: agent.max_turns,
         system: agent.system
-      })),
-      scenarios: libraries.scenarios
+      })) as unknown as CoreSourceEvalConfig['agents'],
+      scenarios: libraries.scenarios as CoreSourceEvalConfig['scenarios']
     }
   };
   const mapped = fromCoreConfigYaml(record);
@@ -616,19 +618,21 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       : [...config.servers.map((server) => ({ kind: 'inline' as const, server }))];
   const seenServerRefs = new Set<string>();
   const inlineServerById = new Map<string, ReturnType<typeof mapInlineServer>>();
-  const servers = mixedServerEntries.flatMap((entry) => {
-    if (entry.kind === 'referenced') {
-      const ref = String(entry.ref || '').trim();
-      if (!ref || seenServerRefs.has(ref)) return [];
-      seenServerRefs.add(ref);
-      serverNameById.set(ref, ref);
-      return [{ ref }];
+  const servers = mixedServerEntries.flatMap(
+    (entry): NonNullable<CoreSourceEvalConfig['servers']> => {
+      if (entry.kind === 'referenced') {
+        const ref = String(entry.ref || '').trim();
+        if (!ref || seenServerRefs.has(ref)) return [];
+        seenServerRefs.add(ref);
+        serverNameById.set(ref, ref);
+        return [{ ref }];
+      }
+      const mapped = mapInlineServer(entry.server);
+      serverNameById.set(entry.server.id, mapped.id);
+      inlineServerById.set(mapped.id, mapped);
+      return [mapped];
     }
-    const mapped = mapInlineServer(entry.server);
-    serverNameById.set(entry.server.id, mapped.id);
-    inlineServerById.set(mapped.id, mapped);
-    return [mapped];
-  });
+  );
 
   const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
     const sourceId = agent.id;
@@ -654,7 +658,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
       ? config.agentEntries
       : [...config.agents.map((agent) => ({ kind: 'inline' as const, agent }))];
   const seenAgentRefs = new Set<string>();
-  const agents = mixedAgentEntries.flatMap((entry) => {
+  const agents = mixedAgentEntries.flatMap((entry): NonNullable<CoreSourceEvalConfig['agents']> => {
     if (entry.kind === 'referenced') {
       const ref = String(entry.ref || '').trim();
       if (!ref || seenAgentRefs.has(ref)) return [];
@@ -804,7 +808,7 @@ export function toCoreLibraries(
         scenario,
         scenario.serverIds.length > 0 ? scenario.serverIds.map((id) => ({ ref: id })) : undefined
       )
-    )
+    ) as CoreEvalConfig['scenarios']
   };
 }
 

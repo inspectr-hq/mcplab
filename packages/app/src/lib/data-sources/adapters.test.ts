@@ -18,6 +18,7 @@ function baseResults(): CoreResultsJson {
       run_id: 'run-1',
       timestamp: '2026-02-08T10:00:00.000Z',
       config_hash: 'abc123',
+      cli_version: '',
       mcp_server_versions: {}
     },
     summary: {
@@ -32,6 +33,10 @@ function baseResults(): CoreResultsJson {
         scenario_id: 'scn-1',
         agent: 'gpt-4o',
         pass_rate: 0.5,
+        distinct_sequences: {},
+        tool_usage_frequency: {},
+        extracted_values: {},
+        last_final_answer: '',
         runs: [
           {
             run_index: 0,
@@ -691,6 +696,7 @@ describe('config adapters round-trip', () => {
           {
             id: 'scn-inline',
             name: 'Inline Scenario',
+            servers: [],
             mcp_servers: [
               { ref: 'weather-mcp' },
               {
@@ -727,9 +733,9 @@ describe('config adapters round-trip', () => {
     expect(roundTripped.agents).toEqual(sourceRecord.config.agents);
     expect(roundTripped.scenarios).toEqual(sourceRecord.config.scenarios);
     expect(roundTripped.run_defaults).toEqual(sourceRecord.config.run_defaults);
-    expect('server_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
-    expect('agent_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
-    expect('scenario_refs' in (roundTripped as Record<string, unknown>)).toBe(false);
+    expect('server_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
+    expect('agent_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
+    expect('scenario_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
   });
 
   it('round-trips oauth_client_credentials auth on top-level and scenario-owned inline servers', () => {
@@ -761,6 +767,7 @@ describe('config adapters round-trip', () => {
           {
             id: 'scn-cc',
             name: 'OAuth CC Scenario',
+            servers: [],
             mcp_servers: [
               {
                 id: 'scoped-api',
@@ -806,7 +813,9 @@ describe('config adapters round-trip', () => {
     const roundTripped = toCoreConfigYaml(uiConfig);
 
     // Top-level server preserves oauth_client_credentials
-    const writtenTopLevel = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'my-api');
+    const writtenTopLevel = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'my-api'
+    );
     expect(writtenTopLevel?.auth).toEqual({
       type: 'oauth_client_credentials',
       token_url: 'https://auth.example.com/token',
@@ -817,10 +826,12 @@ describe('config adapters round-trip', () => {
     });
 
     // Scenario-owned inline server preserves oauth_client_credentials in mcp_servers
-    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const writtenScenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (s) => s['id'] === 'scn-cc'
     );
-    const writtenScopedApi = writtenScenario?.mcp_servers?.find((s) => s['id'] === 'scoped-api');
+    const writtenScopedApi = (writtenScenario?.['mcp_servers'] as AnyRecord[] | undefined)?.find(
+      (s) => s['id'] === 'scoped-api'
+    );
     expect(writtenScopedApi?.auth).toEqual({
       type: 'oauth_client_credentials',
       token_url: 'https://auth2.example.com/token',
@@ -856,7 +867,9 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('my-secret-token-123');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'my-server');
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'my-server'
+    );
     expect(written?.auth).toEqual({ type: 'bearer', token: 'my-secret-token-123' });
   });
 
@@ -887,7 +900,9 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('${MY_TOKEN}');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'env-server');
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'env-server'
+    );
     expect(written?.auth).toEqual({ type: 'bearer', token: '${MY_TOKEN}' });
   });
 
@@ -918,7 +933,9 @@ describe('config adapters round-trip', () => {
     expect(srv?.authValue).toBe('${LEGACY_TOKEN}');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'legacy-server');
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'legacy-server'
+    );
     expect(written?.auth).toEqual({ type: 'bearer', token: '${LEGACY_TOKEN}' });
   });
 
@@ -950,7 +967,9 @@ describe('config adapters round-trip', () => {
     expect(srv?.apiKeyHeaderName).toBe('X-Custom-Key');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'apikey-server');
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'apikey-server'
+    );
     expect(written?.auth).toEqual({
       type: 'api_key',
       header_name: 'X-Custom-Key',
@@ -989,8 +1008,12 @@ describe('config adapters round-trip', () => {
     };
 
     const roundTripped = toCoreConfigYaml(config);
-    const bearer = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'bearer-server');
-    const api = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'api-server');
+    const bearer = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'bearer-server'
+    );
+    const api = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'api-server'
+    );
 
     expect(bearer?.auth).toEqual({ type: 'bearer', token: '${TOKEN}' });
     expect(api?.auth).toEqual({ type: 'api_key', header_name: 'X-Api-Key', value: 'key-value' });
@@ -1072,7 +1095,7 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthTokenEndpoint).toBe('https://auth.example.com/token');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find(
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
       (s) => s['id'] === 'my-oauth-server'
     );
     // mode: 'pre_registered' is the default and intentionally omitted on serialization
@@ -1121,14 +1144,16 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('read');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'dcr-server');
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'dcr-server'
+    );
     expect(written?.auth).toEqual({
       type: 'oauth_authorization_code',
       mode: 'dcr',
       scope: 'read'
     });
-    expect(written?.auth?.client_id).toBeUndefined();
-    expect(written?.auth?.client_secret).toBeUndefined();
+    expect((written?.['auth'] as AnyRecord | undefined)?.['client_id']).toBeUndefined();
+    expect((written?.['auth'] as AnyRecord | undefined)?.['client_secret']).toBeUndefined();
   });
 
   it('round-trips oauth_authorization_code on scenario-owned inline server', () => {
@@ -1145,6 +1170,7 @@ describe('config adapters round-trip', () => {
           {
             id: 'scn-oauth',
             name: 'OAuth Scenario',
+            servers: [],
             mcp_servers: [
               {
                 id: 'inline-oauth',
@@ -1176,7 +1202,7 @@ describe('config adapters round-trip', () => {
     expect(server?.oauthScope).toBe('email');
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const writtenScenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const writtenScenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (s) => s['id'] === 'scn-oauth'
     );
     const writtenServer = (writtenScenario?.['mcp_servers'] as AnyRecord[] | undefined)?.find(
@@ -1216,13 +1242,16 @@ describe('config adapters round-trip', () => {
 
     const uiConfig = fromCoreConfigYaml(sourceRecord);
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const written = (roundTripped.servers as AnyRecord[]).find((s) => s['id'] === 'minimal-oauth');
-    expect(written?.auth?.client_id).toBe('only-client-id');
-    expect(written?.auth?.client_secret).toBeUndefined();
-    expect(written?.auth?.scope).toBeUndefined();
-    expect(written?.auth?.mode).toBeUndefined();
-    expect(written?.auth?.authorization_url).toBeUndefined();
-    expect(written?.auth?.token_url).toBeUndefined();
+    const written = (roundTripped.servers as unknown as AnyRecord[]).find(
+      (s) => s['id'] === 'minimal-oauth'
+    );
+    const writtenAuth = written?.['auth'] as AnyRecord | undefined;
+    expect(writtenAuth?.['client_id']).toBe('only-client-id');
+    expect(writtenAuth?.['client_secret']).toBeUndefined();
+    expect(writtenAuth?.['scope']).toBeUndefined();
+    expect(writtenAuth?.['mode']).toBeUndefined();
+    expect(writtenAuth?.['authorization_url']).toBeUndefined();
+    expect(writtenAuth?.['token_url']).toBeUndefined();
   });
 
   it('round-trips all response_assertions types without lossy conversion', () => {
@@ -1273,10 +1302,10 @@ describe('config adapters round-trip', () => {
     ]);
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-assertions'
     );
-    expect(scenario?.eval?.response_assertions).toEqual(
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['response_assertions']).toEqual(
       sourceRecord.config.scenarios[0] &&
         !('ref' in sourceRecord.config.scenarios[0]) &&
         sourceRecord.config.scenarios[0].eval?.response_assertions
@@ -1322,10 +1351,10 @@ describe('config adapters round-trip', () => {
     ]);
 
     const roundTripped = toCoreConfigYaml(uiConfig);
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-agent-check'
     );
-    expect(scenario?.eval?.agent_assertions).toEqual([
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['agent_assertions']).toEqual([
       {
         label: 'Logical range',
         prompt: 'Confirm the answer includes a valid logical time range.'
@@ -1356,10 +1385,10 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-legacy'
     );
-    expect(scenario?.eval?.response_assertions).toEqual([
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['response_assertions']).toEqual([
       { type: 'contains', value: 'must-have' },
       { type: 'not_contains', value: 'must-not-have' }
     ]);
@@ -1385,7 +1414,7 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-empty'
     );
     expect(scenario?.eval).toBeUndefined();
@@ -1412,7 +1441,7 @@ describe('config adapters round-trip', () => {
       ]
     });
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-tools'
     );
     expect(scenario?.eval).toEqual({
@@ -1447,13 +1476,14 @@ describe('config adapters round-trip', () => {
       ]
     } as EvalConfig);
 
-    const scenario = (roundTripped.scenarios as AnyRecord[]).find(
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
       (item) => item['id'] === 'scn-order'
     );
     expect(scenario).toBeTruthy();
     expect(Object.keys(scenario!)).toEqual([
       'id',
       'name',
+      'servers',
       'mcp_servers',
       'prompt',
       'eval',
@@ -1470,6 +1500,7 @@ describe('config adapters round-trip', () => {
     const orderedKeys = [
       '"id":',
       '"name":',
+      '"servers":',
       '"mcp_servers":',
       '"prompt":',
       '"eval":',
@@ -1539,7 +1570,8 @@ describe('config adapters round-trip', () => {
             prompt: 'test',
             eval: {
               response_assertions: [
-                { type: 'future_type', value: 'x' } as unknown as { type: string }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                { type: 'future_type', value: 'x' } as any
               ]
             }
           }

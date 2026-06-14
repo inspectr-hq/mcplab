@@ -34,7 +34,11 @@ describe('useResultAssistant SSE updates', () => {
 
   it('merges live assistant session updates from SSE events', async () => {
     let onResultEvent:
-      | ((event: { payload: { session: ResultAssistantSessionView; sessionId: string } }) => void)
+      | ((event: {
+          type: string;
+          ts: string;
+          payload: { session: ResultAssistantSessionView; sessionId: string };
+        }) => void)
       | undefined;
     const source = {
       createResultAssistantSession: vi.fn().mockResolvedValue({
