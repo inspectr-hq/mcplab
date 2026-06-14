@@ -1,5 +1,22 @@
 # @inspectr/mcplab
 
+## 1.22.0
+
+### Minor Changes
+
+- feat: Agent Judge checks
+- feat: Batch Judge checks
+- feat: Provide extra context for Judge checks
+- fix: Dashboard show limited recent results
+- fix: SharedWorker guard + fallback, onerror handler and port cleanup
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.18.0
+  - @inspectr/mcplab-mcp-server@1.5.2
+  - @inspectr/mcplab-reporting@1.1.19
+
 ## 1.21.1
 
 ### Patch Changes
