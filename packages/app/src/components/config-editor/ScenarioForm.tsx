@@ -26,19 +26,16 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type {
-  AgentContext,
   AgentConfig,
   ServerConfig,
   Scenario,
-  EvalRule,
-  ExtractRule
+  EvalRule
 } from '@/types/eval';
 import { useEffect, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
-import { toast } from '@/hooks/use-toast';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 

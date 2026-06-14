@@ -530,7 +530,7 @@ async function judgeAgentAssertions(params: {
     'If context.tool_sequence is provided, use it only to understand which tools were called.',
     'Do not require context fields that are not provided.',
     'Return JSON only.',
-    'Schema: {"results":[{"id":"string","pass":boolean,"reason":"string"}]}.',
+    'Schema: {"results":[{"id":"abc","pass":true,"reason":"text"}]}.',
     'Keep each reason short and concrete.'
   ].join(' ');
   const response = await chatWithAgent({
