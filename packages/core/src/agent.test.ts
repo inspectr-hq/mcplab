@@ -83,7 +83,6 @@ describe('judge response formats', () => {
                 type: 'object',
                 properties: {
                   id: { type: 'string' },
-                  label: { type: 'string' },
                   pass: { type: 'boolean' },
                   reason: { type: 'string' }
                 },

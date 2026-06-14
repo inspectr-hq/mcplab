@@ -125,7 +125,7 @@ export async function evaluateScenarioWithAgentChecks(
     const cfg = evalRules?.agent_context;
     const builtContext: AgentJudgeContext = cfg
       ? {
-          ...(cfg.include_prompt && options.scenarioPrompt
+          ...(cfg.include_prompt && options.scenarioPrompt != null && options.scenarioPrompt !== ''
             ? { scenario_prompt: options.scenarioPrompt }
             : {}),
           ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})

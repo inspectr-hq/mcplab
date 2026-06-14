@@ -140,6 +140,7 @@ export interface AgentAssertion {
   prompt: string;
 }
 
+// Must stay structurally identical to AgentContext in packages/app/src/types/eval.ts
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;

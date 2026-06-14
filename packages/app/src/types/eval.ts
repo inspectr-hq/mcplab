@@ -75,6 +75,7 @@ export interface ExtractRule {
   pattern: string;
 }
 
+// Must stay structurally identical to AgentContext in @inspectr/mcplab-core/types
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;

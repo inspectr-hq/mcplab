@@ -33,7 +33,7 @@ import type {
   EvalRule,
   ExtractRule
 } from '@/types/eval';
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
@@ -306,7 +306,7 @@ function ScenarioCard({
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
     const hasAgentChecks = nextRules.some((r) => r.type === 'agent_check');
-    onUpdate({ evalRules: nextRules, ...(!hasAgentChecks ? { agentContext: undefined } : {}) });
+    onUpdate({ evalRules: nextRules, agentContext: hasAgentChecks ? scenario.agentContext : undefined });
   };
 
   const addExtract = () => {
@@ -374,6 +374,8 @@ function ScenarioCard({
   const canLoadToolNames = selectedServerIds.length > 0;
   const [consumedInitialPrompt, setConsumedInitialPrompt] = useState<string>('');
   const [consumedAutoOpenNonce, setConsumedAutoOpenNonce] = useState<number>(0);
+  const agentContextRef = useRef(scenario.agentContext);
+  agentContextRef.current = scenario.agentContext;
 
   useEffect(() => {
     const handoff = (assistantInitialPrompt ?? '').trim();
@@ -1300,60 +1302,52 @@ function ScenarioCard({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id={`judge-ctx-prompt-${scenario.id}`}
-                      checked={scenario.agentContext?.include_prompt ?? false}
-                      disabled={readOnly}
-                      className="mt-0.5"
-                      onCheckedChange={(checked) => {
-                        const next: AgentContext = {
-                          ...scenario.agentContext,
-                          include_prompt: checked === true
-                        };
-                        onUpdate({ agentContext: next });
-                      }}
-                    />
-                    <div>
-                      <Label
-                        htmlFor={`judge-ctx-prompt-${scenario.id}`}
-                        className="cursor-pointer text-xs font-medium"
-                      >
-                        Include prompt
-                      </Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Sends the scenario prompt so the judge can verify the answer addresses the
-                        original question.
-                      </p>
+                  {(
+                    [
+                      {
+                        idSuffix: 'prompt',
+                        field: 'include_prompt',
+                        label: 'Include prompt',
+                        description:
+                          'Sends the scenario prompt so the judge can verify the answer addresses the original question.'
+                      },
+                      {
+                        idSuffix: 'tools',
+                        field: 'include_tool_sequence',
+                        label: 'Include tool sequence',
+                        description:
+                          'Sends the list of called tool names so the judge can reason about which tools were used.'
+                      }
+                    ] as Array<{
+                      idSuffix: string;
+                      field: keyof AgentContext;
+                      label: string;
+                      description: string;
+                    }>
+                  ).map(({ idSuffix, field, label, description }) => (
+                    <div key={field} className="flex items-start gap-2">
+                      <Checkbox
+                        id={`judge-ctx-${idSuffix}-${scenario.id}`}
+                        checked={scenario.agentContext?.[field] ?? false}
+                        disabled={readOnly}
+                        className="mt-0.5"
+                        onCheckedChange={(checked) => {
+                          onUpdate({
+                            agentContext: { ...agentContextRef.current, [field]: checked === true }
+                          });
+                        }}
+                      />
+                      <div>
+                        <Label
+                          htmlFor={`judge-ctx-${idSuffix}-${scenario.id}`}
+                          className="cursor-pointer text-xs font-medium"
+                        >
+                          {label}
+                        </Label>
+                        <p className="text-[11px] text-muted-foreground">{description}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id={`judge-ctx-tools-${scenario.id}`}
-                      checked={scenario.agentContext?.include_tool_sequence ?? false}
-                      disabled={readOnly}
-                      className="mt-0.5"
-                      onCheckedChange={(checked) => {
-                        const next: AgentContext = {
-                          ...scenario.agentContext,
-                          include_tool_sequence: checked === true
-                        };
-                        onUpdate({ agentContext: next });
-                      }}
-                    />
-                    <div>
-                      <Label
-                        htmlFor={`judge-ctx-tools-${scenario.id}`}
-                        className="cursor-pointer text-xs font-medium"
-                      >
-                        Include tool sequence
-                      </Label>
-                      <p className="text-[11px] text-muted-foreground">
-                        Sends the list of called tool names so the judge can reason about which
-                        tools were used.
-                      </p>
-                    </div>
-                  </div>
+                  ))}
                 </CardContent>
               </Card>
             )}

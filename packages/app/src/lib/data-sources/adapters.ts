@@ -171,9 +171,10 @@ function buildCoreEvalBlock(
         }
       : undefined;
 
-  const agent_context: Record<string, boolean> = {};
-  if (agentContext?.include_prompt) agent_context.include_prompt = true;
-  if (agentContext?.include_tool_sequence) agent_context.include_tool_sequence = true;
+  const agent_context = {
+    ...(agentContext?.include_prompt ? { include_prompt: true } : {}),
+    ...(agentContext?.include_tool_sequence ? { include_tool_sequence: true } : {})
+  };
   const hasAgentContext = Object.keys(agent_context).length > 0;
 
   if (
@@ -440,12 +441,14 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       });
     }
 
-    const mappedAgentContext: AgentContext | undefined = scenario.eval?.agent_context
-      ? {
-          include_prompt: scenario.eval.agent_context.include_prompt ?? false,
-          include_tool_sequence: scenario.eval.agent_context.include_tool_sequence ?? false
-        }
-      : undefined;
+    const mappedAgentContext: AgentContext | undefined =
+      scenario.eval?.agent_context &&
+      (scenario.eval.agent_context.include_prompt || scenario.eval.agent_context.include_tool_sequence)
+        ? {
+            include_prompt: scenario.eval.agent_context.include_prompt,
+            include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
+          }
+        : undefined;
     const mappedScenario = {
       id: scenario.id || toId('scn', index),
       name: scenario.name || scenario.id || `Scenario ${index + 1}`,
