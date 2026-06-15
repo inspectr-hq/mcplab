@@ -212,10 +212,11 @@ function resolveReferences(
       throw new Error(`Duplicate scenario id detected: ${inlineId}`);
     }
     seenScenarioIds.add(inlineId);
-    resolvedScenarios.push({
-      ...inline,
-      ...(inline.mcp_servers ? { mcp_servers: [...inline.mcp_servers] } : {})
-    });
+    resolvedScenarios.push(
+      inline.mcp_servers
+        ? { ...inline, mcp_servers: [...inline.mcp_servers] }
+        : { ...inline }
+    );
   }
 
   // --- Resolve mcp_servers from scenarios and build server union ---
