@@ -205,8 +205,7 @@ export interface SourceScenario extends Omit<Scenario, 'servers'> {
   servers?: string[];
 }
 
-export type SourceScenarioListEntry = SourceScenario | ScenarioRefEntry;
-export type ScenarioListEntry = SourceScenarioListEntry;
+export type ScenarioListEntry = SourceScenario | ScenarioRefEntry;
 
 export interface EvalConfig {
   name?: string;
@@ -221,7 +220,7 @@ export interface EvalConfig {
 export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
   servers?: ServerListEntry[]; // optional: legacy only, will be deprecated
   agents: AgentListEntry[];
-  scenarios: SourceScenarioListEntry[];
+  scenarios: ScenarioListEntry[];
 }
 
 export interface ExecutableScenario extends Scenario {
