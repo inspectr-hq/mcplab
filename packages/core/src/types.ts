@@ -205,9 +205,7 @@ export interface SourceScenario extends Omit<Scenario, 'servers'> {
   servers?: string[];
 }
 
-export type ScenarioInlineEntry = Scenario;
-export type SourceScenarioInlineEntry = SourceScenario;
-export type SourceScenarioListEntry = SourceScenarioInlineEntry | ScenarioRefEntry;
+export type SourceScenarioListEntry = SourceScenario | ScenarioRefEntry;
 export type ScenarioListEntry = SourceScenarioListEntry;
 
 export interface EvalConfig {

@@ -166,7 +166,8 @@ function resolveReferences(
     };
   }
 
-  const scenarios: Scenario[] = [];
+  type ResolvedScenarioDraft = SourceScenario & { servers?: string[] };
+  const resolvedScenarios: ResolvedScenarioDraft[] = [];
   const seenScenarioIds = new Set<string>();
   const missingScenarioRefs: string[] = [];
 
@@ -182,9 +183,8 @@ function resolveReferences(
         missingScenarioRefs.push(ref);
         continue;
       }
-      const scenarioCopy: Scenario = {
+      const scenarioCopy: ResolvedScenarioDraft = {
         ...scenario,
-        servers: Array.isArray(scenario.servers) ? [...scenario.servers] : [],
         ...(scenario.mcp_servers ? { mcp_servers: [...scenario.mcp_servers] } : {})
       };
       const rawOverlayMcpServers = (entry as { mcp_servers?: unknown }).mcp_servers;
@@ -199,11 +199,11 @@ function resolveReferences(
         throw new Error(`Duplicate scenario id detected while resolving refs: ${scenarioCopy.id}`);
       }
       seenScenarioIds.add(scenarioCopy.id);
-      scenarios.push(scenarioCopy);
+      resolvedScenarios.push(scenarioCopy);
       continue;
     }
 
-    const inline = entry as Scenario;
+    const inline = entry as SourceScenario;
     const inlineId = String(inline.id || '').trim();
     if (!inlineId) {
       throw new Error('Invalid config: inline scenario is missing required id');
@@ -212,9 +212,8 @@ function resolveReferences(
       throw new Error(`Duplicate scenario id detected: ${inlineId}`);
     }
     seenScenarioIds.add(inlineId);
-    scenarios.push({
+    resolvedScenarios.push({
       ...inline,
-      servers: Array.isArray(inline.servers) ? [...inline.servers] : [],
       ...(inline.mcp_servers ? { mcp_servers: [...inline.mcp_servers] } : {})
     });
   }
@@ -222,9 +221,9 @@ function resolveReferences(
   // --- Resolve mcp_servers from scenarios and build server union ---
   const scenarioServerUnion: Record<string, EvalConfig['servers'][string]> = {};
 
-  for (const scenario of scenarios) {
+  for (const scenario of resolvedScenarios) {
     if (!scenario.mcp_servers || scenario.mcp_servers.length === 0) {
-      scenario.servers = Array.isArray(scenario.servers) ? scenario.servers : [];
+      scenario.servers = Array.isArray(scenario.servers) ? [...scenario.servers] : [];
       continue;
     }
     const resolvedIds: string[] = [];
@@ -279,7 +278,7 @@ function resolveReferences(
   }
 
   // Legacy: validate that scenarios still using servers: string[] have all IDs resolvable
-  for (const scenario of scenarios) {
+  for (const scenario of resolvedScenarios) {
     if (!scenario.mcp_servers) {
       for (const id of scenario.servers ?? []) {
         if (!resolvedServers[id]) {
@@ -321,7 +320,7 @@ function resolveReferences(
       ...sourceConfig,
       servers: resolvedServers,
       agents: resolvedAgents,
-      scenarios
+      scenarios: resolvedScenarios as Scenario[]
     },
     warnings
   };
@@ -487,6 +486,13 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       continue;
     }
     const rawScenario = scenario as SourceScenario & { agent?: unknown };
+    const legacyServers = Array.isArray(rawScenario.servers) ? rawScenario.servers : [];
+    const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
+    if (legacyServers.length > 0 && Array.isArray(rawMcpServers) && rawMcpServers.length > 0) {
+      throw new Error(
+        `Invalid config: inline scenario "${rawScenario.id}" cannot define both servers and mcp_servers`
+      );
+    }
     const nextScenario: SourceScenario = {
       id: rawScenario.id,
       name: rawScenario.name,
@@ -494,13 +500,12 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       eval: rawScenario.eval,
       extract: rawScenario.extract
     };
-    if (Array.isArray(rawScenario.servers) && rawScenario.servers.length > 0) {
-      nextScenario.servers = rawScenario.servers;
+    if (legacyServers.length > 0) {
+      nextScenario.servers = legacyServers;
     }
     const legacyAgent = typeof rawScenario.agent === 'string' ? rawScenario.agent.trim() : '';
     if (legacyAgent) legacyPinnedAgents.add(legacyAgent);
     // Propagate mcp_servers if present in raw YAML
-    const rawMcpServers = (rawScenario as { mcp_servers?: unknown }).mcp_servers;
     if (Array.isArray(rawMcpServers)) {
       nextScenario.mcp_servers = normalizeMcpServerEntries(rawMcpServers);
     }

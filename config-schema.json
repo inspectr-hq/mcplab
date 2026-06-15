@@ -244,6 +244,18 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "prompt"],
+            "allOf": [
+              {
+                "if": {
+                  "required": ["servers", "mcp_servers"],
+                  "properties": {
+                    "servers": { "minItems": 1 },
+                    "mcp_servers": { "minItems": 1 }
+                  }
+                },
+                "then": false
+              }
+            ],
             "properties": {
               "id": { "type": "string", "minLength": 1 },
               "name": { "type": "string" },
