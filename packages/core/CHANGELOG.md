@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.18.1
+
+### Patch Changes
+
+- refactor: Remove legacy servers field from scenarios
+
 ## 1.18.0
 
 ### Minor Changes

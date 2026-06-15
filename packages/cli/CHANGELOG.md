@@ -1,5 +1,15 @@
 # @inspectr/mcplab
 
+## 1.22.1
+
+### Patch Changes
+
+- refactor: Remove legacy servers field from scenarios
+- Updated dependencies
+  - @inspectr/mcplab-core@1.18.1
+  - @inspectr/mcplab-mcp-server@1.5.3
+  - @inspectr/mcplab-reporting@1.1.20
+
 ## 1.22.0
 
 ### Minor Changes
