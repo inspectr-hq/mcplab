@@ -97,6 +97,61 @@ describe('loadConfig normalization', () => {
     }
   });
 
+  it('drops empty legacy scenario servers from normalized source config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - id: scn-1',
+          '    name: Check Weather',
+          '    servers: []',
+          '    prompt: test'
+        ].join('\n'),
+        'utf8'
+      );
+
+      const { sourceConfig } = loadConfig(configPath);
+      const scenario = sourceConfig.scenarios[0] as Record<string, unknown> | undefined;
+      expect(scenario).toBeTruthy();
+      expect('servers' in (scenario ?? {})).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects inline scenarios that define both legacy servers and mcp_servers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - id: scn-1',
+          '    servers:',
+          '      - old-server',
+          '    mcp_servers:',
+          '      - ref: new-server',
+          '    prompt: test'
+        ].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow(
+        'Invalid config: inline scenario "scn-1" cannot define both servers and mcp_servers'
+      );
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
   it('supports mixed scenarios entries with ref + inline', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

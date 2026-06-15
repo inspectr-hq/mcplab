@@ -201,8 +201,11 @@ export interface ScenarioRefEntry {
   mcp_servers?: ServerListEntry[];
 }
 
-export type ScenarioInlineEntry = Scenario;
-export type ScenarioListEntry = ScenarioInlineEntry | ScenarioRefEntry;
+export interface SourceScenario extends Omit<Scenario, 'servers'> {
+  servers?: string[];
+}
+
+export type ScenarioListEntry = SourceScenario | ScenarioRefEntry;
 
 export interface EvalConfig {
   name?: string;

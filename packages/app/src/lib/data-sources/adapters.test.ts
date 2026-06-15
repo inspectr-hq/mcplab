@@ -731,11 +731,78 @@ describe('config adapters round-trip', () => {
     const roundTripped = toCoreConfigYaml(uiConfig);
     expect(roundTripped.servers).toEqual(sourceRecord.config.servers);
     expect(roundTripped.agents).toEqual(sourceRecord.config.agents);
-    expect(roundTripped.scenarios).toEqual(sourceRecord.config.scenarios);
+    expect(roundTripped.scenarios).toEqual([
+      {
+        ref: 'scn-weather',
+        mcp_servers: [{ ref: 'weather-mcp' }]
+      },
+      {
+        id: 'scn-inline',
+        name: 'Inline Scenario',
+        mcp_servers: [
+          { ref: 'weather-mcp' },
+          {
+            id: 'inline-mcp',
+            name: 'Inline MCP',
+            transport: 'http',
+            url: 'http://localhost:3011/mcp'
+          }
+        ],
+        prompt: 'Check latest weather alerts',
+        eval: {
+          tool_constraints: {
+            required_tools: ['get_alerts'],
+            forbidden_tools: ['delete_alerts']
+          },
+          response_assertions: [{ type: 'regex', pattern: 'alerts' }]
+        },
+        extract: [{ name: 'alert_count', from: 'final_text', regex: '(\\d+)' }]
+      }
+    ]);
     expect(roundTripped.run_defaults).toEqual(sourceRecord.config.run_defaults);
     expect('server_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
     expect('agent_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
     expect('scenario_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  it('preserves explicit empty mcp_servers overrides on referenced scenarios', () => {
+    const uiConfig: EvalConfig = {
+      id: 'cfg-empty-override',
+      name: 'empty-override',
+      configName: 'empty-override',
+      description: '/tmp/empty-override.yaml',
+      servers: [],
+      serverEntries: [],
+      agents: [],
+      agentEntries: [],
+      scenarios: [
+        {
+          id: 'scn-empty',
+          name: 'Empty Override',
+          serverIds: [],
+          prompt: 'noop',
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      scenarioEntries: [
+        {
+          kind: 'referenced',
+          ref: 'scn-empty',
+          mcpServers: []
+        }
+      ],
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z'
+    };
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    expect(roundTripped.scenarios).toEqual([
+      {
+        ref: 'scn-empty',
+        mcp_servers: []
+      }
+    ]);
   });
 
   it('round-trips oauth_client_credentials auth on top-level and scenario-owned inline servers', () => {
@@ -1483,12 +1550,12 @@ describe('config adapters round-trip', () => {
     expect(Object.keys(scenario!)).toEqual([
       'id',
       'name',
-      'servers',
       'mcp_servers',
       'prompt',
       'eval',
       'extract'
     ]);
+    expect('servers' in scenario!).toBe(false);
 
     const evalBlock = scenario!.eval as AnyRecord;
     expect(Object.keys(evalBlock)).toEqual(['tool_constraints', 'response_assertions']);
@@ -1500,7 +1567,6 @@ describe('config adapters round-trip', () => {
     const orderedKeys = [
       '"id":',
       '"name":',
-      '"servers":',
       '"mcp_servers":',
       '"prompt":',
       '"eval":',
