@@ -201,8 +201,14 @@ export interface ScenarioRefEntry {
   mcp_servers?: ServerListEntry[];
 }
 
+export interface SourceScenario extends Omit<Scenario, 'servers'> {
+  servers?: string[];
+}
+
 export type ScenarioInlineEntry = Scenario;
-export type ScenarioListEntry = ScenarioInlineEntry | ScenarioRefEntry;
+export type SourceScenarioInlineEntry = SourceScenario;
+export type SourceScenarioListEntry = SourceScenarioInlineEntry | ScenarioRefEntry;
+export type ScenarioListEntry = SourceScenarioListEntry;
 
 export interface EvalConfig {
   name?: string;
@@ -217,7 +223,7 @@ export interface EvalConfig {
 export interface SourceEvalConfig extends Omit<EvalConfig, 'scenarios' | 'agents' | 'servers'> {
   servers?: ServerListEntry[]; // optional: legacy only, will be deprecated
   agents: AgentListEntry[];
-  scenarios: ScenarioListEntry[];
+  scenarios: SourceScenarioListEntry[];
 }
 
 export interface ExecutableScenario extends Scenario {

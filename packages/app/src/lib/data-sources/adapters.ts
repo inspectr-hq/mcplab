@@ -220,7 +220,6 @@ function buildCoreScenarioEntry(
   return {
     id: scenario.id,
     name: scenario.name || undefined,
-    servers: [],
     mcp_servers: mcpServers,
     prompt: scenario.prompt,
     eval: evalBlock,

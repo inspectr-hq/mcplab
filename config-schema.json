@@ -243,12 +243,13 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "servers", "prompt"],
+            "required": ["id", "prompt"],
             "properties": {
               "id": { "type": "string", "minLength": 1 },
               "name": { "type": "string" },
               "servers": {
                 "type": "array",
+                "description": "Legacy scenario server ids. Prefer mcp_servers for canonical configs.",
                 "items": { "type": "string", "minLength": 1 }
               },
               "mcp_servers": {

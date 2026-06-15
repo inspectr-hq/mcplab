@@ -53,7 +53,6 @@ export function readConfigRecord(
 function emptySourceConfig(): SourceEvalConfig {
   return {
     name: undefined,
-    servers: [],
     agents: [],
     scenarios: []
   };
