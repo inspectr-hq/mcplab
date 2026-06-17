@@ -36,6 +36,11 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
     if (!scenario.attachments?.length) continue;
     scenario.attachments = scenario.attachments.map(
       (att: SourceScenarioAttachment): ScenarioAttachment => {
+        if (!att.path && !att.data && !att.url) {
+          throw new Error(
+            `Attachment in scenario "${scenario.id}" has no path, data, or url — at least one is required`
+          );
+        }
         const media_type =
           att.media_type ??
           (att.path
@@ -44,15 +49,9 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
             : 'application/octet-stream');
         if (att.path) {
           const fileData = readFileSync(resolve(bundleRoot, att.path));
-          return {
-            type: att.type,
-            media_type,
-            data: fileData.toString('base64'),
-            url: att.url,
-            name: att.name
-          };
+          return { type: att.type, media_type, data: fileData.toString('base64'), url: att.url, name: att.name };
         }
-        return { type: att.type, media_type, data: att.data ?? '', url: att.url, name: att.name };
+        return { type: att.type, media_type, data: att.data ?? '', url: att.url || undefined, name: att.name };
       }
     );
   }
@@ -78,10 +77,6 @@ export function loadConfig(
   const { config: normalizedSource, warnings: normalizeWarnings } =
     normalizeSourceConfig(sourceConfig);
   const bundleRoot = options?.bundleRoot ? resolve(options.bundleRoot) : detectBundleRoot(path);
-  resolveAttachmentPaths(
-    normalizedSource.scenarios.filter((s): s is SourceScenario => !('ref' in s)),
-    bundleRoot
-  );
   const { config, warnings: resolveWarnings } = resolveReferences(
     normalizedSource,
     path,
@@ -257,6 +252,8 @@ function resolveReferences(
       inline.mcp_servers ? { ...inline, mcp_servers: [...inline.mcp_servers] } : { ...inline }
     );
   }
+
+  resolveAttachmentPaths(resolvedScenarios, bundleRoot);
 
   // --- Resolve mcp_servers from scenarios and build server union ---
   const scenarioServerUnion: Record<string, EvalConfig['servers'][string]> = {};

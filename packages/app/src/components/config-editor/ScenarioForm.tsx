@@ -245,19 +245,23 @@ function ScenarioCard({
 
   function handleAttachmentFiles(files: FileList | null) {
     if (!files) return;
-    Array.from(files).forEach((file) => {
+    const fileArray = Array.from(files);
+    const results = new Array<ScenarioAttachment>(fileArray.length);
+    let completed = 0;
+    fileArray.forEach((file, i) => {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
         const [header, data] = dataUrl.split(',');
-        const media_type = header.replace('data:', '').replace(';base64', '');
-        const attachment: ScenarioAttachment = {
+        results[i] = {
           type: 'image',
-          media_type,
+          media_type: header.replace('data:', '').replace(';base64', ''),
           data,
           name: file.name
         };
-        onUpdate({ attachments: [...(scenario.attachments ?? []), attachment] });
+        if (++completed === fileArray.length) {
+          onUpdate({ attachments: [...(scenario.attachments ?? []), ...results] });
+        }
       };
       reader.readAsDataURL(file);
     });

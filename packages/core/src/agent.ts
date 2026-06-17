@@ -773,7 +773,7 @@ function toOpenAiMessage(message: LlmMessage) {
         { type: 'text' as const, text: message.content },
         ...message.attachments.map((att) => ({
           type: 'image_url' as const,
-          image_url: { url: att.url ?? `data:${att.media_type};base64,${att.data}` }
+          image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
         }))
       ]
     };
