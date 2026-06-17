@@ -894,14 +894,29 @@ function toConversationItemsFromRecord(
   for (let messageIndex = 0; messageIndex < allMessages.length; messageIndex += 1) {
     const message = allMessages[messageIndex];
     if (message.role === 'user') {
-      const textBlocks = message.content.filter(isTextBlock);
-      for (const block of textBlocks) {
-        items.push({
-          id: `user_prompt-${items.length}`,
-          kind: 'user_prompt',
-          text: block.text,
-          timestamp: message.ts
-        });
+      for (const block of message.content) {
+        if (block.type === 'text') {
+          items.push({
+            id: `user_prompt-${items.length}`,
+            kind: 'user_prompt',
+            text: block.text,
+            timestamp: message.ts
+          });
+        } else if (block.type === 'image') {
+          items.push({
+            id: `attachment-${items.length}`,
+            kind: 'user_prompt',
+            text: `[Attached image: ${block.name ?? 'image'}]`,
+            timestamp: message.ts
+          });
+        } else if (block.type === 'document') {
+          items.push({
+            id: `attachment-${items.length}`,
+            kind: 'user_prompt',
+            text: `[Attached document: ${block.name ?? 'document'} (${block.media_type})]`,
+            timestamp: message.ts
+          });
+        }
       }
       continue;
     }

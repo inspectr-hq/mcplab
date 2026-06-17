@@ -5,6 +5,7 @@ import type {
   ExecutableScenario,
   LlmMessage,
   LlmResponse,
+  ScenarioAttachment,
   ToolCall,
   ToolDef,
   TraceMessage,
@@ -190,12 +191,11 @@ export async function runAgentScenario(params: {
       ts: new Date().toISOString(),
       content: [
         { type: 'text', text: scenario.prompt },
-        ...(scenario.attachments ?? []).map((a) => ({
-          type: a.type,
-          media_type: a.media_type,
-          data: a.data,
-          name: a.name
-        }))
+        ...(scenario.attachments ?? []).map((a) =>
+          a.type === 'image' || a.media_type === 'application/pdf'
+            ? { type: a.type, media_type: a.media_type, data: a.data, name: a.name }
+            : { type: 'text' as const, text: attachmentToText(a) }
+        )
       ]
     }
   ];
@@ -744,6 +744,11 @@ function ensureJsonSchema(schema: unknown) {
   return { type: 'object', properties: {} };
 }
 
+function attachmentToText(att: ScenarioAttachment): string {
+  const text = att.data ? Buffer.from(att.data, 'base64').toString('utf8') : '';
+  return att.name ? `[${att.name}]\n${text}` : text;
+}
+
 function toOpenAiMessage(message: LlmMessage) {
   if (message.role === 'tool') {
     return {
@@ -782,16 +787,12 @@ function toOpenAiMessage(message: LlmMessage) {
                 type: 'file' as const,
                 file: {
                   filename: att.name ?? 'document.pdf',
-                  file_data: att.url || `data:${att.media_type};base64,${att.data}`
+                  file_data: `data:${att.media_type};base64,${att.data}`
                 }
               }
             : {
-                // Text-based documents (markdown, csv, plain text): decode to text.
-                // OpenAI's file content type only supports application/pdf.
                 type: 'text' as const,
-                text: `${att.name ? `[${att.name}]\n` : ''}${
-                  att.data ? Buffer.from(att.data, 'base64').toString('utf8') : ''
-                }`
+                text: attachmentToText(att)
               }
         )
       ]
@@ -866,12 +867,7 @@ function toAnthropicMessages(
             : { type: 'base64', media_type: att.media_type, data: att.data }
         });
       } else {
-        // Text-based documents: decode base64 to plain text for broad compatibility.
-        const text = att.data ? Buffer.from(att.data, 'base64').toString('utf8') : '';
-        contentBlocks.push({
-          type: 'text',
-          text: `${att.name ? `[${att.name}]\n` : ''}${text}`
-        });
+        contentBlocks.push({ type: 'text', text: attachmentToText(att) });
       }
     }
     result.push({

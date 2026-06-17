@@ -246,23 +246,36 @@ function ScenarioCard({
   function handleAttachmentFiles(files: FileList | null) {
     if (!files) return;
     const fileArray = Array.from(files);
-    const results = new Array<ScenarioAttachment>(fileArray.length);
+    const results = new Array<ScenarioAttachment | null>(fileArray.length).fill(null);
     let completed = 0;
+
+    const finish = () => {
+      const valid = results.filter((r): r is ScenarioAttachment => r !== null);
+      if (valid.length > 0) {
+        onUpdate({ attachments: [...(scenario.attachments ?? []), ...valid] });
+      }
+    };
+
     fileArray.forEach((file, i) => {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
-        const [header, data] = dataUrl.split(',');
-        const media_type = header.replace('data:', '').replace(';base64', '');
-        results[i] = {
-          type: media_type.startsWith('image/') ? 'image' : 'document',
-          media_type,
-          data,
-          name: file.name
-        };
-        if (++completed === fileArray.length) {
-          onUpdate({ attachments: [...(scenario.attachments ?? []), ...results] });
+        const commaIdx = dataUrl.indexOf(',');
+        const data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
+        if (data) {
+          const header = dataUrl.slice(0, commaIdx);
+          const media_type = header.replace('data:', '').replace(';base64', '');
+          results[i] = {
+            type: media_type.startsWith('image/') ? 'image' : 'document',
+            media_type,
+            data,
+            name: file.name
+          };
         }
+        if (++completed === fileArray.length) finish();
+      };
+      reader.onerror = () => {
+        if (++completed === fileArray.length) finish();
       };
       reader.readAsDataURL(file);
     });
