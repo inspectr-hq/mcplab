@@ -222,6 +222,7 @@ function buildCoreScenarioEntry(
     name: scenario.name || undefined,
     mcp_servers: mcpServers,
     prompt: scenario.prompt,
+    attachments: scenario.attachments,
     eval: evalBlock,
     extract
   };
@@ -479,6 +480,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         return [];
       })(),
       prompt: scenario.prompt,
+      attachments: scenario.attachments,
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,

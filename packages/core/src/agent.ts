@@ -183,12 +183,20 @@ export async function runAgentScenario(params: {
   if (agent.system) {
     messages.push({ role: 'system', content: agent.system });
   }
-  messages.push({ role: 'user', content: scenario.prompt });
+  messages.push({ role: 'user', content: scenario.prompt, attachments: scenario.attachments });
   const traceMessages: TraceMessage[] = [
     {
       role: 'user',
       ts: new Date().toISOString(),
-      content: [{ type: 'text', text: scenario.prompt }]
+      content: [
+        { type: 'text', text: scenario.prompt },
+        ...(scenario.attachments ?? []).map((a) => ({
+          type: 'image' as const,
+          media_type: a.media_type,
+          data: a.data,
+          name: a.name
+        }))
+      ]
     }
   ];
   const traceStartedAt = new Date().toISOString();
@@ -758,6 +766,18 @@ function toOpenAiMessage(message: LlmMessage) {
       }))
     };
   }
+  if (message.role === 'user' && message.attachments?.length) {
+    return {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: message.content },
+        ...message.attachments.map((att) => ({
+          type: 'image_url' as const,
+          image_url: { url: att.url ?? `data:${att.media_type};base64,${att.data}` }
+        }))
+      ]
+    };
+  }
   return {
     role: message.role,
     content: message.content
@@ -810,9 +830,18 @@ function toAnthropicMessages(
       });
       continue;
     }
+    const contentBlocks: any[] = [{ type: 'text', text: message.content }];
+    for (const att of message.attachments ?? []) {
+      contentBlocks.push({
+        type: 'image',
+        source: att.url
+          ? { type: 'url', url: att.url }
+          : { type: 'base64', media_type: att.media_type, data: att.data }
+      });
+    }
     result.push({
       role: message.role === 'assistant' ? 'assistant' : 'user',
-      content: [{ type: 'text', text: message.content }]
+      content: contentBlocks
     });
   }
   return result;

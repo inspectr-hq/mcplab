@@ -1,4 +1,5 @@
 // Core mcp-lab types
+export type { ScenarioAttachment } from '@/lib/data-sources/types';
 
 export interface ServerConfig {
   id: string;
@@ -87,6 +88,7 @@ export interface Scenario {
   mcpServers?: ServerEntry[]; // scenario-owned server definitions (new model)
   serverIds: string[]; // runtime resolved IDs (computed)
   prompt: string;
+  attachments?: ScenarioAttachment[];
   evalRules: EvalRule[];
   extractRules: ExtractRule[];
   agentContext?: AgentContext;

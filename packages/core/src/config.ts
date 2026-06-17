@@ -8,6 +8,8 @@ import type {
   AgentRefEntry,
   EvalConfig,
   ExecutableEvalConfig,
+  ScenarioAttachment,
+  SourceScenarioAttachment,
   Scenario,
   ScenarioListEntry,
   ScenarioRefEntry,
@@ -20,6 +22,41 @@ import type {
 
 const TEST_CASES_DIR = 'test-cases';
 const LEGACY_SCENARIOS_DIR = 'scenarios';
+
+const MEDIA_TYPE_MAP: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp'
+};
+
+function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string): void {
+  for (const scenario of scenarios) {
+    if (!scenario.attachments?.length) continue;
+    scenario.attachments = scenario.attachments.map(
+      (att: SourceScenarioAttachment): ScenarioAttachment => {
+        const media_type =
+          att.media_type ??
+          (att.path
+            ? MEDIA_TYPE_MAP[att.path.split('.').pop()?.toLowerCase() ?? ''] ??
+              'application/octet-stream'
+            : 'application/octet-stream');
+        if (att.path) {
+          const fileData = readFileSync(resolve(bundleRoot, att.path));
+          return {
+            type: att.type,
+            media_type,
+            data: fileData.toString('base64'),
+            url: att.url,
+            name: att.name
+          };
+        }
+        return { type: att.type, media_type, data: att.data ?? '', url: att.url, name: att.name };
+      }
+    );
+  }
+}
 
 export function loadConfig(
   path: string,
@@ -41,6 +78,10 @@ export function loadConfig(
   const { config: normalizedSource, warnings: normalizeWarnings } =
     normalizeSourceConfig(sourceConfig);
   const bundleRoot = options?.bundleRoot ? resolve(options.bundleRoot) : detectBundleRoot(path);
+  resolveAttachmentPaths(
+    normalizedSource.scenarios.filter((s): s is SourceScenario => !('ref' in s)),
+    bundleRoot
+  );
   const { config, warnings: resolveWarnings } = resolveReferences(
     normalizedSource,
     path,
@@ -213,9 +254,7 @@ function resolveReferences(
     }
     seenScenarioIds.add(inlineId);
     resolvedScenarios.push(
-      inline.mcp_servers
-        ? { ...inline, mcp_servers: [...inline.mcp_servers] }
-        : { ...inline }
+      inline.mcp_servers ? { ...inline, mcp_servers: [...inline.mcp_servers] } : { ...inline }
     );
   }
 
@@ -498,6 +537,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       id: rawScenario.id,
       name: rawScenario.name,
       prompt: rawScenario.prompt,
+      attachments: rawScenario.attachments,
       eval: rawScenario.eval,
       extract: rawScenario.extract
     };

@@ -2,7 +2,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ImageIcon,
   Loader2,
+  Paperclip,
   Play,
   Plus,
   Sparkles,
@@ -25,8 +27,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { AgentConfig, ServerConfig, Scenario, EvalRule } from '@/types/eval';
-import { useEffect, useState, type MouseEvent } from 'react';
+import type {
+  AgentConfig,
+  ScenarioAttachment,
+  ServerConfig,
+  Scenario,
+  EvalRule
+} from '@/types/eval';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
@@ -233,6 +241,31 @@ function ScenarioCard({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewAssistantPrompt, setPreviewAssistantPrompt] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAttachmentFiles(files: FileList | null) {
+    if (!files) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const [header, data] = dataUrl.split(',');
+        const media_type = header.replace('data:', '').replace(';base64', '');
+        const attachment: ScenarioAttachment = {
+          type: 'image',
+          media_type,
+          data,
+          name: file.name
+        };
+        onUpdate({ attachments: [...(scenario.attachments ?? []), attachment] });
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function removeAttachment(index: number) {
+    onUpdate({ attachments: (scenario.attachments ?? []).filter((_, i) => i !== index) });
+  }
   const [previewResult, setPreviewResult] = useState<Awaited<
     ReturnType<typeof source.runScenarioPreview>
   > | null>(null);
@@ -706,6 +739,73 @@ function ScenarioCard({
                   className="text-xs"
                 />
               </CardContent>
+            </Card>
+
+            <Card className="border bg-card">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm">Attachments</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Images sent alongside the prompt. Requires a vision-capable model.
+                    </p>
+                  </div>
+                  {!readOnly && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Paperclip className="h-3 w-3" />
+                      Add image
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleAttachmentFiles(e.target.files)}
+                />
+              </CardHeader>
+              {(scenario.attachments?.length ?? 0) > 0 && (
+                <CardContent className="pt-0">
+                  <div className="flex flex-wrap gap-2">
+                    {scenario.attachments?.map((att, ai) => (
+                      <div key={ai} className="group relative">
+                        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded border bg-muted">
+                          {att.media_type.startsWith('image/') ? (
+                            <img
+                              src={`data:${att.media_type};base64,${att.data}`}
+                              alt={att.name ?? `attachment ${ai + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                          )}
+                        </div>
+                        {att.name && (
+                          <p className="mt-0.5 max-w-[80px] truncate text-center text-xs text-muted-foreground">
+                            {att.name}
+                          </p>
+                        )}
+                        {!readOnly && (
+                          <button
+                            onClick={() => removeAttachment(ai)}
+                            className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+                            aria-label="Remove attachment"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              )}
             </Card>
 
             {!readOnly && (
