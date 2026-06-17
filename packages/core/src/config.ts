@@ -49,9 +49,21 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
             : 'application/octet-stream');
         if (att.path) {
           const fileData = readFileSync(resolve(bundleRoot, att.path));
-          return { type: att.type, media_type, data: fileData.toString('base64'), url: att.url, name: att.name };
+          return {
+            type: att.type,
+            media_type,
+            data: fileData.toString('base64'),
+            url: att.url,
+            name: att.name
+          };
         }
-        return { type: att.type, media_type, data: att.data ?? '', url: att.url || undefined, name: att.name };
+        return {
+          type: att.type,
+          media_type,
+          data: att.data ?? '',
+          url: att.url || undefined,
+          name: att.name
+        };
       }
     );
   }
