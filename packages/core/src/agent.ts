@@ -191,7 +191,7 @@ export async function runAgentScenario(params: {
       content: [
         { type: 'text', text: scenario.prompt },
         ...(scenario.attachments ?? []).map((a) => ({
-          type: 'image' as const,
+          type: a.type,
           media_type: a.media_type,
           data: a.data,
           name: a.name
@@ -771,10 +771,29 @@ function toOpenAiMessage(message: LlmMessage) {
       role: 'user' as const,
       content: [
         { type: 'text' as const, text: message.content },
-        ...message.attachments.map((att) => ({
-          type: 'image_url' as const,
-          image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
-        }))
+        ...message.attachments.map((att) =>
+          att.type === 'image'
+            ? {
+                type: 'image_url' as const,
+                image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
+              }
+            : att.media_type === 'application/pdf'
+            ? {
+                type: 'file' as const,
+                file: {
+                  filename: att.name ?? 'document.pdf',
+                  file_data: att.url || `data:${att.media_type};base64,${att.data}`
+                }
+              }
+            : {
+                // Text-based documents (markdown, csv, plain text): decode to text.
+                // OpenAI's file content type only supports application/pdf.
+                type: 'text' as const,
+                text: `${att.name ? `[${att.name}]\n` : ''}${
+                  att.data ? Buffer.from(att.data, 'base64').toString('utf8') : ''
+                }`
+              }
+        )
       ]
     };
   }
@@ -832,12 +851,28 @@ function toAnthropicMessages(
     }
     const contentBlocks: any[] = [{ type: 'text', text: message.content }];
     for (const att of message.attachments ?? []) {
-      contentBlocks.push({
-        type: 'image',
-        source: att.url
-          ? { type: 'url', url: att.url }
-          : { type: 'base64', media_type: att.media_type, data: att.data }
-      });
+      if (att.type === 'image') {
+        contentBlocks.push({
+          type: 'image',
+          source: att.url
+            ? { type: 'url', url: att.url }
+            : { type: 'base64', media_type: att.media_type, data: att.data }
+        });
+      } else if (att.media_type === 'application/pdf') {
+        contentBlocks.push({
+          type: 'document',
+          source: att.url
+            ? { type: 'url', url: att.url }
+            : { type: 'base64', media_type: att.media_type, data: att.data }
+        });
+      } else {
+        // Text-based documents: decode base64 to plain text for broad compatibility.
+        const text = att.data ? Buffer.from(att.data, 'base64').toString('utf8') : '';
+        contentBlocks.push({
+          type: 'text',
+          text: `${att.name ? `[${att.name}]\n` : ''}${text}`
+        });
+      }
     }
     result.push({
       role: message.role === 'assistant' ? 'assistant' : 'user',

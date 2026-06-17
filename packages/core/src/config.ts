@@ -28,8 +28,16 @@ const MEDIA_TYPE_MAP: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   gif: 'image/gif',
-  webp: 'image/webp'
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  csv: 'text/csv'
 };
+
+function attachmentTypeFromMediaType(mediaType: string): 'image' | 'document' {
+  return mediaType.startsWith('image/') ? 'image' : 'document';
+}
 
 function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string): void {
   for (const scenario of scenarios) {
@@ -50,7 +58,7 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
         if (att.path) {
           const fileData = readFileSync(resolve(bundleRoot, att.path));
           return {
-            type: att.type,
+            type: attachmentTypeFromMediaType(media_type),
             media_type,
             data: fileData.toString('base64'),
             url: att.url,
@@ -58,7 +66,7 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
           };
         }
         return {
-          type: att.type,
+          type: attachmentTypeFromMediaType(media_type),
           media_type,
           data: att.data ?? '',
           url: att.url || undefined,

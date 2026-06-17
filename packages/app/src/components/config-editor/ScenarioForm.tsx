@@ -2,7 +2,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  ImageIcon,
+  FileText,
   Loader2,
   Paperclip,
   Play,
@@ -253,9 +253,10 @@ function ScenarioCard({
       reader.onload = () => {
         const dataUrl = reader.result as string;
         const [header, data] = dataUrl.split(',');
+        const media_type = header.replace('data:', '').replace(';base64', '');
         results[i] = {
-          type: 'image',
-          media_type: header.replace('data:', '').replace(';base64', ''),
+          type: media_type.startsWith('image/') ? 'image' : 'document',
+          media_type,
           data,
           name: file.name
         };
@@ -733,7 +734,7 @@ function ScenarioCard({
                   expected output, and constraints.
                 </p>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="space-y-3 pt-0">
                 <Textarea
                   value={scenario.prompt}
                   onChange={(e) => onUpdate({ prompt: e.target.value })}
@@ -742,74 +743,72 @@ function ScenarioCard({
                   rows={4}
                   className="text-xs"
                 />
-              </CardContent>
-            </Card>
-
-            <Card className="border bg-card">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-sm">Attachments</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Images sent alongside the prompt. Requires a vision-capable model.
-                    </p>
-                  </div>
-                  {!readOnly && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 text-xs"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip className="h-3 w-3" />
-                      Add image
-                    </Button>
-                  )}
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleAttachmentFiles(e.target.files)}
-                />
-              </CardHeader>
-              {(scenario.attachments?.length ?? 0) > 0 && (
-                <CardContent className="pt-0">
-                  <div className="flex flex-wrap gap-2">
-                    {scenario.attachments?.map((att, ai) => (
-                      <div key={ai} className="group relative">
-                        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded border bg-muted">
-                          {att.media_type.startsWith('image/') ? (
-                            <img
-                              src={`data:${att.media_type};base64,${att.data}`}
-                              alt={att.name ?? `attachment ${ai + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.md"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleAttachmentFiles(e.target.files)}
+                  />
+                  {(scenario.attachments?.length ?? 0) > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {scenario.attachments?.map((att, ai) => (
+                        <div key={ai} className="group relative">
+                          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded border bg-muted">
+                            {att.type === 'image' ? (
+                              <img
+                                src={`data:${att.media_type};base64,${att.data}`}
+                                alt={att.name ?? `attachment ${ai + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <FileText className="h-6 w-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          {att.name && (
+                            <p className="mt-0.5 max-w-[64px] truncate text-center text-xs text-muted-foreground">
+                              {att.name}
+                            </p>
+                          )}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(ai)}
+                              className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
                           )}
                         </div>
-                        {att.name && (
-                          <p className="mt-0.5 max-w-[80px] truncate text-center text-xs text-muted-foreground">
-                            {att.name}
-                          </p>
-                        )}
-                        {!readOnly && (
-                          <button
-                            onClick={() => removeAttachment(ai)}
-                            className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
-                            aria-label="Remove attachment"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              )}
+                      ))}
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex h-16 w-16 items-center justify-center rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
+                          aria-label="Attach file"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    !readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Attach file
+                      </button>
+                    )
+                  )}
+                </div>
+              </CardContent>
             </Card>
 
             {!readOnly && (

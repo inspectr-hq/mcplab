@@ -297,6 +297,18 @@ const ManageTestCases = () => {
   }, [selectedScenarioId, searchParams, setSearchParams]);
 
   useEffect(() => {
+    // If a background reload (e.g. window focus) produces the same scenario ID while we
+    // have a pending or in-flight save, don't overwrite the draft or cancel the timer —
+    // the pending save already has the correct data and will update selectedScenario once done.
+    const hasPendingChanges = saveTimerRef.current !== null || saveInFlightRef.current;
+    if (
+      selectedScenario &&
+      latestDraftRef.current?.id === selectedScenario.id &&
+      hasPendingChanges
+    ) {
+      return;
+    }
+
     if (selectedScenario) {
       setDraftScenario(structuredClone(selectedScenario));
       latestDraftRef.current = structuredClone(selectedScenario);

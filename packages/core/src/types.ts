@@ -187,7 +187,7 @@ export interface ExtractRule {
 }
 
 export interface ScenarioAttachment {
-  type: 'image';
+  type: 'image' | 'document';
   media_type: string;
   data: string;
   url?: string;
@@ -307,6 +307,7 @@ export interface EstimatedTokens {
 export type TraceMessageContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; media_type: string; data: string; name?: string }
+  | { type: 'document'; media_type: string; data: string; name?: string }
   | {
       type: 'tool_use';
       id: string;
