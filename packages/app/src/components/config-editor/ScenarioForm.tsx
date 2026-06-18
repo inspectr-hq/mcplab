@@ -36,6 +36,7 @@ import type {
 } from '@/types/eval';
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -243,16 +244,36 @@ function ScenarioCard({
   const [previewAssistantPrompt, setPreviewAssistantPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Anthropic only supports these image types as base64 sources.
+  const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
   function handleAttachmentFiles(files: FileList | null) {
     if (!files) return;
     const fileArray = Array.from(files);
     const results = new Array<ScenarioAttachment | null>(fileArray.length).fill(null);
     let completed = 0;
+    let rejectedCount = 0;
 
     const finish = () => {
       const valid = results.filter((r): r is ScenarioAttachment => r !== null);
       if (valid.length > 0) {
         onUpdate({ attachments: [...(scenario.attachments ?? []), ...valid] });
+        if (rejectedCount > 0) {
+          toast({
+            title: `${rejectedCount} file${rejectedCount > 1 ? 's' : ''} skipped`,
+            description: 'Unsupported image format — use JPEG, PNG, GIF, or WebP.',
+            variant: 'destructive'
+          });
+        }
+      } else if (fileArray.length > 0) {
+        toast({
+          title: 'Could not attach files',
+          description:
+            rejectedCount > 0
+              ? 'Unsupported image format — use JPEG, PNG, GIF, or WebP.'
+              : 'Files could not be read.',
+          variant: 'destructive'
+        });
       }
     };
 
@@ -265,12 +286,16 @@ function ScenarioCard({
         if (data) {
           const header = dataUrl.slice(0, commaIdx);
           const media_type = header.replace('data:', '').replace(';base64', '');
-          results[i] = {
-            type: media_type.startsWith('image/') ? 'image' : 'document',
-            media_type,
-            data,
-            name: file.name
-          };
+          if (media_type.startsWith('image/') && !SUPPORTED_IMAGE_TYPES.has(media_type)) {
+            rejectedCount++;
+          } else {
+            results[i] = {
+              type: media_type.startsWith('image/') ? 'image' : 'document',
+              media_type,
+              data,
+              name: file.name
+            };
+          }
         }
         if (++completed === fileArray.length) finish();
       };
@@ -760,7 +785,7 @@ function ScenarioCard({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,application/pdf,text/plain,text/markdown,text/csv,.md"
+                    accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,.md"
                     multiple
                     className="hidden"
                     onChange={(e) => handleAttachmentFiles(e.target.files)}
