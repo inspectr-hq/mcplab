@@ -787,7 +787,9 @@ function toOpenAiMessage(message: LlmMessage) {
                 type: 'file' as const,
                 file: {
                   filename: att.name ?? 'document.pdf',
-                  file_data: `data:${att.media_type};base64,${att.data}`
+                  file_data: att.data
+                    ? `data:${att.media_type};base64,${att.data}`
+                    : att.url ?? ''
                 }
               }
             : {
