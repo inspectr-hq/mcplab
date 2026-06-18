@@ -53,12 +53,16 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
         if (att.path && !att.media_type && ext && !(ext in MEDIA_TYPE_MAP)) {
           throw new Error(
             `Attachment in scenario "${scenario.id}" has unsupported file extension ".${ext}". ` +
-              `Supported extensions: ${Object.keys(MEDIA_TYPE_MAP).map((e) => `.${e}`).join(', ')}`
+              `Supported extensions: ${Object.keys(MEDIA_TYPE_MAP)
+                .map((e) => `.${e}`)
+                .join(', ')}`
           );
         }
         const media_type =
           att.media_type ??
-          (att.path ? MEDIA_TYPE_MAP[ext] ?? 'application/octet-stream' : 'application/octet-stream');
+          (att.path
+            ? MEDIA_TYPE_MAP[ext] ?? 'application/octet-stream'
+            : 'application/octet-stream');
         if (att.path) {
           const fileData = readFileSync(resolve(bundleRoot, att.path));
           return {
