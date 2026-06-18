@@ -43,6 +43,16 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
+// Anthropic only supports these image MIME types for base64 image sources.
+const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+// Non-image types safe to decode as UTF-8 text for LLM consumption.
+const SUPPORTED_DOCUMENT_TYPES = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv'
+]);
+
 interface ScenarioFormProps {
   scenarios: Scenario[];
   scenarioOrigins?: Array<'referenced' | 'inline'>;
@@ -244,9 +254,6 @@ function ScenarioCard({
   const [previewAssistantPrompt, setPreviewAssistantPrompt] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Anthropic only supports these image types as base64 sources.
-  const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-
   function handleAttachmentFiles(files: FileList | null) {
     if (!files) return;
     const fileArray = Array.from(files);
@@ -261,7 +268,8 @@ function ScenarioCard({
         if (rejectedCount > 0) {
           toast({
             title: `${rejectedCount} file${rejectedCount > 1 ? 's' : ''} skipped`,
-            description: 'Unsupported image format — use JPEG, PNG, GIF, or WebP.',
+            description:
+              'Unsupported file type. Images must be JPEG/PNG/GIF/WebP; documents must be PDF, TXT, MD, or CSV.',
             variant: 'destructive'
           });
         }
@@ -270,7 +278,7 @@ function ScenarioCard({
           title: 'Could not attach files',
           description:
             rejectedCount > 0
-              ? 'Unsupported image format — use JPEG, PNG, GIF, or WebP.'
+              ? 'Unsupported file type. Images must be JPEG/PNG/GIF/WebP; documents must be PDF, TXT, MD, or CSV.'
               : 'Files could not be read.',
           variant: 'destructive'
         });
@@ -286,11 +294,15 @@ function ScenarioCard({
         if (data) {
           const header = dataUrl.slice(0, commaIdx);
           const media_type = header.replace('data:', '').replace(';base64', '');
-          if (media_type.startsWith('image/') && !SUPPORTED_IMAGE_TYPES.has(media_type)) {
+          const isImage = media_type.startsWith('image/');
+          const supported = isImage
+            ? SUPPORTED_IMAGE_TYPES.has(media_type)
+            : SUPPORTED_DOCUMENT_TYPES.has(media_type);
+          if (!supported) {
             rejectedCount++;
           } else {
             results[i] = {
-              type: media_type.startsWith('image/') ? 'image' : 'document',
+              type: isImage ? 'image' : 'document',
               media_type,
               data,
               name: file.name

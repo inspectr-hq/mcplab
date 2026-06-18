@@ -50,9 +50,10 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
           );
         }
         const ext = att.path?.split('.').pop()?.toLowerCase() ?? '';
-        if (att.path && !att.media_type && ext && !(ext in MEDIA_TYPE_MAP)) {
+        if (att.path && !att.media_type && (!ext || !(ext in MEDIA_TYPE_MAP))) {
+          const detail = ext ? `unsupported file extension ".${ext}"` : 'no file extension';
           throw new Error(
-            `Attachment in scenario "${scenario.id}" has unsupported file extension ".${ext}". ` +
+            `Attachment in scenario "${scenario.id}" has ${detail}. ` +
               `Supported extensions: ${Object.keys(MEDIA_TYPE_MAP)
                 .map((e) => `.${e}`)
                 .join(', ')}`

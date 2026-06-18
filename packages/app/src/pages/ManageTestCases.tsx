@@ -59,6 +59,9 @@ const ManageTestCases = () => {
   const saveSeqRef = useRef(0);
   const latestScenariosRef = useRef(scenarios);
   latestScenariosRef.current = scenarios;
+  // Always current — useMemo recreates setScenarios when state changes, so we need a ref.
+  const setScenariosFnRef = useRef(setScenarios);
+  setScenariosFnRef.current = setScenarios;
 
   const selectedScenarioId = testCaseId ? decodeURIComponent(testCaseId) : undefined;
   const returnToParam = searchParams.get('returnTo')?.trim() || '';
@@ -307,19 +310,25 @@ const ManageTestCases = () => {
       return;
     }
 
-    // Switching away from a different scenario with a pending debounce timer: flush it now
-    // so the user's last edit is not silently discarded. The timer's stale closure can't be
-    // relied upon (latestDraftRef is about to be overwritten), so we fire the save directly.
+    // Switching away from a different scenario with unsaved changes: flush them now so the
+    // user's last edit is not silently discarded.  Two sub-cases:
+    //   a) Timer pending (debounce hasn't fired yet): cancel it and save immediately.
+    //   b) Save in-flight with queued edits (more edits happened while S1 was saving):
+    //      zero the queue flag before S1's finally block runs, then fire S2 directly.
+    //      S1 and S2 may race, but S2 has the latest data so it's fine if it lands last.
     const isScenarioSwitch = !!pendingDraft && pendingDraft.id !== selectedScenario?.id;
-    if (isScenarioSwitch && saveTimerRef.current !== null && !saveInFlightRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
+    if (isScenarioSwitch && (saveTimerRef.current !== null || saveQueuedRef.current)) {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      saveQueuedRef.current = false;
       const currentScenarios = latestScenariosRef.current;
       const indexToSave = currentScenarios.findIndex((s) => s.id === pendingDraft.id);
       if (indexToSave >= 0) {
         const next = [...currentScenarios];
         next[indexToSave] = pendingDraft;
-        void setScenarios(next);
+        void setScenariosFnRef.current(next);
       }
     }
 
