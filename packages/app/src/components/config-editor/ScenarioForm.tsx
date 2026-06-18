@@ -40,18 +40,13 @@ import { toast } from '@/hooks/use-toast';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import {
+  isSupportedAttachmentMediaType,
+  SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
+  SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
+} from '@/lib/attachment-policy';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-
-// Anthropic only supports these image MIME types for base64 image sources.
-const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-// Non-image types safe to decode as UTF-8 text for LLM consumption.
-const SUPPORTED_DOCUMENT_TYPES = new Set([
-  'application/pdf',
-  'text/plain',
-  'text/markdown',
-  'text/csv'
-]);
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -295,9 +290,7 @@ function ScenarioCard({
           const header = dataUrl.slice(0, commaIdx);
           const media_type = header.replace('data:', '').replace(';base64', '');
           const isImage = media_type.startsWith('image/');
-          const supported = isImage
-            ? SUPPORTED_IMAGE_TYPES.has(media_type)
-            : SUPPORTED_DOCUMENT_TYPES.has(media_type);
+          const supported = isSupportedAttachmentMediaType(media_type);
           if (!supported) {
             rejectedCount++;
           } else {
@@ -508,6 +501,7 @@ function ScenarioCard({
           name: scenario.name,
           prompt: scenario.prompt,
           serverNames: scenario.serverIds,
+          attachments: scenario.attachments ?? [],
           evalRules: scenario.evalRules,
           extractRules: scenario.extractRules
         }
@@ -797,7 +791,11 @@ function ScenarioCard({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,.md"
+                    accept={[
+                      ...SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES,
+                      ...SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
+                      '.md'
+                    ].join(',')}
                     multiple
                     className="hidden"
                     onChange={(e) => handleAttachmentFiles(e.target.files)}

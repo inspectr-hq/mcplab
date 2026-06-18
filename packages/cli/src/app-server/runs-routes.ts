@@ -10,6 +10,7 @@ import {
   renderSummaryMarkdown,
   applyRuntimeServerOverrides,
   type EvalConfig,
+  type ScenarioAttachment,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -77,6 +78,7 @@ type PreviewRunRequestBody = {
     name?: unknown;
     prompt?: unknown;
     serverNames?: unknown;
+    attachments?: unknown;
     evalRules?: unknown;
     extractRules?: unknown;
   };
@@ -93,6 +95,17 @@ type LatestPassRatesRequestBody = {
 };
 
 type ConfigScenario = EvalConfig['scenarios'][number];
+
+function validatePreviewAttachmentContract(attachment: ScenarioAttachment): void {
+  const mediaType = String(attachment.media_type ?? '');
+  const isImage = mediaType.startsWith('image/');
+  const urlOnly = !!attachment.url && !attachment.data;
+  if (urlOnly && !isImage && mediaType !== 'application/pdf') {
+    throw new Error(
+      'Preview attachment must be image/* or application/pdf when only url is provided'
+    );
+  }
+}
 
 export async function handleRunsRoutes(params: {
   req: IncomingMessage;
@@ -404,6 +417,17 @@ export async function handleRunsRoutes(params: {
     const serverNames = Array.isArray(scenarioBody?.serverNames)
       ? scenarioBody.serverNames.map((name) => String(name).trim()).filter(Boolean)
       : [];
+    const attachments = Array.isArray(scenarioBody?.attachments)
+      ? (scenarioBody.attachments as ScenarioAttachment[])
+      : [];
+    try {
+      for (const attachment of attachments) {
+        validatePreviewAttachmentContract(attachment);
+      }
+    } catch (error: unknown) {
+      asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+      return true;
+    }
     const evalRules = Array.isArray(scenarioBody?.evalRules) ? scenarioBody.evalRules : [];
     const extractRules = Array.isArray(scenarioBody?.extractRules) ? scenarioBody.extractRules : [];
     if (!scenarioId) {
@@ -487,6 +511,7 @@ export async function handleRunsRoutes(params: {
           ...(scenarioName ? { name: scenarioName } : {}),
           servers: serverNames,
           prompt: scenarioPrompt,
+          ...(attachments.length > 0 ? { attachments } : {}),
           ...(coreEval ? { eval: coreEval } : {}),
           ...(coreExtract.length > 0 ? { extract: coreExtract } : {})
         }

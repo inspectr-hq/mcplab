@@ -2,6 +2,13 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
+import {
+  ATTACHMENT_MEDIA_TYPE_BY_EXTENSION,
+  attachmentExtensionFromPath,
+  attachmentTypeFromMediaType,
+  inferAttachmentMediaType,
+  validateRuntimeAttachmentContract
+} from './attachments.js';
 import type {
   AgentInlineEntry,
   AgentListEntry,
@@ -23,22 +30,6 @@ import type {
 const TEST_CASES_DIR = 'test-cases';
 const LEGACY_SCENARIOS_DIR = 'scenarios';
 
-const MEDIA_TYPE_MAP: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  pdf: 'application/pdf',
-  txt: 'text/plain',
-  md: 'text/markdown',
-  csv: 'text/csv'
-};
-
-function attachmentTypeFromMediaType(mediaType: string): 'image' | 'document' {
-  return mediaType.startsWith('image/') ? 'image' : 'document';
-}
-
 function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string): void {
   for (const scenario of scenarios) {
     if (!scenario.attachments?.length) continue;
@@ -49,25 +40,28 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
             `Attachment in scenario "${scenario.id}" has no path, data, or url — at least one is required`
           );
         }
-        const ext = att.path?.split('.').pop()?.toLowerCase() ?? '';
-        if (att.path && !att.media_type && (!ext || !(ext in MEDIA_TYPE_MAP))) {
+        const ext = attachmentExtensionFromPath(att.path);
+        if (att.path && !att.media_type && (!ext || !(ext in ATTACHMENT_MEDIA_TYPE_BY_EXTENSION))) {
           const detail = ext ? `unsupported file extension ".${ext}"` : 'no file extension';
           throw new Error(
             `Attachment in scenario "${scenario.id}" has ${detail}. ` +
-              `Supported extensions: ${Object.keys(MEDIA_TYPE_MAP)
+              `Supported extensions: ${Object.keys(ATTACHMENT_MEDIA_TYPE_BY_EXTENSION)
                 .map((e) => `.${e}`)
                 .join(', ')}`
           );
         }
-        const media_type =
-          att.media_type ??
-          (att.path
-            ? MEDIA_TYPE_MAP[ext] ?? 'application/octet-stream'
-            : 'application/octet-stream');
+        const media_type = inferAttachmentMediaType(att) ?? 'application/octet-stream';
+        const type = attachmentTypeFromMediaType(media_type);
+        if (att.url && !att.path && !att.data) {
+          validateRuntimeAttachmentContract(
+            { type, media_type, url: att.url, data: att.data },
+            `URL-only attachment in scenario "${scenario.id}"`
+          );
+        }
         if (att.path) {
           const fileData = readFileSync(resolve(bundleRoot, att.path));
           return {
-            type: attachmentTypeFromMediaType(media_type),
+            type,
             media_type,
             data: fileData.toString('base64'),
             url: att.url,
@@ -75,7 +69,7 @@ function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string)
           };
         }
         return {
-          type: attachmentTypeFromMediaType(media_type),
+          type,
           media_type,
           data: att.data ?? '',
           url: att.url || undefined,

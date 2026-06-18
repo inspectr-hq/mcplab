@@ -829,6 +829,7 @@ export interface EvalDataSource {
       name: string;
       prompt: string;
       serverNames: string[];
+      attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: EvalRule['type'];
         value?: string;

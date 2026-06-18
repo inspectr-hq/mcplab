@@ -279,4 +279,67 @@ describe('ScenarioForm checks editor', () => {
     );
     await waitFor(() => expect(mockSource.runScenarioPreview).toHaveBeenCalled());
   });
+
+  it('includes attachments in prompt preview request', async () => {
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            serverIds: ['server-1'],
+            attachments: [
+              {
+                type: 'document',
+                media_type: 'text/plain',
+                data: 'aGVsbG8=',
+                name: 'notes.txt'
+              }
+            ]
+          }
+        ]}
+        agents={
+          [
+            {
+              id: 'agent-1',
+              name: 'Agent 1',
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              temperature: 0,
+              maxTokens: 1024
+            }
+          ] as AgentConfig[]
+        }
+        servers={
+          [
+            {
+              id: 'server-1',
+              name: 'Server 1',
+              transport: 'streamable-http',
+              url: 'https://example.com/mcp',
+              authType: 'none'
+            }
+          ] as ServerConfig[]
+        }
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run Prompt' }));
+
+    await waitFor(() =>
+      expect(mockSource.runScenarioPreview).toHaveBeenCalledWith({
+        selectedAgentName: 'agent-1',
+        scenario: expect.objectContaining({
+          attachments: [
+            {
+              type: 'document',
+              media_type: 'text/plain',
+              data: 'aGVsbG8=',
+              name: 'notes.txt'
+            }
+          ]
+        })
+      })
+    );
+  });
 });

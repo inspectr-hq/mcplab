@@ -1,7 +1,24 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@inspectr/mcplab-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@inspectr/mcplab-core')>();
+  return {
+    ...actual,
+    hashConfig: vi.fn(() => 'test-hash'),
+    runAll: vi.fn(async () => {
+      return {
+        results: {
+          metadata: { run_id: 'preview-run' },
+          scenarios: [{ runs: [{}] }]
+        }
+      };
+    })
+  };
+});
+
 import { handleRunsRoutes } from './runs-routes.js';
 import {
   createRunQueueServiceForTest,
@@ -218,6 +235,122 @@ describe('run request validation', () => {
     expect(responses[0]?.status).toBe(400);
     expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
       'Evaluation judge agent not found: missing-judge'
+    );
+  });
+
+  it('passes attachments through preview config', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/preview',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({
+          selectedAgentName: 'assistant-1',
+          scenario: {
+            id: 'scn-1',
+            prompt: 'test',
+            serverNames: ['server-1'],
+            attachments: [
+              {
+                type: 'document',
+                media_type: 'text/plain',
+                data: 'aGVsbG8=',
+                name: 'notes.txt'
+              }
+            ],
+            evalRules: [],
+            extractRules: []
+          }
+        }),
+        readLibraries: () => ({
+          agents: {
+            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+          },
+          servers: {
+            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+          },
+          scenarios: {}
+        }),
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        },
+        getScenarioRunTraceRecords: () => [],
+        pickDefaultAssistantAgentName: () => 'assistant-1',
+        pkgVersion: 'test',
+        selectScenarioIds: (config: any) => config
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(200);
+    expect((responses[0]?.payload as any)?.runId).toBe('preview-run');
+  });
+
+  it('returns 400 for preview when url-only text attachment is provided', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/preview',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({
+          selectedAgentName: 'assistant-1',
+          scenario: {
+            id: 'scn-1',
+            prompt: 'test',
+            serverNames: ['server-1'],
+            attachments: [
+              {
+                type: 'document',
+                media_type: 'text/plain',
+                url: 'https://example.com/file.txt'
+              }
+            ],
+            evalRules: [],
+            extractRules: []
+          }
+        }),
+        readLibraries: () => ({
+          agents: {
+            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+          },
+          servers: {
+            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+          },
+          scenarios: {}
+        }),
+        pickDefaultAssistantAgentName: () => 'assistant-1',
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        }
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(400);
+    expect(String((responses[0]?.payload as any)?.error ?? '')).toContain(
+      'Preview attachment must be image/* or application/pdf when only url is provided'
     );
   });
 });

@@ -2,6 +2,7 @@ import type {
   CoreEvalConfig,
   CoreSourceEvalConfig,
   CoreResultsJson,
+  ScenarioAttachment,
   ScenarioRunTraceRecord,
   ScenarioAssistantSessionView,
   ScenarioAssistantTurnResponse,
@@ -366,6 +367,7 @@ export const workspaceApiClient = {
       name: string;
       prompt: string;
       serverNames: string[];
+      attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: string;
         value?: string;

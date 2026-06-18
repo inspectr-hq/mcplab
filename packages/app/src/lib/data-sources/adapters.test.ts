@@ -1552,6 +1552,7 @@ describe('config adapters round-trip', () => {
       'name',
       'mcp_servers',
       'prompt',
+      'attachments',
       'eval',
       'extract'
     ]);
