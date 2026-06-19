@@ -118,6 +118,30 @@ describe('ScenarioForm checks editor', () => {
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
   });
 
+  it('adds ordered tool sequence checks as an ordered list', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toContainEqual({
+      type: 'tool_sequence',
+      sequence: ['search']
+    });
+  });
+
   it('adds response_jsonpath checks with optional equals', async () => {
     const onChange = vi.fn();
 

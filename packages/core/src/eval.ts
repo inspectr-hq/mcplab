@@ -43,13 +43,12 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       reason: undefined
     });
   }
-  const hasSequence = Boolean(evalRules.tool_sequence?.allow?.length);
-  if (hasSequence) {
+  for (const sequence of evalRules.tool_sequence ?? []) {
     results.push({
       type: 'tool_sequence',
-      label: 'Allowed tool sequence',
+      label: formatToolSequenceLabel(sequence),
       status: 'not_evaluated',
-      metadata: { actual: [], allowed: evalRules.tool_sequence?.allow ?? [] }
+      metadata: { actual: [], expected: sequence }
     });
   }
   for (const rule of (evalRules.response_assertions ?? []).map(
@@ -79,10 +78,12 @@ export function evaluateScenario(
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
-  if (evalRules?.tool_sequence?.allow?.length) {
-    const results = evaluateToolSequence(toolSequence, evalRules.tool_sequence.allow);
-    failures.push(...results.failures);
-    check_results.push(...results.check_results);
+  if (evalRules?.tool_sequence?.length) {
+    for (const sequence of evalRules.tool_sequence) {
+      const results = evaluateToolSequence(toolSequence, sequence);
+      failures.push(...results.failures);
+      check_results.push(...results.check_results);
+    }
   }
   if (evalRules?.response_assertions?.length) {
     const results = evaluateResponseAssertions(finalText, evalRules.response_assertions);
@@ -206,33 +207,54 @@ function evaluateToolConstraints(
 
 function evaluateToolSequence(
   actual: string[],
-  allowed: string[][]
+  expected: string[]
 ): Pick<EvalResult, 'failures' | 'check_results'> {
-  const actualKey = JSON.stringify(actual);
-  const allowedKeys = new Set(allowed.map((seq) => JSON.stringify(seq)));
-  if (!allowedKeys.has(actualKey)) {
-    const reason = 'Tool sequence did not match any allowed sequence';
+  const label = formatToolSequenceLabel(expected);
+  if (expected.length === 0) {
     return {
-      failures: [reason],
+      failures: [],
       check_results: [
         {
           type: 'tool_sequence',
-          label: 'Allowed tool sequence',
-          status: 'failed',
-          reason,
-          metadata: { actual, allowed }
+          label,
+          status: 'passed',
+          metadata: { actual, expected }
         }
       ]
     };
   }
+
+  let cursor = 0;
+  for (const tool of expected) {
+    const index = actual.indexOf(tool, cursor);
+    if (index < 0) {
+      const reason = actual.includes(tool)
+        ? `Tool sequence order was not satisfied: ${expected.join(' -> ')}`
+        : `Required tool in sequence not used: ${tool}`;
+      return {
+        failures: [reason],
+        check_results: [
+          {
+            type: 'tool_sequence',
+            label,
+            status: 'failed',
+            reason,
+            metadata: { actual, expected }
+          }
+        ]
+      };
+    }
+    cursor = index + 1;
+  }
+
   return {
     failures: [],
     check_results: [
       {
         type: 'tool_sequence',
-        label: 'Allowed tool sequence',
+        label,
         status: 'passed',
-        metadata: { actual, allowed }
+        metadata: { actual, expected }
       }
     ]
   };
@@ -476,4 +498,8 @@ function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion)
     label: `JSONPath not exists · ${assertion.path}`,
     status: 'passed'
   };
+}
+
+function formatToolSequenceLabel(sequence: string[]): string {
+  return sequence.length > 0 ? `Tool sequence · ${sequence.join(' -> ')}` : 'Tool sequence';
 }

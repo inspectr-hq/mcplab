@@ -46,6 +46,8 @@ export function buildCheckItems({
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
+  if (rule.type === 'tool_sequence')
+    return `Tool sequence · ${(rule.sequence ?? []).join(' -> ')}`;
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
@@ -79,6 +81,8 @@ export function matchFailureReasonForRule(
   const expectedPrefix = (() => {
     if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
+    if (rule.type === 'tool_sequence')
+      return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
     if (rule.type === 'response_contains') return `Contains assertion failed: ${rule.value}`;
     if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${rule.value}`;
@@ -108,6 +112,16 @@ export function matchFailureReasonForRule(
 
   if (rule.type === 'response_jsonpath' || rule.type === 'response_jsonpath_not_exists') {
     return failureReasons.find((reason) => reason.includes(rule.path ?? ''));
+  }
+
+  if (rule.type === 'tool_sequence') {
+    const sequenceText = (rule.sequence ?? []).join(' -> ');
+    return failureReasons.find(
+      (reason) =>
+        reason.startsWith('Tool sequence order was not satisfied:') ||
+        reason.startsWith('Required tool in sequence not used:') ||
+        (sequenceText.length > 0 && reason.includes(sequenceText))
+    );
   }
 
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));

@@ -50,15 +50,12 @@ export function renderHtml(results: ResultsJson): string {
         })
         .join('\n');
 
-      const allowedSequences = scenario.eval?.tool_sequence?.allow ?? [];
-      const allowedRows = allowedSequences
-        .map(
-          (seq) =>
-            `<tr><td><code class="sequence-code">${escapeHtml(
-              JSON.stringify(seq)
-            )}</code></td></tr>`
-        )
-        .join('\n');
+      const toolSequence = scenario.eval?.tool_sequence ?? [];
+      const toolSequenceRows = toolSequence.length
+        ? `<tr><td><code class="sequence-code">${escapeHtml(
+            toolSequence.join(' -> ')
+          )}</code></td></tr>`
+        : '';
 
       const requiredTools = scenario.eval?.tool_constraints?.required_tools ?? [];
       const forbiddenTools = scenario.eval?.tool_constraints?.forbidden_tools ?? [];
@@ -111,10 +108,10 @@ export function renderHtml(results: ResultsJson): string {
             <tbody>${sequenceRows || '<tr><td colspan="2">No tool calls</td></tr>'}</tbody>
           </table>
 
-          <h4>Allowed sequences</h4>
+          <h4>Ordered tool sequence</h4>
           <table>
             <thead><tr><th>Sequence</th></tr></thead>
-            <tbody>${allowedRows || '<tr><td>No constraints</td></tr>'}</tbody>
+            <tbody>${toolSequenceRows || '<tr><td>No constraints</td></tr>'}</tbody>
           </table>
 
           <h4>Required tools</h4>

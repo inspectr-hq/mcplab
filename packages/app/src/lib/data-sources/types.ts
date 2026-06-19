@@ -168,6 +168,7 @@ export interface ScenarioAssistantSuggestionBundle {
     replacement: Array<{
       type: EvalRule['type'];
       value?: string;
+      sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
       label?: string;

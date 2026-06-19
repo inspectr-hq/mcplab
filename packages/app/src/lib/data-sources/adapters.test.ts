@@ -1468,6 +1468,78 @@ describe('config adapters round-trip', () => {
     ]);
   });
 
+  it('round-trips tool_sequence rules as ordered tool lists', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-tool-sequence',
+      name: 'tool-sequence-roundtrip',
+      path: '/tmp/tool-sequence.yaml',
+      mtime: '2026-04-01T10:00:00.000Z',
+      hash: 'hash-tool-sequence',
+      config: {
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-tool-sequence',
+            name: 'Tool Sequence',
+            servers: [],
+            prompt: 'test',
+            eval: {
+              tool_sequence: ['search', 'fetch']
+            }
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    expect(uiConfig.scenarios[0]?.evalRules).toEqual([
+      { type: 'tool_sequence', sequence: ['search', 'fetch'] }
+    ]);
+
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-tool-sequence'
+    );
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['tool_sequence']).toEqual([
+      'search',
+      'fetch'
+    ]);
+  });
+
+  it('round-trips multiple tool_sequence rules as multiple ordered lists', () => {
+    const config: EvalConfig = {
+      id: 'cfg-tool-sequence-multi',
+      name: 'tool-sequence-roundtrip-multi',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-tool-sequence-multi',
+          name: 'Tool Sequence Multi',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'tool_sequence', sequence: ['search', 'fetch'] },
+            { type: 'tool_sequence', sequence: ['lookup', 'process'] }
+          ],
+          extractRules: []
+        }
+      ]
+    };
+
+    const roundTripped = toCoreConfigYaml(config);
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
+      (item) => item['id'] === 'scn-tool-sequence-multi'
+    );
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['tool_sequence']).toEqual([
+      ['search', 'fetch'],
+      ['lookup', 'process']
+    ]);
+  });
+
   it('maps legacy response_contains/not_contains to new core contains/not_contains', () => {
     const roundTripped = toCoreConfigYaml({
       id: 'cfg-legacy',
@@ -1575,6 +1647,7 @@ describe('config adapters round-trip', () => {
           evalRules: [
             { type: 'required_tool', value: 'get_tag_data' },
             { type: 'forbidden_tool', value: 'delete_all' },
+            { type: 'tool_sequence', sequence: ['get_tag_data', 'summarize'] },
             { type: 'response_contains', value: 'ok' }
           ],
           extractRules: [{ name: 'count', pattern: '(\\d+)' }]
@@ -1598,7 +1671,11 @@ describe('config adapters round-trip', () => {
     expect('servers' in scenario!).toBe(false);
 
     const evalBlock = scenario!.eval as AnyRecord;
-    expect(Object.keys(evalBlock)).toEqual(['tool_constraints', 'response_assertions']);
+    expect(Object.keys(evalBlock)).toEqual([
+      'tool_constraints',
+      'tool_sequence',
+      'response_assertions'
+    ]);
 
     const toolConstraints = evalBlock.tool_constraints as AnyRecord;
     expect(Object.keys(toolConstraints)).toEqual(['required_tools', 'forbidden_tools']);
@@ -1617,8 +1694,8 @@ describe('config adapters round-trip', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 
     const serializedEval = JSON.stringify(evalBlock);
-    const evalKeyPositions = ['"tool_constraints":', '"response_assertions":'].map((key) =>
-      serializedEval.indexOf(key)
+    const evalKeyPositions = ['"tool_constraints":', '"tool_sequence":', '"response_assertions":'].map(
+      (key) => serializedEval.indexOf(key)
     );
     expect(evalKeyPositions.every((pos) => pos >= 0)).toBe(true);
     expect([...evalKeyPositions].sort((a, b) => a - b)).toEqual(evalKeyPositions);

@@ -85,10 +85,6 @@ export interface ToolConstraints {
   forbidden_tools?: string[];
 }
 
-export interface ToolSequenceRules {
-  allow?: string[][];
-}
-
 export interface ResponseAssertionRegex {
   type: 'regex';
   pattern: string;
@@ -164,7 +160,7 @@ export type ResponseAssertion =
 
 export interface EvalRules {
   tool_constraints?: ToolConstraints;
-  tool_sequence?: ToolSequenceRules;
+  tool_sequence?: string[][];
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
   agent_context?: AgentContext;

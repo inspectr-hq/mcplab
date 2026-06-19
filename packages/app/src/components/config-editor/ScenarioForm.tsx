@@ -234,6 +234,7 @@ function ScenarioCard({
   const [newRuleEquals, setNewRuleEquals] = useState('');
   const [newRuleLabel, setNewRuleLabel] = useState('');
   const [newRulePrompt, setNewRulePrompt] = useState('');
+  const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -376,6 +377,44 @@ function ScenarioCard({
     setToolPickerValue('');
   };
 
+  const toolSequenceRuleIndex = scenario.evalRules.findIndex((rule) => rule.type === 'tool_sequence');
+  const toolSequenceRule =
+    toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
+  const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
+
+  const updateToolSequence = (nextSequence: string[]) => {
+    const nextRules = [...scenario.evalRules];
+    const nextRule =
+      nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
+    if (toolSequenceRuleIndex >= 0) {
+      if (nextRule) nextRules[toolSequenceRuleIndex] = nextRule;
+      else nextRules.splice(toolSequenceRuleIndex, 1);
+    } else if (nextRule) {
+      nextRules.push(nextRule);
+    }
+    onUpdate({ evalRules: nextRules });
+  };
+
+  const addToolSequenceValue = () => {
+    const value = newToolSequenceValue.trim();
+    if (!value) return;
+    updateToolSequence([...(toolSequence ?? []), value]);
+    setNewToolSequenceValue('');
+  };
+
+  const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= toolSequence.length) return;
+    const next = [...toolSequence];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    updateToolSequence(next);
+  };
+
+  const removeToolSequenceValue = (index: number) => {
+    updateToolSequence(toolSequence.filter((_, i) => i !== index));
+  };
+
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
     const hasAgentChecks = nextRules.some((r) => r.type === 'agent_check');
@@ -411,6 +450,7 @@ function ScenarioCard({
   const ruleTypeLabel: Record<EvalRule['type'], string> = {
     required_tool: 'Required',
     forbidden_tool: 'Forbidden',
+    tool_sequence: 'Sequence',
     response_contains: 'Contains',
     response_not_contains: 'Not Contains',
     response_starts_with: 'Starts With',
@@ -426,6 +466,7 @@ function ScenarioCard({
   const ruleTypeBadgeColor: Record<EvalRule['type'], string> = {
     required_tool: 'border-sky-300/60 bg-sky-500/10 text-sky-700',
     forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
+    tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
     response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
     response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
     response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
@@ -1147,6 +1188,10 @@ function ScenarioCard({
                                       </div>
                                     )}
                                   </div>
+                                ) : rule.type === 'tool_sequence' ? (
+                                  <span className="font-mono break-all">
+                                    {(rule.sequence ?? []).join(' -> ')}
+                                  </span>
                                 ) : (
                                   <span className="font-mono break-all">
                                     {rule.path
@@ -1259,6 +1304,107 @@ function ScenarioCard({
                             </Button>
                           </div>
                         )}
+                        <div className="space-y-2 rounded-md border bg-background px-2 py-2">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <Label className="text-xs">Ordered tool sequence</Label>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Require these tools in order. Other tools may appear between
+                                  them.
+                                </p>
+                              </div>
+                              {toolSequence.length > 0 && !readOnly && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() => updateToolSequence([])}
+                                >
+                                  Clear
+                                </Button>
+                              )}
+                            </div>
+                            {toolSequence.length === 0 ? (
+                              <p className="rounded-md border border-dashed bg-muted/20 px-2 py-2 text-xs text-muted-foreground">
+                                No ordered tool sequence yet.
+                              </p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {toolSequence.map((toolName, toolIndex) => (
+                                  <div
+                                    key={`${scenario.id}-tool-sequence-${toolIndex}`}
+                                    className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
+                                  >
+                                    <span className="text-xs font-medium">{toolIndex + 1}.</span>
+                                    <span className="min-w-0 flex-1 font-mono text-xs break-all">
+                                      {toolName}
+                                    </span>
+                                    {!readOnly && (
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => moveToolSequenceValue(toolIndex, -1)}
+                                          disabled={toolIndex === 0}
+                                          aria-label={`Move tool ${toolIndex + 1} up`}
+                                        >
+                                          <ChevronUp className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => moveToolSequenceValue(toolIndex, 1)}
+                                          disabled={toolIndex === toolSequence.length - 1}
+                                          aria-label={`Move tool ${toolIndex + 1} down`}
+                                        >
+                                          <ChevronDown className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => removeToolSequenceValue(toolIndex)}
+                                          aria-label={`Remove tool ${toolIndex + 1}`}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {!readOnly && (
+                            <div className="flex items-end gap-2">
+                              <Input
+                                value={newToolSequenceValue}
+                                onChange={(e) => setNewToolSequenceValue(e.target.value)}
+                                placeholder="Tool name"
+                                className="h-8 text-xs font-mono"
+                                onKeyDown={(e) =>
+                                  e.key === 'Enter' && (e.preventDefault(), addToolSequenceValue())
+                                }
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 shrink-0"
+                                onClick={addToolSequenceValue}
+                              >
+                                Add step
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                         {isToolRule && (
                           <div className="space-y-1">
                             <div className="flex items-end gap-2">
@@ -1528,6 +1674,9 @@ function buildPreviewCheckItems(
 function renderEvalRulePreview(rule: EvalRule): string {
   if (rule.type === 'agent_check') {
     return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
+  }
+  if (rule.type === 'tool_sequence') {
+    return `${rule.type}: ${(rule.sequence ?? []).join(' -> ')}`;
   }
   if (rule.path) {
     return rule.equals !== undefined
