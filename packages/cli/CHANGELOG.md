@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.23.1
+
+### Patch Changes
+
+- feat: Download MCP tool info
+
 ## 1.23.0
 
 ### Minor Changes
