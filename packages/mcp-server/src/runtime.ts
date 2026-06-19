@@ -3306,6 +3306,23 @@ function flattenScenarioRunTraceRecords(
           });
           continue;
         }
+        if (block.type === 'image' || block.type === 'document') {
+          out.push(
+            removeUndefined({
+              type: block.type,
+              record_index: recordIndex,
+              message_index: messageIndex,
+              block_index: blockIndex,
+              scenario_id: record.scenario_id,
+              agent: record.agent,
+              role: message.role,
+              ts: message.ts,
+              media_type: block.media_type,
+              name: block.name
+            })
+          );
+          continue;
+        }
         out.push(
           removeUndefined({
             type: 'tool_result',
@@ -3334,6 +3351,12 @@ function extractTextBlocks(blocks: TraceMessageContentBlock[]): string[] {
   return blocks
     .filter((b): b is Extract<TraceMessageContentBlock, { type: 'text' }> => b.type === 'text')
     .map((b) => b.text);
+}
+
+function isTraceToolResultBlock(
+  block: TraceMessageContentBlock
+): block is Extract<TraceMessageContentBlock, { type: 'tool_result' }> {
+  return block.type === 'tool_result';
 }
 
 function extractFinalAssistantText(record: ScenarioRunTraceRecord): string {
@@ -3383,6 +3406,22 @@ function buildConversationTimeline(
           tool: block.name,
           args: block.input
         });
+        continue;
+      }
+      if (block.type === 'image' || block.type === 'document') {
+        timeline.push({
+          index: timeline.length,
+          type: block.type,
+          role: message.role,
+          ts: message.ts,
+          message_index: messageIndex,
+          block_index: blockIndex,
+          media_type: block.media_type,
+          name: block.name
+        });
+        continue;
+      }
+      if (!isTraceToolResultBlock(block)) {
         continue;
       }
       timeline.push({

@@ -2,7 +2,9 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  FileText,
   Loader2,
+  Paperclip,
   Play,
   Plus,
   Sparkles,
@@ -25,12 +27,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { AgentConfig, ServerConfig, Scenario, EvalRule } from '@/types/eval';
-import { useEffect, useState, type MouseEvent } from 'react';
+import type {
+  AgentConfig,
+  ScenarioAttachment,
+  ServerConfig,
+  Scenario,
+  EvalRule
+} from '@/types/eval';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import {
+  isSupportedAttachmentMediaType,
+  SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
+  SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES
+} from '@/lib/attachment-policy';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
@@ -233,6 +247,73 @@ function ScenarioCard({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewAssistantPrompt, setPreviewAssistantPrompt] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAttachmentFiles(files: FileList | null) {
+    if (!files) return;
+    const fileArray = Array.from(files);
+    const results = new Array<ScenarioAttachment | null>(fileArray.length).fill(null);
+    let completed = 0;
+    let rejectedCount = 0;
+
+    const finish = () => {
+      const valid = results.filter((r): r is ScenarioAttachment => r !== null);
+      if (valid.length > 0) {
+        onUpdate({ attachments: [...(scenario.attachments ?? []), ...valid] });
+        if (rejectedCount > 0) {
+          toast({
+            title: `${rejectedCount} file${rejectedCount > 1 ? 's' : ''} skipped`,
+            description:
+              'Unsupported file type. Images must be JPEG/PNG/GIF/WebP; documents must be PDF, TXT, MD, or CSV.',
+            variant: 'destructive'
+          });
+        }
+      } else if (fileArray.length > 0) {
+        toast({
+          title: 'Could not attach files',
+          description:
+            rejectedCount > 0
+              ? 'Unsupported file type. Images must be JPEG/PNG/GIF/WebP; documents must be PDF, TXT, MD, or CSV.'
+              : 'Files could not be read.',
+          variant: 'destructive'
+        });
+      }
+    };
+
+    fileArray.forEach((file, i) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const commaIdx = dataUrl.indexOf(',');
+        const data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : '';
+        if (data) {
+          const header = dataUrl.slice(0, commaIdx);
+          const media_type = header.replace('data:', '').replace(';base64', '');
+          const isImage = media_type.startsWith('image/');
+          const supported = isSupportedAttachmentMediaType(media_type);
+          if (!supported) {
+            rejectedCount++;
+          } else {
+            results[i] = {
+              type: isImage ? 'image' : 'document',
+              media_type,
+              data,
+              name: file.name
+            };
+          }
+        }
+        if (++completed === fileArray.length) finish();
+      };
+      reader.onerror = () => {
+        if (++completed === fileArray.length) finish();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function removeAttachment(index: number) {
+    onUpdate({ attachments: (scenario.attachments ?? []).filter((_, i) => i !== index) });
+  }
   const [previewResult, setPreviewResult] = useState<Awaited<
     ReturnType<typeof source.runScenarioPreview>
   > | null>(null);
@@ -420,6 +501,7 @@ function ScenarioCard({
           name: scenario.name,
           prompt: scenario.prompt,
           serverNames: scenario.serverIds,
+          attachments: scenario.attachments ?? [],
           evalRules: scenario.evalRules,
           extractRules: scenario.extractRules
         }
@@ -696,7 +778,7 @@ function ScenarioCard({
                   expected output, and constraints.
                 </p>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="space-y-3 pt-0">
                 <Textarea
                   value={scenario.prompt}
                   onChange={(e) => onUpdate({ prompt: e.target.value })}
@@ -705,6 +787,75 @@ function ScenarioCard({
                   rows={4}
                   className="text-xs"
                 />
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={[
+                      ...SUPPORTED_ATTACHMENT_IMAGE_MEDIA_TYPES,
+                      ...SUPPORTED_ATTACHMENT_DOCUMENT_MEDIA_TYPES,
+                      '.md'
+                    ].join(',')}
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleAttachmentFiles(e.target.files)}
+                  />
+                  {(scenario.attachments?.length ?? 0) > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {scenario.attachments?.map((att, ai) => (
+                        <div key={ai} className="group relative">
+                          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded border bg-muted">
+                            {att.type === 'image' ? (
+                              <img
+                                src={`data:${att.media_type};base64,${att.data}`}
+                                alt={att.name ?? `attachment ${ai + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <FileText className="h-6 w-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          {att.name && (
+                            <p className="mt-0.5 max-w-[64px] truncate text-center text-xs text-muted-foreground">
+                              {att.name}
+                            </p>
+                          )}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => removeAttachment(ai)}
+                              className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+                              aria-label="Remove attachment"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="flex h-16 w-16 items-center justify-center rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
+                          aria-label="Attach file"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    !readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Attach file
+                      </button>
+                    )
+                  )}
+                </div>
               </CardContent>
             </Card>
 

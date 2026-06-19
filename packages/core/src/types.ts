@@ -186,12 +186,27 @@ export interface ExtractRule {
   regex: string;
 }
 
+export interface ScenarioAttachment {
+  type: 'image' | 'document';
+  media_type: string;
+  data: string;
+  url?: string;
+  name?: string;
+}
+
+export interface SourceScenarioAttachment extends Omit<ScenarioAttachment, 'media_type' | 'data'> {
+  media_type?: string;
+  data?: string;
+  path?: string;
+}
+
 export interface Scenario {
   id: string;
   name?: string;
   mcp_servers?: ServerListEntry[]; // source field: scenario-owned server definitions
   servers: string[]; // runtime IDs (computed by resolveReferences)
   prompt: string;
+  attachments?: ScenarioAttachment[];
   eval?: EvalRules;
   extract?: ExtractRule[];
 }
@@ -201,8 +216,9 @@ export interface ScenarioRefEntry {
   mcp_servers?: ServerListEntry[];
 }
 
-export interface SourceScenario extends Omit<Scenario, 'servers'> {
+export interface SourceScenario extends Omit<Scenario, 'servers' | 'attachments'> {
   servers?: string[];
+  attachments?: SourceScenarioAttachment[];
 }
 
 export type ScenarioListEntry = SourceScenario | ScenarioRefEntry;
@@ -258,6 +274,7 @@ export interface ToolCall {
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  attachments?: ScenarioAttachment[];
   tool_call_id?: string;
   name?: string;
   tool_calls?: ToolCall[];
@@ -289,6 +306,8 @@ export interface EstimatedTokens {
 
 export type TraceMessageContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'image'; media_type: string; data: string; name?: string }
+  | { type: 'document'; media_type: string; data: string; name?: string }
   | {
       type: 'tool_use';
       id: string;

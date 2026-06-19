@@ -17,6 +17,7 @@ import {
   toTokenUsage,
   type TokenAccumulator
 } from '@/lib/token-usage';
+import { safeText } from '@/lib/utils';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -31,6 +32,10 @@ import type {
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
+}
+
+function normalizeText(value: unknown): string | undefined {
+  return safeText(value) || undefined;
 }
 
 function toUiEvalRule(assertion: {
@@ -219,9 +224,10 @@ function buildCoreScenarioEntry(
 
   return {
     id: scenario.id,
-    name: scenario.name || undefined,
+    name: normalizeText(scenario.name),
     mcp_servers: mcpServers,
     prompt: scenario.prompt,
+    attachments: scenario.attachments,
     eval: evalBlock,
     extract
   };
@@ -451,7 +457,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         : undefined;
     const mappedScenario = {
       id: scenario.id || toId('scn', index),
-      name: scenario.name || scenario.id || `Scenario ${index + 1}`,
+      name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`,
       serverIds: (() => {
         if ((scenario.servers ?? []).length > 0) {
           return (scenario.servers as string[])
@@ -479,6 +485,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         return [];
       })(),
       prompt: scenario.prompt,
+      attachments: scenario.attachments,
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,
@@ -529,14 +536,14 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
     config: {
       servers: Object.entries(libraries.servers).map(([name, server]) => ({
         id: name,
-        name: server.name || name,
+        name: normalizeText(server.name) || name,
         transport: server.transport,
         url: server.url,
         auth: server.auth
       })) as unknown as CoreSourceEvalConfig['servers'],
       agents: Object.entries(libraries.agents).map(([name, agent]) => ({
         id: name,
-        name: agent.name || name,
+        name: normalizeText(agent.name) || name,
         provider: agent.provider,
         model: agent.model,
         temperature: agent.temperature,
@@ -544,7 +551,10 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         max_turns: agent.max_turns,
         system: agent.system
       })) as unknown as CoreSourceEvalConfig['agents'],
-      scenarios: libraries.scenarios as CoreSourceEvalConfig['scenarios']
+      scenarios: libraries.scenarios.map((scenario, index) => ({
+        ...scenario,
+        name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`
+      })) as CoreSourceEvalConfig['scenarios']
     }
   };
   const mapped = fromCoreConfigYaml(record);
@@ -892,14 +902,29 @@ function toConversationItemsFromRecord(
   for (let messageIndex = 0; messageIndex < allMessages.length; messageIndex += 1) {
     const message = allMessages[messageIndex];
     if (message.role === 'user') {
-      const textBlocks = message.content.filter(isTextBlock);
-      for (const block of textBlocks) {
-        items.push({
-          id: `user_prompt-${items.length}`,
-          kind: 'user_prompt',
-          text: block.text,
-          timestamp: message.ts
-        });
+      for (const block of message.content) {
+        if (block.type === 'text') {
+          items.push({
+            id: `user_prompt-${items.length}`,
+            kind: 'user_prompt',
+            text: block.text,
+            timestamp: message.ts
+          });
+        } else if (block.type === 'image') {
+          items.push({
+            id: `attachment-${items.length}`,
+            kind: 'user_prompt',
+            text: `[Attached image: ${block.name ?? 'image'}]`,
+            timestamp: message.ts
+          });
+        } else if (block.type === 'document') {
+          items.push({
+            id: `attachment-${items.length}`,
+            kind: 'user_prompt',
+            text: `[Attached document: ${block.name ?? 'document'} (${block.media_type})]`,
+            timestamp: message.ts
+          });
+        }
       }
       continue;
     }

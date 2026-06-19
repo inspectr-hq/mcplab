@@ -5,6 +5,7 @@ import type {
   ExecutableScenario,
   LlmMessage,
   LlmResponse,
+  ScenarioAttachment,
   ToolCall,
   ToolDef,
   TraceMessage,
@@ -183,12 +184,19 @@ export async function runAgentScenario(params: {
   if (agent.system) {
     messages.push({ role: 'system', content: agent.system });
   }
-  messages.push({ role: 'user', content: scenario.prompt });
+  messages.push({ role: 'user', content: scenario.prompt, attachments: scenario.attachments });
   const traceMessages: TraceMessage[] = [
     {
       role: 'user',
       ts: new Date().toISOString(),
-      content: [{ type: 'text', text: scenario.prompt }]
+      content: [
+        { type: 'text', text: scenario.prompt },
+        ...(scenario.attachments ?? []).map((a) =>
+          a.type === 'image' || a.media_type === 'application/pdf'
+            ? { type: a.type, media_type: a.media_type, data: a.data, name: a.name }
+            : { type: 'text' as const, text: attachmentToText(a) }
+        )
+      ]
     }
   ];
   const traceStartedAt = new Date().toISOString();
@@ -736,6 +744,11 @@ function ensureJsonSchema(schema: unknown) {
   return { type: 'object', properties: {} };
 }
 
+function attachmentToText(att: ScenarioAttachment): string {
+  const text = att.data ? Buffer.from(att.data, 'base64').toString('utf8') : '';
+  return att.name ? `[${att.name}]\n${text}` : text;
+}
+
 function toOpenAiMessage(message: LlmMessage) {
   if (message.role === 'tool') {
     return {
@@ -756,6 +769,33 @@ function toOpenAiMessage(message: LlmMessage) {
           arguments: JSON.stringify(call.arguments ?? {})
         }
       }))
+    };
+  }
+  if (message.role === 'user' && message.attachments?.length) {
+    return {
+      role: 'user' as const,
+      content: [
+        { type: 'text' as const, text: message.content },
+        ...message.attachments.map((att) =>
+          att.type === 'image'
+            ? {
+                type: 'image_url' as const,
+                image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
+              }
+            : att.media_type === 'application/pdf'
+            ? {
+                type: 'file' as const,
+                file: {
+                  filename: att.name ?? 'document.pdf',
+                  file_data: att.data ? `data:${att.media_type};base64,${att.data}` : att.url ?? ''
+                }
+              }
+            : {
+                type: 'text' as const,
+                text: attachmentToText(att)
+              }
+        )
+      ]
     };
   }
   return {
@@ -810,9 +850,29 @@ function toAnthropicMessages(
       });
       continue;
     }
+    const contentBlocks: any[] = [{ type: 'text', text: message.content }];
+    for (const att of message.attachments ?? []) {
+      if (att.type === 'image') {
+        contentBlocks.push({
+          type: 'image',
+          source: att.url
+            ? { type: 'url', url: att.url }
+            : { type: 'base64', media_type: att.media_type, data: att.data }
+        });
+      } else if (att.media_type === 'application/pdf') {
+        contentBlocks.push({
+          type: 'document',
+          source: att.url
+            ? { type: 'url', url: att.url }
+            : { type: 'base64', media_type: att.media_type, data: att.data }
+        });
+      } else {
+        contentBlocks.push({ type: 'text', text: attachmentToText(att) });
+      }
+    }
     result.push({
       role: message.role === 'assistant' ? 'assistant' : 'user',
-      content: [{ type: 'text', text: message.content }]
+      content: contentBlocks
     });
   }
   return result;

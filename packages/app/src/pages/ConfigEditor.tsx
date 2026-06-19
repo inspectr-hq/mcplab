@@ -33,6 +33,7 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
 import { toast } from '@/hooks/use-toast';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';
+import { safeText } from '@/lib/utils';
 import type {
   AgentConfig,
   AgentEntry,
@@ -256,7 +257,7 @@ const ConfigEditor = () => {
     if (isNew) {
       const created = await addConfig(nextConfig);
       setConfig(created);
-      const createdDisplayName = created.configName?.trim() || created.name;
+      const createdDisplayName = safeText(created.configName, safeText(created.name, created.id));
       toast({
         title: 'MCP Evaluation Created',
         description: `"${createdDisplayName}" has been saved.`
@@ -265,7 +266,7 @@ const ConfigEditor = () => {
     } else {
       const updated = await updateConfig(config.id, nextConfig);
       setConfig(updated);
-      const updatedDisplayName = updated.configName?.trim() || updated.name;
+      const updatedDisplayName = safeText(updated.configName, safeText(updated.name, updated.id));
       toast({
         title: 'MCP Evaluation Updated',
         description: `"${updatedDisplayName}" has been updated.`
@@ -275,7 +276,7 @@ const ConfigEditor = () => {
     }
   };
 
-  const displayConfigName = config.configName?.trim() || config.name;
+  const displayConfigName = safeText(config.configName, safeText(config.name, config.id));
   const title = isNew
     ? 'New MCP Evaluation'
     : editing
@@ -292,7 +293,7 @@ const ConfigEditor = () => {
         .map((item) => ({
           id: item.id,
           ref: item.id,
-          label: item.name || item.id,
+          label: safeText(item.name, item.id),
           model: item.model
         }))
         .sort((a, b) => a.label.localeCompare(b.label)),
@@ -318,8 +319,8 @@ const ConfigEditor = () => {
         .filter(
           (entry): entry is Extract<AgentEntry, { kind: 'inline' }> => entry.kind === 'inline'
         )
-        .map((entry) => entry.agent.name || entry.agent.id),
-      ...libAgents.map((agent) => agent.name || agent.id)
+        .map((entry) => safeText(entry.agent.name, entry.agent.id)),
+      ...libAgents.map((agent) => safeText(agent.name, agent.id))
     ]);
     const customBase = `${baseName}-custom`;
     let customName = customBase;
@@ -383,7 +384,7 @@ const ConfigEditor = () => {
   const importAgentFromLibraryInline = () => {
     const template = libAgents.find((item) => item.id === selectedLibraryAgentId);
     if (!template) return;
-    const displayName = template.name || template.id;
+    const displayName = safeText(template.name, template.id);
     const customName = createCustomInlineAgentName(displayName);
     const inlineCopy: AgentConfig = {
       ...structuredClone(template),
@@ -434,7 +435,7 @@ const ConfigEditor = () => {
       toast({ title: 'Referenced agent not found', variant: 'destructive' });
       return;
     }
-    const displayName = template.name || template.id;
+    const displayName = safeText(template.name, template.id);
     const customName = createCustomInlineAgentName(displayName);
     const inlineCopy: AgentConfig = {
       ...structuredClone(template),
@@ -541,7 +542,7 @@ const ConfigEditor = () => {
         .map((item) => item.scenario.name?.trim().toLowerCase())
         .filter(Boolean) as string[]
     );
-    const baseName = `${(template.name || template.id).trim()}-custom`;
+    const baseName = `${safeText(template.name, template.id)}-custom`;
     let nextName = baseName;
     let suffix = 2;
     while (usedNames.has(nextName.toLowerCase())) {
@@ -1009,8 +1010,8 @@ const ConfigEditor = () => {
                       entry.kind === 'referenced' ? findLibraryAgentByRef(entry.ref) : null;
                     const rowName =
                       entry.kind === 'inline'
-                        ? entry.agent.name?.trim() || entry.agent.id
-                        : referenceAgent?.name || entry.ref;
+                        ? safeText(entry.agent.name, entry.agent.id)
+                        : safeText(referenceAgent?.name, entry.ref);
                     const rowModel =
                       entry.kind === 'inline'
                         ? entry.agent.model
@@ -1267,7 +1268,7 @@ const ConfigEditor = () => {
               <CardContent className="pt-4">
                 <div className="space-y-2">
                   {agentViewRows.map((row, index) => {
-                    const name = row.agent.name || row.agent.id;
+                    const name = safeText(row.agent.name, row.agent.id);
                     const isDefault = defaultRunAgentNames.includes(
                       row.origin === 'inline' ? row.agent.id : row.ref || row.agent.id
                     );
@@ -1361,10 +1362,12 @@ const ConfigEditor = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {[...libScenarios]
-                        .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id))
+                        .sort((a, b) =>
+                          safeText(a.name, a.id).localeCompare(safeText(b.name, b.id))
+                        )
                         .map((item) => (
                           <SelectItem key={item.id} value={item.id}>
-                            {item.name || item.id}
+                            {safeText(item.name, item.id)}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -1407,10 +1410,10 @@ const ConfigEditor = () => {
                       entry.kind === 'referenced' ? findLibraryScenarioByRef(entry.ref) : null;
                     const rowTitle =
                       entry.kind === 'inline'
-                        ? entry.scenario.name?.trim() || entry.scenario.id
-                        : referenceScenario?.name || entry.ref;
+                        ? safeText(entry.scenario.name, entry.scenario.id)
+                        : safeText(referenceScenario?.name, entry.ref);
                     const hasMissingInlineName =
-                      entry.kind === 'inline' && !entry.scenario.name?.trim();
+                      entry.kind === 'inline' && safeText(entry.scenario.name).length === 0;
                     const isMissingRef =
                       entry.kind === 'referenced' && missingScenarioRefSet.has(entry.ref);
                     const hasOverrides =
@@ -1575,7 +1578,7 @@ const ConfigEditor = () => {
                                       updateReferencedScenarioServers(index, next);
                                     }}
                                   >
-                                    {server.name || server.id}
+                                    {safeText(server.name, server.id)}
                                   </Button>
                                 );
                               })}

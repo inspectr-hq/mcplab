@@ -198,6 +198,33 @@ describe('loadConfig normalization', () => {
     }
   });
 
+  it('rejects url-only text attachments because runtime cannot load their content', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
+    try {
+      const configPath = join(dir, 'config.yaml');
+      writeFileSync(
+        configPath,
+        [
+          'servers: {}',
+          'agents: {}',
+          'scenarios:',
+          '  - id: scn-1',
+          '    prompt: test',
+          '    attachments:',
+          '      - media_type: text/plain',
+          '        url: https://example.com/file.txt'
+        ].join('\n'),
+        'utf8'
+      );
+
+      expect(() => loadConfig(configPath)).toThrow(
+        'URL-only attachment in scenario "scn-1" must be image/* or application/pdf'
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('rejects legacy scenario_refs field', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-config-'));
     try {

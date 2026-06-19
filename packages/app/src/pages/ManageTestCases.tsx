@@ -57,6 +57,11 @@ const ManageTestCases = () => {
   const saveQueuedRef = useRef(false);
   const latestDraftRef = useRef<Scenario | null>(null);
   const saveSeqRef = useRef(0);
+  const latestScenariosRef = useRef(scenarios);
+  latestScenariosRef.current = scenarios;
+  // Always current — useMemo recreates setScenarios when state changes, so we need a ref.
+  const setScenariosFnRef = useRef(setScenarios);
+  setScenariosFnRef.current = setScenarios;
 
   const selectedScenarioId = testCaseId ? decodeURIComponent(testCaseId) : undefined;
   const returnToParam = searchParams.get('returnTo')?.trim() || '';
@@ -297,6 +302,43 @@ const ManageTestCases = () => {
   }, [selectedScenarioId, searchParams, setSearchParams]);
 
   useEffect(() => {
+    const hasPendingChanges = saveTimerRef.current !== null || saveInFlightRef.current;
+    const pendingDraft = latestDraftRef.current;
+
+    // Same scenario + pending changes: window-focus reload guard — do not overwrite the draft.
+    if (selectedScenario && pendingDraft?.id === selectedScenario.id && hasPendingChanges) {
+      return;
+    }
+
+    // Switching away from a different scenario with unsaved changes: flush them now so the
+    // user's last edit is not silently discarded.  Two sub-cases:
+    //   a) Timer pending (debounce hasn't fired yet): cancel it and save immediately.
+    //   b) Save in-flight with queued edits (more edits happened while S1 was saving):
+    //      zero the queue flag before S1's finally block runs, then fire S2 directly.
+    //      S1 and S2 may race, but S2 has the latest data so it's fine if it lands last.
+    const isScenarioSwitch = !!pendingDraft && pendingDraft.id !== selectedScenario?.id;
+    if (isScenarioSwitch && (saveTimerRef.current !== null || saveQueuedRef.current)) {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      saveQueuedRef.current = false;
+      const currentScenarios = latestScenariosRef.current;
+      const indexToSave = currentScenarios.findIndex((s) => s.id === pendingDraft.id);
+      if (indexToSave >= 0) {
+        const next = [...currentScenarios];
+        next[indexToSave] = pendingDraft;
+        void setScenariosFnRef.current(next);
+      }
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveInFlightRef.current = false;
+    saveQueuedRef.current = false;
+
     if (selectedScenario) {
       setDraftScenario(structuredClone(selectedScenario));
       latestDraftRef.current = structuredClone(selectedScenario);
@@ -308,13 +350,7 @@ const ManageTestCases = () => {
       setSaveStatus('idle');
       setSaveError('');
     }
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    saveInFlightRef.current = false;
-    saveQueuedRef.current = false;
-  }, [selectedScenario]);
+  }, [selectedScenario]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {

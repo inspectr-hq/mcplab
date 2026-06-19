@@ -2,12 +2,21 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parse } from 'yaml';
+import {
+  ATTACHMENT_MEDIA_TYPE_BY_EXTENSION,
+  attachmentExtensionFromPath,
+  attachmentTypeFromMediaType,
+  inferAttachmentMediaType,
+  validateRuntimeAttachmentContract
+} from './attachments.js';
 import type {
   AgentInlineEntry,
   AgentListEntry,
   AgentRefEntry,
   EvalConfig,
   ExecutableEvalConfig,
+  ScenarioAttachment,
+  SourceScenarioAttachment,
   Scenario,
   ScenarioListEntry,
   ScenarioRefEntry,
@@ -20,6 +29,56 @@ import type {
 
 const TEST_CASES_DIR = 'test-cases';
 const LEGACY_SCENARIOS_DIR = 'scenarios';
+
+function resolveAttachmentPaths(scenarios: SourceScenario[], bundleRoot: string): void {
+  for (const scenario of scenarios) {
+    if (!scenario.attachments?.length) continue;
+    scenario.attachments = scenario.attachments.map(
+      (att: SourceScenarioAttachment): ScenarioAttachment => {
+        if (!att.path && !att.data && !att.url) {
+          throw new Error(
+            `Attachment in scenario "${scenario.id}" has no path, data, or url — at least one is required`
+          );
+        }
+        const ext = attachmentExtensionFromPath(att.path);
+        if (att.path && !att.media_type && (!ext || !(ext in ATTACHMENT_MEDIA_TYPE_BY_EXTENSION))) {
+          const detail = ext ? `unsupported file extension ".${ext}"` : 'no file extension';
+          throw new Error(
+            `Attachment in scenario "${scenario.id}" has ${detail}. ` +
+              `Supported extensions: ${Object.keys(ATTACHMENT_MEDIA_TYPE_BY_EXTENSION)
+                .map((e) => `.${e}`)
+                .join(', ')}`
+          );
+        }
+        const media_type = inferAttachmentMediaType(att) ?? 'application/octet-stream';
+        const type = attachmentTypeFromMediaType(media_type);
+        if (att.url && !att.path && !att.data) {
+          validateRuntimeAttachmentContract(
+            { type, media_type, url: att.url, data: att.data },
+            `URL-only attachment in scenario "${scenario.id}"`
+          );
+        }
+        if (att.path) {
+          const fileData = readFileSync(resolve(bundleRoot, att.path));
+          return {
+            type,
+            media_type,
+            data: fileData.toString('base64'),
+            url: att.url,
+            name: att.name
+          };
+        }
+        return {
+          type,
+          media_type,
+          data: att.data ?? '',
+          url: att.url || undefined,
+          name: att.name
+        };
+      }
+    );
+  }
+}
 
 export function loadConfig(
   path: string,
@@ -213,11 +272,11 @@ function resolveReferences(
     }
     seenScenarioIds.add(inlineId);
     resolvedScenarios.push(
-      inline.mcp_servers
-        ? { ...inline, mcp_servers: [...inline.mcp_servers] }
-        : { ...inline }
+      inline.mcp_servers ? { ...inline, mcp_servers: [...inline.mcp_servers] } : { ...inline }
     );
   }
+
+  resolveAttachmentPaths(resolvedScenarios, bundleRoot);
 
   // --- Resolve mcp_servers from scenarios and build server union ---
   const scenarioServerUnion: Record<string, EvalConfig['servers'][string]> = {};
@@ -498,6 +557,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       id: rawScenario.id,
       name: rawScenario.name,
       prompt: rawScenario.prompt,
+      attachments: rawScenario.attachments,
       eval: rawScenario.eval,
       extract: rawScenario.extract
     };

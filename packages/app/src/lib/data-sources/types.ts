@@ -6,6 +6,7 @@ import type {
   ResultsJson as CoreResultsJson,
   Scenario as CoreScenario,
   ScenarioAggregate as CoreScenarioAggregate,
+  ScenarioAttachment,
   ScenarioRunResult as CoreScenarioRun,
   ScenarioRunTraceRecord as CoreScenarioRunTraceRecord,
   ServerAuthBearer as CoreServerAuthBearer,
@@ -32,7 +33,8 @@ export type {
   CoreScenarioRun,
   CoreScenarioAggregate,
   CoreResultsJson,
-  HealthMcpConnectionInfo
+  HealthMcpConnectionInfo,
+  ScenarioAttachment
 };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -827,6 +829,7 @@ export interface EvalDataSource {
       name: string;
       prompt: string;
       serverNames: string[];
+      attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: EvalRule['type'];
         value?: string;
