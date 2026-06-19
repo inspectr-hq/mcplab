@@ -946,9 +946,13 @@ function ScenarioCard({
                     onChange={(e) => handleAttachmentFiles(e.target.files)}
                   />
                   {(scenario.attachments?.length ?? 0) > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-start gap-2">
                       {scenario.attachments?.map((att, ai) => (
-                        <div key={ai} className="group relative">
+                        <div
+                          key={ai}
+                          className="group relative"
+                          title={`${att.name ?? `attachment ${ai + 1}`}`}
+                        >
                           <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded border bg-muted">
                             {att.type === 'image' ? (
                               <img
@@ -981,8 +985,9 @@ function ScenarioCard({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="flex h-16 w-16 items-center justify-center rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
+                          className="flex h-16 w-16 items-center justify-center self-start rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
                           aria-label="Attach file"
+                          title="Attach file (image or document)"
                         >
                           <Paperclip className="h-4 w-4" />
                         </button>

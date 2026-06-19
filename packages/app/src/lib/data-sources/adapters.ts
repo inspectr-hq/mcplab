@@ -18,7 +18,10 @@ import {
   type TokenAccumulator
 } from '@/lib/token-usage';
 import { safeText } from '@/lib/utils';
-import { attachmentTypeFromMediaType, inferAttachmentMediaType } from '../../../../core/src/attachments';
+import {
+  attachmentTypeFromMediaType,
+  inferAttachmentMediaType
+} from '../../../../core/src/attachments';
 import type { ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
