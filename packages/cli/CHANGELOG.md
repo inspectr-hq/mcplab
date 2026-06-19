@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.23.0
+
+### Minor Changes
+
+- feat: Attach files to test cases
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.19.0
+  - @inspectr/mcplab-mcp-server@1.6.0
+  - @inspectr/mcplab-reporting@1.1.21
+
 ## 1.22.1
 
 ### Patch Changes

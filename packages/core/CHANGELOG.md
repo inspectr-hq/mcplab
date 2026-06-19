@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.19.0
+
+### Minor Changes
+
+- feat: Attach files to test cases
+
 ## 1.18.1
 
 ### Patch Changes
