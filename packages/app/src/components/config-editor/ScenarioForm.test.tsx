@@ -118,6 +118,34 @@ describe('ScenarioForm checks editor', () => {
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
   });
 
+  it('edits response_contains checks in place', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'response_contains', value: 'success' }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    fireEvent.change(screen.getByPlaceholderText('Value'), {
+      target: { value: 'approved' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update check' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([{ type: 'response_contains', value: 'approved' }]);
+  });
+
   it('adds ordered tool sequence checks as an ordered list', async () => {
     const onChange = vi.fn();
 
@@ -188,6 +216,7 @@ describe('ScenarioForm checks editor', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
 
+    expect(screen.getAllByRole('combobox')[1]).toHaveTextContent('Tool Sequence');
     expect(screen.getByText('Sequence steps')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Tool name')).toBeInTheDocument();
   });

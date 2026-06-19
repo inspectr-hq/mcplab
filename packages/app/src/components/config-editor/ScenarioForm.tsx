@@ -243,6 +243,7 @@ function ScenarioCard({
   const [toolSequenceEditorOpen, setToolSequenceEditorOpen] = useState(false);
   const [agentCheckEditingIndex, setAgentCheckEditingIndex] = useState<number | null>(null);
   const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
+  const [valueRuleEditingIndex, setValueRuleEditingIndex] = useState<number | null>(null);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -392,11 +393,15 @@ function ScenarioCard({
     }
 
     if (!newRuleValue.trim()) return;
-    onUpdate({
-      evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }]
-    });
+    const nextRules = [...scenario.evalRules];
+    const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
+    if (valueRuleEditingIndex !== null) nextRules[valueRuleEditingIndex] = nextRule;
+    else nextRules.push(nextRule);
+    onUpdate({ evalRules: nextRules });
     setNewRuleValue('');
     setToolPickerValue('');
+    setValueRuleEditingIndex(null);
+    setNewRuleType('required_tool');
   };
 
   const addToolSequenceValue = () => {
@@ -467,6 +472,15 @@ function ScenarioCard({
       agentContext: hasAgentChecks ? scenario.agentContext : undefined
     });
   };
+
+  const editableValueRuleTypes: EvalRule['type'][] = [
+    'response_contains',
+    'response_not_contains',
+    'response_starts_with',
+    'response_ends_with',
+    'response_equals',
+    'response_regex'
+  ];
 
   const addExtract = () => {
     if (!newExtractName.trim() || !newExtractPattern.trim()) return;
@@ -1251,7 +1265,9 @@ function ScenarioCard({
                             </div>
                             {!readOnly && (
                               <div className="flex items-center gap-1">
-                                {(rule.type === 'tool_sequence' || rule.type === 'agent_check') && (
+                                {(rule.type === 'tool_sequence' ||
+                                  rule.type === 'agent_check' ||
+                                  editableValueRuleTypes.includes(rule.type)) && (
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -1264,11 +1280,17 @@ function ScenarioCard({
                                         setToolSequenceEditorOpen(true);
                                         return;
                                       }
-                                      setNewRuleType('agent_check');
-                                      setAgentCheckEditingIndex(ri);
-                                      setNewRuleLabel(rule.label ?? '');
-                                      setNewRulePrompt(rule.prompt ?? '');
-                                      setAgentCheckEditorOpen(true);
+                                      if (rule.type === 'agent_check') {
+                                        setNewRuleType('agent_check');
+                                        setAgentCheckEditingIndex(ri);
+                                        setNewRuleLabel(rule.label ?? '');
+                                        setNewRulePrompt(rule.prompt ?? '');
+                                        setAgentCheckEditorOpen(true);
+                                        return;
+                                      }
+                                      setNewRuleType(rule.type);
+                                      setValueRuleEditingIndex(ri);
+                                      setNewRuleValue(rule.value ?? '');
                                     }}
                                     aria-label={`Edit check ${ri + 1}`}
                                   >
@@ -1325,12 +1347,12 @@ function ScenarioCard({
                             />
                           </div>
                         ) : (
-                          <div className="flex gap-2 items-end">
+                              <div className="flex gap-2 items-end">
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
                               className="h-8 w-[14.5rem] shrink-0 text-xs"
-                              hideToolSequence={hasToolSequenceRule}
+                              hideToolSequence={hasToolSequenceRule && newRuleType !== 'tool_sequence'}
                             />
                             {isJsonPathRule ? (
                               <>
@@ -1394,7 +1416,7 @@ function ScenarioCard({
                               className="h-8 shrink-0"
                               onClick={addRule}
                             >
-                              Add
+                              {valueRuleEditingIndex !== null ? 'Update check' : 'Add'}
                             </Button>
                           </div>
                         )}
