@@ -64,6 +64,10 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   return `${rule.type} · ${rule.value}`;
 }
 
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
+
 export function matchFailureReasonForRule(
   rule: EvalRule,
   failureReasons: string[]
@@ -117,8 +121,9 @@ export function matchFailureReasonForRule(
   if (rule.type === 'tool_sequence') {
     return failureReasons.find(
       (reason) =>
-        reason.startsWith('Tool sequence order was not satisfied:') ||
-        reason.startsWith('Required tool in sequence not used:')
+        reason.startsWith(
+          `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
+        ) || reason.startsWith('Required tool in sequence not used:')
     );
   }
 

@@ -38,6 +38,7 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
+import { formatToolSequenceLabel } from '@inspectr/mcplab-core';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -110,6 +111,10 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
+
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
 
 export function ScenarioForm({
   scenarios,
@@ -1289,7 +1294,7 @@ function ScenarioCard({
                                   </div>
                                 ) : rule.type === 'tool_sequence' ? (
                                   <span className="font-mono break-all">
-                                    {(rule.sequence ?? []).join(' -> ')}
+                                    {formatToolSequenceText(rule.sequence ?? [])}
                                   </span>
                                 ) : (
                                   <span className="font-mono break-all">
@@ -1823,7 +1828,7 @@ function renderEvalRulePreview(rule: EvalRule): string {
     return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
   }
   if (rule.type === 'tool_sequence') {
-    return `${rule.type}: ${(rule.sequence ?? []).join(' -> ')}`;
+    return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
   }
   if (rule.path) {
     return rule.equals !== undefined
