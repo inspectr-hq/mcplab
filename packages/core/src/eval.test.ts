@@ -64,14 +64,14 @@ describe('evaluateScenario — tool_constraints', () => {
 describe('evaluateScenario — tool_sequence', () => {
   it('passes when the required tools appear in order with tools in between', () => {
     const result = evaluateScenario('response', ['search', 'lookup', 'fetch'], {
-      tool_sequence: [['search', 'fetch']]
+      tool_sequence: ['search', 'fetch']
     });
     expect(result.pass).toBe(true);
   });
 
   it('fails when the required tools appear out of order', () => {
     const result = evaluateScenario('response', ['fetch', 'search'], {
-      tool_sequence: [['search', 'fetch']]
+      tool_sequence: ['search', 'fetch']
     });
     expect(result.pass).toBe(false);
     expect(result.failures).toContain('Tool sequence order was not satisfied: search -> fetch');
@@ -79,7 +79,7 @@ describe('evaluateScenario — tool_sequence', () => {
 
   it('fails when a required tool is missing', () => {
     const result = evaluateScenario('response', ['search'], {
-      tool_sequence: [['search', 'fetch']]
+      tool_sequence: ['search', 'fetch']
     });
     expect(result.pass).toBe(false);
     expect(result.failures).toContain('Required tool in sequence not used: fetch');
@@ -87,21 +87,11 @@ describe('evaluateScenario — tool_sequence', () => {
 
   it('supports repeated tools in the required sequence', () => {
     const result = evaluateScenario('response', ['search', 'fetch', 'search', 'fetch'], {
-      tool_sequence: [['search', 'fetch', 'search', 'fetch']]
+      tool_sequence: ['search', 'fetch', 'search', 'fetch']
     });
     expect(result.pass).toBe(true);
   });
 
-  it('evaluates multiple tool sequence checks independently', () => {
-    const result = evaluateScenario('response', ['search', 'lookup', 'fetch', 'store'], {
-      tool_sequence: [
-        ['search', 'fetch'],
-        ['lookup', 'store']
-      ]
-    });
-    expect(result.pass).toBe(true);
-    expect(result.check_results).toHaveLength(2);
-  });
 });
 
 describe('evaluateScenario — response_assertions regex', () => {
@@ -620,7 +610,7 @@ describe('buildNotEvaluatedCheckResults', () => {
   it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
     const results = buildNotEvaluatedCheckResults({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
-      tool_sequence: [['search', 'fetch']],
+      tool_sequence: ['search', 'fetch'],
       response_assertions: [
         { type: 'contains', value: 'ok' },
         { type: 'jsonpath_exists', path: '$.data.id' }

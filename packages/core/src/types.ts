@@ -160,7 +160,7 @@ export type ResponseAssertion =
 
 export interface EvalRules {
   tool_constraints?: ToolConstraints;
-  tool_sequence?: string[][];
+  tool_sequence?: string[];
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
   agent_context?: AgentContext;

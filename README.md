@@ -271,9 +271,7 @@ scenarios:
         forbidden_tools: ["delete"]
 
       # Validate tool order
-      tool_sequence:
-        - ["search", "analyze"]
-        - ["lookup", "fetch", "summarize"]
+      tool_sequence: ["search", "analyze"]
 
       # Validate response content
       response_assertions:
@@ -318,8 +316,8 @@ run_defaults:
   - `required_tools`: Tools that must be called
   - `forbidden_tools`: Tools that must not be called
 
-- **`tool_sequence`** - Ordered tool sequences that must appear in the run in the same order
-  - Example: `[["search", "analyze"], ["lookup", "fetch", "summarize"]]` passes when each listed sequence appears in order, even if other tools happen in between
+- **`tool_sequence`** - Ordered tool list that must appear in the run in the same order
+  - Example: `["search", "analyze"]` passes when the run contains `search` before `analyze`, even if other tools happen in between
 
 - **`response_assertions`** - Validate the final response
   - `contains`: Final text must include a literal substring (case-insensitive)

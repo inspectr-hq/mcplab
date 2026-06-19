@@ -43,7 +43,8 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
       reason: undefined
     });
   }
-  for (const sequence of evalRules.tool_sequence ?? []) {
+  const sequence = evalRules.tool_sequence ?? [];
+  if (sequence.length > 0) {
     results.push({
       type: 'tool_sequence',
       label: formatToolSequenceLabel(sequence),
@@ -79,11 +80,9 @@ export function evaluateScenario(
     check_results.push(...results.check_results);
   }
   if (evalRules?.tool_sequence?.length) {
-    for (const sequence of evalRules.tool_sequence) {
-      const results = evaluateToolSequence(toolSequence, sequence);
-      failures.push(...results.failures);
-      check_results.push(...results.check_results);
-    }
+    const results = evaluateToolSequence(toolSequence, evalRules.tool_sequence);
+    failures.push(...results.failures);
+    check_results.push(...results.check_results);
   }
   if (evalRules?.response_assertions?.length) {
     const results = evaluateResponseAssertions(finalText, evalRules.response_assertions);

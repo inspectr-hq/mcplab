@@ -370,11 +370,7 @@
                   },
                   "tool_sequence": {
                     "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": { "type": "string", "minLength": 1 },
-                      "minItems": 1
-                    }
+                    "items": { "type": "string", "minLength": 1 }
                   },
                   "response_assertions": {
                     "type": "array",

@@ -119,14 +119,11 @@ describe('ScenarioForm checks editor', () => {
   });
 
   it('adds ordered tool sequence checks as an ordered list', async () => {
-    let scenarios = [baseScenario()];
-    const onChange = vi.fn((next: Scenario[]) => {
-      scenarios = next;
-    });
+    const onChange = vi.fn();
 
-    const { rerender } = render(
+    render(
       <ScenarioForm
-        scenarios={scenarios}
+        scenarios={[baseScenario()]}
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
         onChange={onChange}
@@ -142,32 +139,33 @@ describe('ScenarioForm checks editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
 
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
-    rerender(
-      <ScenarioForm
-        scenarios={scenarios}
-        agents={[] as AgentConfig[]}
-        servers={[] as ServerConfig[]}
-        onChange={onChange}
-      />
-    );
-
-    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
-      target: { value: 'lookup' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
-
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules[0]).toEqual({
       type: 'tool_sequence',
       sequence: ['search']
     });
-    expect(updated[0]?.evalRules[1]).toEqual({
-      type: 'tool_sequence',
-      sequence: ['lookup']
-    });
+  });
+
+  it('hides tool sequence from the add-check dropdown when one already exists', async () => {
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'tool_sequence', sequence: ['search', 'fetch'] }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    expect(screen.queryByText('Tool Sequence')).not.toBeInTheDocument();
+    expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Tool name')).toBeInTheDocument();
   });
 
   it('adds response_jsonpath checks with optional equals', async () => {

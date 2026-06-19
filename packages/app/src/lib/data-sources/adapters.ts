@@ -138,7 +138,7 @@ function buildCoreEvalBlock(
         required_tools?: string[];
         forbidden_tools?: string[];
       };
-      tool_sequence?: string[][];
+      tool_sequence?: string[];
       response_assertions?: Array<
         | { type: 'regex'; pattern: string }
         | { type: 'contains'; value: string }
@@ -163,13 +163,9 @@ function buildCoreEvalBlock(
     .map((rule) => rule.value)
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const tool_sequence = evalRules
-    .filter((rule) => rule.type === 'tool_sequence')
-    .map((rule) =>
-      (rule.sequence ?? [])
-        .map((value) => value.trim())
-        .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    )
-    .filter((sequence) => sequence.length > 0);
+    .find((rule) => rule.type === 'tool_sequence')
+    ?.sequence?.map((value) => value.trim())
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
@@ -197,7 +193,7 @@ function buildCoreEvalBlock(
 
   if (
     !tool_constraints &&
-    tool_sequence.length === 0 &&
+    !tool_sequence?.length &&
     response_assertions.length === 0 &&
     agent_assertions.length === 0 &&
     !hasAgentContext
@@ -206,7 +202,7 @@ function buildCoreEvalBlock(
 
   return {
     ...(tool_constraints ? { tool_constraints } : {}),
-    ...(tool_sequence.length > 0 ? { tool_sequence } : {}),
+    ...(tool_sequence && tool_sequence.length > 0 ? { tool_sequence } : {}),
     ...(response_assertions.length > 0 ? { response_assertions } : {}),
     ...(agent_assertions.length > 0 ? { agent_assertions } : {}),
     ...(hasAgentContext ? { agent_context } : {})
@@ -451,9 +447,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       evalRules.push({ type: 'forbidden_tool', value: tool });
     }
     if (scenario.eval?.tool_sequence?.length) {
-      for (const sequence of scenario.eval.tool_sequence) {
-        evalRules.push({ type: 'tool_sequence', sequence: [...sequence] });
-      }
+      evalRules.push({ type: 'tool_sequence', sequence: [...scenario.eval.tool_sequence] });
     }
     for (const assertion of scenario.eval?.response_assertions ?? []) {
       evalRules.push(toUiEvalRule(assertion));

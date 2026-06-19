@@ -69,21 +69,23 @@ interface ScenarioFormProps {
 function RuleTypeSelect({
   value,
   onValueChange,
-  className
+  className,
+  hideToolSequence = false
 }: {
   value: EvalRule['type'];
   onValueChange: (value: EvalRule['type']) => void;
   className?: string;
+  hideToolSequence?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={(next) => onValueChange(next as EvalRule['type'])}>
       <SelectTrigger className={className}>
         <SelectValue />
       </SelectTrigger>
-        <SelectContent>
+      <SelectContent>
         <SelectItem value="required_tool">Required Tool</SelectItem>
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
-        <SelectItem value="tool_sequence">Tool Sequence</SelectItem>
+        {!hideToolSequence && <SelectItem value="tool_sequence">Tool Sequence</SelectItem>}
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
         <SelectItem value="response_not_contains">Text does not contain</SelectItem>
@@ -376,11 +378,7 @@ function ScenarioCard({
         .map((value) => value.trim())
         .filter((value): value is string => typeof value === 'string' && value.length > 0);
       if (nextSequence.length === 0) return;
-      onUpdate({
-        evalRules: [...scenario.evalRules, { type: 'tool_sequence', sequence: nextSequence }]
-      });
-      setToolSequenceDraft([]);
-      setNewToolSequenceValue('');
+      updateToolSequence(nextSequence);
       return;
     }
 
@@ -413,6 +411,36 @@ function ScenarioCard({
   const removeToolSequenceValue = (index: number) => {
     setToolSequenceDraft((current) => current.filter((_, i) => i !== index));
   };
+
+  const toolSequenceRuleIndex = scenario.evalRules.findIndex((rule) => rule.type === 'tool_sequence');
+  const toolSequenceRule =
+    toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
+  const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
+  const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
+
+  const updateToolSequence = (nextSequence: string[]) => {
+    const nextRules = [...scenario.evalRules];
+    const nextRule =
+      nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
+    if (toolSequenceRuleIndex >= 0) {
+      if (nextRule) nextRules[toolSequenceRuleIndex] = nextRule;
+      else nextRules.splice(toolSequenceRuleIndex, 1);
+    } else if (nextRule) {
+      nextRules.push(nextRule);
+    }
+    onUpdate({ evalRules: nextRules });
+  };
+
+  useEffect(() => {
+    if (!hasToolSequenceRule && newRuleType !== 'tool_sequence') return;
+    setToolSequenceDraft(toolSequence);
+  }, [hasToolSequenceRule, newRuleType, toolSequenceRuleIndex, toolSequence.join('|')]);
+
+  useEffect(() => {
+    if (!hasToolSequenceRule) return;
+    if (newRuleType !== 'tool_sequence') return;
+    setNewRuleType('required_tool');
+  }, [hasToolSequenceRule, newRuleType]);
 
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
@@ -482,7 +510,7 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
     newRuleType === 'response_jsonpath_not_exists';
-  const isToolSequenceRule = newRuleType === 'tool_sequence';
+  const showToolSequenceEditor = newRuleType === 'tool_sequence' || hasToolSequenceRule;
   const isAgentCheckRule = newRuleType === 'agent_check';
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
@@ -518,7 +546,6 @@ function ScenarioCard({
     setNewRulePath('');
     setNewRuleEquals('');
     setNewToolSequenceValue('');
-    setToolSequenceDraft([]);
   }, [newRuleType]);
 
   useEffect(() => {
@@ -1260,6 +1287,7 @@ function ScenarioCard({
                               value={newRuleType}
                               onValueChange={setNewRuleType}
                               className="h-8 w-[14.5rem] shrink-0 text-xs"
+                              hideToolSequence={hasToolSequenceRule}
                             />
                             {isJsonPathRule ? (
                               <>
@@ -1284,7 +1312,7 @@ function ScenarioCard({
                                   />
                                 )}
                               </>
-                            ) : isToolSequenceRule ? (
+                            ) : showToolSequenceEditor ? (
                               <div className="min-w-0 flex-1 flex items-end gap-2">
                                 <Input
                                   value={newToolSequenceValue}
@@ -1327,7 +1355,7 @@ function ScenarioCard({
                             </Button>
                           </div>
                         )}
-                        {isToolSequenceRule && (
+                        {showToolSequenceEditor && (
                           <div className="space-y-2 rounded-md border bg-background px-2 py-2">
                             <div className="flex items-center justify-between gap-2">
                               <div>
@@ -1336,16 +1364,27 @@ function ScenarioCard({
                                   Require these tools in order. Other tools may appear between them.
                                 </p>
                               </div>
-                              {toolSequenceDraft.length > 0 && !readOnly && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-[11px]"
-                                  onClick={() => setToolSequenceDraft([])}
-                                >
-                                  Clear
-                                </Button>
+                              {!readOnly && toolSequenceDraft.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => setToolSequenceDraft([])}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => updateToolSequence(toolSequenceDraft)}
+                                  >
+                                    {hasToolSequenceRule ? 'Update sequence' : 'Add sequence'}
+                                  </Button>
+                                </div>
                               )}
                             </div>
                             {toolSequenceDraft.length === 0 ? (

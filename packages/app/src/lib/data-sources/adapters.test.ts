@@ -1485,7 +1485,7 @@ describe('config adapters round-trip', () => {
             servers: [],
             prompt: 'test',
             eval: {
-              tool_sequence: [['search', 'fetch']]
+              tool_sequence: ['search', 'fetch']
             }
           }
         ]
@@ -1502,40 +1502,8 @@ describe('config adapters round-trip', () => {
       (item) => item['id'] === 'scn-tool-sequence'
     );
     expect((scenario?.['eval'] as AnyRecord | undefined)?.['tool_sequence']).toEqual([
-      ['search', 'fetch']
-    ]);
-  });
-
-  it('round-trips multiple tool_sequence rules as multiple ordered lists', () => {
-    const config: EvalConfig = {
-      id: 'cfg-tool-sequence-multi',
-      name: 'tool-sequence-roundtrip-multi',
-      createdAt: '2026-04-01T10:00:00.000Z',
-      updatedAt: '2026-04-01T10:00:00.000Z',
-      servers: [],
-      agents: [],
-      scenarios: [
-        {
-          id: 'scn-tool-sequence-multi',
-          name: 'Tool Sequence Multi',
-          serverIds: [],
-          prompt: 'test',
-          evalRules: [
-            { type: 'tool_sequence', sequence: ['search', 'fetch'] },
-            { type: 'tool_sequence', sequence: ['lookup', 'process'] }
-          ],
-          extractRules: []
-        }
-      ]
-    };
-
-    const roundTripped = toCoreConfigYaml(config);
-    const scenario = (roundTripped.scenarios as unknown as AnyRecord[]).find(
-      (item) => item['id'] === 'scn-tool-sequence-multi'
-    );
-    expect((scenario?.['eval'] as AnyRecord | undefined)?.['tool_sequence']).toEqual([
-      ['search', 'fetch'],
-      ['lookup', 'process']
+      'search',
+      'fetch'
     ]);
   });
 

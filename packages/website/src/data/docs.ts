@@ -338,9 +338,7 @@ const scenarioConfiguration: DocPage = {
       tool_constraints:
         required_tools: [get_weather]
         forbidden_tools: [delete_city]
-      tool_sequence:
-        - [get_weather, summarize_weather]
-        - [get_weather, format_for_client]
+      tool_sequence: [get_weather]
       response_assertions:
         - type: regex
           pattern: '([0-9]+)(\\.[0-9]+)?\\s?°?C'
@@ -352,7 +350,7 @@ const scenarioConfiguration: DocPage = {
       bullets: [
         'Use `required_tools` to enforce critical tool calls.',
         'Use `forbidden_tools` to block unsafe or irrelevant tools.',
-        'Use `tool_sequence` to require one or more tool sequences in order while allowing other tools in between.',
+        'Use `tool_sequence` to require tools in order while allowing other tools in between.',
         'Use literal response assertions (`contains`, `equals`, etc.) for stable text checks.',
         'Use regex assertions for variable outputs (numbers, IDs, timestamps).',
         'Use JSONPath assertions when the response is structured JSON.'
@@ -1837,7 +1835,7 @@ const refConfiguration: DocPage = {
       bullets: [
         'tool_constraints.required_tools (string[], optional) — tool names the agent must call.',
         'tool_constraints.forbidden_tools (string[], optional) — tool names the agent must not call.',
-        'tool_sequence (string[][], optional) — ordered tool sequences that must appear in the run in that order, with other tools allowed in between.',
+        'tool_sequence (string[], optional) — ordered tool names that must appear in the run in that order, with other tools allowed in between.',
         'response_assertions supports: contains, not_contains, starts_with, ends_with, equals, regex, jsonpath, jsonpath_exists, jsonpath_not_exists.',
         'For detailed examples of each assertion, see Reference / Tool and Response Assertions.'
       ]
@@ -1915,8 +1913,9 @@ const refToolAndResponseAssertions: DocPage = {
           language: 'yaml',
           code: `eval:
   tool_sequence:
-    - [lookup_account, verify_identity, process_refund]
-    - [lookup_account, verify_identity, check_policy, process_refund]`
+    - lookup_account
+    - verify_identity
+    - process_refund`
         }
       ]
     },

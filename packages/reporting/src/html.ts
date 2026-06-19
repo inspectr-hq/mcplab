@@ -50,16 +50,11 @@ export function renderHtml(results: ResultsJson): string {
         })
         .join('\n');
 
-      const toolSequences = scenario.eval?.tool_sequence ?? [];
-      const toolSequenceRows = toolSequences.length
-        ? toolSequences
-            .map(
-              (sequence) =>
-                `<tr><td><code class="sequence-code">${escapeHtml(
-                  sequence.join(' -> ')
-                )}</code></td></tr>`
-            )
-            .join('\n')
+      const toolSequence = scenario.eval?.tool_sequence ?? [];
+      const toolSequenceRows = toolSequence.length
+        ? `<tr><td><code class="sequence-code">${escapeHtml(
+            toolSequence.join(' -> ')
+          )}</code></td></tr>`
         : '';
 
       const requiredTools = scenario.eval?.tool_constraints?.required_tools ?? [];

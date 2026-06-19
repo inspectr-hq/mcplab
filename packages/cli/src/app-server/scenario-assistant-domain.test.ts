@@ -170,6 +170,23 @@ describe('continueAssistantTurn normalization integration', () => {
     chatWithJsonRetryMock.mockReset();
   });
 
+  it('includes optional tool_sequence and agent_check guidance in the system prompt', async () => {
+    chatWithJsonRetryMock.mockResolvedValue({
+      type: 'assistant_message',
+      text: 'Updated checks'
+    });
+
+    const session = baseSession();
+    await continueAssistantTurn(session);
+
+    const options = chatWithJsonRetryMock.mock.calls[0]?.[0] as {
+      system?: string;
+    };
+    expect(options.system).toContain('Optional checks you may suggest when useful');
+    expect(options.system).toContain('tool_sequence');
+    expect(options.system).toContain('agent_check');
+  });
+
   it('applies tool-name normalization and regex preference cleanup before returning suggestions', async () => {
     chatWithJsonRetryMock.mockResolvedValue({
       type: 'assistant_message',
