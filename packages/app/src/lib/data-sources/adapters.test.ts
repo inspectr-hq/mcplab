@@ -1661,9 +1661,11 @@ describe('config adapters round-trip', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 
     const serializedEval = JSON.stringify(evalBlock);
-    const evalKeyPositions = ['"tool_constraints":', '"tool_sequence":', '"response_assertions":'].map(
-      (key) => serializedEval.indexOf(key)
-    );
+    const evalKeyPositions = [
+      '"tool_constraints":',
+      '"tool_sequence":',
+      '"response_assertions":'
+    ].map((key) => serializedEval.indexOf(key));
     expect(evalKeyPositions.every((pos) => pos >= 0)).toBe(true);
     expect([...evalKeyPositions].sort((a, b) => a - b)).toEqual(evalKeyPositions);
 

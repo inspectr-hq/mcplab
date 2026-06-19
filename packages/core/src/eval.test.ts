@@ -91,7 +91,6 @@ describe('evaluateScenario — tool_sequence', () => {
     });
     expect(result.pass).toBe(true);
   });
-
 });
 
 describe('evaluateScenario — response_assertions regex', () => {

@@ -46,8 +46,7 @@ export function buildCheckItems({
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
-  if (rule.type === 'tool_sequence')
-    return `Tool sequence · ${(rule.sequence ?? []).join(' -> ')}`;
+  if (rule.type === 'tool_sequence') return `Tool sequence · ${(rule.sequence ?? []).join(' -> ')}`;
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;

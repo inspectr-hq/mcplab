@@ -426,7 +426,9 @@ function ScenarioCard({
     setToolSequenceDraft((current) => current.filter((_, i) => i !== index));
   };
 
-  const toolSequenceRuleIndex = scenario.evalRules.findIndex((rule) => rule.type === 'tool_sequence');
+  const toolSequenceRuleIndex = scenario.evalRules.findIndex(
+    (rule) => rule.type === 'tool_sequence'
+  );
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
   const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
@@ -1347,12 +1349,14 @@ function ScenarioCard({
                             />
                           </div>
                         ) : (
-                              <div className="flex gap-2 items-end">
+                          <div className="flex gap-2 items-end">
                             <RuleTypeSelect
                               value={newRuleType}
                               onValueChange={setNewRuleType}
                               className="h-8 w-[14.5rem] shrink-0 text-xs"
-                              hideToolSequence={hasToolSequenceRule && newRuleType !== 'tool_sequence'}
+                              hideToolSequence={
+                                hasToolSequenceRule && newRuleType !== 'tool_sequence'
+                              }
                             />
                             {isJsonPathRule ? (
                               <>
@@ -1385,7 +1389,8 @@ function ScenarioCard({
                                   placeholder="Tool name"
                                   className="h-8 text-xs font-mono"
                                   onKeyDown={(e) =>
-                                    e.key === 'Enter' && (e.preventDefault(), addToolSequenceValue())
+                                    e.key === 'Enter' &&
+                                    (e.preventDefault(), addToolSequenceValue())
                                   }
                                 />
                                 <Button
