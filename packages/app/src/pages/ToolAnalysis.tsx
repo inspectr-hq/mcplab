@@ -16,10 +16,15 @@ import {
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { toast } from '@/hooks/use-toast';
-import type { RunJobEvent, ToolAnalysisReport } from '@/lib/data-sources/types';
+import type {
+  RunJobEvent,
+  ToolAnalysisDiscoverResponse,
+  ToolAnalysisReport
+} from '@/lib/data-sources/types';
 import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
+import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -135,21 +140,7 @@ const ToolAnalysisPage = () => {
   const [settingsAssistantAgentName, setSettingsAssistantAgentName] = useState('');
   const [selectedServerNames, setSelectedServerNames] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
-  const [discovered, setDiscovered] = useState<
-    {
-      serverName: string;
-      warnings: string[];
-      tools: Array<{
-        name: string;
-        title?: string;
-        description?: string;
-        inputSchema?: unknown;
-        outputSchema?: unknown;
-        safetyClassification: 'read_only' | 'unsafe_or_unknown';
-        classificationReason: string;
-      }>;
-    }[]
-  >([]);
+  const [discovered, setDiscovered] = useState<ToolAnalysisDiscoverResponse['servers']>([]);
   const [selectedToolsByServer, setSelectedToolsByServer] = useState<Record<string, string[]>>({});
   const [toolQuery, setToolQuery] = useState('');
   const [metadataReview, setMetadataReview] = useState(true);
@@ -426,6 +417,30 @@ const ToolAnalysisPage = () => {
     }
   };
 
+  const downloadToolInfo = () => {
+    const selectedServerName = selectedServerNames[0];
+    const discoveredServer = discovered.find((server) => server.serverName === selectedServerName);
+    if (!selectedServerName || !discoveredServer) {
+      toast({
+        title: 'No discovered tool info available',
+        description: 'Select a server and discover tools before downloading tool info.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const exportData = buildToolInfoExport({
+      serverName: discoveredServer.serverName,
+      tools: discoveredServer.tools,
+      selectedToolNames: selectedToolsByServer[discoveredServer.serverName]
+    });
+    downloadTextFile(
+      buildToolInfoFilename(discoveredServer.serverName, discoveredServer.mcpServerVersion),
+      `${JSON.stringify(exportData, null, 2)}\n`,
+      'application/json'
+    );
+  };
+
   const stopAnalysis = async () => {
     if (!activeJobId) return;
     const jobId = activeJobId;
@@ -673,16 +688,33 @@ const ToolAnalysisPage = () => {
                 <Label className="text-xs">
                   {selectedServerLabel ? `Tools for ${selectedServerLabel}` : 'Tools'}
                 </Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void discoverTools()}
-                  disabled={discovering || authInProgress || selectedServerNames.length === 0}
-                >
-                  {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Discover Tools
-                </Button>
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={downloadToolInfo}
+                    disabled={
+                      discovering ||
+                      authInProgress ||
+                      selectedServerNames.length === 0 ||
+                      discovered.length === 0
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Tool Info
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void discoverTools()}
+                    disabled={discovering || authInProgress || selectedServerNames.length === 0}
+                  >
+                    {discovering && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Discover Tools
+                  </Button>
+                </div>
               </div>
               <div className="space-y-3 rounded-md border p-3">
                 {selectedServerNames.length === 0 ? (
