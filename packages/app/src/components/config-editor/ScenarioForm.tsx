@@ -665,6 +665,7 @@ function ScenarioCard({
       'Final answer:',
       previewResult.run.finalAnswer || '(empty)',
       '',
+      'If the run has a meaningful ordered tool path, suggest a tool_sequence check using the raw tool names in the tool sequence order, even if other tools appear between them.',
       'Please propose concrete updates to the Prompt, Checks, and/or Value Capture Rules based on this preview.'
     ].join('\n');
     setPreviewAssistantPrompt(prompt);

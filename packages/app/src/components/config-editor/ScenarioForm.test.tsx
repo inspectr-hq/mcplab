@@ -8,6 +8,7 @@ const mockSource = {
   runScenarioPreview: vi.fn()
 };
 const mockEnsureOAuthForServers = vi.fn();
+let mockScenarioAssistantDialogProps: Record<string, unknown> | null = null;
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
@@ -20,7 +21,10 @@ vi.mock('@/lib/oauth-session-utils', () => ({
 }));
 
 vi.mock('@/components/config-editor/ScenarioAssistantDialog', () => ({
-  ScenarioAssistantDialog: () => null
+  ScenarioAssistantDialog: (props: Record<string, unknown>) => {
+    mockScenarioAssistantDialogProps = props;
+    return null;
+  }
 }));
 
 function baseScenario(): Scenario {
@@ -37,6 +41,7 @@ function baseScenario(): Scenario {
 describe('ScenarioForm checks editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockScenarioAssistantDialogProps = null;
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [] });
     mockSource.runScenarioPreview.mockResolvedValue({
       runId: 'preview-1',
