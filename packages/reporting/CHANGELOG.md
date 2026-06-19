@@ -1,5 +1,16 @@
 # @inspectr/mcplab-reporting
 
+## 1.2.0
+
+### Minor Changes
+
+- feat: Tool sequence check
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.20.0
+
 ## 1.1.21
 
 ### Patch Changes

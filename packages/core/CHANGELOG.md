@@ -1,5 +1,11 @@
 # @inspectr/mcplab-core
 
+## 1.20.0
+
+### Minor Changes
+
+- feat: Tool sequence check
+
 ## 1.19.0
 
 ### Minor Changes

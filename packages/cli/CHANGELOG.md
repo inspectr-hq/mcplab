@@ -1,5 +1,20 @@
 # @inspectr/mcplab
 
+## 1.24.0
+
+### Minor Changes
+
+- feat: Tool sequence check
+- feat: Edit checks
+- UI: Tweak attachment elements
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.20.0
+  - @inspectr/mcplab-mcp-server@1.7.0
+  - @inspectr/mcplab-reporting@1.2.0
+
 ## 1.23.1
 
 ### Patch Changes

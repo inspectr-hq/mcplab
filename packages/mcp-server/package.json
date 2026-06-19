@@ -1,6 +1,6 @@
 {
   "name": "@inspectr/mcplab-mcp-server",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "MCP server that exposes MCPLab evaluation tools — query runs, results, and traces via the Model Context Protocol",
   "license": "MIT",
   "repository": {
@@ -54,8 +54,8 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@inspectr/mcplab-core": "1.19.0",
-    "@inspectr/mcplab-reporting": "1.1.21",
+    "@inspectr/mcplab-core": "1.20.0",
+    "@inspectr/mcplab-reporting": "1.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "yaml": "^2.8.4",
     "zod": "^3.25.0"
