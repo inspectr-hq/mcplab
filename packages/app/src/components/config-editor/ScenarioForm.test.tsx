@@ -180,6 +180,26 @@ describe('ScenarioForm checks editor', () => {
     });
   });
 
+  it('renders a tool_sequence rule safely even when sequence data is missing', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'tool_sequence' }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.getByText('Sequence')).toBeInTheDocument();
+  });
+
   it('hides sequence steps after saving and reopens them on edit', async () => {
     const onChange = vi.fn();
 

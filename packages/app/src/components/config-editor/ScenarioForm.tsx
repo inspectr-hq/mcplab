@@ -444,7 +444,8 @@ function ScenarioCard({
   );
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
-  const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
+  const toolSequence =
+    toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence ?? [] : [];
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
 
   const updateToolSequence = (nextSequence: string[]) => {
