@@ -1897,7 +1897,14 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'tool-assertions',
       title: 'Tool Assertions',
       paragraphs: [
-        'Tool assertions validate whether the agent used the right tools and sequence of calls.'
+        'Tool assertions validate whether the agent used the right tools and, when needed, whether they were called in the right order.',
+        'These checks look at the observed tool-call list for a run. They do not inspect the final answer text.'
+      ],
+      bullets: [
+        'Use `required_tools` when a tool call is mandatory for the scenario to pass.',
+        'Use `forbidden_tools` when a tool call would be unsafe, irrelevant, or should not appear in a valid solution.',
+        'Use `tool_sequence` when the relative order matters, but other tool calls may happen between the listed tools.',
+        'Repeated tools are matched from left to right, so `tool_sequence: [search, search, summarize]` requires two separate `search` calls before `summarize`.'
       ],
       codeBlocks: [
         {
@@ -1923,7 +1930,15 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'response-assertions',
       title: 'Response Assertions',
       paragraphs: [
-        'String response assertions are literal checks and are case-insensitive by default. Use regex only when you need pattern matching.'
+        'Response assertions validate the final answer text.',
+        'Literal string checks are case-insensitive by default. Use regex only when you need pattern matching, and use JSONPath when the model must return structured JSON.'
+      ],
+      bullets: [
+        'Use `contains` for a phrase that should appear anywhere in the final response.',
+        'Use `not_contains` for words or phrases that must not appear.',
+        'Use `starts_with`, `ends_with`, or `equals` when the response format is mostly fixed.',
+        'Use `regex` for variable text such as IDs, timestamps, alternations, or optional wording.',
+        'Use `jsonpath`, `jsonpath_exists`, and `jsonpath_not_exists` only when the final response is valid JSON.'
       ],
       codeBlocks: [
         {
@@ -2039,6 +2054,9 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'behavior-notes',
       title: 'Behavior Notes and Edge Cases',
       bullets: [
+        'required_tools passes when each listed tool appears at least once in the run, in any order.',
+        'forbidden_tools fails when any listed tool appears in the run.',
+        'tool_sequence is an ordered subsequence check: listed tools must appear in order, but other tools may appear between them.',
         'contains/not_contains/starts_with/ends_with/equals are literal, case-insensitive string checks.',
         'regex is case-insensitive by default and uses JavaScript regular expressions.',
         'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
@@ -2146,17 +2164,18 @@ const pageIndex: DocPage[] = [
 export const docsPages = pageIndex;
 
 export const docsNavSections = [
-  {
-    title: 'Getting Started',
-    items: [
-      overview,
-      installation,
-      quickStart,
-      setupEvaluations,
-      scenarioConfiguration,
-      librariesAndRefs
-    ]
-  },
+    {
+      title: 'Getting Started',
+      items: [
+        overview,
+        installation,
+        quickStart,
+        setupEvaluations,
+        scenarioConfiguration,
+        refToolAndResponseAssertions,
+        librariesAndRefs
+      ]
+    },
   {
     title: 'CLI',
     items: [cliRunning, cliConfiguration, cliReports, cliResultsQuery, cliCicd, cliCommandReference]
@@ -2178,7 +2197,7 @@ export const docsNavSections = [
   },
   {
     title: 'Reference',
-    items: [refConfiguration, refToolAndResponseAssertions, refEnvVars]
+    items: [refConfiguration, refEnvVars]
   }
 ] as const;
 
