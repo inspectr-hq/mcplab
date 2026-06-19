@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Edit,
   FileText,
   Loader2,
   Paperclip,
@@ -239,6 +240,9 @@ function ScenarioCard({
   const [newRulePrompt, setNewRulePrompt] = useState('');
   const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
   const [toolSequenceDraft, setToolSequenceDraft] = useState<string[]>([]);
+  const [toolSequenceEditorOpen, setToolSequenceEditorOpen] = useState(false);
+  const [agentCheckEditingIndex, setAgentCheckEditingIndex] = useState<number | null>(null);
+  const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -365,11 +369,16 @@ function ScenarioCard({
       const label = newRuleLabel.trim();
       const prompt = newRulePrompt.trim();
       if (!label || !prompt) return;
-      onUpdate({
-        evalRules: [...scenario.evalRules, { type: 'agent_check', label, prompt }]
-      });
+      const nextRules = [...scenario.evalRules];
+      const nextRule = { type: 'agent_check', label, prompt } as const;
+      if (agentCheckEditingIndex !== null) nextRules[agentCheckEditingIndex] = nextRule;
+      else nextRules.push(nextRule);
+      onUpdate({ evalRules: nextRules });
       setNewRuleLabel('');
       setNewRulePrompt('');
+      setAgentCheckEditingIndex(null);
+      setAgentCheckEditorOpen(false);
+      setNewRuleType('required_tool');
       return;
     }
 
@@ -429,18 +438,26 @@ function ScenarioCard({
       nextRules.push(nextRule);
     }
     onUpdate({ evalRules: nextRules });
+    setToolSequenceEditorOpen(false);
+    setToolSequenceDraft([]);
+    setNewToolSequenceValue('');
+    if (newRuleType === 'tool_sequence') {
+      setNewRuleType('required_tool');
+    }
   };
 
   useEffect(() => {
-    if (!hasToolSequenceRule && newRuleType !== 'tool_sequence') return;
+    if (!toolSequenceEditorOpen) return;
     setToolSequenceDraft(toolSequence);
-  }, [hasToolSequenceRule, newRuleType, toolSequenceRuleIndex, toolSequence.join('|')]);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence.join('|')]);
 
   useEffect(() => {
-    if (!hasToolSequenceRule) return;
-    if (newRuleType !== 'tool_sequence') return;
-    setNewRuleType('required_tool');
-  }, [hasToolSequenceRule, newRuleType]);
+    setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
+  }, [newRuleType]);
+
+  useEffect(() => {
+    setAgentCheckEditorOpen(newRuleType === 'agent_check');
+  }, [newRuleType]);
 
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
@@ -510,8 +527,8 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
     newRuleType === 'response_jsonpath_not_exists';
-  const showToolSequenceEditor = newRuleType === 'tool_sequence' || hasToolSequenceRule;
-  const isAgentCheckRule = newRuleType === 'agent_check';
+  const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
+  const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
@@ -1233,16 +1250,42 @@ function ScenarioCard({
                               </div>
                             </div>
                             {!readOnly && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 shrink-0"
-                                onClick={() => removeRule(ri)}
-                                aria-label={`Remove check ${ri + 1}`}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {(rule.type === 'tool_sequence' || rule.type === 'agent_check') && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[11px]"
+                                    onClick={() => {
+                                      if (rule.type === 'tool_sequence') {
+                                        setNewRuleType('tool_sequence');
+                                        setToolSequenceDraft(rule.sequence ?? []);
+                                        setToolSequenceEditorOpen(true);
+                                        return;
+                                      }
+                                      setNewRuleType('agent_check');
+                                      setAgentCheckEditingIndex(ri);
+                                      setNewRuleLabel(rule.label ?? '');
+                                      setNewRulePrompt(rule.prompt ?? '');
+                                      setAgentCheckEditorOpen(true);
+                                    }}
+                                    aria-label={`Edit check ${ri + 1}`}
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 shrink-0"
+                                  onClick={() => removeRule(ri)}
+                                  aria-label={`Remove check ${ri + 1}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                         ))
@@ -1250,7 +1293,7 @@ function ScenarioCard({
                     </div>
                     {!readOnly && (
                       <div className="space-y-2">
-                        {isAgentCheckRule ? (
+                        {showAgentCheckEditor ? (
                           <div className="space-y-2">
                             <div className="flex items-end gap-2">
                               <RuleTypeSelect
@@ -1271,7 +1314,7 @@ function ScenarioCard({
                                 className="h-8 shrink-0"
                                 onClick={addRule}
                               >
-                                Add
+                                {agentCheckEditingIndex !== null ? 'Update check' : 'Add check'}
                               </Button>
                             </div>
                             <Textarea

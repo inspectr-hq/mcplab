@@ -147,23 +147,47 @@ describe('ScenarioForm checks editor', () => {
     });
   });
 
-  it('hides tool sequence from the add-check dropdown when one already exists', async () => {
-    render(
+  it('hides sequence steps after saving and reopens them on edit', async () => {
+    const onChange = vi.fn();
+
+    const { rerender } = render(
       <ScenarioForm
-        scenarios={[
-          {
-            ...baseScenario(),
-            evalRules: [{ type: 'tool_sequence', sequence: ['search', 'fetch'] }]
-          }
-        ]}
+        scenarios={[baseScenario()]}
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
-        onChange={vi.fn()}
+        onChange={onChange}
       />
     );
 
     fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool Sequence'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+
+    rerender(
+      <ScenarioForm
+        scenarios={updated}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.queryByText('Sequence steps')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Tool name')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
     expect(screen.queryByText('Tool Sequence')).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+
     expect(screen.getByText('Sequence steps')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Tool name')).toBeInTheDocument();
   });
@@ -275,7 +299,7 @@ describe('ScenarioForm checks editor', () => {
         target: { value: 'Confirm the answer includes a valid logical time range.' }
       }
     );
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add check' }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -284,6 +308,54 @@ describe('ScenarioForm checks editor', () => {
         type: 'agent_check',
         label: 'Logical range',
         prompt: 'Confirm the answer includes a valid logical time range.'
+      }
+    ]);
+  });
+
+  it('edits agent checks in place', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [
+              {
+                type: 'agent_check',
+                label: 'Logical range',
+                prompt: 'Confirm the answer includes a valid logical time range.'
+              }
+            ]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    fireEvent.change(screen.getByPlaceholderText('Prompt name'), {
+      target: { value: 'Time range' }
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is 'Not available'."
+      ),
+      {
+        target: { value: 'Confirm the answer includes a valid earliest and latest time range.' }
+      }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Update check' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Time range',
+        prompt: 'Confirm the answer includes a valid earliest and latest time range.'
       }
     ]);
   });
