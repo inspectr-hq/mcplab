@@ -1,5 +1,11 @@
 # @inspectr/mcplab
 
+## 1.24.1
+
+### Patch Changes
+
+- fix: Apply tool_sequence rule safely
+
 ## 1.24.0
 
 ### Minor Changes
