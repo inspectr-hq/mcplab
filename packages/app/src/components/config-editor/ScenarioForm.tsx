@@ -80,9 +80,10 @@ function RuleTypeSelect({
       <SelectTrigger className={className}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+        <SelectContent>
         <SelectItem value="required_tool">Required Tool</SelectItem>
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+        <SelectItem value="tool_sequence">Tool Sequence</SelectItem>
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
         <SelectItem value="response_not_contains">Text does not contain</SelectItem>
@@ -235,6 +236,7 @@ function ScenarioCard({
   const [newRuleLabel, setNewRuleLabel] = useState('');
   const [newRulePrompt, setNewRulePrompt] = useState('');
   const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
+  const [toolSequenceDraft, setToolSequenceDraft] = useState<string[]>([]);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -369,6 +371,19 @@ function ScenarioCard({
       return;
     }
 
+    if (newRuleType === 'tool_sequence') {
+      const nextSequence = toolSequenceDraft
+        .map((value) => value.trim())
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+      if (nextSequence.length === 0) return;
+      onUpdate({
+        evalRules: [...scenario.evalRules, { type: 'tool_sequence', sequence: nextSequence }]
+      });
+      setToolSequenceDraft([]);
+      setNewToolSequenceValue('');
+      return;
+    }
+
     if (!newRuleValue.trim()) return;
     onUpdate({
       evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }]
@@ -377,42 +392,26 @@ function ScenarioCard({
     setToolPickerValue('');
   };
 
-  const toolSequenceRuleIndex = scenario.evalRules.findIndex((rule) => rule.type === 'tool_sequence');
-  const toolSequenceRule =
-    toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
-  const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
-
-  const updateToolSequence = (nextSequence: string[]) => {
-    const nextRules = [...scenario.evalRules];
-    const nextRule =
-      nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
-    if (toolSequenceRuleIndex >= 0) {
-      if (nextRule) nextRules[toolSequenceRuleIndex] = nextRule;
-      else nextRules.splice(toolSequenceRuleIndex, 1);
-    } else if (nextRule) {
-      nextRules.push(nextRule);
-    }
-    onUpdate({ evalRules: nextRules });
-  };
-
   const addToolSequenceValue = () => {
     const value = newToolSequenceValue.trim();
     if (!value) return;
-    updateToolSequence([...(toolSequence ?? []), value]);
+    setToolSequenceDraft((current) => [...current, value]);
     setNewToolSequenceValue('');
   };
 
   const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= toolSequence.length) return;
-    const next = [...toolSequence];
-    const [item] = next.splice(index, 1);
-    next.splice(nextIndex, 0, item);
-    updateToolSequence(next);
+    setToolSequenceDraft((current) => {
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
   };
 
   const removeToolSequenceValue = (index: number) => {
-    updateToolSequence(toolSequence.filter((_, i) => i !== index));
+    setToolSequenceDraft((current) => current.filter((_, i) => i !== index));
   };
 
   const removeRule = (ri: number) => {
@@ -483,6 +482,7 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
     newRuleType === 'response_jsonpath_not_exists';
+  const isToolSequenceRule = newRuleType === 'tool_sequence';
   const isAgentCheckRule = newRuleType === 'agent_check';
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
@@ -517,6 +517,8 @@ function ScenarioCard({
     setToolPickerValue('');
     setNewRulePath('');
     setNewRuleEquals('');
+    setNewToolSequenceValue('');
+    setToolSequenceDraft([]);
   }, [newRuleType]);
 
   useEffect(() => {
@@ -1282,6 +1284,27 @@ function ScenarioCard({
                                   />
                                 )}
                               </>
+                            ) : isToolSequenceRule ? (
+                              <div className="min-w-0 flex-1 flex items-end gap-2">
+                                <Input
+                                  value={newToolSequenceValue}
+                                  onChange={(e) => setNewToolSequenceValue(e.target.value)}
+                                  placeholder="Tool name"
+                                  className="h-8 text-xs font-mono"
+                                  onKeyDown={(e) =>
+                                    e.key === 'Enter' && (e.preventDefault(), addToolSequenceValue())
+                                  }
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 shrink-0"
+                                  onClick={addToolSequenceValue}
+                                >
+                                  Add step
+                                </Button>
+                              </div>
                             ) : (
                               <Input
                                 value={newRuleValue}
@@ -1304,37 +1327,36 @@ function ScenarioCard({
                             </Button>
                           </div>
                         )}
-                        <div className="space-y-2 rounded-md border bg-background px-2 py-2">
-                          <div className="space-y-1">
+                        {isToolSequenceRule && (
+                          <div className="space-y-2 rounded-md border bg-background px-2 py-2">
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <Label className="text-xs">Ordered tool sequence</Label>
+                                <Label className="text-xs">Sequence steps</Label>
                                 <p className="text-[11px] text-muted-foreground">
-                                  Require these tools in order. Other tools may appear between
-                                  them.
+                                  Require these tools in order. Other tools may appear between them.
                                 </p>
                               </div>
-                              {toolSequence.length > 0 && !readOnly && (
+                              {toolSequenceDraft.length > 0 && !readOnly && (
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
                                   className="h-7 px-2 text-[11px]"
-                                  onClick={() => updateToolSequence([])}
+                                  onClick={() => setToolSequenceDraft([])}
                                 >
                                   Clear
                                 </Button>
                               )}
                             </div>
-                            {toolSequence.length === 0 ? (
+                            {toolSequenceDraft.length === 0 ? (
                               <p className="rounded-md border border-dashed bg-muted/20 px-2 py-2 text-xs text-muted-foreground">
                                 No ordered tool sequence yet.
                               </p>
                             ) : (
                               <div className="space-y-1.5">
-                                {toolSequence.map((toolName, toolIndex) => (
+                                {toolSequenceDraft.map((toolName, toolIndex) => (
                                   <div
-                                    key={`${scenario.id}-tool-sequence-${toolIndex}`}
+                                    key={`${scenario.id}-tool-sequence-draft-${toolIndex}`}
                                     className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
                                   >
                                     <span className="text-xs font-medium">{toolIndex + 1}.</span>
@@ -1360,7 +1382,7 @@ function ScenarioCard({
                                           size="icon"
                                           className="h-6 w-6"
                                           onClick={() => moveToolSequenceValue(toolIndex, 1)}
-                                          disabled={toolIndex === toolSequence.length - 1}
+                                          disabled={toolIndex === toolSequenceDraft.length - 1}
                                           aria-label={`Move tool ${toolIndex + 1} down`}
                                         >
                                           <ChevronDown className="h-3.5 w-3.5" />
@@ -1382,29 +1404,7 @@ function ScenarioCard({
                               </div>
                             )}
                           </div>
-                          {!readOnly && (
-                            <div className="flex items-end gap-2">
-                              <Input
-                                value={newToolSequenceValue}
-                                onChange={(e) => setNewToolSequenceValue(e.target.value)}
-                                placeholder="Tool name"
-                                className="h-8 text-xs font-mono"
-                                onKeyDown={(e) =>
-                                  e.key === 'Enter' && (e.preventDefault(), addToolSequenceValue())
-                                }
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-8 shrink-0"
-                                onClick={addToolSequenceValue}
-                              >
-                                Add step
-                              </Button>
-                            </div>
-                          )}
-                        </div>
+                        )}
                         {isToolRule && (
                           <div className="space-y-1">
                             <div className="flex items-end gap-2">

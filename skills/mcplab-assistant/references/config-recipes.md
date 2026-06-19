@@ -53,7 +53,7 @@ Source of truth: `config-schema.json`.
 
 - `tool_constraints.required_tools`: string[]
 - `tool_constraints.forbidden_tools`: string[]
-- `tool_sequence`: string[]
+- `tool_sequence`: string[][]
 - `response_assertions`:
   - contains assertion: `{ type: "contains", value: string }`
   - not_contains assertion: `{ type: "not_contains", value: string }`
@@ -65,7 +65,7 @@ Source of truth: `config-schema.json`.
   - jsonpath_exists assertion: `{ type: "jsonpath_exists", path: string }`
   - jsonpath_not_exists assertion: `{ type: "jsonpath_not_exists", path: string }`
 - String assertions (`contains`, `not_contains`, `starts_with`, `ends_with`, `equals`) are literal and case-insensitive.
-- `tool_sequence` checks ordered appearance only; extra tools may occur between listed tools.
+- `tool_sequence` checks ordered appearance only; extra tools may occur between listed tools. Each nested list is one sequence check.
 
 ### `extract`
 
@@ -118,8 +118,8 @@ scenarios:
         required_tools: [search_items]
         forbidden_tools: [delete_item]
       tool_sequence:
-        - search_items
-        - summarize_items
+        - [search_items, summarize_items]
+        - [lookup_items, format_summary]
       response_assertions:
         - type: contains
           value: Found

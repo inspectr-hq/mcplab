@@ -1485,7 +1485,7 @@ describe('config adapters round-trip', () => {
             servers: [],
             prompt: 'test',
             eval: {
-              tool_sequence: ['search', 'fetch']
+              tool_sequence: [['search', 'fetch']]
             }
           }
         ]
@@ -1502,8 +1502,7 @@ describe('config adapters round-trip', () => {
       (item) => item['id'] === 'scn-tool-sequence'
     );
     expect((scenario?.['eval'] as AnyRecord | undefined)?.['tool_sequence']).toEqual([
-      'search',
-      'fetch'
+      ['search', 'fetch']
     ]);
   });
 

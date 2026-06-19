@@ -119,11 +119,33 @@ describe('ScenarioForm checks editor', () => {
   });
 
   it('adds ordered tool sequence checks as an ordered list', async () => {
-    const onChange = vi.fn();
+    let scenarios = [baseScenario()];
+    const onChange = vi.fn((next: Scenario[]) => {
+      scenarios = next;
+    });
 
-    render(
+    const { rerender } = render(
       <ScenarioForm
-        scenarios={[baseScenario()]}
+        scenarios={scenarios}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool Sequence'));
+    expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    rerender(
+      <ScenarioForm
+        scenarios={scenarios}
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
         onChange={onChange}
@@ -131,14 +153,20 @@ describe('ScenarioForm checks editor', () => {
     );
 
     fireEvent.change(screen.getByPlaceholderText('Tool name'), {
-      target: { value: 'search' }
+      target: { value: 'lookup' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
-    expect(updated[0]?.evalRules).toContainEqual({
+    expect(updated[0]?.evalRules[0]).toEqual({
       type: 'tool_sequence',
       sequence: ['search']
+    });
+    expect(updated[0]?.evalRules[1]).toEqual({
+      type: 'tool_sequence',
+      sequence: ['lookup']
     });
   });
 
