@@ -18,6 +18,11 @@ import {
   type TokenAccumulator
 } from '@/lib/token-usage';
 import { safeText } from '@/lib/utils';
+import {
+  attachmentTypeFromMediaType,
+  inferAttachmentMediaType
+} from '../../../../core/src/attachments';
+import type { ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -36,6 +41,17 @@ function toId(base: string, index: number): string {
 
 function normalizeText(value: unknown): string | undefined {
   return safeText(value) || undefined;
+}
+
+function normalizeScenarioAttachment(att: SourceScenarioAttachment): ScenarioAttachment {
+  const mediaType = att.media_type ?? inferAttachmentMediaType(att) ?? 'application/octet-stream';
+  return {
+    type: attachmentTypeFromMediaType(mediaType),
+    media_type: mediaType,
+    data: att.data ?? '',
+    ...(att.url ? { url: att.url } : {}),
+    ...(att.name ? { name: att.name } : {})
+  };
 }
 
 function toUiEvalRule(assertion: {
@@ -89,6 +105,7 @@ function toCoreResponseAssertion(
   if (
     rule.type === 'required_tool' ||
     rule.type === 'forbidden_tool' ||
+    rule.type === 'tool_sequence' ||
     rule.type === 'agent_check'
   )
     return null;
@@ -134,6 +151,7 @@ function buildCoreEvalBlock(
         required_tools?: string[];
         forbidden_tools?: string[];
       };
+      tool_sequence?: string[];
       response_assertions?: Array<
         | { type: 'regex'; pattern: string }
         | { type: 'contains'; value: string }
@@ -156,6 +174,10 @@ function buildCoreEvalBlock(
   const forbidden_tools = evalRules
     .filter((rule) => rule.type === 'forbidden_tool')
     .map((rule) => rule.value)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const tool_sequence = evalRules
+    .find((rule) => rule.type === 'tool_sequence')
+    ?.sequence?.map((value) => value.trim())
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
@@ -184,6 +206,7 @@ function buildCoreEvalBlock(
 
   if (
     !tool_constraints &&
+    !tool_sequence?.length &&
     response_assertions.length === 0 &&
     agent_assertions.length === 0 &&
     !hasAgentContext
@@ -192,6 +215,7 @@ function buildCoreEvalBlock(
 
   return {
     ...(tool_constraints ? { tool_constraints } : {}),
+    ...(tool_sequence && tool_sequence.length > 0 ? { tool_sequence } : {}),
     ...(response_assertions.length > 0 ? { response_assertions } : {}),
     ...(agent_assertions.length > 0 ? { agent_assertions } : {}),
     ...(hasAgentContext ? { agent_context } : {})
@@ -435,6 +459,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     for (const tool of scenario.eval?.tool_constraints?.forbidden_tools ?? []) {
       evalRules.push({ type: 'forbidden_tool', value: tool });
     }
+    if (scenario.eval?.tool_sequence?.length) {
+      evalRules.push({ type: 'tool_sequence', sequence: [...scenario.eval.tool_sequence] });
+    }
     for (const assertion of scenario.eval?.response_assertions ?? []) {
       evalRules.push(toUiEvalRule(assertion));
     }
@@ -455,7 +482,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
             include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
           }
         : undefined;
-    const mappedScenario = {
+    const mappedScenario: EvalConfig['scenarios'][number] = {
       id: scenario.id || toId('scn', index),
       name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`,
       serverIds: (() => {
@@ -485,7 +512,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         return [];
       })(),
       prompt: scenario.prompt,
-      attachments: scenario.attachments,
+      attachments: scenario.attachments?.map(normalizeScenarioAttachment),
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,

@@ -369,17 +369,8 @@
                     }
                   },
                   "tool_sequence": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "allow": {
-                        "type": "array",
-                        "items": {
-                          "type": "array",
-                          "items": { "type": "string", "minLength": 1 }
-                        }
-                      }
-                    }
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
                   },
                   "response_assertions": {
                     "type": "array",

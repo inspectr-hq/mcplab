@@ -464,8 +464,8 @@ evaluateScenario(finalText, toolSequence, evalRules)
   │       forbidden_tools  → did any of these appear? (must not)
   │
   ├─ 2. Tool sequence
-  │       allowed sequences → does toolSequence exactly match one of the allowed sequences?
-  │       (exact JSON.stringify comparison)
+  │       ordered tool list  → do the listed tools appear in the same order?
+  │       (subsequence match; other tools may appear in between)
   │
   ├─ 3. Response assertions  (each produces one CheckResult)
   │       regex             → RegExp.test(finalText)  (case-insensitive, inline flags stripped)

@@ -8,6 +8,7 @@ const mockSource = {
   runScenarioPreview: vi.fn()
 };
 const mockEnsureOAuthForServers = vi.fn();
+let mockScenarioAssistantDialogProps: Record<string, unknown> | null = null;
 
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
@@ -20,7 +21,10 @@ vi.mock('@/lib/oauth-session-utils', () => ({
 }));
 
 vi.mock('@/components/config-editor/ScenarioAssistantDialog', () => ({
-  ScenarioAssistantDialog: () => null
+  ScenarioAssistantDialog: (props: Record<string, unknown>) => {
+    mockScenarioAssistantDialogProps = props;
+    return null;
+  }
 }));
 
 function baseScenario(): Scenario {
@@ -37,6 +41,7 @@ function baseScenario(): Scenario {
 describe('ScenarioForm checks editor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockScenarioAssistantDialogProps = null;
     mockSource.discoverToolsForAnalysis.mockResolvedValue({ servers: [] });
     mockSource.runScenarioPreview.mockResolvedValue({
       runId: 'preview-1',
@@ -116,6 +121,109 @@ describe('ScenarioForm checks editor', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
+  });
+
+  it('edits response_contains checks in place', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'response_contains', value: 'success' }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    fireEvent.change(screen.getByPlaceholderText('Value'), {
+      target: { value: 'approved' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update check' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([{ type: 'response_contains', value: 'approved' }]);
+  });
+
+  it('adds ordered tool sequence checks as an ordered list', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool Sequence'));
+    expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules[0]).toEqual({
+      type: 'tool_sequence',
+      sequence: ['search']
+    });
+  });
+
+  it('hides sequence steps after saving and reopens them on edit', async () => {
+    const onChange = vi.fn();
+
+    const { rerender } = render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool Sequence'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+
+    rerender(
+      <ScenarioForm
+        scenarios={updated}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    expect(screen.queryByText('Sequence steps')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Tool name')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    expect(screen.queryByText('Tool Sequence')).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+
+    expect(screen.getAllByRole('combobox')[1]).toHaveTextContent('Tool Sequence');
+    expect(screen.getByText('Sequence steps')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Tool name')).toBeInTheDocument();
   });
 
   it('adds response_jsonpath checks with optional equals', async () => {
@@ -225,7 +333,7 @@ describe('ScenarioForm checks editor', () => {
         target: { value: 'Confirm the answer includes a valid logical time range.' }
       }
     );
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add check' }));
 
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
@@ -234,6 +342,54 @@ describe('ScenarioForm checks editor', () => {
         type: 'agent_check',
         label: 'Logical range',
         prompt: 'Confirm the answer includes a valid logical time range.'
+      }
+    ]);
+  });
+
+  it('edits agent checks in place', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [
+              {
+                type: 'agent_check',
+                label: 'Logical range',
+                prompt: 'Confirm the answer includes a valid logical time range.'
+              }
+            ]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit check 1' }));
+    fireEvent.change(screen.getByPlaceholderText('Prompt name'), {
+      target: { value: 'Time range' }
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Judge prompt. Example: Confirm the answer includes a valid earliest and latest timestamp range, and that neither is 'Not available'."
+      ),
+      {
+        target: { value: 'Confirm the answer includes a valid earliest and latest time range.' }
+      }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Update check' }));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'agent_check',
+        label: 'Time range',
+        prompt: 'Confirm the answer includes a valid earliest and latest time range.'
       }
     ]);
   });

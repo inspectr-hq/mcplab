@@ -26,6 +26,7 @@ interface ScenarioAssistantContextInput {
     evalRules: Array<{
       type: string;
       value?: string;
+      sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
       label?: string;
@@ -43,6 +44,7 @@ interface ScenarioAssistantSuggestionBundle {
     replacement: Array<{
       type: string;
       value?: string;
+      sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
       label?: string;
@@ -60,6 +62,7 @@ interface ScenarioAssistantSuggestionBundle {
 interface ScenarioAssistantEvalRuleSuggestion {
   type: string;
   value?: string;
+  sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
   label?: string;
@@ -180,7 +183,9 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
+    'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
     'Use agent_check when the validation is semantic, fuzzy, or intent-based and deterministic checks would be brittle. agent_check requires label and prompt.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
     'Use response_regex only for genuinely variable/complex patterns (IDs, dates, currency, alternation, optional tokens, quantifiers, character classes).',
@@ -266,6 +271,15 @@ function normalizeEvalRuleToolNames(
         rule.value = mapping.tool;
       }
     }
+    if (rule.type === 'tool_sequence' && Array.isArray(rule.sequence)) {
+      rule.sequence = rule.sequence
+        .map((toolName) => toolName.trim())
+        .filter((toolName) => toolName.length > 0)
+        .map((toolName) => {
+          const mapping = toolPublicMap.get(toolName);
+          return mapping ? mapping.tool : toolName;
+        });
+    }
   }
 }
 
@@ -305,9 +319,9 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.value ?? ''}::${rule.path ?? ''}::${
-    rule.equals === undefined ? '' : String(rule.equals)
-  }`;
+  return `${rule.type}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${
+    rule.path ?? ''
+  }::${rule.equals === undefined ? '' : String(rule.equals)}`;
 }
 
 function hasEquivalentLiteralRule(
@@ -526,6 +540,9 @@ export function normalizeScenarioAssistantEvalRules(
     const rule: ScenarioAssistantEvalRuleSuggestion = {
       ...rawRule,
       ...(typeof rawRule.value === 'string' ? { value: rawRule.value.trim() } : {}),
+      ...(Array.isArray(rawRule.sequence)
+        ? { sequence: rawRule.sequence.map((toolName) => toolName.trim()).filter(Boolean) }
+        : {}),
       ...(typeof rawRule.path === 'string' ? { path: rawRule.path.trim() } : {})
     };
 

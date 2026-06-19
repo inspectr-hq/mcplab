@@ -12,6 +12,15 @@ describe('formatEvalRuleLabel', () => {
       })
     ).toBe('Agent check · Logical range');
   });
+
+  it('formats tool sequences consistently', () => {
+    expect(
+      formatEvalRuleLabel({
+        type: 'tool_sequence',
+        sequence: ['search', 'fetch']
+      })
+    ).toBe('Tool sequence · search -> fetch');
+  });
 });
 
 describe('buildCheckItems', () => {

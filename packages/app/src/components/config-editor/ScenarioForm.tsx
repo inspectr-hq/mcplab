@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Edit,
   FileText,
   Loader2,
   Paperclip,
@@ -37,6 +38,7 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
+import { formatToolSequenceLabel } from '../../../../core/src/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -69,11 +71,13 @@ interface ScenarioFormProps {
 function RuleTypeSelect({
   value,
   onValueChange,
-  className
+  className,
+  hideToolSequence = false
 }: {
   value: EvalRule['type'];
   onValueChange: (value: EvalRule['type']) => void;
   className?: string;
+  hideToolSequence?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={(next) => onValueChange(next as EvalRule['type'])}>
@@ -83,6 +87,7 @@ function RuleTypeSelect({
       <SelectContent>
         <SelectItem value="required_tool">Required Tool</SelectItem>
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
+        {!hideToolSequence && <SelectItem value="tool_sequence">Tool Sequence</SelectItem>}
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
         <SelectItem value="response_not_contains">Text does not contain</SelectItem>
@@ -106,6 +111,10 @@ const emptyScenario = (): Scenario => ({
   evalRules: [],
   extractRules: []
 });
+
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
 
 export function ScenarioForm({
   scenarios,
@@ -234,6 +243,13 @@ function ScenarioCard({
   const [newRuleEquals, setNewRuleEquals] = useState('');
   const [newRuleLabel, setNewRuleLabel] = useState('');
   const [newRulePrompt, setNewRulePrompt] = useState('');
+  const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
+  const [toolSequenceDraft, setToolSequenceDraft] = useState<string[]>([]);
+  const [toolSequenceEditorOpen, setToolSequenceEditorOpen] = useState(false);
+  const [toolSequenceEditingRule, setToolSequenceEditingRule] = useState<EvalRule | null>(null);
+  const [agentCheckEditingRule, setAgentCheckEditingRule] = useState<EvalRule | null>(null);
+  const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
+  const [valueRuleEditingRule, setValueRuleEditingRule] = useState<EvalRule | null>(null);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -325,6 +341,11 @@ function ScenarioCard({
     setExpanded((prev) => !prev);
   };
 
+  const findRuleIndex = (rule: EvalRule | null) => {
+    if (!rule) return -1;
+    return scenario.evalRules.findIndex((candidate) => candidate === rule);
+  };
+
   const addRule = () => {
     if (
       newRuleType === 'response_jsonpath' ||
@@ -360,21 +381,130 @@ function ScenarioCard({
       const label = newRuleLabel.trim();
       const prompt = newRulePrompt.trim();
       if (!label || !prompt) return;
-      onUpdate({
-        evalRules: [...scenario.evalRules, { type: 'agent_check', label, prompt }]
-      });
+      const nextRules = [...scenario.evalRules];
+      const nextRule = { type: 'agent_check', label, prompt } as const;
+      const editingIndex = findRuleIndex(agentCheckEditingRule);
+      if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
+      else nextRules.push(nextRule);
+      onUpdate({ evalRules: nextRules });
       setNewRuleLabel('');
       setNewRulePrompt('');
+      setAgentCheckEditingRule(null);
+      setAgentCheckEditorOpen(false);
+      setNewRuleType('required_tool');
+      return;
+    }
+
+    if (newRuleType === 'tool_sequence') {
+      const nextSequence = toolSequenceDraft
+        .map((value) => value.trim())
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+      if (nextSequence.length === 0) return;
+      updateToolSequence(nextSequence);
       return;
     }
 
     if (!newRuleValue.trim()) return;
-    onUpdate({
-      evalRules: [...scenario.evalRules, { type: newRuleType, value: newRuleValue.trim() }]
-    });
+    const nextRules = [...scenario.evalRules];
+    const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
+    const editingIndex = findRuleIndex(valueRuleEditingRule);
+    if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
+    else nextRules.push(nextRule);
+    onUpdate({ evalRules: nextRules });
     setNewRuleValue('');
     setToolPickerValue('');
+    setValueRuleEditingRule(null);
+    setNewRuleType('required_tool');
   };
+
+  const addToolSequenceValue = () => {
+    const value = newToolSequenceValue.trim();
+    if (!value) return;
+    setToolSequenceDraft((current) => [...current, value]);
+    setNewToolSequenceValue('');
+  };
+
+  const moveToolSequenceValue = (index: number, direction: -1 | 1) => {
+    const nextIndex = index + direction;
+    setToolSequenceDraft((current) => {
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  };
+
+  const removeToolSequenceValue = (index: number) => {
+    setToolSequenceDraft((current) => current.filter((_, i) => i !== index));
+  };
+
+  const toolSequenceRuleIndex = scenario.evalRules.findIndex(
+    (rule) => rule.type === 'tool_sequence'
+  );
+  const toolSequenceRule =
+    toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
+  const toolSequence = toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence : [];
+  const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
+
+  const updateToolSequence = (nextSequence: string[]) => {
+    const nextRules = [...scenario.evalRules];
+    const nextRule =
+      nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
+    const editingIndex = findRuleIndex(toolSequenceEditingRule);
+    const currentIndex = editingIndex >= 0 ? editingIndex : toolSequenceRuleIndex;
+    if (currentIndex >= 0) {
+      if (nextRule) nextRules[currentIndex] = nextRule;
+      else nextRules.splice(currentIndex, 1);
+    } else if (nextRule) {
+      nextRules.push(nextRule);
+    }
+    onUpdate({ evalRules: nextRules });
+    setToolSequenceEditorOpen(false);
+    setToolSequenceDraft([]);
+    setNewToolSequenceValue('');
+    setToolSequenceEditingRule(null);
+    if (newRuleType === 'tool_sequence') {
+      setNewRuleType('required_tool');
+    }
+  };
+
+  useEffect(() => {
+    if (!toolSequenceEditorOpen) return;
+    setToolSequenceDraft(toolSequence);
+  }, [toolSequenceEditorOpen, toolSequenceRuleIndex, toolSequence.join('|')]);
+
+  useEffect(() => {
+    setToolSequenceEditorOpen(newRuleType === 'tool_sequence');
+  }, [newRuleType]);
+
+  useEffect(() => {
+    setAgentCheckEditorOpen(newRuleType === 'agent_check');
+  }, [newRuleType]);
+
+  useEffect(() => {
+    if (toolSequenceEditingRule && findRuleIndex(toolSequenceEditingRule) < 0) {
+      setToolSequenceEditingRule(null);
+    }
+    if (agentCheckEditingRule && findRuleIndex(agentCheckEditingRule) < 0) {
+      setAgentCheckEditingRule(null);
+    }
+    if (valueRuleEditingRule && findRuleIndex(valueRuleEditingRule) < 0) {
+      setValueRuleEditingRule(null);
+    }
+  }, [scenario.evalRules, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
+
+  useEffect(() => {
+    if (toolSequenceEditingRule && newRuleType !== 'tool_sequence') {
+      setToolSequenceEditingRule(null);
+    }
+    if (agentCheckEditingRule && newRuleType !== 'agent_check') {
+      setAgentCheckEditingRule(null);
+    }
+    if (valueRuleEditingRule && valueRuleEditingRule.type !== newRuleType) {
+      setValueRuleEditingRule(null);
+    }
+  }, [newRuleType, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
 
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
@@ -384,6 +514,15 @@ function ScenarioCard({
       agentContext: hasAgentChecks ? scenario.agentContext : undefined
     });
   };
+
+  const editableValueRuleTypes: EvalRule['type'][] = [
+    'response_contains',
+    'response_not_contains',
+    'response_starts_with',
+    'response_ends_with',
+    'response_equals',
+    'response_regex'
+  ];
 
   const addExtract = () => {
     if (!newExtractName.trim() || !newExtractPattern.trim()) return;
@@ -411,6 +550,7 @@ function ScenarioCard({
   const ruleTypeLabel: Record<EvalRule['type'], string> = {
     required_tool: 'Required',
     forbidden_tool: 'Forbidden',
+    tool_sequence: 'Sequence',
     response_contains: 'Contains',
     response_not_contains: 'Not Contains',
     response_starts_with: 'Starts With',
@@ -426,6 +566,7 @@ function ScenarioCard({
   const ruleTypeBadgeColor: Record<EvalRule['type'], string> = {
     required_tool: 'border-sky-300/60 bg-sky-500/10 text-sky-700',
     forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
+    tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
     response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
     response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
     response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
@@ -442,7 +583,8 @@ function ScenarioCard({
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
     newRuleType === 'response_jsonpath_not_exists';
-  const isAgentCheckRule = newRuleType === 'agent_check';
+  const showToolSequenceEditor = newRuleType === 'tool_sequence' && toolSequenceEditorOpen;
+  const showAgentCheckEditor = newRuleType === 'agent_check' && agentCheckEditorOpen;
   const selectedServerIds = scenario.serverIds.filter((sid) =>
     servers.some((srv) => srv.id === sid)
   );
@@ -476,6 +618,7 @@ function ScenarioCard({
     setToolPickerValue('');
     setNewRulePath('');
     setNewRuleEquals('');
+    setNewToolSequenceValue('');
   }, [newRuleType]);
 
   useEffect(() => {
@@ -562,6 +705,8 @@ function ScenarioCard({
       'Final answer:',
       previewResult.run.finalAnswer || '(empty)',
       '',
+      'If the run has a meaningful ordered tool path, suggest a tool_sequence check using the raw tool names in the tool sequence order, even if other tools appear between them.',
+      'Use agent_check only for semantic or fuzzy validation;',
       'Please propose concrete updates to the Prompt, Checks, and/or Value Capture Rules based on this preview.'
     ].join('\n');
     setPreviewAssistantPrompt(prompt);
@@ -801,9 +946,13 @@ function ScenarioCard({
                     onChange={(e) => handleAttachmentFiles(e.target.files)}
                   />
                   {(scenario.attachments?.length ?? 0) > 0 ? (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-start gap-2">
                       {scenario.attachments?.map((att, ai) => (
-                        <div key={ai} className="group relative">
+                        <div
+                          key={ai}
+                          className="group relative"
+                          title={`${att.name ?? `attachment ${ai + 1}`}`}
+                        >
                           <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded border bg-muted">
                             {att.type === 'image' ? (
                               <img
@@ -836,8 +985,9 @@ function ScenarioCard({
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="flex h-16 w-16 items-center justify-center rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
+                          className="flex h-16 w-16 items-center justify-center self-start rounded border border-dashed text-muted-foreground hover:border-foreground hover:text-foreground"
                           aria-label="Attach file"
+                          title="Attach file (image or document)"
                         >
                           <Paperclip className="h-4 w-4" />
                         </button>
@@ -1147,6 +1297,10 @@ function ScenarioCard({
                                       </div>
                                     )}
                                   </div>
+                                ) : rule.type === 'tool_sequence' ? (
+                                  <span className="font-mono break-all">
+                                    {formatToolSequenceText(rule.sequence ?? [])}
+                                  </span>
                                 ) : (
                                   <span className="font-mono break-all">
                                     {rule.path
@@ -1159,16 +1313,51 @@ function ScenarioCard({
                               </div>
                             </div>
                             {!readOnly && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 shrink-0"
-                                onClick={() => removeRule(ri)}
-                                aria-label={`Remove check ${ri + 1}`}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                {(rule.type === 'tool_sequence' ||
+                                  rule.type === 'agent_check' ||
+                                  editableValueRuleTypes.includes(rule.type)) && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[11px]"
+                                    onClick={() => {
+                                      if (rule.type === 'tool_sequence') {
+                                        setNewRuleType('tool_sequence');
+                                        setToolSequenceDraft(rule.sequence ?? []);
+                                        setToolSequenceEditingRule(rule);
+                                        setToolSequenceEditorOpen(true);
+                                        return;
+                                      }
+                                      if (rule.type === 'agent_check') {
+                                        setNewRuleType('agent_check');
+                                        setAgentCheckEditingRule(rule);
+                                        setNewRuleLabel(rule.label ?? '');
+                                        setNewRulePrompt(rule.prompt ?? '');
+                                        setAgentCheckEditorOpen(true);
+                                        return;
+                                      }
+                                      setNewRuleType(rule.type);
+                                      setValueRuleEditingRule(rule);
+                                      setNewRuleValue(rule.value ?? '');
+                                    }}
+                                    aria-label={`Edit check ${ri + 1}`}
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 shrink-0"
+                                  onClick={() => removeRule(ri)}
+                                  aria-label={`Remove check ${ri + 1}`}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             )}
                           </div>
                         ))
@@ -1176,7 +1365,7 @@ function ScenarioCard({
                     </div>
                     {!readOnly && (
                       <div className="space-y-2">
-                        {isAgentCheckRule ? (
+                        {showAgentCheckEditor ? (
                           <div className="space-y-2">
                             <div className="flex items-end gap-2">
                               <RuleTypeSelect
@@ -1197,7 +1386,7 @@ function ScenarioCard({
                                 className="h-8 shrink-0"
                                 onClick={addRule}
                               >
-                                Add
+                                {agentCheckEditingRule !== null ? 'Update check' : 'Add check'}
                               </Button>
                             </div>
                             <Textarea
@@ -1213,6 +1402,9 @@ function ScenarioCard({
                               value={newRuleType}
                               onValueChange={setNewRuleType}
                               className="h-8 w-[14.5rem] shrink-0 text-xs"
+                              hideToolSequence={
+                                hasToolSequenceRule && newRuleType !== 'tool_sequence'
+                              }
                             />
                             {isJsonPathRule ? (
                               <>
@@ -1237,6 +1429,28 @@ function ScenarioCard({
                                   />
                                 )}
                               </>
+                            ) : showToolSequenceEditor ? (
+                              <div className="min-w-0 flex-1 flex items-end gap-2">
+                                <Input
+                                  value={newToolSequenceValue}
+                                  onChange={(e) => setNewToolSequenceValue(e.target.value)}
+                                  placeholder="Tool name"
+                                  className="h-8 text-xs font-mono"
+                                  onKeyDown={(e) =>
+                                    e.key === 'Enter' &&
+                                    (e.preventDefault(), addToolSequenceValue())
+                                  }
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 shrink-0"
+                                  onClick={addToolSequenceValue}
+                                >
+                                  Add step
+                                </Button>
+                              </div>
                             ) : (
                               <Input
                                 value={newRuleValue}
@@ -1255,8 +1469,97 @@ function ScenarioCard({
                               className="h-8 shrink-0"
                               onClick={addRule}
                             >
-                              Add
+                              {valueRuleEditingRule !== null ? 'Update check' : 'Add'}
                             </Button>
+                          </div>
+                        )}
+                        {showToolSequenceEditor && (
+                          <div className="space-y-2 rounded-md border bg-background px-2 py-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <Label className="text-xs">Sequence steps</Label>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Require these tools in order. Other tools may appear between them.
+                                </p>
+                              </div>
+                              {!readOnly && toolSequenceDraft.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => setToolSequenceDraft([])}
+                                  >
+                                    Clear
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 px-2 text-[11px]"
+                                    onClick={() => updateToolSequence(toolSequenceDraft)}
+                                  >
+                                    {hasToolSequenceRule ? 'Update sequence' : 'Add sequence'}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                            {toolSequenceDraft.length === 0 ? (
+                              <p className="rounded-md border border-dashed bg-muted/20 px-2 py-2 text-xs text-muted-foreground">
+                                No ordered tool sequence yet.
+                              </p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {toolSequenceDraft.map((toolName, toolIndex) => (
+                                  <div
+                                    key={`${scenario.id}-tool-sequence-draft-${toolIndex}`}
+                                    className="flex items-center gap-2 rounded-md border bg-muted/10 px-2 py-1.5"
+                                  >
+                                    <span className="text-xs font-medium">{toolIndex + 1}.</span>
+                                    <span className="min-w-0 flex-1 font-mono text-xs break-all">
+                                      {toolName}
+                                    </span>
+                                    {!readOnly && (
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => moveToolSequenceValue(toolIndex, -1)}
+                                          disabled={toolIndex === 0}
+                                          aria-label={`Move tool ${toolIndex + 1} up`}
+                                        >
+                                          <ChevronUp className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => moveToolSequenceValue(toolIndex, 1)}
+                                          disabled={toolIndex === toolSequenceDraft.length - 1}
+                                          aria-label={`Move tool ${toolIndex + 1} down`}
+                                        >
+                                          <ChevronDown className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() => removeToolSequenceValue(toolIndex)}
+                                          aria-label={`Remove tool ${toolIndex + 1}`}
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {isToolRule && (
@@ -1528,6 +1831,9 @@ function buildPreviewCheckItems(
 function renderEvalRulePreview(rule: EvalRule): string {
   if (rule.type === 'agent_check') {
     return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
+  }
+  if (rule.type === 'tool_sequence') {
+    return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
   }
   if (rule.path) {
     return rule.equals !== undefined

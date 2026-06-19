@@ -1,4 +1,6 @@
 // Core mcp-lab types
+import type { ScenarioAttachment } from '@/lib/data-sources/types';
+
 export type { ScenarioAttachment } from '@/lib/data-sources/types';
 
 export interface ServerConfig {
@@ -46,6 +48,7 @@ export interface EvalRule {
   type:
     | 'required_tool'
     | 'forbidden_tool'
+    | 'tool_sequence'
     | 'response_contains'
     | 'response_not_contains'
     | 'response_starts_with'
@@ -57,6 +60,7 @@ export interface EvalRule {
     | 'response_jsonpath_not_exists'
     | 'agent_check';
   value?: string;
+  sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
   label?: string;

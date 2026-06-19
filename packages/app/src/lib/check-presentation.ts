@@ -1,5 +1,6 @@
 import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import type { CheckResult, EvalRule } from '@/types/eval';
+import { formatToolSequenceLabel } from '../../../core/src/eval';
 
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
@@ -46,6 +47,7 @@ export function buildCheckItems({
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
+  if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
@@ -60,6 +62,10 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'response_jsonpath_not_exists') return `JSONPath not exists · ${rule.path}`;
   if (rule.type === 'agent_check') return `Agent check · ${rule.label}`;
   return `${rule.type} · ${rule.value}`;
+}
+
+function formatToolSequenceText(sequence: string[]): string {
+  return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
 }
 
 export function matchFailureReasonForRule(
@@ -79,6 +85,8 @@ export function matchFailureReasonForRule(
   const expectedPrefix = (() => {
     if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
+    if (rule.type === 'tool_sequence')
+      return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
     if (rule.type === 'response_contains') return `Contains assertion failed: ${rule.value}`;
     if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${rule.value}`;
@@ -108,6 +116,15 @@ export function matchFailureReasonForRule(
 
   if (rule.type === 'response_jsonpath' || rule.type === 'response_jsonpath_not_exists') {
     return failureReasons.find((reason) => reason.includes(rule.path ?? ''));
+  }
+
+  if (rule.type === 'tool_sequence') {
+    return failureReasons.find(
+      (reason) =>
+        reason.startsWith(
+          `Tool sequence order was not satisfied: ${formatToolSequenceText(rule.sequence ?? [])}`
+        ) || reason.startsWith('Required tool in sequence not used:')
+    );
   }
 
   return failureReasons.find((reason) => reason.startsWith(expectedPrefix));

@@ -338,9 +338,7 @@ const scenarioConfiguration: DocPage = {
       tool_constraints:
         required_tools: [get_weather]
         forbidden_tools: [delete_city]
-      tool_sequence:
-        allow:
-          - [get_weather]
+      tool_sequence: [get_weather]
       response_assertions:
         - type: regex
           pattern: '([0-9]+)(\\.[0-9]+)?\\s?°?C'
@@ -352,6 +350,7 @@ const scenarioConfiguration: DocPage = {
       bullets: [
         'Use `required_tools` to enforce critical tool calls.',
         'Use `forbidden_tools` to block unsafe or irrelevant tools.',
+        'Use `tool_sequence` to require tools in order while allowing other tools in between.',
         'Use literal response assertions (`contains`, `equals`, etc.) for stable text checks.',
         'Use regex assertions for variable outputs (numbers, IDs, timestamps).',
         'Use JSONPath assertions when the response is structured JSON.'
@@ -1832,10 +1831,11 @@ const refConfiguration: DocPage = {
     },
     {
       id: 'assertions-schema',
-      title: 'eval.tool_constraints and eval.response_assertions',
+      title: 'eval.tool_constraints, eval.tool_sequence and eval.response_assertions',
       bullets: [
         'tool_constraints.required_tools (string[], optional) — tool names the agent must call.',
         'tool_constraints.forbidden_tools (string[], optional) — tool names the agent must not call.',
+        'tool_sequence (string[], optional) — ordered tool names that must appear in the run in that order, with other tools allowed in between.',
         'response_assertions supports: contains, not_contains, starts_with, ends_with, equals, regex, jsonpath, jsonpath_exists, jsonpath_not_exists.',
         'For detailed examples of each assertion, see Reference / Tool and Response Assertions.'
       ]
@@ -1880,7 +1880,7 @@ const refToolAndResponseAssertions: DocPage = {
     'regex',
     'contains'
   ],
-  seoTitle: 'Reference — Tool and Response Assertions',
+  seoTitle: 'Getting Started — Tool and Response Assertions',
   track: 'reference',
   sections: [
     {
@@ -1897,7 +1897,14 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'tool-assertions',
       title: 'Tool Assertions',
       paragraphs: [
-        'Tool assertions validate whether the agent used the right tools and sequence of calls.'
+        'Tool assertions validate whether the agent used the right tools and, when needed, whether they were called in the right order.',
+        'These checks look at the observed tool-call list for a run. They do not inspect the final answer text.'
+      ],
+      bullets: [
+        'Use `required_tools` when a tool call is mandatory for the scenario to pass.',
+        'Use `forbidden_tools` when a tool call would be unsafe, irrelevant, or should not appear in a valid solution.',
+        'Use `tool_sequence` when the relative order matters, but other tool calls may happen between the listed tools.',
+        'Repeated tools are matched from left to right, so `tool_sequence: [search, search, summarize]` requires two separate `search` calls before `summarize`.'
       ],
       codeBlocks: [
         {
@@ -1909,13 +1916,13 @@ const refToolAndResponseAssertions: DocPage = {
     forbidden_tools: [delete_account]`
         },
         {
-          title: 'allowed tool sequences',
+          title: 'ordered tool sequence',
           language: 'yaml',
           code: `eval:
   tool_sequence:
-    allow:
-      - [lookup_account, verify_identity, process_refund]
-      - [lookup_account, verify_identity, check_policy, process_refund]`
+    - lookup_account
+    - verify_identity
+    - process_refund`
         }
       ]
     },
@@ -1923,7 +1930,15 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'response-assertions',
       title: 'Response Assertions',
       paragraphs: [
-        'String response assertions are literal checks and are case-insensitive by default. Use regex only when you need pattern matching.'
+        'Response assertions validate the final answer text.',
+        'Literal string checks are case-insensitive by default. Use regex only when you need pattern matching, and use JSONPath when the model must return structured JSON.'
+      ],
+      bullets: [
+        'Use `contains` for a phrase that should appear anywhere in the final response.',
+        'Use `not_contains` for words or phrases that must not appear.',
+        'Use `starts_with`, `ends_with`, or `equals` when the response format is mostly fixed.',
+        'Use `regex` for variable text such as IDs, timestamps, alternations, or optional wording.',
+        'Use `jsonpath`, `jsonpath_exists`, and `jsonpath_not_exists` only when the final response is valid JSON.'
       ],
       codeBlocks: [
         {
@@ -2039,6 +2054,9 @@ const refToolAndResponseAssertions: DocPage = {
       id: 'behavior-notes',
       title: 'Behavior Notes and Edge Cases',
       bullets: [
+        'required_tools passes when each listed tool appears at least once in the run, in any order.',
+        'forbidden_tools fails when any listed tool appears in the run.',
+        'tool_sequence is an ordered subsequence check: listed tools must appear in order, but other tools may appear between them.',
         'contains/not_contains/starts_with/ends_with/equals are literal, case-insensitive string checks.',
         'regex is case-insensitive by default and uses JavaScript regular expressions.',
         'jsonpath/jsonpath_exists/jsonpath_not_exists require valid JSON in the final response.',
@@ -2154,6 +2172,7 @@ export const docsNavSections = [
       quickStart,
       setupEvaluations,
       scenarioConfiguration,
+      refToolAndResponseAssertions,
       librariesAndRefs
     ]
   },
@@ -2178,7 +2197,7 @@ export const docsNavSections = [
   },
   {
     title: 'Reference',
-    items: [refConfiguration, refToolAndResponseAssertions, refEnvVars]
+    items: [refConfiguration, refEnvVars]
   }
 ] as const;
 

@@ -90,6 +90,16 @@ describe('normalizeScenarioAssistantEvalRules', () => {
     ]);
   });
 
+  it('normalizes tool_sequence entries and preserves ordered sequences', () => {
+    const result = normalizeScenarioAssistantEvalRules([
+      { type: 'tool_sequence', sequence: ['  srv__refund_tool  ', 'search_tags'] }
+    ]);
+
+    expect(result).toEqual([
+      { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] }
+    ]);
+  });
+
   it('collapses off-by-one count guard checks into one explicit positive check', () => {
     const result = normalizeScenarioAssistantEvalRules([
       { type: 'response_contains', value: '9' },
@@ -170,6 +180,23 @@ describe('continueAssistantTurn normalization integration', () => {
     chatWithJsonRetryMock.mockReset();
   });
 
+  it('includes optional tool_sequence and agent_check guidance in the system prompt', async () => {
+    chatWithJsonRetryMock.mockResolvedValue({
+      type: 'assistant_message',
+      text: 'Updated checks'
+    });
+
+    const session = baseSession();
+    await continueAssistantTurn(session);
+
+    const options = chatWithJsonRetryMock.mock.calls[0]?.[0] as {
+      system?: string;
+    };
+    expect(options.system).toContain('Optional checks you may suggest when useful');
+    expect(options.system).toContain('tool_sequence');
+    expect(options.system).toContain('agent_check');
+  });
+
   it('applies tool-name normalization and regex preference cleanup before returning suggestions', async () => {
     chatWithJsonRetryMock.mockResolvedValue({
       type: 'assistant_message',
@@ -190,6 +217,25 @@ describe('continueAssistantTurn normalization integration', () => {
     expect(output.response.suggestions?.evalRules?.replacement).toEqual([
       { type: 'required_tool', value: 'refund_tool' },
       { type: 'response_contains', value: 'refund processed' }
+    ]);
+  });
+
+  it('normalizes public tool names inside tool_sequence suggestions', async () => {
+    chatWithJsonRetryMock.mockResolvedValue({
+      type: 'assistant_message',
+      text: 'Updated checks',
+      suggestions: {
+        evalRules: {
+          replacement: [{ type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] }]
+        }
+      }
+    });
+
+    const session = baseSession();
+    const output = await continueAssistantTurn(session);
+
+    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
+      { type: 'tool_sequence', sequence: ['refund_tool', 'search_tags'] }
     ]);
   });
 

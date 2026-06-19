@@ -62,31 +62,32 @@ describe('evaluateScenario — tool_constraints', () => {
 });
 
 describe('evaluateScenario — tool_sequence', () => {
-  it('passes when sequence matches an allowed sequence', () => {
-    const result = evaluateScenario('response', ['search', 'fetch'], {
-      tool_sequence: { allow: [['search', 'fetch'], ['fetch']] }
+  it('passes when the required tools appear in order with tools in between', () => {
+    const result = evaluateScenario('response', ['search', 'lookup', 'fetch'], {
+      tool_sequence: ['search', 'fetch']
     });
     expect(result.pass).toBe(true);
   });
 
-  it('fails when sequence matches none of the allowed sequences', () => {
+  it('fails when the required tools appear out of order', () => {
     const result = evaluateScenario('response', ['fetch', 'search'], {
-      tool_sequence: { allow: [['search', 'fetch']] }
+      tool_sequence: ['search', 'fetch']
     });
     expect(result.pass).toBe(false);
-    expect(result.failures).toContain('Tool sequence did not match any allowed sequence');
+    expect(result.failures).toContain('Tool sequence order was not satisfied: search -> fetch');
   });
 
-  it('passes when empty sequence is explicitly allowed', () => {
-    const result = evaluateScenario('response', [], {
-      tool_sequence: { allow: [[]] }
+  it('fails when a required tool is missing', () => {
+    const result = evaluateScenario('response', ['search'], {
+      tool_sequence: ['search', 'fetch']
     });
-    expect(result.pass).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.failures).toContain('Required tool in sequence not used: fetch');
   });
 
-  it('skips sequence check when allow list is empty', () => {
-    const result = evaluateScenario('response', ['search', 'fetch'], {
-      tool_sequence: { allow: [] }
+  it('supports repeated tools in the required sequence', () => {
+    const result = evaluateScenario('response', ['search', 'fetch', 'search', 'fetch'], {
+      tool_sequence: ['search', 'fetch', 'search', 'fetch']
     });
     expect(result.pass).toBe(true);
   });
@@ -608,7 +609,7 @@ describe('buildNotEvaluatedCheckResults', () => {
   it('includes deterministic and agent checks when a run aborts before evaluation completes', () => {
     const results = buildNotEvaluatedCheckResults({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
-      tool_sequence: { allow: [['search', 'fetch']] },
+      tool_sequence: ['search', 'fetch'],
       response_assertions: [
         { type: 'contains', value: 'ok' },
         { type: 'jsonpath_exists', path: '$.data.id' }
