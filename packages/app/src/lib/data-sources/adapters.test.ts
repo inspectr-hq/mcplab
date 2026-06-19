@@ -765,6 +765,45 @@ describe('config adapters round-trip', () => {
     expect('scenario_refs' in (roundTripped as unknown as Record<string, unknown>)).toBe(false);
   });
 
+  it('normalizes malformed scenario names to a safe string during round-trip', () => {
+    const malformedScenarioName = { 'Context - Two-Step Workflow': true };
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-malformed-scenario-name',
+      name: 'malformed-scenario-name',
+      path: '/tmp/malformed-scenario-name.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-malformed',
+      config: {
+        name: 'Malformed Scenario Name',
+        servers: [],
+        agents: [],
+        scenarios: [
+          {
+            id: 'scn-malformed',
+            name: malformedScenarioName as unknown as string,
+            servers: [],
+            prompt: 'Check malformed scenario names',
+            eval: {
+              tool_constraints: { required_tools: [], forbidden_tools: [] },
+              response_assertions: []
+            },
+            extract: []
+          }
+        ]
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    expect(uiConfig.scenarios[0]?.name).toBe('scn-malformed');
+    const roundTripped = toCoreConfigYaml(uiConfig);
+    expect(roundTripped.scenarios[0]).toMatchObject({
+      id: 'scn-malformed',
+      name: 'scn-malformed',
+      prompt: 'Check malformed scenario names'
+    });
+    expect((roundTripped.scenarios[0] as AnyRecord).name).toBe('scn-malformed');
+  });
+
   it('preserves explicit empty mcp_servers overrides on referenced scenarios', () => {
     const uiConfig: EvalConfig = {
       id: 'cfg-empty-override',
