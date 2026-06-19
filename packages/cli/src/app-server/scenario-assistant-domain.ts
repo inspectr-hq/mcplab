@@ -319,9 +319,9 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${rule.path ?? ''}::${
-    rule.equals === undefined ? '' : String(rule.equals)
-  }`;
+  return `${rule.type}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${
+    rule.path ?? ''
+  }::${rule.equals === undefined ? '' : String(rule.equals)}`;
 }
 
 function hasEquivalentLiteralRule(

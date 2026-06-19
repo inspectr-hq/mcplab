@@ -18,6 +18,8 @@ import {
   type TokenAccumulator
 } from '@/lib/token-usage';
 import { safeText } from '@/lib/utils';
+import { attachmentTypeFromMediaType, inferAttachmentMediaType } from '../../../../core/src/attachments';
+import type { ScenarioAttachment, SourceScenarioAttachment } from '../../../../core/src/types';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -36,6 +38,17 @@ function toId(base: string, index: number): string {
 
 function normalizeText(value: unknown): string | undefined {
   return safeText(value) || undefined;
+}
+
+function normalizeScenarioAttachment(att: SourceScenarioAttachment): ScenarioAttachment {
+  const mediaType = att.media_type ?? inferAttachmentMediaType(att) ?? 'application/octet-stream';
+  return {
+    type: attachmentTypeFromMediaType(mediaType),
+    media_type: mediaType,
+    data: att.data ?? '',
+    ...(att.url ? { url: att.url } : {}),
+    ...(att.name ? { name: att.name } : {})
+  };
 }
 
 function toUiEvalRule(assertion: {
@@ -496,7 +509,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
         return [];
       })(),
       prompt: scenario.prompt,
-      attachments: scenario.attachments,
+      attachments: scenario.attachments?.map(normalizeScenarioAttachment),
       evalRules,
       extractRules: (scenario.extract ?? []).map((rule) => ({
         name: rule.name,

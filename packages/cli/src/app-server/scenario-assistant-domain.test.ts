@@ -226,9 +226,7 @@ describe('continueAssistantTurn normalization integration', () => {
       text: 'Updated checks',
       suggestions: {
         evalRules: {
-          replacement: [
-            { type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] }
-          ]
+          replacement: [{ type: 'tool_sequence', sequence: ['srv__refund_tool', 'search_tags'] }]
         }
       }
     });
