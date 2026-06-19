@@ -2164,18 +2164,18 @@ const pageIndex: DocPage[] = [
 export const docsPages = pageIndex;
 
 export const docsNavSections = [
-    {
-      title: 'Getting Started',
-      items: [
-        overview,
-        installation,
-        quickStart,
-        setupEvaluations,
-        scenarioConfiguration,
-        refToolAndResponseAssertions,
-        librariesAndRefs
-      ]
-    },
+  {
+    title: 'Getting Started',
+    items: [
+      overview,
+      installation,
+      quickStart,
+      setupEvaluations,
+      scenarioConfiguration,
+      refToolAndResponseAssertions,
+      librariesAndRefs
+    ]
+  },
   {
     title: 'CLI',
     items: [cliRunning, cliConfiguration, cliReports, cliResultsQuery, cliCicd, cliCommandReference]

@@ -113,6 +113,10 @@
   pre {
     font-family: 'JetBrains Mono', monospace;
   }
+
+  :not(pre) > code {
+    @apply rounded border border-border/70 bg-muted px-1 py-0.5 text-[0.92em] text-foreground;
+  }
 }
 
 /* Custom scrollbar */
