@@ -1880,7 +1880,7 @@ const refToolAndResponseAssertions: DocPage = {
     'regex',
     'contains'
   ],
-  seoTitle: 'Reference — Tool and Response Assertions',
+  seoTitle: 'Getting Started — Tool and Response Assertions',
   track: 'reference',
   sections: [
     {

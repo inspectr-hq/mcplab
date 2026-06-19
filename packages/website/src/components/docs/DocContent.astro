@@ -7,18 +7,32 @@ interface Props {
 }
 
 const { sections } = Astro.props;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderInlineCode(text: string): string {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+}
 ---
 
 {sections.map((section) => (
   <section id={section.id} class="scroll-mt-24">
     <h2 class="mt-10 mb-4 text-2xl font-semibold tracking-tight">{section.title}</h2>
     {section.paragraphs?.map((paragraph) => (
-      <p class="mb-4 text-muted-foreground leading-7">{paragraph}</p>
+      <p class="mb-4 text-muted-foreground leading-7" set:html={renderInlineCode(paragraph)} />
     ))}
     {section.bullets ? (
       <ul class="mb-6 space-y-2 pl-5 text-muted-foreground">
         {section.bullets.map((bullet) => (
-          <li class="list-disc leading-7">{bullet}</li>
+          <li class="list-disc leading-7" set:html={renderInlineCode(bullet)} />
         ))}
       </ul>
     ) : null}
