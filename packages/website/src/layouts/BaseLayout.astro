@@ -28,12 +28,17 @@ import '../index.css';
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalURL} />
     <meta property="og:site_name" content="MCPLab" />
-    <meta property="og:image" content="/screenshots/dashboard.png" />
+    <meta property="og:image" content="/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={title} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="/screenshots/dashboard.png" />
+    <meta name="twitter:image" content="/og.png" />
+    <meta name="twitter:image:alt" content={title} />
     <script
       async
       defer
