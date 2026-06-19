@@ -38,7 +38,7 @@ import type {
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
-import { formatToolSequenceLabel } from '@inspectr/mcplab-core';
+import { formatToolSequenceLabel } from '../../../../core/src/eval';
 import { ScenarioAssistantDialog } from '@/components/config-editor/ScenarioAssistantDialog';
 import { RunConversationPreview } from '@/components/results/RunConversationPreview';
 import { useDataSource } from '@/contexts/DataSourceContext';
