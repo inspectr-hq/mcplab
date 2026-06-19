@@ -1,5 +1,6 @@
 import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import type { CheckResult, EvalRule } from '@/types/eval';
+import { formatToolSequenceLabel } from '../../../core/src/eval';
 
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
@@ -46,7 +47,7 @@ export function buildCheckItems({
 export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
-  if (rule.type === 'tool_sequence') return `Tool sequence · ${(rule.sequence ?? []).join(' -> ')}`;
+  if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
@@ -114,12 +115,10 @@ export function matchFailureReasonForRule(
   }
 
   if (rule.type === 'tool_sequence') {
-    const sequenceText = (rule.sequence ?? []).join(' -> ');
     return failureReasons.find(
       (reason) =>
         reason.startsWith('Tool sequence order was not satisfied:') ||
-        reason.startsWith('Required tool in sequence not used:') ||
-        (sequenceText.length > 0 && reason.includes(sequenceText))
+        reason.startsWith('Required tool in sequence not used:')
     );
   }
 

@@ -42,7 +42,6 @@ function toUiEvalRule(assertion: {
   type: string;
   pattern?: string;
   value?: string;
-  sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
 }): EvalRule {
@@ -65,8 +64,6 @@ function toUiEvalRule(assertion: {
       return { type: 'response_jsonpath_exists', path: assertion.path };
     case 'jsonpath_not_exists':
       return { type: 'response_jsonpath_not_exists', path: assertion.path };
-    case 'tool_sequence':
-      return { type: 'tool_sequence', sequence: assertion.sequence ?? [] };
     default:
       throw new Error(
         `Unsupported response assertion type in config: ${String(
@@ -469,7 +466,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
             include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
           }
         : undefined;
-    const mappedScenario = {
+    const mappedScenario: EvalConfig['scenarios'][number] = {
       id: scenario.id || toId('scn', index),
       name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`,
       serverIds: (() => {

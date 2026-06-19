@@ -241,9 +241,10 @@ function ScenarioCard({
   const [newToolSequenceValue, setNewToolSequenceValue] = useState('');
   const [toolSequenceDraft, setToolSequenceDraft] = useState<string[]>([]);
   const [toolSequenceEditorOpen, setToolSequenceEditorOpen] = useState(false);
-  const [agentCheckEditingIndex, setAgentCheckEditingIndex] = useState<number | null>(null);
+  const [toolSequenceEditingRule, setToolSequenceEditingRule] = useState<EvalRule | null>(null);
+  const [agentCheckEditingRule, setAgentCheckEditingRule] = useState<EvalRule | null>(null);
   const [agentCheckEditorOpen, setAgentCheckEditorOpen] = useState(false);
-  const [valueRuleEditingIndex, setValueRuleEditingIndex] = useState<number | null>(null);
+  const [valueRuleEditingRule, setValueRuleEditingRule] = useState<EvalRule | null>(null);
   const [toolPickerValue, setToolPickerValue] = useState('');
   const [availableToolNames, setAvailableToolNames] = useState<string[] | null>(null);
   const [toolNamesLoading, setToolNamesLoading] = useState(false);
@@ -335,6 +336,11 @@ function ScenarioCard({
     setExpanded((prev) => !prev);
   };
 
+  const findRuleIndex = (rule: EvalRule | null) => {
+    if (!rule) return -1;
+    return scenario.evalRules.findIndex((candidate) => candidate === rule);
+  };
+
   const addRule = () => {
     if (
       newRuleType === 'response_jsonpath' ||
@@ -372,12 +378,13 @@ function ScenarioCard({
       if (!label || !prompt) return;
       const nextRules = [...scenario.evalRules];
       const nextRule = { type: 'agent_check', label, prompt } as const;
-      if (agentCheckEditingIndex !== null) nextRules[agentCheckEditingIndex] = nextRule;
+      const editingIndex = findRuleIndex(agentCheckEditingRule);
+      if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
       else nextRules.push(nextRule);
       onUpdate({ evalRules: nextRules });
       setNewRuleLabel('');
       setNewRulePrompt('');
-      setAgentCheckEditingIndex(null);
+      setAgentCheckEditingRule(null);
       setAgentCheckEditorOpen(false);
       setNewRuleType('required_tool');
       return;
@@ -395,12 +402,13 @@ function ScenarioCard({
     if (!newRuleValue.trim()) return;
     const nextRules = [...scenario.evalRules];
     const nextRule = { type: newRuleType, value: newRuleValue.trim() } as const;
-    if (valueRuleEditingIndex !== null) nextRules[valueRuleEditingIndex] = nextRule;
+    const editingIndex = findRuleIndex(valueRuleEditingRule);
+    if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
     else nextRules.push(nextRule);
     onUpdate({ evalRules: nextRules });
     setNewRuleValue('');
     setToolPickerValue('');
-    setValueRuleEditingIndex(null);
+    setValueRuleEditingRule(null);
     setNewRuleType('required_tool');
   };
 
@@ -438,9 +446,11 @@ function ScenarioCard({
     const nextRules = [...scenario.evalRules];
     const nextRule =
       nextSequence.length > 0 ? ({ type: 'tool_sequence', sequence: nextSequence } as const) : null;
-    if (toolSequenceRuleIndex >= 0) {
-      if (nextRule) nextRules[toolSequenceRuleIndex] = nextRule;
-      else nextRules.splice(toolSequenceRuleIndex, 1);
+    const editingIndex = findRuleIndex(toolSequenceEditingRule);
+    const currentIndex = editingIndex >= 0 ? editingIndex : toolSequenceRuleIndex;
+    if (currentIndex >= 0) {
+      if (nextRule) nextRules[currentIndex] = nextRule;
+      else nextRules.splice(currentIndex, 1);
     } else if (nextRule) {
       nextRules.push(nextRule);
     }
@@ -448,6 +458,7 @@ function ScenarioCard({
     setToolSequenceEditorOpen(false);
     setToolSequenceDraft([]);
     setNewToolSequenceValue('');
+    setToolSequenceEditingRule(null);
     if (newRuleType === 'tool_sequence') {
       setNewRuleType('required_tool');
     }
@@ -465,6 +476,30 @@ function ScenarioCard({
   useEffect(() => {
     setAgentCheckEditorOpen(newRuleType === 'agent_check');
   }, [newRuleType]);
+
+  useEffect(() => {
+    if (toolSequenceEditingRule && findRuleIndex(toolSequenceEditingRule) < 0) {
+      setToolSequenceEditingRule(null);
+    }
+    if (agentCheckEditingRule && findRuleIndex(agentCheckEditingRule) < 0) {
+      setAgentCheckEditingRule(null);
+    }
+    if (valueRuleEditingRule && findRuleIndex(valueRuleEditingRule) < 0) {
+      setValueRuleEditingRule(null);
+    }
+  }, [scenario.evalRules, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
+
+  useEffect(() => {
+    if (toolSequenceEditingRule && newRuleType !== 'tool_sequence') {
+      setToolSequenceEditingRule(null);
+    }
+    if (agentCheckEditingRule && newRuleType !== 'agent_check') {
+      setAgentCheckEditingRule(null);
+    }
+    if (valueRuleEditingRule && valueRuleEditingRule.type !== newRuleType) {
+      setValueRuleEditingRule(null);
+    }
+  }, [newRuleType, toolSequenceEditingRule, agentCheckEditingRule, valueRuleEditingRule]);
 
   const removeRule = (ri: number) => {
     const nextRules = scenario.evalRules.filter((_, i) => i !== ri);
@@ -666,6 +701,7 @@ function ScenarioCard({
       previewResult.run.finalAnswer || '(empty)',
       '',
       'If the run has a meaningful ordered tool path, suggest a tool_sequence check using the raw tool names in the tool sequence order, even if other tools appear between them.',
+      'Use agent_check only for semantic or fuzzy validation;',
       'Please propose concrete updates to the Prompt, Checks, and/or Value Capture Rules based on this preview.'
     ].join('\n');
     setPreviewAssistantPrompt(prompt);
@@ -1280,19 +1316,20 @@ function ScenarioCard({
                                       if (rule.type === 'tool_sequence') {
                                         setNewRuleType('tool_sequence');
                                         setToolSequenceDraft(rule.sequence ?? []);
+                                        setToolSequenceEditingRule(rule);
                                         setToolSequenceEditorOpen(true);
                                         return;
                                       }
                                       if (rule.type === 'agent_check') {
                                         setNewRuleType('agent_check');
-                                        setAgentCheckEditingIndex(ri);
+                                        setAgentCheckEditingRule(rule);
                                         setNewRuleLabel(rule.label ?? '');
                                         setNewRulePrompt(rule.prompt ?? '');
                                         setAgentCheckEditorOpen(true);
                                         return;
                                       }
                                       setNewRuleType(rule.type);
-                                      setValueRuleEditingIndex(ri);
+                                      setValueRuleEditingRule(rule);
                                       setNewRuleValue(rule.value ?? '');
                                     }}
                                     aria-label={`Edit check ${ri + 1}`}
@@ -1339,7 +1376,7 @@ function ScenarioCard({
                                 className="h-8 shrink-0"
                                 onClick={addRule}
                               >
-                                {agentCheckEditingIndex !== null ? 'Update check' : 'Add check'}
+                                {agentCheckEditingRule !== null ? 'Update check' : 'Add check'}
                               </Button>
                             </div>
                             <Textarea
@@ -1422,7 +1459,7 @@ function ScenarioCard({
                               className="h-8 shrink-0"
                               onClick={addRule}
                             >
-                              {valueRuleEditingIndex !== null ? 'Update check' : 'Add'}
+                              {valueRuleEditingRule !== null ? 'Update check' : 'Add'}
                             </Button>
                           </div>
                         )}

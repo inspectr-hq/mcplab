@@ -499,6 +499,6 @@ function toCheckResultTemplateForResponseAssertion(assertion: ResponseAssertion)
   };
 }
 
-function formatToolSequenceLabel(sequence: string[]): string {
+export function formatToolSequenceLabel(sequence: string[]): string {
   return sequence.length > 0 ? `Tool sequence · ${sequence.join(' -> ')}` : 'Tool sequence';
 }

@@ -26,6 +26,7 @@ interface ScenarioAssistantContextInput {
     evalRules: Array<{
       type: string;
       value?: string;
+      sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
       label?: string;
@@ -43,6 +44,7 @@ interface ScenarioAssistantSuggestionBundle {
     replacement: Array<{
       type: string;
       value?: string;
+      sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
       label?: string;
@@ -60,6 +62,7 @@ interface ScenarioAssistantSuggestionBundle {
 interface ScenarioAssistantEvalRuleSuggestion {
   type: string;
   value?: string;
+  sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
   label?: string;
@@ -268,6 +271,15 @@ function normalizeEvalRuleToolNames(
         rule.value = mapping.tool;
       }
     }
+    if (rule.type === 'tool_sequence' && Array.isArray(rule.sequence)) {
+      rule.sequence = rule.sequence
+        .map((toolName) => toolName.trim())
+        .filter((toolName) => toolName.length > 0)
+        .map((toolName) => {
+          const mapping = toolPublicMap.get(toolName);
+          return mapping ? mapping.tool : toolName;
+        });
+    }
   }
 }
 
@@ -307,7 +319,7 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.value ?? ''}::${rule.path ?? ''}::${
+  return `${rule.type}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${rule.path ?? ''}::${
     rule.equals === undefined ? '' : String(rule.equals)
   }`;
 }
@@ -528,6 +540,9 @@ export function normalizeScenarioAssistantEvalRules(
     const rule: ScenarioAssistantEvalRuleSuggestion = {
       ...rawRule,
       ...(typeof rawRule.value === 'string' ? { value: rawRule.value.trim() } : {}),
+      ...(Array.isArray(rawRule.sequence)
+        ? { sequence: rawRule.sequence.map((toolName) => toolName.trim()).filter(Boolean) }
+        : {}),
       ...(typeof rawRule.path === 'string' ? { path: rawRule.path.trim() } : {})
     };
 
