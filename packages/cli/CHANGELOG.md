@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 1.24.2
+
+### Patch Changes
+
+- feat: Scenario assistent Add selected and Replace all
+- fix: Scenario assistent insert tool sequence check
+
 ## 1.24.1
 
 ### Patch Changes
