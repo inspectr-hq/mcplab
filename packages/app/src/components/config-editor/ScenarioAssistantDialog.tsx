@@ -71,6 +71,9 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
 type SuggestedEvalRule = NonNullable<
   ScenarioAssistantSuggestionBundle['evalRules']
 >['replacement'][number];
+type SuggestedExtractRule = NonNullable<
+  ScenarioAssistantSuggestionBundle['extractRules']
+>['replacement'][number];
 
 function sequenceFromSuggestedRule(rule: SuggestedEvalRule): string[] {
   if (Array.isArray(rule.sequence)) {
@@ -477,7 +480,9 @@ export function ScenarioAssistantDialog({
       );
       onApplyPatch({
         evalRules:
-          evalRuleMode === 'append' ? [...scenario.evalRules, ...normalized.rules] : normalized.rules
+          evalRuleMode === 'append'
+            ? [...scenario.evalRules, ...normalized.rules]
+            : normalized.rules
       });
       if (normalized.skippedToolSequences > 0) {
         toast({
@@ -500,6 +505,26 @@ export function ScenarioAssistantDialog({
       extractRules: 'Value Capture Rules'
     };
     toast({ title: 'Applied suggestion', description: `Updated ${labelByKey[key]}` });
+  };
+
+  const applyExtractRuleSuggestions = (
+    messageId: string | undefined,
+    suggestions: ScenarioAssistantSuggestionBundle | undefined,
+    selectedExtractRules: SuggestedExtractRule[],
+    mode: 'replace' | 'append'
+  ) => {
+    if (!suggestions?.extractRules) return;
+    onApplyPatch({
+      extractRules:
+        mode === 'append'
+          ? [...scenario.extractRules, ...selectedExtractRules]
+          : selectedExtractRules
+    });
+    if (messageId) {
+      const composite = `${messageId}:extractRules`;
+      setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
+    }
+    toast({ title: 'Applied suggestion', description: 'Updated Value Capture Rules' });
   };
 
   const blurActiveElement = () => {
@@ -728,17 +753,25 @@ export function ScenarioAssistantDialog({
                             />
                           )}
                           {message.suggestions.extractRules && (
-                            <SuggestionCard
-                              title="Value Capture Rules"
+                            <ExtractRulesSuggestionCard
                               rationale={message.suggestions.extractRules.rationale}
-                              preview={JSON.stringify(
-                                message.suggestions.extractRules.replacement,
-                                null,
-                                2
-                              )}
+                              rules={message.suggestions.extractRules.replacement}
                               applied={appliedSuggestionKeys.has(`${message.id}:extractRules`)}
-                              onApply={() =>
-                                applySuggestions(message.id, message.suggestions, 'extractRules')
+                              onApply={(selectedRules) =>
+                                applyExtractRuleSuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  selectedRules,
+                                  'append'
+                                )
+                              }
+                              onReplace={(selectedRules) =>
+                                applyExtractRuleSuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  selectedRules,
+                                  'replace'
+                                )
                               }
                             />
                           )}
@@ -837,10 +870,17 @@ function SuggestionCard({
     >
       <div className="flex items-center justify-between gap-2">
         <h5 className="text-sm font-medium">{title}</h5>
+      </div>
+      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
+      <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
+        {preview}
+      </pre>
+      <div className="flex justify-end">
         <Button
           type="button"
           size="sm"
-          variant={applied ? 'secondary' : 'outline'}
+          className="h-8"
+          variant={applied ? 'secondary' : 'default'}
           onClick={onApply}
           disabled={applied}
         >
@@ -854,10 +894,6 @@ function SuggestionCard({
           )}
         </Button>
       </div>
-      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
-      <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
-        {preview}
-      </pre>
     </div>
   );
 }
@@ -958,6 +994,7 @@ function EvalRulesSuggestionCard({
             <Button
               type="button"
               size="sm"
+              className="h-8"
               variant="outline"
               onClick={() => onReplace(selectedRules)}
               disabled={selectedCount === 0}
@@ -967,6 +1004,126 @@ function EvalRulesSuggestionCard({
             <Button
               type="button"
               size="sm"
+              className="h-8"
+              onClick={() => onApply(selectedRules)}
+              disabled={selectedCount === 0}
+            >
+              Add selected
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExtractRulesSuggestionCard({
+  rationale,
+  rules,
+  applied = false,
+  onApply,
+  onReplace
+}: {
+  rationale?: string;
+  rules: SuggestedExtractRule[];
+  applied?: boolean;
+  onApply: (selectedRules: SuggestedExtractRule[]) => void;
+  onReplace: (selectedRules: SuggestedExtractRule[]) => void;
+}) {
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
+    () => new Set(rules.map((_, index) => index))
+  );
+  const selectedCount = selectedIndexes.size;
+  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
+  const allSelected = selectedCount === rules.length;
+
+  const toggleRule = (index: number, checked: boolean) => {
+    setSelectedIndexes((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(index);
+      } else {
+        next.delete(index);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div
+      className={`space-y-2 rounded-md border p-3 ${
+        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h5 className="text-sm font-medium">Value Capture Rules</h5>
+      </div>
+      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
+      <div className="space-y-2 rounded bg-muted/60 p-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] text-muted-foreground">
+            {selectedCount} of {rules.length} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            disabled={applied || rules.length === 0}
+            onClick={() =>
+              setSelectedIndexes(allSelected ? new Set() : new Set(rules.map((_, index) => index)))
+            }
+          >
+            {allSelected ? 'Unselect all' : 'Select all'}
+          </Button>
+        </div>
+        {rules.map((rule, index) => {
+          const label = `${rule.name} · ${rule.pattern}`;
+          const checkboxId = `scenario-assistant-extract-${index}-${rule.name}`;
+          return (
+            <div
+              key={`${rule.name}-${index}`}
+              className="flex items-start gap-2 rounded bg-background p-2"
+            >
+              <Checkbox
+                id={checkboxId}
+                checked={selectedIndexes.has(index)}
+                disabled={applied}
+                onCheckedChange={(checked) => toggleRule(index, checked === true)}
+                aria-label={`Select ${label}`}
+              />
+              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
+                <span className="block text-xs font-medium">{label}</span>
+                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
+                  {JSON.stringify(rule)}
+                </code>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-end gap-2">
+        {applied ? (
+          <Button type="button" size="sm" variant="secondary" disabled>
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+            Applied
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8"
+              variant="outline"
+              onClick={() => onReplace(selectedRules)}
+              disabled={selectedCount === 0}
+            >
+              Replace all
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8"
               onClick={() => onApply(selectedRules)}
               disabled={selectedCount === 0}
             >

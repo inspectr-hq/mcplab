@@ -477,6 +477,117 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     });
   });
 
+  it('adds only selected value capture suggestions to existing rules', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-select-extract-rules',
+            role: 'assistant',
+            text: 'I suggest adding value capture rules.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              extractRules: {
+                replacement: [
+                  { name: 'asset', pattern: 'Asset: (\\w+)' },
+                  { name: 'count', pattern: 'Count: (\\d+)' }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario({
+          extractRules: [{ name: 'existing', pattern: 'Existing: (.+)' }]
+        })}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unselect all' }));
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Add selected' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      extractRules: [
+        { name: 'existing', pattern: 'Existing: (.+)' },
+        { name: 'asset', pattern: 'Asset: (\\w+)' }
+      ]
+    });
+  });
+
+  it('can replace all value capture rules with selected suggestions', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-replace-extract-rules',
+            role: 'assistant',
+            text: 'I suggest replacing value capture rules.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              extractRules: {
+                replacement: [
+                  { name: 'asset', pattern: 'Asset: (\\w+)' },
+                  { name: 'count', pattern: 'Count: (\\d+)' }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario({
+          extractRules: [{ name: 'existing', pattern: 'Existing: (.+)' }]
+        })}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Replace all' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      extractRules: [
+        { name: 'asset', pattern: 'Asset: (\\w+)' },
+        { name: 'count', pattern: 'Count: (\\d+)' }
+      ]
+    });
+  });
+
   it('does not apply placeholder-only tool_sequence suggestions', async () => {
     const onApplyPatch = vi.fn();
     mockSource.createScenarioAssistantSession.mockResolvedValue({
