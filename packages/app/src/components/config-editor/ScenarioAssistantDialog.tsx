@@ -14,11 +14,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { isAbortError } from '@/lib/abort';
+import { formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import type { AgentConfig, EvalRule, Scenario, ServerConfig } from '@/types/eval';
 import type {
@@ -65,6 +67,53 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
       'Based on the current tool configuration and context, generate a complete scenario draft. Include a clear prompt, realistic expected tool calls with arguments, meaningful checks that validate the core behavior, and at least one value capture rule. Explain your choices so I can adjust them.'
   }
 ] as const;
+
+type SuggestedEvalRule = NonNullable<
+  ScenarioAssistantSuggestionBundle['evalRules']
+>['replacement'][number];
+
+function sequenceFromSuggestedRule(rule: SuggestedEvalRule): string[] {
+  if (Array.isArray(rule.sequence)) {
+    return rule.sequence.map((toolName) => toolName.trim()).filter(Boolean);
+  }
+  const value = typeof rule.value === 'string' ? rule.value.trim() : '';
+  if (!value || value.toLowerCase() === 'tool sequence') return [];
+  return value
+    .split(/\s*(?:->|,|\n)\s*/)
+    .map((toolName) => toolName.trim())
+    .filter(Boolean);
+}
+
+function normalizeSuggestedEvalRules(rules: SuggestedEvalRule[]): {
+  rules: EvalRule[];
+  skippedToolSequences: number;
+} {
+  const normalized: EvalRule[] = [];
+  let skippedToolSequences = 0;
+  for (const rule of rules) {
+    if (rule.type === 'tool_sequence') {
+      const sequence = sequenceFromSuggestedRule(rule);
+      if (sequence.length > 0) {
+        normalized.push({ type: 'tool_sequence', sequence });
+      } else {
+        skippedToolSequences += 1;
+      }
+      continue;
+    }
+    normalized.push(rule);
+  }
+  return { rules: normalized, skippedToolSequences };
+}
+
+function formatSuggestedEvalRuleLabel(rule: SuggestedEvalRule): string {
+  if (rule.type === 'tool_sequence') {
+    const sequence = sequenceFromSuggestedRule(rule);
+    return sequence.length > 0
+      ? `Tool sequence · ${sequence.join(' -> ')}`
+      : 'Tool sequence · No tool steps';
+  }
+  return formatEvalRuleLabel(rule);
+}
 
 interface ScenarioAssistantDialogProps {
   open: boolean;
@@ -414,23 +463,29 @@ export function ScenarioAssistantDialog({
   const applySuggestions = (
     messageId: string | undefined,
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
-    key: 'prompt' | 'evalRules' | 'extractRules'
+    key: 'prompt' | 'evalRules' | 'extractRules',
+    selectedEvalRules?: SuggestedEvalRule[],
+    evalRuleMode: 'replace' | 'append' = 'replace'
   ) => {
     if (!suggestions) return;
     if (key === 'prompt' && suggestions.prompt) {
       onApplyPatch({ prompt: suggestions.prompt.replacement });
     }
     if (key === 'evalRules' && suggestions.evalRules) {
+      const normalized = normalizeSuggestedEvalRules(
+        selectedEvalRules ?? suggestions.evalRules.replacement
+      );
       onApplyPatch({
-        evalRules: suggestions.evalRules.replacement as Array<{
-          type: EvalRule['type'];
-          value?: string;
-          path?: string;
-          equals?: string | number | boolean;
-          label?: string;
-          prompt?: string;
-        }>
+        evalRules:
+          evalRuleMode === 'append' ? [...scenario.evalRules, ...normalized.rules] : normalized.rules
       });
+      if (normalized.skippedToolSequences > 0) {
+        toast({
+          title: 'Skipped invalid tool sequence',
+          description: 'The assistant suggested a sequence check without any tool steps.',
+          variant: 'destructive'
+        });
+      }
     }
     if (key === 'extractRules' && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });
@@ -648,17 +703,27 @@ export function ScenarioAssistantDialog({
                             />
                           )}
                           {message.suggestions.evalRules && (
-                            <SuggestionCard
-                              title="Checks"
+                            <EvalRulesSuggestionCard
                               rationale={message.suggestions.evalRules.rationale}
-                              preview={JSON.stringify(
-                                message.suggestions.evalRules.replacement,
-                                null,
-                                2
-                              )}
+                              rules={message.suggestions.evalRules.replacement}
                               applied={appliedSuggestionKeys.has(`${message.id}:evalRules`)}
-                              onApply={() =>
-                                applySuggestions(message.id, message.suggestions, 'evalRules')
+                              onApply={(selectedRules) =>
+                                applySuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  'evalRules',
+                                  selectedRules,
+                                  'append'
+                                )
+                              }
+                              onReplace={(selectedRules) =>
+                                applySuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  'evalRules',
+                                  selectedRules,
+                                  'replace'
+                                )
                               }
                             />
                           )}
@@ -793,6 +858,123 @@ function SuggestionCard({
       <pre className="max-h-56 overflow-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
         {preview}
       </pre>
+    </div>
+  );
+}
+
+function EvalRulesSuggestionCard({
+  rationale,
+  rules,
+  applied = false,
+  onApply,
+  onReplace
+}: {
+  rationale?: string;
+  rules: SuggestedEvalRule[];
+  applied?: boolean;
+  onApply: (selectedRules: SuggestedEvalRule[]) => void;
+  onReplace: (selectedRules: SuggestedEvalRule[]) => void;
+}) {
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
+    () => new Set(rules.map((_, index) => index))
+  );
+  const selectedCount = selectedIndexes.size;
+  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
+  const allSelected = selectedCount === rules.length;
+
+  const toggleRule = (index: number, checked: boolean) => {
+    setSelectedIndexes((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(index);
+      } else {
+        next.delete(index);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div
+      className={`space-y-2 rounded-md border p-3 ${
+        applied ? 'border-emerald-300 bg-emerald-50/40' : ''
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h5 className="text-sm font-medium">Checks</h5>
+      </div>
+      {rationale && <p className="text-xs text-muted-foreground">{rationale}</p>}
+      <div className="space-y-2 rounded bg-muted/60 p-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] text-muted-foreground">
+            {selectedCount} of {rules.length} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            disabled={applied || rules.length === 0}
+            onClick={() =>
+              setSelectedIndexes(allSelected ? new Set() : new Set(rules.map((_, index) => index)))
+            }
+          >
+            {allSelected ? 'Unselect all' : 'Select all'}
+          </Button>
+        </div>
+        {rules.map((rule, index) => {
+          const label = formatSuggestedEvalRuleLabel(rule);
+          const checkboxId = `scenario-assistant-check-${index}-${rule.type}`;
+          return (
+            <div
+              key={`${rule.type}-${index}`}
+              className="flex items-start gap-2 rounded bg-background p-2"
+            >
+              <Checkbox
+                id={checkboxId}
+                checked={selectedIndexes.has(index)}
+                disabled={applied}
+                onCheckedChange={(checked) => toggleRule(index, checked === true)}
+                aria-label={`Select ${label}`}
+              />
+              <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer space-y-1">
+                <span className="block text-xs font-medium">{label}</span>
+                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
+                  {JSON.stringify(rule)}
+                </code>
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-end gap-2">
+        {applied ? (
+          <Button type="button" size="sm" variant="secondary" disabled>
+            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+            Applied
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onReplace(selectedRules)}
+              disabled={selectedCount === 0}
+            >
+              Replace all
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onApply(selectedRules)}
+              disabled={selectedCount === 0}
+            >
+              Add selected
+            </Button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

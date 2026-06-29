@@ -371,6 +371,7 @@ export const workspaceApiClient = {
       evalRules: Array<{
         type: string;
         value?: string;
+        sequence?: string[];
         path?: string;
         equals?: string | number | boolean;
         label?: string;

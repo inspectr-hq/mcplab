@@ -316,6 +316,217 @@ describe('ScenarioAssistantDialog OAuth startup', () => {
     expect(onApplyPatch).toHaveBeenCalledWith({ prompt: 'Return exactly the asset tags.' });
   });
 
+  it('applies structured tool_sequence suggestions with sequence data', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-sequence',
+            role: 'assistant',
+            text: 'I suggest adding a sequence check.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              evalRules: {
+                replacement: [
+                  { type: 'required_tool', value: 'search_tags' },
+                  { type: 'tool_sequence', sequence: ['search_tags', 'value_based_search'] }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      evalRules: [
+        { type: 'required_tool', value: 'search_tags' },
+        { type: 'tool_sequence', sequence: ['search_tags', 'value_based_search'] }
+      ]
+    });
+  });
+
+  it('adds only selected check suggestions to existing checks', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-select-checks',
+            role: 'assistant',
+            text: 'I suggest adding checks.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              evalRules: {
+                replacement: [
+                  { type: 'required_tool', value: 'search_tags' },
+                  { type: 'response_contains', value: 'TM5-BP2-CONC' }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario({
+          evalRules: [{ type: 'forbidden_tool', value: 'delete_tags' }]
+        })}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unselect all' }));
+    expect(checkboxes[0]).not.toBeChecked();
+    expect(checkboxes[1]).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Add selected' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Replace all' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    expect(checkboxes[0]).toBeChecked();
+    expect(checkboxes[1]).toBeChecked();
+
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      evalRules: [
+        { type: 'forbidden_tool', value: 'delete_tags' },
+        { type: 'required_tool', value: 'search_tags' }
+      ]
+    });
+  });
+
+  it('can replace all checks with selected suggestions', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-replace-checks',
+            role: 'assistant',
+            text: 'I suggest replacing checks.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              evalRules: {
+                replacement: [
+                  { type: 'required_tool', value: 'search_tags' },
+                  { type: 'response_contains', value: 'TM5-BP2-CONC' }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario({
+          evalRules: [{ type: 'forbidden_tool', value: 'delete_tags' }]
+        })}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Replace all' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      evalRules: [
+        { type: 'required_tool', value: 'search_tags' },
+        { type: 'response_contains', value: 'TM5-BP2-CONC' }
+      ]
+    });
+  });
+
+  it('does not apply placeholder-only tool_sequence suggestions', async () => {
+    const onApplyPatch = vi.fn();
+    mockSource.createScenarioAssistantSession.mockResolvedValue({
+      sessionId: 'sas-1',
+      session: {
+        ...makeAssistantSession(),
+        messages: [
+          {
+            id: 'msg-sequence-placeholder',
+            role: 'assistant',
+            text: 'I suggest adding a sequence check.',
+            createdAt: new Date().toISOString(),
+            suggestions: {
+              evalRules: {
+                replacement: [
+                  { type: 'required_tool', value: 'search_tags' },
+                  { type: 'tool_sequence', value: 'Tool sequence' }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    render(
+      <ScenarioAssistantDialog
+        open
+        onOpenChange={vi.fn()}
+        scenario={makeScenario()}
+        agents={agents}
+        servers={servers}
+        onApplyPatch={onApplyPatch}
+      />
+    );
+
+    await screen.findByText('Structured Suggestions');
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected' }));
+
+    expect(onApplyPatch).toHaveBeenCalledWith({
+      evalRules: [{ type: 'required_tool', value: 'search_tags' }]
+    });
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Skipped invalid tool sequence',
+        variant: 'destructive'
+      })
+    );
+  });
+
   it('merges live assistant session updates from SSE events', async () => {
     let onScenarioEvent:
       | ((event: {
