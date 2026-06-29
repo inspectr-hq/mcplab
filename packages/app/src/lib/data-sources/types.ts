@@ -307,6 +307,7 @@ export type ScenarioAssistantSseEvent = AssistantSseEvent<ScenarioAssistantSessi
 
 export interface ScenarioPreviewCoreRunResponse {
   runId: string;
+  warnings?: string[];
   scenario: {
     scenarioId: string;
     agent: string;
@@ -786,6 +787,7 @@ export interface EvalDataSource {
           evalRules: Array<{
             type: EvalRule['type'];
             value?: string;
+            sequence?: string[];
             path?: string;
             equals?: string | number | boolean;
             label?: string;
@@ -834,6 +836,7 @@ export interface EvalDataSource {
       evalRules: Array<{
         type: EvalRule['type'];
         value?: string;
+        sequence?: string[];
         path?: string;
         equals?: string | number | boolean;
         label?: string;

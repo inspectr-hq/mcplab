@@ -20,6 +20,7 @@ vi.mock('@inspectr/mcplab-core', async (importOriginal) => {
 });
 
 import { handleRunsRoutes } from './runs-routes.js';
+import { runAll } from '@inspectr/mcplab-core';
 import {
   createRunQueueServiceForTest,
   createRunQueueState,
@@ -295,6 +296,174 @@ describe('run request validation', () => {
     expect(handled).toBe(true);
     expect(responses[0]?.status).toBe(200);
     expect((responses[0]?.payload as any)?.runId).toBe('preview-run');
+  });
+
+  it('passes tool_sequence eval rules through preview config', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/preview',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({
+          selectedAgentName: 'assistant-1',
+          scenario: {
+            id: 'scn-1',
+            prompt: 'test',
+            serverNames: ['server-1'],
+            evalRules: [{ type: 'tool_sequence', sequence: ['search_tags', 'value_based_search'] }],
+            extractRules: []
+          }
+        }),
+        readLibraries: () => ({
+          agents: {
+            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+          },
+          servers: {
+            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+          },
+          scenarios: {}
+        }),
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        },
+        getScenarioRunTraceRecords: () => [],
+        pickDefaultAssistantAgentName: () => 'assistant-1',
+        pkgVersion: 'test',
+        selectScenarioIds: (config: any) => config
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(200);
+    expect(vi.mocked(runAll).mock.calls.at(-1)?.[0].scenarios[0]?.eval?.tool_sequence).toEqual([
+      'search_tags',
+      'value_based_search'
+    ]);
+  });
+
+  it('normalizes legacy tool_sequence value strings in preview config', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/preview',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({
+          selectedAgentName: 'assistant-1',
+          scenario: {
+            id: 'scn-1',
+            prompt: 'test',
+            serverNames: ['server-1'],
+            evalRules: [{ type: 'tool_sequence', value: 'search_tags -> value_based_search' }],
+            extractRules: []
+          }
+        }),
+        readLibraries: () => ({
+          agents: {
+            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+          },
+          servers: {
+            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+          },
+          scenarios: {}
+        }),
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        },
+        getScenarioRunTraceRecords: () => [],
+        pickDefaultAssistantAgentName: () => 'assistant-1',
+        pkgVersion: 'test',
+        selectScenarioIds: (config: any) => config
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(200);
+    expect(vi.mocked(runAll).mock.calls.at(-1)?.[0].scenarios[0]?.eval?.tool_sequence).toEqual([
+      'search_tags',
+      'value_based_search'
+    ]);
+  });
+
+  it('returns a warning when preview eval rules include multiple tool_sequence checks', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs/preview', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs/preview',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({
+          selectedAgentName: 'assistant-1',
+          scenario: {
+            id: 'scn-1',
+            prompt: 'test',
+            serverNames: ['server-1'],
+            evalRules: [
+              { type: 'tool_sequence', sequence: ['search_tags', 'value_based_search'] },
+              { type: 'tool_sequence', sequence: ['lookup', 'fetch'] }
+            ],
+            extractRules: []
+          }
+        }),
+        readLibraries: () => ({
+          agents: {
+            'assistant-1': { provider: 'openai', model: 'gpt-4o-mini' }
+          },
+          servers: {
+            'server-1': { transport: 'http', url: 'http://localhost:3000/mcp' }
+          },
+          scenarios: {}
+        }),
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        },
+        getScenarioRunTraceRecords: () => [],
+        pickDefaultAssistantAgentName: () => 'assistant-1',
+        pkgVersion: 'test',
+        selectScenarioIds: (config: any) => config
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]?.status).toBe(200);
+    expect((responses[0]?.payload as any)?.warnings).toEqual([
+      'Multiple tool_sequence checks were provided; only the last valid sequence was used.'
+    ]);
+    expect(vi.mocked(runAll).mock.calls.at(-1)?.[0].scenarios[0]?.eval?.tool_sequence).toEqual([
+      'lookup',
+      'fetch'
+    ]);
   });
 
   it('returns 400 for preview when url-only text attachment is provided', async () => {

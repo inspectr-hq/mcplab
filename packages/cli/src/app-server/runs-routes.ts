@@ -499,7 +499,8 @@ export async function handleRunsRoutes(params: {
       }
     }
 
-    const coreEval = toCoreEvalRules(evalRules);
+    const previewWarnings: string[] = [];
+    const coreEval = toCoreEvalRules(evalRules, previewWarnings);
     const coreExtract = toCoreExtractRules(extractRules);
     const previewConfigBase: EvalConfig = {
       name: `Preview ${scenarioId}`,
@@ -539,6 +540,7 @@ export async function handleRunsRoutes(params: {
         ) ?? traceRecords[0];
       asJson(res, 200, {
         runId: results.metadata.run_id,
+        ...(previewWarnings.length > 0 ? { warnings: previewWarnings } : {}),
         scenario: {
           scenarioId,
           agent: selectedAgentName,
@@ -673,10 +675,13 @@ export async function handleRunsRoutes(params: {
 }
 
 function toCoreEvalRules(
-  evalRules: unknown[]
+  evalRules: unknown[],
+  warnings: string[] = []
 ): EvalConfig['scenarios'][number]['eval'] | undefined {
   const requiredTools: string[] = [];
   const forbiddenTools: string[] = [];
+  let toolSequence: string[] | undefined;
+  let validToolSequenceCount = 0;
   const agentAssertions: Array<{ label: string; prompt: string }> = [];
   const responseAssertions: Array<
     | { type: 'contains'; value: string }
@@ -699,6 +704,7 @@ function toCoreEvalRules(
       equals?: unknown;
       label?: unknown;
       prompt?: unknown;
+      sequence?: unknown;
     };
     const type = String(rule.type ?? '').trim();
     const value = String(rule.value ?? '').trim();
@@ -712,6 +718,14 @@ function toCoreEvalRules(
     }
     if (type === 'forbidden_tool' && value) {
       forbiddenTools.push(value);
+      continue;
+    }
+    if (type === 'tool_sequence') {
+      const sequence = parseToolSequenceRule(rule);
+      if (sequence.length > 0) {
+        validToolSequenceCount += 1;
+        toolSequence = sequence;
+      }
       continue;
     }
     if (type === 'response_contains' && value) {
@@ -765,9 +779,16 @@ function toCoreEvalRules(
   }
 
   const hasToolConstraints = requiredTools.length > 0 || forbiddenTools.length > 0;
+  const hasToolSequence = Boolean(toolSequence?.length);
+  if (validToolSequenceCount > 1) {
+    warnings.push(
+      'Multiple tool_sequence checks were provided; only the last valid sequence was used.'
+    );
+  }
   const hasResponseAssertions = responseAssertions.length > 0;
   const hasAgentAssertions = agentAssertions.length > 0;
-  if (!hasToolConstraints && !hasResponseAssertions && !hasAgentAssertions) return undefined;
+  if (!hasToolConstraints && !hasToolSequence && !hasResponseAssertions && !hasAgentAssertions)
+    return undefined;
   return {
     ...(hasToolConstraints
       ? {
@@ -777,9 +798,22 @@ function toCoreEvalRules(
           }
         }
       : {}),
+    ...(hasToolSequence ? { tool_sequence: toolSequence } : {}),
     ...(hasResponseAssertions ? { response_assertions: responseAssertions } : {}),
     ...(hasAgentAssertions ? { agent_assertions: agentAssertions } : {})
   };
+}
+
+function parseToolSequenceRule(rule: { value?: unknown; sequence?: unknown }): string[] {
+  if (Array.isArray(rule.sequence)) {
+    return rule.sequence.map((toolName) => String(toolName ?? '').trim()).filter(Boolean);
+  }
+  const value = String(rule.value ?? '').trim();
+  if (!value || value.toLowerCase() === 'tool sequence') return [];
+  return value
+    .split(/\s*(?:->|,|\n)\s*/)
+    .map((toolName) => toolName.trim())
+    .filter(Boolean);
 }
 
 function toCoreExtractRules(
