@@ -128,9 +128,7 @@ describe('Results', () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -148,9 +146,7 @@ describe('Results', () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -168,9 +164,7 @@ describe('Results', () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200), makeRun('run-b', null)]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -191,9 +185,7 @@ describe('Results', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -236,9 +228,7 @@ describe('Results', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -258,9 +248,7 @@ describe('Results', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results']}
-      >
+      <MemoryRouter initialEntries={['/results']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -280,9 +268,7 @@ describe('Results', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results?time_filter=last&time_preset=15min']}
-      >
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=15min']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>
@@ -344,9 +330,7 @@ describe('Results', () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-old', 900, '2026-03-10T09:30:00.000Z')]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results?time_filter=last&time_preset=15min']}
-      >
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=15min']}>
         <Routes>
           <Route path="/results" element={<Results />} />
         </Routes>

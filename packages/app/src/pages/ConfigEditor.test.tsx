@@ -89,9 +89,7 @@ describe('ConfigEditor', () => {
 
   it('renders the edit page even when a library scenario has a malformed name', () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations/cfg-1/edit']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/edit']}>
         <Routes>
           <Route path="/mcp-evaluations/:id/edit" element={<ConfigEditor />} />
         </Routes>

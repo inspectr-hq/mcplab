@@ -177,9 +177,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -198,9 +196,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -227,9 +223,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -250,9 +244,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -269,9 +261,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(makeResult());
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -297,9 +287,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -352,9 +340,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1?agent=agent-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1?agent=agent-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -396,9 +382,7 @@ describe('ResultDetail conversation toggle', () => {
     ];
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -424,9 +408,7 @@ describe('ResultDetail conversation toggle', () => {
     sourceMock.startRun.mockClear();
 
     render(
-      <MemoryRouter
-        initialEntries={['/results/run-rerun']}
-      >
+      <MemoryRouter initialEntries={['/results/run-rerun']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>
@@ -482,9 +464,7 @@ describe('ResultDetail conversation toggle', () => {
     getResultMock.mockResolvedValue(result);
 
     const { container } = render(
-      <MemoryRouter
-        initialEntries={['/results/run-1']}
-      >
+      <MemoryRouter initialEntries={['/results/run-1']}>
         <Routes>
           <Route path="/results/:id" element={<ResultDetail />} />
         </Routes>

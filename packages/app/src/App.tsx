@@ -68,10 +68,7 @@ export function AppRouteTree() {
           path="/libraries/scenarios"
           element={<Navigate to="/libraries/test-cases" replace />}
         />
-        <Route
-          path="/libraries/scenarios/:scenarioId"
-          element={<LegacyScenarioRouteRedirect />}
-        />
+        <Route path="/libraries/scenarios/:scenarioId" element={<LegacyScenarioRouteRedirect />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/mcp" element={<McpConnectionInfoPage />} />
         <Route path="/run" element={<RunEvaluation />} />

@@ -231,9 +231,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -275,9 +273,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare?mode=within-run&runId=missing&agents=unknown']}
-      >
+      <MemoryRouter initialEntries={['/compare?mode=within-run&runId=missing&agents=unknown']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -292,9 +288,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(mixedAgentCountResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -309,9 +303,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -333,9 +325,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -472,9 +462,7 @@ describe('Compare', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare?time_filter=last&time_preset=15min']}
-      >
+      <MemoryRouter initialEntries={['/compare?time_filter=last&time_preset=15min']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -527,9 +515,7 @@ describe('Compare', () => {
     sourceMock.listResults.mockResolvedValue(baseResults);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare?time_filter=last&time_preset=24h']}
-      >
+      <MemoryRouter initialEntries={['/compare?time_filter=last&time_preset=24h']}>
         <Routes>
           <Route
             path="/compare"
@@ -584,9 +570,7 @@ describe('Compare', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>
@@ -610,9 +594,7 @@ describe('Compare', () => {
     ]);
 
     render(
-      <MemoryRouter
-        initialEntries={['/compare']}
-      >
+      <MemoryRouter initialEntries={['/compare']}>
         <Routes>
           <Route path="/compare" element={<Compare />} />
         </Routes>

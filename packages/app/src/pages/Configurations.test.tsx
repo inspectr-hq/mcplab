@@ -120,9 +120,7 @@ describe('Configurations suites', () => {
 
   it('renders grouped suite headers including root bucket', async () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -137,9 +135,7 @@ describe('Configurations suites', () => {
 
   it('filters configs by suite selection', async () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -161,9 +157,7 @@ describe('Configurations suites', () => {
 
   it('filters configs by parent suite including nested sublevels', async () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -185,9 +179,7 @@ describe('Configurations suites', () => {
 
   it('queues all configs in a suite when Run Suite is clicked', async () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -209,9 +201,7 @@ describe('Configurations suites', () => {
 
   it('quick run passes only the config-scoped agents', async () => {
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
@@ -244,9 +234,7 @@ describe('Configurations suites', () => {
     ];
 
     render(
-      <MemoryRouter
-        initialEntries={['/mcp-evaluations']}
-      >
+      <MemoryRouter initialEntries={['/mcp-evaluations']}>
         <Routes>
           <Route path="/mcp-evaluations" element={<Configurations />} />
         </Routes>
