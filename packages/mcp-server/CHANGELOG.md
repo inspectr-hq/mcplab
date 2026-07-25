@@ -1,5 +1,13 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.7.1
+
+### Patch Changes
+
+- chore: Bump dependencies
+- chore: Streamline CLI log output
+- feat: App CLI show ASCII logo
+
 ## 1.7.0
 
 ### Minor Changes
