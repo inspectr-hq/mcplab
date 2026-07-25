@@ -45,6 +45,7 @@ import {
 } from './results/format.js';
 import type { ResultSource } from './results/types.js';
 import { getContext } from './results/context.js';
+import { printCliBanner } from './cli-branding.js';
 
 const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   ?.version as string;
@@ -647,6 +648,7 @@ program
       if (Number.isNaN(port) || port <= 0) {
         throw new Error('Port must be a positive number');
       }
+      printCliBanner();
       await startAppServer({
         host: resolvedAppOptions.host,
         port,
