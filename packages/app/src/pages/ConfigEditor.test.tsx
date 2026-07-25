@@ -91,7 +91,6 @@ describe('ConfigEditor', () => {
     render(
       <MemoryRouter
         initialEntries={['/mcp-evaluations/cfg-1/edit']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/mcp-evaluations/:id/edit" element={<ConfigEditor />} />

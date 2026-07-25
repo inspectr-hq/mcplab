@@ -233,7 +233,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -259,7 +258,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare?mode=within-run&runId=run-2&agents=agent-b,agent-a']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -279,7 +277,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare?mode=within-run&runId=missing&agents=unknown']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -297,7 +294,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -315,7 +311,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -340,7 +335,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -458,7 +452,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare?mode=within-run&runId=run-mixed&agents=agent-a,agent-b']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -481,7 +474,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare?time_filter=last&time_preset=15min']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -510,7 +502,6 @@ describe('Compare', () => {
             start
           )}&time_end=${toDatetimeLocalValue(end)}`
         ]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -538,7 +529,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare?time_filter=last&time_preset=24h']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route
@@ -575,7 +565,6 @@ describe('Compare', () => {
         initialEntries={[
           '/compare?mode=within-run&runId=run-1&agents=agent-a,agent-b&time_filter=last&time_preset=15min'
         ]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -597,7 +586,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />
@@ -624,7 +612,6 @@ describe('Compare', () => {
     render(
       <MemoryRouter
         initialEntries={['/compare']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/compare" element={<Compare />} />

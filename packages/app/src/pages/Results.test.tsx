@@ -130,7 +130,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -151,7 +150,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -172,7 +170,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -196,7 +193,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -242,7 +238,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -265,7 +260,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -288,7 +282,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results?time_filter=last&time_preset=15min']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -322,7 +315,6 @@ describe('Results', () => {
             start
           )}&time_end=${toDatetimeLocalValue(end)}`
         ]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
@@ -354,7 +346,6 @@ describe('Results', () => {
     render(
       <MemoryRouter
         initialEntries={['/results?time_filter=last&time_preset=15min']}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
           <Route path="/results" element={<Results />} />
