@@ -615,7 +615,7 @@ export async function startMcplabMcpServer(
     try {
       await handleHttpRequest(req, res, sessions, options.path);
     } catch (error) {
-      logger.error('[mcplab-mcp-server] request error:', error);
+      logger.error('[mcplab-mcp] request error:', error);
       if (!res.headersSent) {
         sendJson(res, 500, {
           jsonrpc: '2.0',
@@ -633,7 +633,7 @@ export async function startMcplabMcpServer(
     httpServer.listen(options.port, options.host, () => {
       httpServer.off('error', rejectListen);
       logger.error(
-        `[mcplab-mcp-server] Streamable HTTP listening on http://${options.host}:${options.port}${options.path}`
+        `[mcplab-mcp] Streamable HTTP listening on http://${options.host}:${options.port}${options.path}`
       );
       resolveListen();
     });
@@ -645,7 +645,7 @@ export async function startMcplabMcpServer(
         await runtime.transport.close();
         await runtime.server.close();
       } catch (error) {
-        logger.error(`[mcplab-mcp-server] failed to close session ${sessionId}:`, error);
+        logger.error(`[mcplab-mcp] failed to close session ${sessionId}:`, error);
       }
     }
     sessions.clear();
