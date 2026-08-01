@@ -154,9 +154,9 @@ export function AppLayout() {
   const embed = new URLSearchParams(location.search).get('embed') === '1';
   const crumbs = buildCrumbs(location.pathname, location.search);
   const { version } = useDataSource();
-  const { isRunning, queuedCount, oauthBlockedCount, streamStatus, reconnectStream } =
+  const { isRunning, runningCount, queuedCount, oauthBlockedCount, streamStatus, reconnectStream } =
     useRunQueueStatus();
-  const queueDisplayCount = queuedCount + (isRunning ? 1 : 0);
+  const queueDisplayCount = queuedCount + runningCount;
 
   if (embed) {
     return (

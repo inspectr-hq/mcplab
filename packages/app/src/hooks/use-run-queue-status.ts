@@ -111,10 +111,12 @@ export function useRunQueueStatus() {
 
   return useMemo(() => {
     const isRunning = queueState.active_jobs.length > 0 || queueState.admitting_jobs.length > 0;
+    const runningCount = queueState.active_jobs.length + queueState.admitting_jobs.length;
     const queuedCount = queueState.queued.length;
     const oauthBlockedCount = countOAuthBlockedQueued(queueState.queued);
     return {
       isRunning,
+      runningCount,
       queuedCount,
       oauthBlockedCount,
       streamStatus,

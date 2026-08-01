@@ -132,6 +132,7 @@ describe('useRunQueueStatus', () => {
     await waitFor(() => {
       expect(result.current.isRunning).toBe(true);
       expect(result.current.queuedCount).toBe(0);
+      expect(result.current.runningCount).toBe(1);
     });
   });
 });
