@@ -11,6 +11,7 @@ export const RESULT_ASSISTANT_TOOL_CAPABILITIES: ResultAssistantToolCapability[]
   { name: 'mcplab_write_markdown_report', role: 'write', readOnly: false, search: false },
   { name: 'mcplab_search_markdown_reports', role: 'search', readOnly: true, search: true },
   { name: 'mcplab_read_markdown_report', role: 'read', readOnly: true, search: false },
+  { name: 'mcplab_list_runs', role: 'list', readOnly: true, search: false },
   { name: 'mcplab_aggregate_runs', role: 'analysis', readOnly: true, search: false },
   { name: 'mcplab_compare_runs', role: 'analysis', readOnly: true, search: false },
   { name: 'mcplab_results_search', role: 'search', readOnly: true, search: true },

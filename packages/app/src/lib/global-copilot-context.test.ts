@@ -15,4 +15,10 @@ describe('globalCopilotRouteContext', () => {
       activeTestCaseId: 'weather-case'
     });
   });
+
+  it('resolves the Results 24-hour preset to MCP-neutral ISO bounds', () => {
+    expect(globalCopilotRouteContext('/results', '?time_filter=last&time_preset=24h', new Date('2026-08-01T12:00:00Z')).resultsFilter).toEqual({
+      since: '2026-07-31T12:00:00.000Z', until: '2026-08-01T12:00:00.000Z'
+    });
+  });
 });

@@ -61,7 +61,7 @@ function stored(message: Message): GlobalCopilotMessage | null {
 }
 
 export function GlobalCopilotSidebar() {
-  const { source } = useDataSource();
+  const { source, version } = useDataSource();
   const location = useLocation();
   const navigate = useNavigate();
   const queue = useRunQueueStatus();
@@ -103,6 +103,7 @@ export function GlobalCopilotSidebar() {
         forwardedProps: {
           context: {
             ...globalCopilotRouteContext(location.pathname, location.search),
+            mcplabVersion: version,
             queue: {
               runningCount: queue.runningCount,
               queuedCount: queue.queuedCount,

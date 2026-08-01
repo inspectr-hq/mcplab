@@ -1382,6 +1382,53 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_list_runs',
+    {
+      description:
+        'List MCPLab evaluation runs with optional inclusive ISO time bounds. Use this for the current Results-page filter before reading or aggregating individual runs.',
+      outputSchema: {
+        since: z.string().optional(),
+        until: z.string().optional(),
+        total_matching: z.number().int().nonnegative(),
+        runs: z.array(z.object({
+          run_id: z.string(),
+          timestamp: z.string().optional(),
+          config_hash: z.string().optional(),
+          summary: ResultsSummarySchema.optional()
+        }))
+      },
+      inputSchema: {
+        since: z.string().datetime().optional().describe('Inclusive ISO-8601 lower time bound.'),
+        until: z.string().datetime().optional().describe('Inclusive ISO-8601 upper time bound.'),
+        limit: z.number().int().positive().max(200).optional().describe('Maximum runs to return (default 50).')
+      }
+    },
+    async ({ since, until, limit }) => {
+      return withToolHandling(async () => {
+        const sinceMs = since ? new Date(since).getTime() : undefined;
+        const untilMs = until ? new Date(until).getTime() : undefined;
+        if (sinceMs !== undefined && untilMs !== undefined && sinceMs > untilMs) {
+          throw new Error('since must be earlier than or equal to until');
+        }
+        const matching = listRunsWithFallback(resolveRunsDir(), undefined, true)
+          .filter((entry) => {
+            const timestamp = String((entry.metadata as any)?.timestamp ?? '');
+            const time = new Date(timestamp).getTime();
+            return !Number.isNaN(time) && (sinceMs === undefined || time >= sinceMs) && (untilMs === undefined || time <= untilMs);
+          })
+          .sort((left, right) => String((right.metadata as any)?.timestamp ?? '').localeCompare(String((left.metadata as any)?.timestamp ?? '')));
+        const runs = matching.slice(0, limit ?? 50).map((entry) => ({
+          run_id: String(entry.run_id),
+          timestamp: typeof (entry.metadata as any)?.timestamp === 'string' ? (entry.metadata as any).timestamp : undefined,
+          config_hash: typeof (entry.metadata as any)?.config_hash === 'string' ? (entry.metadata as any).config_hash : undefined,
+          summary: entry.summary as any
+        }));
+        return ok(`Found ${matching.length} run(s) matching the requested time range`, { since, until, total_matching: matching.length, runs });
+      });
+    }
+  );
+
+  registerTool(
     'mcplab_aggregate_runs',
     {
       description:

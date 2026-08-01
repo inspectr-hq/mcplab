@@ -246,6 +246,15 @@ describe('mcp tool contracts', () => {
     ).toBe(true);
   });
 
+  it('mcplab_list_runs accepts bounded ISO time ranges', () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_list_runs');
+    expect(tool).toBeDefined();
+    const schema = asSchema(tool!.config.inputSchema);
+    expect(schema.safeParse({ since: '2026-07-31T12:00:00.000Z', until: '2026-08-01T12:00:00.000Z' }).success).toBe(true);
+    expect(schema.safeParse({ since: 'not-a-date' }).success).toBe(false);
+  });
+
   it('mcplab_search_markdown_reports schema supports pagination and defaults', () => {
     const tools = setupTools();
     const tool = tools.get('mcplab_search_markdown_reports');
