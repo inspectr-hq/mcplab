@@ -25,6 +25,7 @@ import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { toast } from '@/hooks/use-toast';
 import { GlobalCopilotThreadList } from '@/components/global-copilot/GlobalCopilotThreadList';
+import { GlobalCopilotComposer } from '@/components/global-copilot/GlobalCopilotComposer';
 
 const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
@@ -1037,20 +1038,13 @@ export function GlobalCopilotSidebar() {
           <div ref={chatEndRef} />
         </div>
       </ScrollArea>
-      <div className="border-t p-3">
-        <AssistantComposer
-          input={input}
-          onInputChange={setInput}
-          onSend={() => void send()}
-          onCancel={() => agentRef.current?.abortRun()}
-          disabled={loading}
-          loading={loading}
-          inputPlaceholder="Ask MCPLab..."
-          snippets={[]}
-          snippetsLabel="Suggestions"
-          onSnippetSelect={setInput}
-        />
-      </div>
+      <GlobalCopilotComposer
+        input={input}
+        onInputChange={setInput}
+        onSend={() => void send()}
+        onCancel={() => agentRef.current?.abortRun()}
+        loading={loading}
+      />
     </aside>
   );
 }
