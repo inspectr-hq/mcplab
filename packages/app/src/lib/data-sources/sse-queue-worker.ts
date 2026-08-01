@@ -5,6 +5,7 @@ const portLastPong = new Map<MessagePort, number>();
 let source: EventSource | null = null;
 let baseUrl = '';
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let latestQueueEvent: unknown = null;
 
 const HEARTBEAT_MS = 15_000;
 
@@ -23,6 +24,14 @@ function removePort(port: MessagePort): void {
 }
 
 function broadcast(data: unknown): void {
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'type' in data &&
+    data.type === 'queue_event'
+  ) {
+    latestQueueEvent = data;
+  }
   for (const port of ports) {
     port.postMessage(data);
   }
@@ -88,6 +97,9 @@ self.addEventListener('connect', (e: Event) => {
       portLastPong.set(port, Date.now());
       ensureHeartbeat();
       openEventSource();
+      if (latestQueueEvent) {
+        port.postMessage(latestQueueEvent);
+      }
       // New tab connecting after SSE is already open: send connected immediately
       if (source?.readyState === 1) {
         port.postMessage({
