@@ -50,7 +50,7 @@ const GLOBAL_COPILOT_START_ACTION_TOOLS: ToolDef[] = [
   }
 ];
 
-function globalCopilotFrontendTools(context: any): ToolDef[] {
+export function globalCopilotFrontendTools(context: any): ToolDef[] {
   const available = new Set(Array.isArray(context?.availableActions) ? context.availableActions : []);
   return [
     ...GLOBAL_COPILOT_FRONTEND_TOOLS,

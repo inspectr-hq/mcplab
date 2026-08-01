@@ -1,5 +1,5 @@
 import { Bot, MessageSquarePlus, PanelRightClose, Pencil, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HttpAgent, type Message } from '@ag-ui/client';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,7 @@ export function GlobalCopilotSidebar() {
   const [thread, setThread] = useState<GlobalCopilotThread>();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const agentRef = useRef<HttpAgent>();
   const refresh = useCallback(async (key: string) => { const next = await store.listThreads(key); setThreads(next); return next; }, []);
 
   useEffect(() => { void source.getWorkspaceSettings().then(async (settings) => { if (!settings) return; const key = await workspaceKeyFromRoot(settings.workspaceRoot); setWorkspaceKey(key); const next = await refresh(key); const activeId = await store.getActiveThreadId(key); setThread(next.find((item) => item.id === activeId) ?? next[0]); }); }, [refresh, source]);
@@ -94,6 +95,7 @@ export function GlobalCopilotSidebar() {
     setInput(''); setLoading(true);
     try {
       const agent = new HttpAgent({ url: '/api/global-copilot/run', agentId: 'mcplab-global-copilot', threadId: optimistic.id, initialMessages: optimistic.messages.map((message) => ({ id: message.id, role: message.role, content: message.content })) });
+      agentRef.current = agent;
       await agent.runAgent({
         forwardedProps: {
           context: {
@@ -110,7 +112,10 @@ export function GlobalCopilotSidebar() {
       });
       const nextMessages = agent.messages.map(stored).filter((message): message is GlobalCopilotMessage => message !== null);
       await save({ ...optimistic, messages: nextMessages });
-    } finally { setLoading(false); }
+    } catch (error: unknown) {
+      const text = error instanceof Error ? error.message : String(error);
+      await save({ ...optimistic, messages: [...optimistic.messages, { id: id('system'), role: 'system', content: `Copilot request failed: ${text}`, createdAt: new Date().toISOString() }] });
+    } finally { agentRef.current = undefined; setLoading(false); }
   }, [input, loading, location.pathname, location.search, queue.oauthBlockedCount, queue.queuedCount, queue.runningCount, queue.streamStatus, save, thread, workspaceKey]);
   const confirmNavigation = useCallback(async (message: GlobalCopilotMessage, approved: boolean) => {
     if (!thread || !message.action || message.action.kind !== 'navigate_to_view') return;
@@ -148,6 +153,6 @@ export function GlobalCopilotSidebar() {
     <div className="border-b p-2"><Button size="sm" className="w-full" onClick={() => void newThread()}><MessageSquarePlus className="mr-2 h-4 w-4" />New chat</Button></div>
     <ScrollArea className="max-h-32 border-b"><div className="p-1">{threads.map((item) => <div key={item.id} className="flex items-center"><button type="button" onClick={() => selectThread(item)} className={`min-w-0 flex-1 truncate rounded px-2 py-1.5 text-left text-xs ${thread?.id === item.id ? 'bg-muted font-medium' : 'hover:bg-muted/50'}`}>{item.title}</button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Rename ${item.title}`} onClick={() => void renameThread(item)}><Pencil className="h-3.5 w-3.5" /></Button><Button size="icon" variant="ghost" className="h-7 w-7" aria-label={`Delete ${item.title}`} onClick={async () => { await store.deleteThread(item.workspaceKey, item.id); const next = await refresh(item.workspaceKey); if (thread?.id === item.id) { await store.setActiveThreadId(item.workspaceKey, next[0]?.id); setThread(next[0]); } }}><Trash2 className="h-3.5 w-3.5" /></Button></div>)}</div></ScrollArea>
     <ScrollArea className="min-h-0 flex-1"><div className="space-y-3 p-3">{messages.length === 0 && <p className="text-sm text-muted-foreground">Ask about results, test cases, or MCPLab.</p>}{messages.map((message) => <div key={message.id} className="space-y-2"><AssistantMessageRow message={{ id: message.id, role: message.role, text: message.content, createdAt: message.createdAt }} />{message.action?.kind === 'navigate_to_view' && message.action.status === 'pending' && <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm"><p>{message.action.reason || `Open ${message.action.path}?`}</p><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => void confirmNavigation(message, true)}>Open view</Button><Button size="sm" variant="outline" onClick={() => void confirmNavigation(message, false)}>Not now</Button></div></div>}{message.action?.kind === 'external_mcp_tool' && message.action.status === 'pending' && <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm"><p>Run {message.action.serverName}/{message.action.toolName}?</p><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => void confirmExternalTool(message, true)}>Run tool</Button><Button size="sm" variant="outline" onClick={() => void confirmExternalTool(message, false)}>Not now</Button></div></div>}{message.action?.kind === 'start_action' && message.action.status === 'pending' && <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm"><p>Start {message.action.name === 'start_evaluation_run' ? 'the evaluation run' : 'Tool Analysis'} using the current page settings?</p><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => void confirmStartAction(message, true)}>Start</Button><Button size="sm" variant="outline" onClick={() => void confirmStartAction(message, false)}>Not now</Button></div></div>}{message.action?.kind === 'navigate_to_view' && message.action.status === 'approved' && <p className="text-xs text-emerald-700">Opened {message.action.path}</p>}{message.action?.status === 'denied' && <p className="text-xs text-muted-foreground">Action declined</p>}{message.action?.status === 'error' && <p className="text-xs text-destructive">Action failed</p>}</div>)}{loading && <AssistantTypingIndicator />}</div></ScrollArea>
-    <div className="border-t p-3"><AssistantComposer input={input} onInputChange={setInput} onSend={() => void send()} disabled={loading} loading={loading} inputPlaceholder="Ask MCPLab..." snippets={[]} snippetsLabel="Suggestions" onSnippetSelect={setInput} /></div>
+    <div className="border-t p-3"><AssistantComposer input={input} onInputChange={setInput} onSend={() => void send()} onCancel={() => agentRef.current?.abortRun()} disabled={loading} loading={loading} inputPlaceholder="Ask MCPLab..." snippets={[]} snippetsLabel="Suggestions" onSnippetSelect={setInput} /></div>
   </aside>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GLOBAL_COPILOT_FRONTEND_TOOLS, globalCopilotExternalServers, selectGlobalCopilotAgentName } from './global-copilot-domain.js';
+import { GLOBAL_COPILOT_FRONTEND_TOOLS, globalCopilotExternalServers, globalCopilotFrontendTools, selectGlobalCopilotAgentName } from './global-copilot-domain.js';
 
 describe('selectGlobalCopilotAgentName', () => {
   it('prefers the dedicated global copilot setting', () => {
@@ -43,5 +43,15 @@ describe('selectGlobalCopilotAgentName', () => {
 
     expect(Object.keys(globalCopilotExternalServers(libraries, 'weather-case'))).toEqual(['weather']);
     expect(globalCopilotExternalServers(libraries, undefined)).toEqual({});
+  });
+
+  it('only offers start actions explicitly published by the active page', () => {
+    expect(globalCopilotFrontendTools({ availableActions: [] }).map((tool) => tool.name)).toEqual([
+      'navigate_to_view'
+    ]);
+    expect(globalCopilotFrontendTools({ availableActions: ['start_tool_analysis'] }).map((tool) => tool.name)).toEqual([
+      'navigate_to_view',
+      'start_tool_analysis'
+    ]);
   });
 });
