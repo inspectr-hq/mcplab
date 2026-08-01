@@ -192,6 +192,53 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('offers subtle links to edit the parent scenario and reusable test case', async () => {
+    const result = makeResult();
+    result.configId = '';
+    result.configName = 'Config';
+    result.configPath = 'config.yaml';
+    const scenario = {
+      id: 'scn-1',
+      name: 'Scenario 1',
+      prompt: 'Prompt',
+      serverIds: [],
+      evalRules: [],
+      extractRules: []
+    };
+    mockConfigs.push({
+      id: 'cfg-1',
+      name: 'Config',
+      relativePath: 'config.yaml',
+      agents: [],
+      scenarios: [scenario],
+      createdAt: '2026-02-08T10:00:00.000Z',
+      updatedAt: '2026-02-08T10:00:00.000Z'
+    });
+    mockLibraryScenarios.push(scenario);
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByRole('link', { name: 'Edit scenario' })).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Scenario 1'));
+
+    expect(screen.getByRole('link', { name: 'Edit scenario' })).toHaveAttribute(
+      'href',
+      '/mcp-evaluations/cfg-1/scenarios'
+    );
+    expect(screen.getByRole('link', { name: 'Edit test case' })).toHaveAttribute(
+      'href',
+      '/libraries/test-cases/scn-1?returnTo=%2Fresults%2Frun-1'
+    );
+  });
+
   it('is hidden by default and reveals chat timeline without hiding final answer', async () => {
     getResultMock.mockResolvedValue(makeResult());
 

@@ -29,6 +29,7 @@ describe('AppLayout queue indicator', () => {
     mockUseDataSource.mockReturnValue({ version: '1.0.0' });
     mockUseRunQueueStatus.mockReturnValue({
       isRunning: false,
+      runningCount: 0,
       queuedCount: 0,
       oauthBlockedCount: 0,
       streamStatus: 'connected',
@@ -53,6 +54,7 @@ describe('AppLayout queue indicator', () => {
     mockUseDataSource.mockReturnValue({ version: '1.0.0' });
     mockUseRunQueueStatus.mockReturnValue({
       isRunning: true,
+      runningCount: 1,
       queuedCount: 3,
       oauthBlockedCount: 1,
       streamStatus: 'connected',
@@ -77,5 +79,29 @@ describe('AppLayout queue indicator', () => {
     expect(screen.getByLabelText('Queue processing')).toBeInTheDocument();
     expect(screen.getByText('OAuth wait')).toBeInTheDocument();
     expect(screen.getByText('4')).toHaveClass('bg-yellow-500/20');
+  });
+
+  it('counts every active job in the top-bar queue badge', () => {
+    mockUseDataSource.mockReturnValue({ version: '1.0.0' });
+    mockUseRunQueueStatus.mockReturnValue({
+      isRunning: true,
+      runningCount: 2,
+      queuedCount: 1,
+      oauthBlockedCount: 0,
+      streamStatus: 'connected',
+      reconnectStream: vi.fn()
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/run']}>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/run" element={<div>Run page</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 });

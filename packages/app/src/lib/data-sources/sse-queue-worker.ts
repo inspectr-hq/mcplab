@@ -5,8 +5,39 @@ const portLastPong = new Map<MessagePort, number>();
 let source: EventSource | null = null;
 let baseUrl = '';
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let latestQueueEvent: unknown = null;
 
 const HEARTBEAT_MS = 15_000;
+
+function isEmptyQueueEvent(data: unknown): boolean {
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    !('type' in data) ||
+    data.type !== 'queue_event'
+  ) {
+    return false;
+  }
+  const payload =
+    'payload' in data && typeof data.payload === 'object' && data.payload !== null
+      ? data.payload
+      : null;
+  const event =
+    payload && 'event' in payload && typeof payload.event === 'object' && payload.event !== null
+      ? payload.event
+      : null;
+  if (!event) return false;
+  const activeJobs =
+    'active_jobs' in event && Array.isArray(event.active_jobs)
+      ? event.active_jobs
+      : 'active' in event && event.active
+      ? [event.active]
+      : [];
+  const admittingJobs =
+    'admitting_jobs' in event && Array.isArray(event.admitting_jobs) ? event.admitting_jobs : [];
+  const queued = 'queued' in event && Array.isArray(event.queued) ? event.queued : [];
+  return activeJobs.length === 0 && admittingJobs.length === 0 && queued.length === 0;
+}
 
 function removePort(port: MessagePort): void {
   ports.delete(port);
@@ -23,6 +54,9 @@ function removePort(port: MessagePort): void {
 }
 
 function broadcast(data: unknown): void {
+  if (typeof data === 'object' && data !== null && 'type' in data && data.type === 'queue_event') {
+    latestQueueEvent = isEmptyQueueEvent(data) ? null : data;
+  }
   for (const port of ports) {
     port.postMessage(data);
   }
@@ -88,6 +122,9 @@ self.addEventListener('connect', (e: Event) => {
       portLastPong.set(port, Date.now());
       ensureHeartbeat();
       openEventSource();
+      if (latestQueueEvent) {
+        port.postMessage(latestQueueEvent);
+      }
       // New tab connecting after SSE is already open: send connected immediately
       if (source?.readyState === 1) {
         port.postMessage({

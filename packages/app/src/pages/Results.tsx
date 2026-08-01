@@ -4,6 +4,7 @@ import {
   Clock,
   MoreHorizontal,
   Eye,
+  LayoutDashboard,
   Download,
   Play,
   Bot,
@@ -59,6 +60,7 @@ import {
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
@@ -69,6 +71,7 @@ import type { EvalResult } from '@/types/eval';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
@@ -85,6 +88,7 @@ type ResultTableItem =
 
 const RESULTS_TABLE_COLUMN_COUNT = 8;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
+const RESULTS_DASHBOARD_VISIBILITY_KEY = 'mcplab:results:dashboard-visible';
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
@@ -187,6 +191,15 @@ function readStoredTimeFilter(): TimeFilterQueryState | null {
   }
 }
 
+function readStoredDashboardVisibility(): boolean {
+  try {
+    const stored = localStorage.getItem(RESULTS_DASHBOARD_VISIBILITY_KEY);
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
 const RESULT_ASSISTANT_SNIPPETS = [
   {
     label: 'Summarize Run Trends',
@@ -224,6 +237,9 @@ const Results = () => {
       : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams)
   );
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const [deletingRun, setDeletingRun] = useState(false);
@@ -242,6 +258,7 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
   const { offset, totalCount, hasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
@@ -365,7 +382,48 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [apiScenarioFilter, apiTimeFilter, offset, source]);
+  }, [apiScenarioFilter, apiTimeFilter, completionVersion, offset, source]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RESULTS_DASHBOARD_VISIBILITY_KEY, String(dashboardVisible));
+    } catch {
+      // ignore persistence failures
+    }
+  }, [dashboardVisible]);
+
+  useEffect(() => {
+    if (!dashboardVisible || !source.listRunSummaries) return;
+    let active = true;
+    setDashboardLoading(true);
+    source
+      .listRunSummaries({
+        ...apiTimeFilter,
+        scenario: apiScenarioFilter
+      })
+      .then((summaries) => {
+        if (active) setDashboardRuns(summaries.map(summaryToResult));
+      })
+      .catch(() => {
+        if (active) setDashboardRuns([]);
+      })
+      .finally(() => {
+        if (active) setDashboardLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, source]);
+
+  useEffect(() => {
+    if (dashboardVisible && source.listRunSummaries) return;
+    if (!dashboardVisible) {
+      setDashboardLoading(false);
+      return;
+    }
+    setDashboardRuns(results);
+    setDashboardLoading(false);
+  }, [dashboardVisible, results, source]);
 
   const {
     assistantMessages,
@@ -697,7 +755,7 @@ const Results = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col">
       <AlertDialog
         open={pendingDeleteRunId !== null}
         onOpenChange={(open) => {
@@ -906,10 +964,28 @@ const Results = () => {
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+          onClick={() => setDashboardVisible((visible) => !visible)}
+          aria-pressed={dashboardVisible}
+        >
+          <LayoutDashboard className="h-3 w-3" />
+          {dashboardVisible ? 'Hide dashboard' : 'Show dashboard'}
+        </Button>
+      </div>
+
+      {dashboardVisible ? (
+        <div className="mt-2">
+          <ResultsDashboard runs={dashboardRuns} loading={dashboardLoading} />
+        </div>
+      ) : null}
 
       <div
-        className={`grid gap-6 ${
+        className={`mt-4 grid gap-6 ${
           assistantOpen
             ? assistantExpanded
               ? 'xl:grid-cols-[minmax(0,1fr)_52rem]'

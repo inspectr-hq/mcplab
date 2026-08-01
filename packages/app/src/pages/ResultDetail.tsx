@@ -23,7 +23,9 @@ import {
   Plus,
   Clock,
   Clock3,
-  Play
+  Play,
+  Pencil,
+  FileCode
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -350,7 +352,31 @@ const ResultDetail = () => {
       ? configs.find((c) => c.id === requestedConfigId)
       : undefined;
     if (byRequested) return byRequested;
-    return result ? configs.find((c) => c.id === result.configId) : undefined;
+    if (!result) return undefined;
+    const resultPath = result.configPath?.trim();
+    const resultName = result.configName?.trim();
+    const byId = configs.find((config) => config.id === result.configId);
+    if (byId) return byId;
+    const pathCandidates = (config: (typeof configs)[number]) => [
+      config.relativePath,
+      config.sourcePath,
+      config.suitePath
+    ];
+    const exactPathMatch = resultPath
+      ? configs.find((config) =>
+          pathCandidates(config).some((candidate) => candidate?.trim() === resultPath)
+        )
+      : undefined;
+    if (exactPathMatch) return exactPathMatch;
+    const suffixPathMatch = resultPath
+      ? configs.find((config) =>
+          pathCandidates(config).some((candidate) => candidate?.endsWith(`/${resultPath}`) === true)
+        )
+      : undefined;
+    if (suffixPathMatch) return suffixPathMatch;
+    return configs.find((config) =>
+      resultName ? config.name === resultName || config.configName === resultName : false
+    );
   }, [configs, requestedConfigId, result]);
   const resultConfigLabel = useMemo(() => {
     const explicitName = result?.configName?.trim();
@@ -1036,6 +1062,18 @@ const ResultDetail = () => {
                   {filteredScenarios.map((sc) => {
                     const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                     const scenarioLabel = sc.scenarioName || sc.scenarioId;
+                    const scenarioConfigId = activeConfig?.id || result?.configId?.trim();
+                    const scenarioEditHref = scenarioConfigId
+                      ? `/mcp-evaluations/${encodeURIComponent(scenarioConfigId)}/scenarios`
+                      : null;
+                    const libraryTestCase = libraryScenarios.find(
+                      (scenario) => scenario.id === sc.scenarioId
+                    );
+                    const testCaseEditHref = libraryTestCase
+                      ? `/libraries/test-cases/${encodeURIComponent(
+                          libraryTestCase.id
+                        )}?returnTo=${encodeURIComponent(`/results/${result?.id ?? id}`)}`
+                      : null;
                     return (
                       <Collapsible
                         key={rowKey}
@@ -1054,7 +1092,20 @@ const ResultDetail = () => {
                                 />
                               </TableCell>
                               <TableCell className="font-medium text-sm">
-                                {sc.scenarioName}
+                                <div className="flex items-center gap-1.5">
+                                  <span>{sc.scenarioName}</span>
+                                  {scenarioEditHref ? (
+                                    <Link
+                                      to={scenarioEditHref}
+                                      aria-label="Edit scenario"
+                                      title="Edit scenario"
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Link>
+                                  ) : null}
+                                </div>
                               </TableCell>
                               <TableCell className="text-sm">
                                 <div>{sc.agentName}</div>
@@ -1110,21 +1161,37 @@ const ResultDetail = () => {
                                         tool time
                                       </p>
                                     </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 gap-1.5 px-2 text-xs shrink-0"
-                                      onClick={() =>
-                                        openAssistantWithPrompt(
-                                          `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`,
-                                          { scenarioId: sc.scenarioId }
-                                        )
-                                      }
-                                    >
-                                      <Sparkles className="h-4 w-4 text-amber-500" />
-                                      Ask Assistant
-                                    </Button>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                      {testCaseEditHref ? (
+                                        <Button
+                                          asChild
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                                        >
+                                          <Link to={testCaseEditHref} aria-label="Edit test case">
+                                            <FileCode className="h-3.5 w-3.5" />
+                                            Edit test case
+                                          </Link>
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 gap-1.5 px-2 text-xs"
+                                        onClick={() =>
+                                          openAssistantWithPrompt(
+                                            `Explain why scenario '${scenarioLabel}' failed (agent: ${sc.agentName}). Summarize the likely cause from the result details and suggest what to inspect next.`,
+                                            { scenarioId: sc.scenarioId }
+                                          )
+                                        }
+                                      >
+                                        <Sparkles className="h-4 w-4 text-amber-500" />
+                                        Ask Assistant
+                                      </Button>
+                                    </div>
                                   </div>
                                   {sc.runs.map((run) => (
                                     <div

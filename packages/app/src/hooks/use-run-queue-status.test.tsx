@@ -132,6 +132,52 @@ describe('useRunQueueStatus', () => {
     await waitFor(() => {
       expect(result.current.isRunning).toBe(true);
       expect(result.current.queuedCount).toBe(0);
+      expect(result.current.runningCount).toBe(1);
+    });
+  });
+
+  it('increments completionVersion when an in-flight job leaves the queue state', async () => {
+    let emit: ((event: any) => void) | null = null;
+    sourceRef.current = {
+      subscribeRunQueue: (onEvent: (event: any) => void) => {
+        emit = onEvent;
+        return () => undefined;
+      }
+    };
+
+    const { result } = renderHook(() => useRunQueueStatus());
+    const activeJob = {
+      jobId: 'job-1',
+      status: 'running',
+      runParams: {
+        configPath: '/tmp/eval.yaml',
+        runsPerScenario: 1,
+        scenarioIds: null,
+        agents: null,
+        runNote: null,
+        serverOverrideAll: null,
+        scenarioServerOverrides: null
+      }
+    };
+
+    act(() => {
+      emit?.({
+        type: 'queue_event',
+        payload: {
+          event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] }
+        }
+      });
+    });
+
+    act(() => {
+      emit?.({
+        type: 'queue_event',
+        payload: { event: { active: null, active_jobs: [], admitting_jobs: [], queued: [] } }
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.completionVersion).toBe(1);
     });
   });
 });
