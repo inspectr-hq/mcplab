@@ -14,6 +14,10 @@ export type GlobalCopilotMessage = {
     toolName: string;
     arguments: Record<string, unknown>;
     status: 'pending' | 'approved' | 'denied' | 'error';
+  } | {
+    kind: 'start_action';
+    name: 'start_evaluation_run' | 'start_tool_analysis';
+    status: 'pending' | 'approved' | 'denied' | 'error';
   };
 };
 
