@@ -19,6 +19,8 @@ describe('global copilot actions', () => {
     expect(action).toHaveBeenCalledOnce();
 
     cleanups.pop()?.();
-    await expect(invokeGlobalCopilotAction('start_evaluation_run')).rejects.toThrow('no longer available');
+    await expect(invokeGlobalCopilotAction('start_evaluation_run')).rejects.toThrow(
+      'no longer available'
+    );
   });
 });

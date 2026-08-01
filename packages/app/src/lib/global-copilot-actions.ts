@@ -4,7 +4,10 @@ type RegisteredAction = () => Promise<void> | void;
 
 const actions = new Map<GlobalCopilotActionName, RegisteredAction>();
 
-export function registerGlobalCopilotAction(name: GlobalCopilotActionName, action: RegisteredAction): () => void {
+export function registerGlobalCopilotAction(
+  name: GlobalCopilotActionName,
+  action: RegisteredAction
+): () => void {
   actions.set(name, action);
   return () => {
     if (actions.get(name) === action) actions.delete(name);

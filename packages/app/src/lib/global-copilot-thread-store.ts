@@ -4,22 +4,25 @@ export type GlobalCopilotMessage = {
   content: string;
   createdAt: string;
   toolCallId?: string;
-  action?: {
-    kind: 'navigate_to_view';
-    path: string;
-    reason?: string;
-    status: 'pending' | 'approved' | 'denied';
-  } | {
-    kind: 'external_mcp_tool';
-    serverName: string;
-    toolName: string;
-    arguments: Record<string, unknown>;
-    status: 'pending' | 'approved' | 'denied' | 'error';
-  } | {
-    kind: 'start_action';
-    name: 'start_evaluation_run' | 'start_tool_analysis';
-    status: 'pending' | 'approved' | 'denied' | 'error';
-  };
+  action?:
+    | {
+        kind: 'navigate_to_view';
+        path: string;
+        reason?: string;
+        status: 'pending' | 'approved' | 'denied';
+      }
+    | {
+        kind: 'external_mcp_tool';
+        serverName: string;
+        toolName: string;
+        arguments: Record<string, unknown>;
+        status: 'pending' | 'approved' | 'denied' | 'error';
+      }
+    | {
+        kind: 'start_action';
+        name: 'start_evaluation_run' | 'start_tool_analysis';
+        status: 'pending' | 'approved' | 'denied' | 'error';
+      };
 };
 
 export type GlobalCopilotThread = {
@@ -32,7 +35,10 @@ export type GlobalCopilotThread = {
   messages: GlobalCopilotMessage[];
 };
 
-export type GlobalCopilotThreadInput = Omit<GlobalCopilotThread, 'version' | 'createdAt' | 'updatedAt'> &
+export type GlobalCopilotThreadInput = Omit<
+  GlobalCopilotThread,
+  'version' | 'createdAt' | 'updatedAt'
+> &
   Partial<Pick<GlobalCopilotThread, 'createdAt' | 'updatedAt'>>;
 
 const DATABASE_NAME = 'mcplab-global-copilot';
@@ -45,7 +51,9 @@ export class GlobalCopilotThreadStore {
       const request = indexedDB.open(DATABASE_NAME, 2);
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-          const store = request.result.createObjectStore(STORE_NAME, { keyPath: ['workspaceKey', 'id'] });
+          const store = request.result.createObjectStore(STORE_NAME, {
+            keyPath: ['workspaceKey', 'id']
+          });
           store.createIndex('workspace-updated', ['workspaceKey', 'updatedAt']);
         }
         if (!request.result.objectStoreNames.contains(PREFERENCES_STORE_NAME)) {
@@ -111,11 +119,16 @@ export class GlobalCopilotThreadStore {
 
   async getActiveThreadId(workspaceKey: string): Promise<string | undefined> {
     const database = await this.open();
-    const record = await new Promise<{ workspaceKey: string; activeThreadId?: string } | undefined>((resolve, reject) => {
-      const request = database.transaction(PREFERENCES_STORE_NAME, 'readonly').objectStore(PREFERENCES_STORE_NAME).get(workspaceKey);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    const record = await new Promise<{ workspaceKey: string; activeThreadId?: string } | undefined>(
+      (resolve, reject) => {
+        const request = database
+          .transaction(PREFERENCES_STORE_NAME, 'readonly')
+          .objectStore(PREFERENCES_STORE_NAME)
+          .get(workspaceKey);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      }
+    );
     database.close();
     return record?.activeThreadId;
   }

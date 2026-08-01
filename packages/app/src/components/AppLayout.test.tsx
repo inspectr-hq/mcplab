@@ -122,7 +122,11 @@ describe('AppLayout queue indicator', () => {
 
     const { container } = render(
       <MemoryRouter initialEntries={['/results']}>
-        <Routes><Route element={<AppLayout />}><Route path="/results" element={<div>Results</div>} /></Route></Routes>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/results" element={<div>Results</div>} />
+          </Route>
+        </Routes>
       </MemoryRouter>
     );
 

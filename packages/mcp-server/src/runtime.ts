@@ -1390,17 +1390,25 @@ export function registerTools(server: McpServer): void {
         since: z.string().optional(),
         until: z.string().optional(),
         total_matching: z.number().int().nonnegative(),
-        runs: z.array(z.object({
-          run_id: z.string(),
-          timestamp: z.string().optional(),
-          config_hash: z.string().optional(),
-          summary: ResultsSummarySchema.optional()
-        }))
+        runs: z.array(
+          z.object({
+            run_id: z.string(),
+            timestamp: z.string().optional(),
+            config_hash: z.string().optional(),
+            summary: ResultsSummarySchema.optional()
+          })
+        )
       },
       inputSchema: {
         since: z.string().datetime().optional().describe('Inclusive ISO-8601 lower time bound.'),
         until: z.string().datetime().optional().describe('Inclusive ISO-8601 upper time bound.'),
-        limit: z.number().int().positive().max(200).optional().describe('Maximum runs to return (default 50).')
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(200)
+          .optional()
+          .describe('Maximum runs to return (default 50).')
       }
     },
     async ({ since, until, limit }) => {
@@ -1414,16 +1422,35 @@ export function registerTools(server: McpServer): void {
           .filter((entry) => {
             const timestamp = String((entry.metadata as any)?.timestamp ?? '');
             const time = new Date(timestamp).getTime();
-            return !Number.isNaN(time) && (sinceMs === undefined || time >= sinceMs) && (untilMs === undefined || time <= untilMs);
+            return (
+              !Number.isNaN(time) &&
+              (sinceMs === undefined || time >= sinceMs) &&
+              (untilMs === undefined || time <= untilMs)
+            );
           })
-          .sort((left, right) => String((right.metadata as any)?.timestamp ?? '').localeCompare(String((left.metadata as any)?.timestamp ?? '')));
+          .sort((left, right) =>
+            String((right.metadata as any)?.timestamp ?? '').localeCompare(
+              String((left.metadata as any)?.timestamp ?? '')
+            )
+          );
         const runs = matching.slice(0, limit ?? 50).map((entry) => ({
           run_id: String(entry.run_id),
-          timestamp: typeof (entry.metadata as any)?.timestamp === 'string' ? (entry.metadata as any).timestamp : undefined,
-          config_hash: typeof (entry.metadata as any)?.config_hash === 'string' ? (entry.metadata as any).config_hash : undefined,
+          timestamp:
+            typeof (entry.metadata as any)?.timestamp === 'string'
+              ? (entry.metadata as any).timestamp
+              : undefined,
+          config_hash:
+            typeof (entry.metadata as any)?.config_hash === 'string'
+              ? (entry.metadata as any).config_hash
+              : undefined,
           summary: entry.summary as any
         }));
-        return ok(`Found ${matching.length} run(s) matching the requested time range`, { since, until, total_matching: matching.length, runs });
+        return ok(`Found ${matching.length} run(s) matching the requested time range`, {
+          since,
+          until,
+          total_matching: matching.length,
+          runs
+        });
       });
     }
   );

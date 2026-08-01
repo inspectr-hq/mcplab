@@ -57,7 +57,10 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
-import { handleGlobalCopilotRun, handleGlobalCopilotToolConfirmation } from './global-copilot-domain.js';
+import {
+  handleGlobalCopilotRun,
+  handleGlobalCopilotToolConfirmation
+} from './global-copilot-domain.js';
 import { createRunQueueService } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
