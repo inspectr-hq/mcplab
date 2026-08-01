@@ -8,6 +8,8 @@ import { AssistantComposer, AssistantMessageRow, AssistantTypingIndicator } from
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { GlobalCopilotThreadStore, type GlobalCopilotMessage, type GlobalCopilotThread, workspaceKeyFromRoot } from '@/lib/global-copilot-thread-store';
 import { availableGlobalCopilotActions, invokeGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
+import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 
 const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
@@ -61,6 +63,7 @@ export function GlobalCopilotSidebar() {
   const { source } = useDataSource();
   const location = useLocation();
   const navigate = useNavigate();
+  const queue = useRunQueueStatus();
   const [open, setOpen] = useState(() => window.localStorage.getItem(openKey) !== '0');
   const [workspaceKey, setWorkspaceKey] = useState<string>();
   const [threads, setThreads] = useState<GlobalCopilotThread[]>([]);
@@ -94,9 +97,13 @@ export function GlobalCopilotSidebar() {
       await agent.runAgent({
         forwardedProps: {
           context: {
-            pathname: location.pathname,
-            search: location.search,
-            activeTestCaseId: location.pathname.match(/^\/libraries\/test-cases\/([^/]+)/)?.[1],
+            ...globalCopilotRouteContext(location.pathname, location.search),
+            queue: {
+              runningCount: queue.runningCount,
+              queuedCount: queue.queuedCount,
+              oauthBlockedCount: queue.oauthBlockedCount,
+              streamStatus: queue.streamStatus
+            },
             availableActions: availableGlobalCopilotActions()
           }
         }
@@ -104,7 +111,7 @@ export function GlobalCopilotSidebar() {
       const nextMessages = agent.messages.map(stored).filter((message): message is GlobalCopilotMessage => message !== null);
       await save({ ...optimistic, messages: nextMessages });
     } finally { setLoading(false); }
-  }, [input, loading, location.pathname, location.search, save, thread, workspaceKey]);
+  }, [input, loading, location.pathname, location.search, queue.oauthBlockedCount, queue.queuedCount, queue.runningCount, queue.streamStatus, save, thread, workspaceKey]);
   const confirmNavigation = useCallback(async (message: GlobalCopilotMessage, approved: boolean) => {
     if (!thread || !message.action || message.action.kind !== 'navigate_to_view') return;
     const allowed = new Set(['/', '/mcp-evaluations', '/run', '/results', '/compare', '/tool-analysis', '/tool-analysis-results', '/libraries/servers', '/libraries/agents', '/libraries/test-cases', '/settings']);
