@@ -19,4 +19,13 @@ describe('GlobalCopilotThreadStore', () => {
     expect((await store.listThreads('workspace-a')).map((thread) => thread.id)).toEqual(['one']);
     expect((await store.listThreads('workspace-b')).map((thread) => thread.id)).toEqual(['two']);
   });
+
+  it('keeps the active thread selection within its workspace partition', async () => {
+    const store = new GlobalCopilotThreadStore();
+    await store.setActiveThreadId('workspace-a', 'thread-a');
+    await store.setActiveThreadId('workspace-b', 'thread-b');
+
+    await expect(store.getActiveThreadId('workspace-a')).resolves.toBe('thread-a');
+    await expect(store.getActiveThreadId('workspace-b')).resolves.toBe('thread-b');
+  });
 });

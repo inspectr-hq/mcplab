@@ -19,6 +19,10 @@ vi.mock('@/components/AppSidebar', () => ({
   AppSidebar: () => <aside>Sidebar</aside>
 }));
 
+vi.mock('@/components/GlobalCopilotSidebar', () => ({
+  GlobalCopilotSidebar: () => <aside>Global Copilot</aside>
+}));
+
 vi.mock('@/components/ui/sidebar', () => ({
   SidebarProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   SidebarTrigger: () => <button type="button">Toggle</button>

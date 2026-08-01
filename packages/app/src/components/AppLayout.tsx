@@ -1,5 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
+import { GlobalCopilotSidebar } from '@/components/GlobalCopilotSidebar';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -265,6 +266,7 @@ export function AppLayout() {
             <Outlet />
           </main>
         </div>
+        <GlobalCopilotSidebar />
       </div>
     </SidebarProvider>
   );

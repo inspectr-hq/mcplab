@@ -20,14 +20,20 @@ export type GlobalCopilotThreadInput = Omit<GlobalCopilotThread, 'version' | 'cr
 
 const DATABASE_NAME = 'mcplab-global-copilot';
 const STORE_NAME = 'threads';
+const PREFERENCES_STORE_NAME = 'preferences';
 
 export class GlobalCopilotThreadStore {
   private open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DATABASE_NAME, 1);
+      const request = indexedDB.open(DATABASE_NAME, 2);
       request.onupgradeneeded = () => {
-        const store = request.result.createObjectStore(STORE_NAME, { keyPath: ['workspaceKey', 'id'] });
-        store.createIndex('workspace-updated', ['workspaceKey', 'updatedAt']);
+        if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+          const store = request.result.createObjectStore(STORE_NAME, { keyPath: ['workspaceKey', 'id'] });
+          store.createIndex('workspace-updated', ['workspaceKey', 'updatedAt']);
+        }
+        if (!request.result.objectStoreNames.contains(PREFERENCES_STORE_NAME)) {
+          request.result.createObjectStore(PREFERENCES_STORE_NAME, { keyPath: 'workspaceKey' });
+        }
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -77,6 +83,29 @@ export class GlobalCopilotThreadStore {
       transaction.objectStore(STORE_NAME).delete([workspaceKey, id]);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }
+
+  async getActiveThreadId(workspaceKey: string): Promise<string | undefined> {
+    const database = await this.open();
+    const record = await new Promise<{ workspaceKey: string; activeThreadId?: string } | undefined>((resolve, reject) => {
+      const request = database.transaction(PREFERENCES_STORE_NAME, 'readonly').objectStore(PREFERENCES_STORE_NAME).get(workspaceKey);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return record?.activeThreadId;
+  }
+
+  async setActiveThreadId(workspaceKey: string, activeThreadId: string | undefined): Promise<void> {
+    const database = await this.open();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(PREFERENCES_STORE_NAME, 'readwrite');
+      transaction.objectStore(PREFERENCES_STORE_NAME).put({ workspaceKey, activeThreadId });
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
     });
     database.close();
   }
