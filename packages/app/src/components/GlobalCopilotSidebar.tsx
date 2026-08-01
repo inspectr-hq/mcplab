@@ -58,7 +58,13 @@ function stored(message: Message): GlobalCopilotMessage | null {
     : undefined;
   if (startAction) return { id: message.id, role: 'system', content: 'Run action requested.', createdAt: new Date().toISOString(), action: { kind: 'start_action', name: startAction.function.name as 'start_evaluation_run' | 'start_tool_analysis', status: 'pending' } };
   if (!['user', 'assistant', 'tool', 'system'].includes(message.role) || typeof message.content !== 'string') return null;
-  return { id: message.id, role: message.role as GlobalCopilotMessage['role'], content: message.content, createdAt: new Date().toISOString() };
+  return {
+    id: message.id,
+    role: message.role as GlobalCopilotMessage['role'],
+    content: message.content,
+    createdAt: new Date().toISOString(),
+    ...((message as Message & { toolCallId?: string }).toolCallId ? { toolCallId: (message as Message & { toolCallId?: string }).toolCallId } : {})
+  };
 }
 
 export function GlobalCopilotSidebar() {
@@ -101,7 +107,12 @@ export function GlobalCopilotSidebar() {
     const optimistic = await save({ ...active, title: active.messages.length ? active.title : question.slice(0, 60), messages: [...active.messages, user] });
     setInput(''); setLoading(true);
     try {
-      const agent = new HttpAgent({ url: '/api/global-copilot/run', agentId: 'mcplab-global-copilot', threadId: optimistic.id, initialMessages: optimistic.messages.map((message) => ({ id: message.id, role: message.role, content: message.content })) });
+      const agent = new HttpAgent({ url: '/api/global-copilot/run', agentId: 'mcplab-global-copilot', threadId: optimistic.id, initialMessages: optimistic.messages.map((message) => {
+        if (message.role === 'tool' && !message.toolCallId) {
+          return { id: message.id, role: 'system' as const, content: `Previously retrieved tool data:\n${message.content}` };
+        }
+        return { id: message.id, role: message.role, content: message.content, ...(message.toolCallId ? { toolCallId: message.toolCallId } : {}) };
+      }) });
       agentRef.current = agent;
       await agent.runAgent({
         forwardedProps: {
@@ -142,7 +153,7 @@ export function GlobalCopilotSidebar() {
       const response = await fetch('/api/global-copilot/confirm-tool', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ activeTestCaseId, serverName: message.action.serverName, toolName: message.action.toolName, arguments: message.action.arguments }) });
       const body = await response.json() as { content?: string; error?: string };
       if (!response.ok) throw new Error(body.error ?? 'The MCP call failed.');
-      await save({ ...thread, messages: [...update('approved'), { id: id('tool'), role: 'tool', content: body.content ?? 'Tool completed.', createdAt: new Date().toISOString() }] });
+      await save({ ...thread, messages: [...update('approved'), { id: id('tool'), role: 'system', content: `External tool result:\n${body.content ?? 'Tool completed.'}`, createdAt: new Date().toISOString() }] });
     } catch (error: unknown) {
       await save({ ...thread, messages: [...update('error'), { id: id('tool'), role: 'system', content: error instanceof Error ? error.message : String(error), createdAt: new Date().toISOString() }] });
     }

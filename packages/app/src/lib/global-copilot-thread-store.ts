@@ -3,6 +3,7 @@ export type GlobalCopilotMessage = {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   createdAt: string;
+  toolCallId?: string;
   action?: {
     kind: 'navigate_to_view';
     path: string;
