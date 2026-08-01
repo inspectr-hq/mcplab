@@ -3,6 +3,12 @@ export type GlobalCopilotMessage = {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   createdAt: string;
+  action?: {
+    kind: 'navigate_to_view';
+    path: string;
+    reason?: string;
+    status: 'pending' | 'approved' | 'denied';
+  };
 };
 
 export type GlobalCopilotThread = {
