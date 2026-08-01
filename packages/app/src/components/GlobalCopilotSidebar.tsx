@@ -144,6 +144,7 @@ function stored(
 ): GlobalCopilotMessage | null {
   const markedAction = storedGlobalCopilotFrontendAction(message);
   if (markedAction) return markedAction;
+  if (message.role === 'assistant' && !String(message.content ?? '').trim()) return null;
   const navigation =
     message.role === 'assistant'
       ? (

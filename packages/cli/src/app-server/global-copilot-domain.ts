@@ -240,14 +240,14 @@ export async function handleGlobalCopilotRun(params: {
   res.setHeader('cache-control', 'no-cache');
   res.setHeader('connection', 'keep-alive');
   if ('flushHeaders' in res && typeof res.flushHeaders === 'function') res.flushHeaders();
-  const messageId = randomUUID();
+  const toolMessageId = randomUUID();
+  const finalMessageId = randomUUID();
   try {
     sendEvent(res, encoder, {
       type: EventType.RUN_STARTED,
       threadId: input.threadId,
       runId: input.runId
     });
-    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_START, messageId, role: 'assistant' });
     const activeTestCaseId = (input.forwardedProps as any)?.context?.activeTestCaseId;
     const loaded = await loadGlobalCopilotTools(
       globalCopilotExternalServers(libraries, activeTestCaseId)
@@ -279,7 +279,7 @@ export async function handleGlobalCopilotRun(params: {
           type: EventType.TOOL_CALL_START,
           toolCallId,
           toolCallName: call.name,
-          parentMessageId: messageId
+          parentMessageId: toolMessageId
         });
         sendEvent(res, encoder, {
           type: EventType.TOOL_CALL_ARGS,
@@ -305,7 +305,7 @@ export async function handleGlobalCopilotRun(params: {
             type: EventType.TOOL_CALL_START,
             toolCallId,
             toolCallName: call.name,
-            parentMessageId: messageId
+            parentMessageId: toolMessageId
           });
           sendEvent(res, encoder, {
             type: EventType.TOOL_CALL_ARGS,
@@ -340,7 +340,7 @@ export async function handleGlobalCopilotRun(params: {
           type: EventType.TOOL_CALL_START,
           toolCallId,
           toolCallName: call.name,
-          parentMessageId: messageId
+          parentMessageId: toolMessageId
         });
         sendEvent(res, encoder, {
           type: EventType.TOOL_CALL_ARGS,
@@ -367,7 +367,7 @@ export async function handleGlobalCopilotRun(params: {
         type: EventType.TOOL_CALL_START,
         toolCallId,
         toolCallName: 'request_additional_read_tools',
-        parentMessageId: messageId
+        parentMessageId: toolMessageId
       });
       sendEvent(res, encoder, {
         type: EventType.TOOL_CALL_ARGS,
@@ -395,8 +395,13 @@ export async function handleGlobalCopilotRun(params: {
       (response.tool_calls?.length
         ? 'This action needs your approval before I can continue.'
         : 'I could not produce a response.');
-    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: text });
-    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_END, messageId });
+    sendEvent(res, encoder, {
+      type: EventType.TEXT_MESSAGE_START,
+      messageId: finalMessageId,
+      role: 'assistant'
+    });
+    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_CONTENT, messageId: finalMessageId, delta: text });
+    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_END, messageId: finalMessageId });
     sendEvent(res, encoder, {
       type: EventType.RUN_FINISHED,
       threadId: input.threadId,
