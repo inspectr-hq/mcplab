@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AssistantComposer,
   AssistantMessageRow,
+  AssistantToolCallCard,
   AssistantTypingIndicator
 } from '@/components/assistant/AssistantChat';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -647,25 +648,21 @@ export function GlobalCopilotSidebar() {
                       </div>
                     </div>
                   )}
-                {message.action?.kind === 'external_mcp_tool' &&
-                  message.action.status === 'pending' && (
-                    <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                      <p>
-                        Run {message.action.serverName}/{message.action.toolName}?
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <Button size="sm" onClick={() => void confirmExternalTool(message, true)}>
-                          Run tool
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void confirmExternalTool(message, false)}
-                        >
-                          Not now
-                        </Button>
-                      </div>
-                    </div>
+                {message.action?.kind === 'external_mcp_tool' && (
+                    <AssistantToolCallCard
+                      call={{
+                        id: message.id,
+                        server: message.action.serverName,
+                        tool: message.action.toolName,
+                        publicToolName: `${message.action.serverName}__${message.action.toolName}`,
+                        arguments: message.action.arguments,
+                        status: message.action.status,
+                        createdAt: message.createdAt
+                      }}
+                      description={`External MCP call on ${message.action.serverName}.`}
+                      onApprove={() => void confirmExternalTool(message, true)}
+                      onDeny={() => void confirmExternalTool(message, false)}
+                    />
                   )}
                 {message.action?.kind === 'start_action' && message.action.status === 'pending' && (
                   <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
