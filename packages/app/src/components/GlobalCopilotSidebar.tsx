@@ -1,12 +1,4 @@
-import {
-  Bot,
-  Copy,
-  MessageSquarePlus,
-  PanelRightClose,
-  PanelRightOpen,
-  Pencil,
-  Trash2
-} from 'lucide-react';
+import { Bot, Copy, MessageSquarePlus, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HttpAgent, type Message } from '@ag-ui/client';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -32,6 +24,7 @@ import {
 import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { toast } from '@/hooks/use-toast';
+import { GlobalCopilotThreadList } from '@/components/global-copilot/GlobalCopilotThreadList';
 
 const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
@@ -847,89 +840,22 @@ export function GlobalCopilotSidebar() {
           New chat
         </Button>
       </div>
-      <div className="border-b p-2">
-        <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
-          <button
-            type="button"
-            className="hover:text-foreground"
-            onClick={() => setShowRecentThreads((value) => !value)}
-            aria-expanded={showRecentThreads}
-          >
-            {showRecentThreads ? 'Recent conversations ▾' : 'Recent conversations ▸'}
-          </button>
-          <button
-            type="button"
-            className="hover:text-foreground"
-            onClick={() => {
-              setShowAllThreads((value) => !value);
-              setShowRecentThreads(true);
-            }}
-          >
-            {showAllThreads ? 'Recent only' : `All conversations (${threads.length})`}
-          </button>
-        </div>
-        {showRecentThreads && (
-          <>
-            {showAllThreads && (
-              <input
-                className="mb-1 h-8 w-full rounded border bg-background px-2 text-xs"
-                value={threadQuery}
-                onChange={(event) => setThreadQuery(event.target.value)}
-                placeholder="Search conversations"
-              />
-            )}
-            <ScrollArea className={showAllThreads ? 'max-h-48' : 'max-h-52'}>
-              <div className="p-1">
-                {threads
-                  .filter((item) =>
-                    showAllThreads
-                      ? item.title.toLowerCase().includes(threadQuery.toLowerCase())
-                      : true
-                  )
-                  .slice(0, showAllThreads ? 100 : 6)
-                  .map((item) => (
-                    <div key={item.id} className="flex items-center">
-                      <button
-                        type="button"
-                        onClick={() => selectThread(item)}
-                        className={`min-w-0 flex-1 truncate rounded px-2 py-1.5 text-left text-xs ${
-                          thread?.id === item.id ? 'bg-muted font-medium' : 'hover:bg-muted/50'
-                        }`}
-                      >
-                        {item.title}
-                      </button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        aria-label={`Rename ${item.title}`}
-                        onClick={() => void renameThread(item)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        aria-label={`Delete ${item.title}`}
-                        onClick={async () => {
-                          await store.deleteThread(item.workspaceKey, item.id);
-                          const next = await refresh(item.workspaceKey);
-                          if (thread?.id === item.id) {
-                            await store.setActiveThreadId(item.workspaceKey, next[0]?.id);
-                            setThread(next[0]);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-              </div>
-            </ScrollArea>
-          </>
-        )}
-      </div>
+      <GlobalCopilotThreadList
+        threads={threads}
+        activeThreadId={thread?.id}
+        onSelect={selectThread}
+        onRename={(item) => void renameThread(item)}
+        onDelete={(item) =>
+          void (async () => {
+            await store.deleteThread(item.workspaceKey, item.id);
+            const next = await refresh(item.workspaceKey);
+            if (thread?.id === item.id) {
+              await store.setActiveThreadId(item.workspaceKey, next[0]?.id);
+              setThread(next[0]);
+            }
+          })()
+        }
+      />
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-3 p-3">
           {messages.length === 0 && (
