@@ -132,6 +132,15 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         action: { kind: 'continue_reading', batchSize: action.batchSize, status: 'pending' }
       };
     }
+    if (action.kind === 'open_result_detail' && typeof action.runId === 'string') {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Result Detail available for run ${action.runId}.`,
+        createdAt,
+        action: { kind: 'open_result_detail', runId: action.runId, status: 'pending' }
+      };
+    }
   } catch {
     /* Invalid action payloads are rendered as normal assistant messages. */
   }
@@ -518,6 +527,19 @@ export function GlobalCopilotSidebar() {
     },
     [save, send, thread]
   );
+  const openResultDetail = useCallback(
+    async (message: GlobalCopilotMessage) => {
+      if (!thread || !message.action || message.action.kind !== 'open_result_detail') return;
+      const messages = thread.messages.map((item) =>
+        item.id === message.id
+          ? { ...item, action: { ...message.action!, status: 'approved' as const } }
+          : item
+      );
+      await save({ ...thread, messages });
+      navigate(`/results/${encodeURIComponent(message.action.runId)}`);
+    },
+    [navigate, save, thread]
+  );
   const confirmExternalTool = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
       if (!thread || !message.action || message.action.kind !== 'external_mcp_tool') return;
@@ -824,6 +846,17 @@ export function GlobalCopilotSidebar() {
                           onClick={() => void confirmAdditionalReadTools(message, false)}
                         >
                           Stop here
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                {message.action?.kind === 'open_result_detail' &&
+                  message.action.status === 'pending' && (
+                    <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-sm">
+                      <p>Result Detail available for run {message.action.runId}.</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button size="sm" onClick={() => void openResultDetail(message)}>
+                          Open Result Detail
                         </Button>
                       </div>
                     </div>

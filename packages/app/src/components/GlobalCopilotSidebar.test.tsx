@@ -32,4 +32,16 @@ describe('globalCopilotToolDisplayName', () => {
       action: { kind: 'navigate_to_view', path: '/mcp-evaluations', status: 'pending' }
     });
   });
+
+  it('restores a Result Detail suggestion without navigating automatically', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-2',
+        role: 'assistant',
+        content: '[mcplab-action]{"kind":"open_result_detail","runId":"run-42"}'
+      } as Message)
+    ).toMatchObject({
+      action: { kind: 'open_result_detail', runId: 'run-42', status: 'pending' }
+    });
+  });
 });

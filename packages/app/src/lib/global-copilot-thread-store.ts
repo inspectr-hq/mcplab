@@ -29,6 +29,11 @@ export type GlobalCopilotMessage = {
         kind: 'continue_reading';
         batchSize: number;
         status: 'pending' | 'approved' | 'denied';
+      }
+    | {
+        kind: 'open_result_detail';
+        runId: string;
+        status: 'pending' | 'approved';
       };
 };
 

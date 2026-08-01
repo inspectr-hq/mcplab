@@ -271,6 +271,7 @@ export async function handleGlobalCopilotRun(params: {
       system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
     });
     let pendingApproval = false;
+    let suggestedRunId: string | undefined;
     for (
       let toolTurn = 0;
       response.tool_calls?.length && toolTurn < GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE;
@@ -308,6 +309,10 @@ export async function handleGlobalCopilotRun(params: {
       } else {
         const tool = loaded?.mapping.get(call.name);
         if (tool && loaded && tool.autoApprove && isResultAssistantAutoApprovedTool(tool.tool)) {
+          const arguments_ = call.arguments ?? {};
+          if (typeof (arguments_ as Record<string, unknown>).run_id === 'string') {
+            suggestedRunId = (arguments_ as Record<string, string>).run_id;
+          }
           const toolCallId = call.id ?? randomUUID();
           sendEvent(res, encoder, {
             type: EventType.TOOL_CALL_START,
@@ -410,6 +415,24 @@ export async function handleGlobalCopilotRun(params: {
     });
     sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_CONTENT, messageId: finalMessageId, delta: text });
     sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_END, messageId: finalMessageId });
+    if (
+      suggestedRunId &&
+      !pendingApproval &&
+      !text.startsWith(GLOBAL_COPILOT_ACTION_MARKER)
+    ) {
+      const suggestionMessageId = randomUUID();
+      sendEvent(res, encoder, {
+        type: EventType.TEXT_MESSAGE_START,
+        messageId: suggestionMessageId,
+        role: 'assistant'
+      });
+      sendEvent(res, encoder, {
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        messageId: suggestionMessageId,
+        delta: globalCopilotActionContent({ kind: 'open_result_detail', runId: suggestedRunId })
+      });
+      sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_END, messageId: suggestionMessageId });
+    }
     sendEvent(res, encoder, {
       type: EventType.RUN_FINISHED,
       threadId: input.threadId,
