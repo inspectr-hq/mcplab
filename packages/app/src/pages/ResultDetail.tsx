@@ -355,19 +355,28 @@ const ResultDetail = () => {
     if (!result) return undefined;
     const resultPath = result.configPath?.trim();
     const resultName = result.configName?.trim();
-    return configs.find((config) => {
-      if (config.id === result.configId) return true;
-      const pathMatches = resultPath
-        ? [config.relativePath, config.sourcePath, config.suitePath].some(
-            (candidate) =>
-              candidate === resultPath || candidate?.endsWith(`/${resultPath}`) === true
-          )
-        : false;
-      const nameMatches = resultName
-        ? config.name === resultName || config.configName === resultName
-        : false;
-      return pathMatches || nameMatches;
-    });
+    const byId = configs.find((config) => config.id === result.configId);
+    if (byId) return byId;
+    const pathCandidates = (config: (typeof configs)[number]) => [
+      config.relativePath,
+      config.sourcePath,
+      config.suitePath
+    ];
+    const exactPathMatch = resultPath
+      ? configs.find((config) =>
+          pathCandidates(config).some((candidate) => candidate?.trim() === resultPath)
+        )
+      : undefined;
+    if (exactPathMatch) return exactPathMatch;
+    const suffixPathMatch = resultPath
+      ? configs.find((config) =>
+          pathCandidates(config).some((candidate) => candidate?.endsWith(`/${resultPath}`) === true)
+        )
+      : undefined;
+    if (suffixPathMatch) return suffixPathMatch;
+    return configs.find((config) =>
+      resultName ? config.name === resultName || config.configName === resultName : false
+    );
   }, [configs, requestedConfigId, result]);
   const resultConfigLabel = useMemo(() => {
     const explicitName = result?.configName?.trim();

@@ -393,19 +393,9 @@ const Results = () => {
   }, [dashboardVisible]);
 
   useEffect(() => {
-    if (!dashboardVisible) {
-      setDashboardLoading(false);
-      return;
-    }
+    if (!dashboardVisible || !source.listRunSummaries) return;
     let active = true;
     setDashboardLoading(true);
-    if (!source.listRunSummaries) {
-      setDashboardRuns(results);
-      setDashboardLoading(false);
-      return () => {
-        active = false;
-      };
-    }
     source
       .listRunSummaries({
         ...apiTimeFilter,
@@ -423,7 +413,17 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, results, source]);
+  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, source]);
+
+  useEffect(() => {
+    if (dashboardVisible && source.listRunSummaries) return;
+    if (!dashboardVisible) {
+      setDashboardLoading(false);
+      return;
+    }
+    setDashboardRuns(results);
+    setDashboardLoading(false);
+  }, [dashboardVisible, results, source]);
 
   const {
     assistantMessages,

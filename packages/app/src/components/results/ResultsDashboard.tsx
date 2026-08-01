@@ -107,11 +107,11 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm">
-                <div className="h-3 w-3 rounded-full bg-success" />
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: PASS_COLOR }} />
                 {formatNumber(summary.passedRuns)} passed
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <div className="h-3 w-3 rounded-full bg-destructive" />
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: FAIL_COLOR }} />
                 {formatNumber(summary.failedRuns)} failed
               </div>
             </div>
