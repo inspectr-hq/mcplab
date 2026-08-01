@@ -10,24 +10,31 @@ let latestQueueEvent: unknown = null;
 const HEARTBEAT_MS = 15_000;
 
 function isEmptyQueueEvent(data: unknown): boolean {
-  if (typeof data !== 'object' || data === null || !('type' in data) || data.type !== 'queue_event') {
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    !('type' in data) ||
+    data.type !== 'queue_event'
+  ) {
     return false;
   }
-  const payload = 'payload' in data && typeof data.payload === 'object' && data.payload !== null
-    ? data.payload
-    : null;
-  const event = payload && 'event' in payload && typeof payload.event === 'object' && payload.event !== null
-    ? payload.event
-    : null;
+  const payload =
+    'payload' in data && typeof data.payload === 'object' && data.payload !== null
+      ? data.payload
+      : null;
+  const event =
+    payload && 'event' in payload && typeof payload.event === 'object' && payload.event !== null
+      ? payload.event
+      : null;
   if (!event) return false;
-  const activeJobs = 'active_jobs' in event && Array.isArray(event.active_jobs)
-    ? event.active_jobs
-    : 'active' in event && event.active
+  const activeJobs =
+    'active_jobs' in event && Array.isArray(event.active_jobs)
+      ? event.active_jobs
+      : 'active' in event && event.active
       ? [event.active]
       : [];
-  const admittingJobs = 'admitting_jobs' in event && Array.isArray(event.admitting_jobs)
-    ? event.admitting_jobs
-    : [];
+  const admittingJobs =
+    'admitting_jobs' in event && Array.isArray(event.admitting_jobs) ? event.admitting_jobs : [];
   const queued = 'queued' in event && Array.isArray(event.queued) ? event.queued : [];
   return activeJobs.length === 0 && admittingJobs.length === 0 && queued.length === 0;
 }
