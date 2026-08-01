@@ -57,6 +57,7 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
+import { handleGlobalCopilotRun } from './global-copilot-domain.js';
 import { createRunQueueService } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
@@ -298,6 +299,11 @@ export async function startAppServer(options: AppServerOptions) {
           settings.scenarioAssistantAgentName = next || undefined;
           settingsChanged = true;
         }
+        if (Object.prototype.hasOwnProperty.call(body, 'globalCopilotAgentName')) {
+          const next = String(body.globalCopilotAgentName ?? '').trim();
+          settings.globalCopilotAgentName = next || undefined;
+          settingsChanged = true;
+        }
         if (Object.prototype.hasOwnProperty.call(body, 'evaluationJudgeAgentName')) {
           const next = String(body.evaluationJudgeAgentName ?? '').trim();
           if (next) {
@@ -325,6 +331,11 @@ export async function startAppServer(options: AppServerOptions) {
           persistSettingsOverrides(settings);
         }
         asJson(res, 200, settings);
+        return;
+      }
+
+      if (pathname === '/api/global-copilot/run' && method === 'POST') {
+        await handleGlobalCopilotRun({ req, res, settings, parseBody, asJson });
         return;
       }
 

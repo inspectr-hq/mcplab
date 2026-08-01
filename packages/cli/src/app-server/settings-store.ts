@@ -5,6 +5,7 @@ import type { AppSettings } from './types.js';
 
 interface AppSettingsOverrides {
   scenario_assistant_agent_name?: string;
+  global_copilot_agent_name?: string;
   evaluation_judge_agent_name?: string;
   default_queue_workers?: unknown;
 }
@@ -58,6 +59,7 @@ export function applySettingsOverrides(settings: AppSettings): void {
   if (envQueueWorkers !== undefined) settings.defaultQueueWorkers = envQueueWorkers;
   settings.scenarioAssistantAgentName =
     overrides.scenario_assistant_agent_name?.trim() || undefined;
+  settings.globalCopilotAgentName = overrides.global_copilot_agent_name?.trim() || undefined;
   settings.evaluationJudgeAgentName = overrides.evaluation_judge_agent_name?.trim() || undefined;
 }
 
@@ -66,6 +68,9 @@ export function persistSettingsOverrides(settings: AppSettings): void {
     default_queue_workers: normalizeQueueWorkerCount(settings.defaultQueueWorkers),
     ...(settings.scenarioAssistantAgentName
       ? { scenario_assistant_agent_name: settings.scenarioAssistantAgentName }
+      : {}),
+    ...(settings.globalCopilotAgentName
+      ? { global_copilot_agent_name: settings.globalCopilotAgentName }
       : {}),
     ...(settings.evaluationJudgeAgentName
       ? { evaluation_judge_agent_name: settings.evaluationJudgeAgentName }

@@ -21,6 +21,7 @@ export interface AppSettings {
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
+  globalCopilotAgentName?: string;
   evaluationJudgeAgentName?: string;
 }
 

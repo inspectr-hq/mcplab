@@ -171,11 +171,13 @@ export const workspaceApiClient = {
       librariesDir: string;
       defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
+      globalCopilotAgentName?: string;
       evaluationJudgeAgentName?: string;
     }>('/api/settings'),
   updateSettings: (patch: {
     defaultQueueWorkers?: number;
     scenarioAssistantAgentName?: string;
+    globalCopilotAgentName?: string;
     evaluationJudgeAgentName?: string;
   }) =>
     request<{
@@ -185,6 +187,7 @@ export const workspaceApiClient = {
       librariesDir: string;
       defaultQueueWorkers: number;
       scenarioAssistantAgentName?: string;
+      globalCopilotAgentName?: string;
       evaluationJudgeAgentName?: string;
     }>('/api/settings', {
       method: 'PUT',

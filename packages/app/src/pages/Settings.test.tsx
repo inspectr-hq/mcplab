@@ -19,6 +19,7 @@ const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
         librariesDir: '/tmp/libs',
         defaultQueueWorkers: 3,
         scenarioAssistantAgentName: 'assistant-1',
+        globalCopilotAgentName: 'assistant-1',
         evaluationJudgeAgentName: 'assistant-1'
       }),
       updateWorkspaceSettings: vi.fn().mockResolvedValue({
@@ -28,6 +29,7 @@ const { sourceMock, agentsRef, reloadMock } = vi.hoisted(() => {
         librariesDir: '/tmp/libs',
         defaultQueueWorkers: 4,
         scenarioAssistantAgentName: 'assistant-1',
+        globalCopilotAgentName: 'assistant-1',
         evaluationJudgeAgentName: 'assistant-1'
       })
     }
@@ -75,12 +77,28 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Evaluation workers')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('combobox')[2]!);
+    fireEvent.click(screen.getAllByRole('combobox')[3]!);
     fireEvent.click(screen.getByText('4'));
 
     await waitFor(() => {
       expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
         defaultQueueWorkers: 4
+      });
+    });
+  });
+
+  it('loads and saves the global copilot agent setting', async () => {
+    render(<SettingsPage />);
+
+    await waitFor(() => expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled());
+    expect(screen.getByText('Global copilot agent')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]!);
+    fireEvent.click(screen.getByText('No default agent'));
+
+    await waitFor(() => {
+      expect(sourceMock.updateWorkspaceSettings).toHaveBeenCalledWith({
+        globalCopilotAgentName: undefined
       });
     });
   });
@@ -94,7 +112,7 @@ describe('SettingsPage', () => {
       expect(sourceMock.getWorkspaceSettings).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getAllByRole('combobox')[2]!);
+    fireEvent.click(screen.getAllByRole('combobox')[3]!);
     fireEvent.click(screen.getByText('4'));
 
     await waitFor(() => {
@@ -104,7 +122,7 @@ describe('SettingsPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getAllByRole('combobox')[2]).toHaveTextContent('3');
+      expect(screen.getAllByRole('combobox')[3]).toHaveTextContent('3');
     });
   });
 });

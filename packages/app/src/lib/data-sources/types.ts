@@ -141,6 +141,7 @@ export interface WorkspaceSettings {
   librariesDir: string;
   defaultQueueWorkers: number;
   scenarioAssistantAgentName?: string;
+  globalCopilotAgentName?: string;
   evaluationJudgeAgentName?: string;
 }
 
@@ -770,6 +771,7 @@ export interface EvalDataSource {
   updateWorkspaceSettings: (patch: {
     defaultQueueWorkers?: number;
     scenarioAssistantAgentName?: string;
+    globalCopilotAgentName?: string;
     evaluationJudgeAgentName?: string;
   }) => Promise<WorkspaceSettings | null>;
   createScenarioAssistantSession: (

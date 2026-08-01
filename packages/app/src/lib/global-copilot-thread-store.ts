@@ -1,0 +1,89 @@
+export type GlobalCopilotMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  content: string;
+  createdAt: string;
+};
+
+export type GlobalCopilotThread = {
+  version: 1;
+  id: string;
+  workspaceKey: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: GlobalCopilotMessage[];
+};
+
+export type GlobalCopilotThreadInput = Omit<GlobalCopilotThread, 'version' | 'createdAt' | 'updatedAt'> &
+  Partial<Pick<GlobalCopilotThread, 'createdAt' | 'updatedAt'>>;
+
+const DATABASE_NAME = 'mcplab-global-copilot';
+const STORE_NAME = 'threads';
+
+export class GlobalCopilotThreadStore {
+  private open(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DATABASE_NAME, 1);
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore(STORE_NAME, { keyPath: ['workspaceKey', 'id'] });
+        store.createIndex('workspace-updated', ['workspaceKey', 'updatedAt']);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async saveThread(input: GlobalCopilotThreadInput): Promise<GlobalCopilotThread> {
+    const now = new Date().toISOString();
+    const thread: GlobalCopilotThread = {
+      version: 1,
+      id: input.id,
+      workspaceKey: input.workspaceKey,
+      title: input.title,
+      messages: input.messages,
+      createdAt: input.createdAt ?? now,
+      updatedAt: input.updatedAt ?? now
+    };
+    const database = await this.open();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      transaction.objectStore(STORE_NAME).put(thread);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    database.close();
+    return thread;
+  }
+
+  async listThreads(workspaceKey: string): Promise<GlobalCopilotThread[]> {
+    const database = await this.open();
+    const threads = await new Promise<GlobalCopilotThread[]>((resolve, reject) => {
+      const request = database.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
+      request.onsuccess = () => resolve(request.result as GlobalCopilotThread[]);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return threads
+      .filter((thread) => thread.workspaceKey === workspaceKey)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async deleteThread(workspaceKey: string, id: string): Promise<void> {
+    const database = await this.open();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, 'readwrite');
+      transaction.objectStore(STORE_NAME).delete([workspaceKey, id]);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  }
+}
+
+export async function workspaceKeyFromRoot(workspaceRoot: string): Promise<string> {
+  const bytes = new TextEncoder().encode(workspaceRoot);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (part) => part.toString(16).padStart(2, '0')).join('');
+}

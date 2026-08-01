@@ -44,6 +44,8 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
+    "@ag-ui/core": "^0.0.57",
+    "@ag-ui/encoder": "^0.0.57",
     "@inspectr/mcplab-core": "1.20.0",
     "@inspectr/mcplab-mcp-server": "1.7.1",
     "@inspectr/mcplab-reporting": "1.2.0",

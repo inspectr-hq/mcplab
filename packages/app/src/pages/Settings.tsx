@@ -20,6 +20,7 @@ const SettingsPage = () => {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [scenarioAssistantAgentName, setScenarioAssistantAgentName] = useState<string>('');
+  const [globalCopilotAgentName, setGlobalCopilotAgentName] = useState<string>('');
   const [evaluationJudgeAgentName, setEvaluationJudgeAgentName] = useState<string>('');
   const [defaultQueueWorkers, setDefaultQueueWorkers] = useState<string>('1');
 
@@ -33,10 +34,12 @@ const SettingsPage = () => {
     try {
       const settings = await source.getWorkspaceSettings();
       setScenarioAssistantAgentName(settings?.scenarioAssistantAgentName ?? '');
+      setGlobalCopilotAgentName(settings?.globalCopilotAgentName ?? '');
       setEvaluationJudgeAgentName(settings?.evaluationJudgeAgentName ?? '');
       setDefaultQueueWorkers(String(settings?.defaultQueueWorkers ?? 1));
     } catch (error: unknown) {
       setScenarioAssistantAgentName('');
+      setGlobalCopilotAgentName('');
       setEvaluationJudgeAgentName('');
       setDefaultQueueWorkers('1');
       toast({
@@ -69,6 +72,32 @@ const SettingsPage = () => {
       });
     } catch (error: unknown) {
       setScenarioAssistantAgentName(previousAgentName);
+      toast({
+        title: 'Could not save settings',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const saveGlobalCopilotAgentSetting = async (nextAgentName: string) => {
+    const previousAgentName = globalCopilotAgentName;
+    setGlobalCopilotAgentName(nextAgentName);
+    setSavingSettings(true);
+    try {
+      await source.updateWorkspaceSettings({
+        globalCopilotAgentName: nextAgentName || undefined
+      });
+      toast({
+        title: 'Settings updated',
+        description: nextAgentName
+          ? `Global copilot agent set to ${nextAgentName}.`
+          : 'Global copilot will use the default assistant agent.'
+      });
+    } catch (error: unknown) {
+      setGlobalCopilotAgentName(previousAgentName);
       toast({
         title: 'Could not save settings',
         description: error instanceof Error ? error.message : String(error),
@@ -190,6 +219,44 @@ const SettingsPage = () => {
             <p className="text-xs text-muted-foreground">
               Applies to the assistant flows that use the workspace default. MCP Evaluation editors
               can still override the assistant agent from their evaluation context.
+            </p>
+          </div>
+          <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Global Copilot</CardTitle>
+          <CardDescription>
+            The assistant agent used by the persistent global copilot sidebar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1.3fr_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Global copilot agent</Label>
+            <Select
+              value={globalCopilotAgentName || '__none__'}
+              onValueChange={(value) =>
+                void saveGlobalCopilotAgentSetting(value === '__none__' ? '' : value)
+              }
+              disabled={savingSettings}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select global copilot agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">No default agent</SelectItem>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name || agent.id} · {agent.model}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              If unset, the global copilot uses the default assistant agent, then the first
+              available library agent.
             </p>
           </div>
           <div className="text-xs text-muted-foreground">Saved in workspace settings</div>
