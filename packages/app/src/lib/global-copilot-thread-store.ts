@@ -103,6 +103,11 @@ export class GlobalCopilotThreadStore {
     database.close();
   }
 
+  async pruneThreads(workspaceKey: string, maxThreads = 100): Promise<void> {
+    const stale = (await this.listThreads(workspaceKey)).slice(Math.max(0, maxThreads));
+    await Promise.all(stale.map((thread) => this.deleteThread(workspaceKey, thread.id)));
+  }
+
   async getActiveThreadId(workspaceKey: string): Promise<string | undefined> {
     const database = await this.open();
     const record = await new Promise<{ workspaceKey: string; activeThreadId?: string } | undefined>((resolve, reject) => {

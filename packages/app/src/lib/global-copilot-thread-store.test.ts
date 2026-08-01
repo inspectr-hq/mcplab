@@ -28,4 +28,13 @@ describe('GlobalCopilotThreadStore', () => {
     await expect(store.getActiveThreadId('workspace-a')).resolves.toBe('thread-a');
     await expect(store.getActiveThreadId('workspace-b')).resolves.toBe('thread-b');
   });
+
+  it('prunes only the oldest threads beyond a workspace retention limit', async () => {
+    const store = new GlobalCopilotThreadStore();
+    await store.saveThread({ id: 'old', workspaceKey: 'workspace-a', title: 'Old', messages: [], updatedAt: '2026-01-01T00:00:00.000Z' });
+    await store.saveThread({ id: 'new', workspaceKey: 'workspace-a', title: 'New', messages: [], updatedAt: '2026-01-02T00:00:00.000Z' });
+    await store.pruneThreads('workspace-a', 1);
+
+    expect((await store.listThreads('workspace-a')).map((thread) => thread.id)).toEqual(['new']);
+  });
 });
