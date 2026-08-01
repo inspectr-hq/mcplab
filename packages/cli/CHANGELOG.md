@@ -1,5 +1,13 @@
 # @inspectr/mcplab
 
+## 1.25.0
+
+### Minor Changes
+
+- feat: add results dashboard with aggregated metrics
+- feat: refresh results after each completed evaluation
+- feat: add scenario & test-case editing actions in the result page
+
 ## 1.24.3
 
 ### Patch Changes
