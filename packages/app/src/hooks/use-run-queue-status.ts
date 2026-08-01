@@ -71,21 +71,24 @@ export function useRunQueueStatus() {
         if (event.type === 'queue_event' && queueEvent) {
           revisionRef.current += 1;
           const nextQueueState = normalizeQueueState(queueEvent);
-          const currentJobIds = new Set([
-            ...nextQueueState.active_jobs,
-            ...nextQueueState.admitting_jobs,
-            ...nextQueueState.queued
-          ].map((job) => job.jobId));
+          const currentJobIds = new Set(
+            [
+              ...nextQueueState.active_jobs,
+              ...nextQueueState.admitting_jobs,
+              ...nextQueueState.queued
+            ].map((job) => job.jobId)
+          );
           const completedCount = [...inFlightJobIdsRef.current].filter(
             (jobId) => !currentJobIds.has(jobId)
           ).length;
           if (completedCount > 0) {
             setCompletionVersion((previous) => previous + completedCount);
           }
-          inFlightJobIdsRef.current = new Set([
-            ...nextQueueState.active_jobs,
-            ...nextQueueState.admitting_jobs
-          ].map((job) => job.jobId));
+          inFlightJobIdsRef.current = new Set(
+            [...nextQueueState.active_jobs, ...nextQueueState.admitting_jobs].map(
+              (job) => job.jobId
+            )
+          );
           setStreamStatus('connected');
           streamStatusRef.current = 'connected';
           setQueueState(nextQueueState);

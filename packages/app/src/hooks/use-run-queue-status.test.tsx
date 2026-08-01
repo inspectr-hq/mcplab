@@ -163,7 +163,9 @@ describe('useRunQueueStatus', () => {
     act(() => {
       emit?.({
         type: 'queue_event',
-        payload: { event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] } }
+        payload: {
+          event: { active: activeJob, active_jobs: [activeJob], admitting_jobs: [], queued: [] }
+        }
       });
     });
 
