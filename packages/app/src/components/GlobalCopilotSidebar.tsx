@@ -37,6 +37,19 @@ const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
 const globalCopilotActionMarker = '[mcplab-action]';
+const globalCopilotNavigationTargets = new Set([
+  '/',
+  '/mcp-evaluations',
+  '/run',
+  '/results',
+  '/compare',
+  '/tool-analysis',
+  '/tool-analysis-results',
+  '/libraries/servers',
+  '/libraries/agents',
+  '/libraries/test-cases',
+  '/settings'
+]);
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
 export function globalCopilotToolDisplayName(name: string): string {
@@ -67,7 +80,7 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
       return {
         id: message.id,
         role: 'system',
-        content: `Navigation requested: ${action.path}`,
+        content: `Opening ${action.path}.`,
         createdAt,
         action: {
           kind: 'navigate_to_view',
@@ -318,6 +331,25 @@ export function GlobalCopilotSidebar() {
     },
     [refresh]
   );
+  useEffect(() => {
+    if (!thread) return;
+    const requested = thread.messages.find(
+      (message) => message.action?.kind === 'navigate_to_view' && message.action.status === 'pending'
+    );
+    if (!requested?.action || !globalCopilotNavigationTargets.has(requested.action.path)) return;
+    void save({
+      ...thread,
+      messages: thread.messages.map((message) =>
+        message.id === requested.id
+          ? {
+              ...message,
+              content: `Opened ${requested.action!.path}.`,
+              action: { ...requested.action!, status: 'approved' as const }
+            }
+          : message
+      )
+    }).then(() => navigate(requested.action!.path));
+  }, [navigate, save, thread]);
   const selectThread = useCallback((next: GlobalCopilotThread) => {
     void store.setActiveThreadId(next.workspaceKey, next.id);
     setThread(next);
@@ -484,39 +516,6 @@ export function GlobalCopilotSidebar() {
       );
     },
     [save, send, thread]
-  );
-  const confirmNavigation = useCallback(
-    async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'navigate_to_view') return;
-      const allowed = new Set([
-        '/',
-        '/mcp-evaluations',
-        '/run',
-        '/results',
-        '/compare',
-        '/tool-analysis',
-        '/tool-analysis-results',
-        '/libraries/servers',
-        '/libraries/agents',
-        '/libraries/test-cases',
-        '/settings'
-      ]);
-      if (!allowed.has(message.action.path)) return;
-      const messages = thread.messages.map((item) =>
-        item.id === message.id
-          ? {
-              ...item,
-              action: {
-                ...message.action!,
-                status: approved ? ('approved' as const) : ('denied' as const)
-              }
-            }
-          : item
-      );
-      await save({ ...thread, messages });
-      if (approved) navigate(message.action.path);
-    },
-    [navigate, save, thread]
   );
   const confirmExternalTool = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
@@ -804,24 +803,6 @@ export function GlobalCopilotSidebar() {
                     }
                   />
                 )}
-                {message.action?.kind === 'navigate_to_view' &&
-                  message.action.status === 'pending' && (
-                    <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                      <p>{message.action.reason || `Open ${message.action.path}?`}</p>
-                      <div className="mt-2 flex gap-2">
-                        <Button size="sm" onClick={() => void confirmNavigation(message, true)}>
-                          Open view
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void confirmNavigation(message, false)}
-                        >
-                          Not now
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 {message.action?.kind === 'continue_reading' &&
                   message.action.status === 'pending' && (
                     <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">

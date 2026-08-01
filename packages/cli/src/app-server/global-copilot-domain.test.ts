@@ -4,6 +4,7 @@ import {
   GLOBAL_COPILOT_FRONTEND_TOOLS,
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
+  isExplicitGlobalCopilotNavigationRequest,
   selectGlobalCopilotAgentName
 } from './global-copilot-domain.js';
 
@@ -37,6 +38,19 @@ describe('selectGlobalCopilotAgentName', () => {
       expect.objectContaining({ name: 'navigate_to_view' })
     ]);
     expect(JSON.stringify(GLOBAL_COPILOT_FRONTEND_TOOLS)).not.toContain('http://');
+  });
+
+  it('only treats direct requests to open a view as navigation', () => {
+    expect(
+      isExplicitGlobalCopilotNavigationRequest([
+        { role: 'user', content: 'When was the last run for Tag Profile and was it successful?' }
+      ])
+    ).toBe(false);
+    expect(
+      isExplicitGlobalCopilotNavigationRequest([
+        { role: 'user', content: 'Go to the evaluations list.' }
+      ])
+    ).toBe(true);
   });
 
   it('only scopes external MCP servers to the active test case', () => {

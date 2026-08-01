@@ -93,6 +93,13 @@ export function selectGlobalCopilotAgentName(params: {
   );
 }
 
+export function isExplicitGlobalCopilotNavigationRequest(messages: LlmMessage[]): boolean {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+  return /\b(?:go(?:\s+to)?|goto|navigate|open|take me|switch)\b/i.test(
+    String(lastUserMessage?.content ?? '')
+  );
+}
+
 function toLlmMessages(input: RunAgentInput): LlmMessage[] {
   return input.messages.flatMap((message: any) => {
     if (!['user', 'assistant', 'system', 'tool'].includes(message.role)) return [];
@@ -106,6 +113,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'You are the MCPLab Global Copilot.',
     'Help users analyze evaluation results and author or improve MCP test cases.',
     'You can navigate the MCPLab interface using available frontend actions.',
+    'Only navigate when the user explicitly asks to go, navigate, open, take them, or switch to a view. For questions about runs, results, evaluations, or test cases, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',
@@ -245,7 +253,9 @@ export async function handleGlobalCopilotRun(params: {
       globalCopilotExternalServers(libraries, activeTestCaseId)
     ).catch(() => undefined);
     const messages = toLlmMessages(input);
-    const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context);
+    const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context).filter(
+      (tool) => tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
+    );
     let response = await chatWithAgent({
       agent: agent as AgentConfig,
       messages,
