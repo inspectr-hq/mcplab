@@ -226,7 +226,7 @@ export async function handleGlobalCopilotRun(params: {
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
         const result = await loaded.mcp.callTool(tool.server, tool.tool, call.arguments ?? {});
         const content = truncateJson(result, 4000);
-        sendEvent(res, encoder, { type: EventType.TOOL_CALL_RESULT, toolCallId, content });
+        sendEvent(res, encoder, { type: EventType.TOOL_CALL_RESULT, messageId: randomUUID(), toolCallId, content });
         messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: [{ id: toolCallId, name: call.name, arguments: call.arguments ?? {} }] });
         messages.push({ role: 'tool', content, tool_call_id: toolCallId, name: call.name });
           response = await chatWithAgent({ agent: agent as AgentConfig, messages, tools: [...frontendTools, ...loaded.tools], system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context) });
