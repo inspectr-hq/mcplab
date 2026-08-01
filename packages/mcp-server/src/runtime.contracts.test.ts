@@ -40,6 +40,29 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('mcplab_build_app_link builds encoded, allowlisted Result Detail links', async () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_build_app_link');
+    expect(tool).toBeDefined();
+
+    const schema = asSchema(tool!.config.inputSchema);
+    expect(schema.safeParse({ view: 'result_detail' }).success).toBe(true);
+
+    const result = await tool!.cb({
+      view: 'result_detail',
+      run_id: 'run / 1',
+      config_id: 'config 1',
+      agent: 'agent/a'
+    });
+    expect(result.structuredContent).toMatchObject({
+      view: 'result_detail',
+      path: '/results/run%20%2F%201?configId=config+1&agent=agent%2Fa',
+      url: 'http://127.0.0.1:8787/results/run%20%2F%201?configId=config+1&agent=agent%2Fa'
+    });
+    const missingRun = await tool!.cb({ view: 'result_detail' });
+    expect(missingRun.isError).toBe(true);
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');

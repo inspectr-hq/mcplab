@@ -722,6 +722,147 @@ export function registerTools(server: McpServer): void {
   };
 
   registerTool(
+    'mcplab_build_app_link',
+    {
+      description:
+        'Build a safe deep link to a local MCPLab app view. Use this to give the user a link to open; it does not control or navigate a browser.',
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        view: z
+          .enum([
+            'home',
+            'evaluations',
+            'run_evaluation',
+            'results',
+            'result_detail',
+            'compare',
+            'tool_analysis',
+            'tool_analysis_results',
+            'tool_analysis_result',
+            'library_servers',
+            'library_agents',
+            'library_test_cases',
+            'settings'
+          ])
+          .describe('The allowlisted MCPLab view to link to.'),
+        run_id: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Required for result_detail; the MCPLab evaluation run ID.'),
+        tool_analysis_id: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Required for tool_analysis_result; the Tool Analysis result ID.'),
+        config_id: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Optional configuration ID for a Result Detail or Run Evaluation link.'),
+        agent: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Optional agent ID for a Result Detail link.'),
+        scenario: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe('Optional scenario filter for a Results link.'),
+        time_filter: z
+          .enum(['last', 'custom'])
+          .optional()
+          .describe('Optional Results time-filter mode.'),
+        time_preset: z
+          .enum(['15min', '30min', '1h', '24h', '7d', '14d', '30d'])
+          .optional()
+          .describe('Optional preset when time_filter is last.'),
+        time_start: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Optional inclusive ISO time start when time_filter is custom.'),
+        time_end: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Optional inclusive ISO time end when time_filter is custom.')
+      },
+      outputSchema: {
+        view: z.string(),
+        path: z.string(),
+        url: z.string().url()
+      }
+    },
+    ({
+      view,
+      run_id,
+      tool_analysis_id,
+      config_id,
+      agent,
+      scenario,
+      time_filter,
+      time_preset,
+      time_start,
+      time_end
+    }) => {
+      return withToolHandling(() => {
+        const pathByView: Record<string, string> = {
+          home: '/',
+          evaluations: '/mcp-evaluations',
+          run_evaluation: '/run',
+          results: '/results',
+          compare: '/compare',
+          tool_analysis: '/tool-analysis',
+          tool_analysis_results: '/tool-analysis-results',
+          library_servers: '/libraries/servers',
+          library_agents: '/libraries/agents',
+          library_test_cases: '/libraries/test-cases',
+          settings: '/settings'
+        };
+        let path = pathByView[view];
+        if (view === 'result_detail') {
+          if (!run_id) throw new Error('run_id is required for view=result_detail.');
+          path = `/results/${encodeURIComponent(run_id)}`;
+        }
+        if (view === 'tool_analysis_result') {
+          if (!tool_analysis_id)
+            throw new Error('tool_analysis_id is required for view=tool_analysis_result.');
+          path = `/tool-analysis-results/${encodeURIComponent(tool_analysis_id)}`;
+        }
+        const query = new URLSearchParams();
+        if (view === 'result_detail') {
+          if (config_id) query.set('configId', config_id);
+          if (agent) query.set('agent', agent);
+        }
+        if (view === 'run_evaluation' && config_id) query.set('configId', config_id);
+        if (view === 'results') {
+          if (scenario) query.set('scenario', scenario);
+          if (time_filter) query.set('time_filter', time_filter);
+          if (time_filter === 'last' && time_preset) query.set('time_preset', time_preset);
+          if (time_filter === 'custom') {
+            if (time_start) query.set('time_start', time_start);
+            if (time_end) query.set('time_end', time_end);
+          }
+        }
+        const resolvedPath = `${path}${query.size ? `?${query.toString()}` : ''}`;
+        const baseUrl = new URL(process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787');
+        if (!['http:', 'https:'].includes(baseUrl.protocol)) {
+          throw new Error('MCPLAB_APP_URL must use http or https.');
+        }
+        const url = new URL(resolvedPath, baseUrl).toString();
+        return ok(`Built MCPLab app link for ${view}.`, { view, path: resolvedPath, url });
+      });
+    }
+  );
+
+  registerTool(
     'mcplab_write_markdown_report',
     {
       description:
