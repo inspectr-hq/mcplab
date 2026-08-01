@@ -1425,6 +1425,7 @@ export function registerTools(server: McpServer): void {
             tool_usage_frequency: z.record(z.number())
           })
         ),
+        effective_agent_override: z.array(z.string()).optional(),
         effective_server_overrides: z.record(z.array(z.string())),
         report_html_preview: z.string()
       },
@@ -1437,6 +1438,13 @@ export function registerTools(server: McpServer): void {
           .positive()
           .optional()
           .describe('Runs per scenario (default 1).'),
+        agent_override: z
+          .array(z.string().min(1))
+          .min(1)
+          .optional()
+          .describe(
+            'Optional evaluation agent IDs to use for all selected scenarios for this run. These are resolved from the effective config and MCPLab agent library without modifying the config.'
+          ),
         server_override_all: z
           .array(z.string())
           .optional()
@@ -1451,6 +1459,7 @@ export function registerTools(server: McpServer): void {
       config_path,
       scenario_id,
       runs_per_scenario,
+      agent_override,
       server_override_all,
       scenario_server_overrides
     }) => {
@@ -1468,7 +1477,7 @@ export function registerTools(server: McpServer): void {
         const effectiveConfigHash = hashConfig(runtimeOverridden);
         const executable = expandConfigForAgents(
           runtimeOverridden,
-          runtimeOverridden.run_defaults?.selected_agents
+          agent_override ?? runtimeOverridden.run_defaults?.selected_agents
         );
         const { runDir, results } = await runAll(executable, {
           runsPerScenario: runs_per_scenario ?? 1,
@@ -1513,6 +1522,7 @@ export function registerTools(server: McpServer): void {
             pass_rate: scenario.pass_rate,
             tool_usage_frequency: scenario.tool_usage_frequency
           })),
+          effective_agent_override: agent_override ?? undefined,
           effective_server_overrides: Object.fromEntries(
             runtimeOverridden.scenarios.map((scenario) => [scenario.id, [...scenario.servers]])
           ),

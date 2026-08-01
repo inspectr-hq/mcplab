@@ -63,6 +63,26 @@ describe('mcp tool contracts', () => {
     expect(missingRun.isError).toBe(true);
   });
 
+  it('mcplab_run_eval accepts a temporary agent override alongside server overrides', () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_run_eval');
+    expect(tool).toBeDefined();
+
+    const schema = asSchema(tool!.config.inputSchema);
+    expect(
+      schema.safeParse({
+        config_path: 'mcplab/evals/eval.yaml',
+        scenario_id: 'tag-profile',
+        agent_override: ['deepseek'],
+        server_override_all: ['deepseek-mcp'],
+        scenario_server_overrides: { 'tag-profile': ['deepseek-mcp'] }
+      }).success
+    ).toBe(true);
+    expect(
+      schema.safeParse({ config_path: 'mcplab/evals/eval.yaml', agent_override: [] }).success
+    ).toBe(false);
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');
