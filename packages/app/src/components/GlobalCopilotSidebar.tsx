@@ -36,6 +36,7 @@ import { toast } from '@/hooks/use-toast';
 const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
+const globalCopilotActionMarker = '[mcplab-action]';
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
 export function globalCopilotToolDisplayName(name: string): string {
@@ -52,10 +53,84 @@ export function globalCopilotToolLabel(name: string): string {
     : toolName;
 }
 
+export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopilotMessage | null {
+  if (message.role !== 'assistant' || !message.content?.startsWith(globalCopilotActionMarker)) {
+    return null;
+  }
+  try {
+    const action = JSON.parse(message.content.slice(globalCopilotActionMarker.length)) as Record<
+      string,
+      unknown
+    >;
+    const createdAt = new Date().toISOString();
+    if (action.kind === 'navigate_to_view' && typeof action.path === 'string') {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Navigation requested: ${action.path}`,
+        createdAt,
+        action: {
+          kind: 'navigate_to_view',
+          path: action.path,
+          reason: typeof action.reason === 'string' ? action.reason : undefined,
+          status: 'pending'
+        }
+      };
+    }
+    if (
+      action.kind === 'start_action' &&
+      (action.name === 'start_evaluation_run' || action.name === 'start_tool_analysis')
+    ) {
+      return {
+        id: message.id,
+        role: 'system',
+        content: 'Run action requested.',
+        createdAt,
+        action: { kind: 'start_action', name: action.name, status: 'pending' }
+      };
+    }
+    if (
+      action.kind === 'external_mcp_tool' &&
+      typeof action.serverName === 'string' &&
+      typeof action.toolName === 'string' &&
+      action.arguments &&
+      typeof action.arguments === 'object'
+    ) {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `External MCP call requested: ${action.serverName}/${action.toolName}`,
+        createdAt,
+        action: {
+          kind: 'external_mcp_tool',
+          serverName: action.serverName,
+          toolName: action.toolName,
+          arguments: action.arguments as Record<string, unknown>,
+          status: 'pending'
+        }
+      };
+    }
+    if (action.kind === 'continue_reading' && typeof action.batchSize === 'number') {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Additional MCPLab read-tool batch requested (${action.batchSize} calls).`,
+        createdAt,
+        action: { kind: 'continue_reading', batchSize: action.batchSize, status: 'pending' }
+      };
+    }
+  } catch {
+    /* Invalid action payloads are rendered as normal assistant messages. */
+  }
+  return null;
+}
+
 function stored(
   message: Message,
   toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
 ): GlobalCopilotMessage | null {
+  const markedAction = storedGlobalCopilotFrontendAction(message);
+  if (markedAction) return markedAction;
   const navigation =
     message.role === 'assistant'
       ? (
@@ -84,6 +159,29 @@ function stored(
           }
         };
       }
+    } catch {
+      /* Invalid tool arguments are rendered as the normal assistant message. */
+    }
+  }
+  const continueReading =
+    message.role === 'assistant'
+      ? (
+          message as Message & {
+            toolCalls?: Array<{ function: { name: string; arguments: string } }>;
+          }
+        ).toolCalls?.find((call) => call.function.name === 'request_additional_read_tools')
+      : undefined;
+  if (continueReading) {
+    try {
+      const args = JSON.parse(continueReading.function.arguments) as { batchSize?: unknown };
+      const batchSize = typeof args.batchSize === 'number' ? args.batchSize : 5;
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Additional MCPLab read-tool batch requested (${batchSize} calls).`,
+        createdAt: new Date().toISOString(),
+        action: { kind: 'continue_reading', batchSize, status: 'pending' }
+      };
     } catch {
       /* Invalid tool arguments are rendered as the normal assistant message. */
     }
@@ -250,11 +348,13 @@ export function GlobalCopilotSidebar() {
     setThread(next);
     await refresh(workspaceKey);
   }, [refresh, workspaceKey]);
-  const send = useCallback(async () => {
-    const question = input.trim();
-    if (!question || !workspaceKey || loading) return;
+  const send = useCallback(
+    async (continuation?: GlobalCopilotMessage, continuationThread?: GlobalCopilotThread) => {
+      const question = continuation?.content ?? input.trim();
+      if (!question || !workspaceKey || loading) return;
     const now = new Date().toISOString();
     const active =
+      continuationThread ??
       thread ??
       (await store.saveThread({
         id: id('gct'),
@@ -264,18 +364,20 @@ export function GlobalCopilotSidebar() {
         createdAt: now,
         updatedAt: now
       }));
-    const user: GlobalCopilotMessage = {
-      id: id('msg'),
-      role: 'user',
-      content: question,
-      createdAt: now
-    };
+    const submitted =
+      continuation ??
+      ({
+        id: id('msg'),
+        role: 'user',
+        content: question,
+        createdAt: now
+      } satisfies GlobalCopilotMessage);
     const optimistic = await save({
       ...active,
-      title: active.messages.length ? active.title : question.slice(0, 60),
-      messages: [...active.messages, user]
+      title: active.messages.length || continuation ? active.title : question.slice(0, 60),
+      messages: [...active.messages, submitted]
     });
-    setInput('');
+    if (!continuation) setInput('');
     setLoading(true);
     try {
       const agent = new HttpAgent({
@@ -343,19 +445,46 @@ export function GlobalCopilotSidebar() {
       agentRef.current = undefined;
       setLoading(false);
     }
-  }, [
-    input,
-    loading,
-    location.pathname,
-    location.search,
-    queue.oauthBlockedCount,
-    queue.queuedCount,
-    queue.runningCount,
-    queue.streamStatus,
-    save,
-    thread,
-    workspaceKey
-  ]);
+    },
+    [
+      input,
+      loading,
+      location.pathname,
+      location.search,
+      queue.oauthBlockedCount,
+      queue.queuedCount,
+      queue.runningCount,
+      queue.streamStatus,
+      save,
+      thread,
+      workspaceKey
+    ]
+  );
+  const confirmAdditionalReadTools = useCallback(
+    async (message: GlobalCopilotMessage, approved: boolean) => {
+      if (!thread || !message.action || message.action.kind !== 'continue_reading') return;
+      const messages = thread.messages.map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              action: { ...message.action!, status: approved ? ('approved' as const) : ('denied' as const) }
+            }
+          : item
+      );
+      const saved = await save({ ...thread, messages });
+      if (!approved) return;
+      await send(
+        {
+          id: id('continue'),
+          role: 'system',
+          content: `The user approved up to ${message.action.batchSize} additional read-only MCPLab tool calls. Continue investigating the most recent unresolved request.`,
+          createdAt: new Date().toISOString()
+        },
+        saved
+      );
+    },
+    [save, send, thread]
+  );
   const confirmNavigation = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
       if (!thread || !message.action || message.action.kind !== 'navigate_to_view') return;
@@ -689,6 +818,30 @@ export function GlobalCopilotSidebar() {
                           onClick={() => void confirmNavigation(message, false)}
                         >
                           Not now
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                {message.action?.kind === 'continue_reading' &&
+                  message.action.status === 'pending' && (
+                    <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
+                      <p>
+                        Allow up to {message.action.batchSize} additional read-only MCPLab tool calls to
+                        continue this investigation?
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => void confirmAdditionalReadTools(message, true)}
+                        >
+                          Continue
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void confirmAdditionalReadTools(message, false)}
+                        >
+                          Stop here
                         </Button>
                       </div>
                     </div>

@@ -31,6 +31,14 @@ export const GLOBAL_COPILOT_NAVIGATION_TARGETS = [
   '/settings'
 ] as const;
 
+export const GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE = 5;
+
+const GLOBAL_COPILOT_ACTION_MARKER = '[mcplab-action]';
+
+function globalCopilotActionContent(action: Record<string, unknown>): string {
+  return `${GLOBAL_COPILOT_ACTION_MARKER}${JSON.stringify(action)}`;
+}
+
 export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [
   {
     name: 'navigate_to_view',
@@ -245,7 +253,11 @@ export async function handleGlobalCopilotRun(params: {
       system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
     });
     let pendingApproval = false;
-    for (let toolTurn = 0; response.tool_calls?.length && toolTurn < 3; toolTurn += 1) {
+    for (
+      let toolTurn = 0;
+      response.tool_calls?.length && toolTurn < GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE;
+      toolTurn += 1
+    ) {
       const call = response.tool_calls[0]!;
       if (
         call.name === 'navigate_to_view' ||
@@ -265,6 +277,14 @@ export async function handleGlobalCopilotRun(params: {
           delta: JSON.stringify(call.arguments ?? {})
         });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+        response = {
+          ...response,
+          content: globalCopilotActionContent(
+            call.name === 'navigate_to_view'
+              ? { kind: 'navigate_to_view', ...(call.arguments ?? {}) }
+              : { kind: 'start_action', name: call.name }
+          )
+        };
         pendingApproval = true;
         break;
       } else {
@@ -318,20 +338,46 @@ export async function handleGlobalCopilotRun(params: {
           delta: JSON.stringify(call.arguments ?? {})
         });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+        response = {
+          ...response,
+          content: globalCopilotActionContent({
+            kind: 'external_mcp_tool',
+            serverName: tool?.server,
+            toolName: tool?.tool,
+            arguments: call.arguments ?? {}
+          })
+        };
         pendingApproval = true;
         break;
       }
     }
     if (response.tool_calls?.length && !pendingApproval) {
-      response = await chatWithAgent({
-        agent: agent as AgentConfig,
-        messages,
-        tools: [],
-        system: [
-          globalCopilotSystemPrompt((input.forwardedProps as any)?.context),
-          'You have reached the read-tool limit for this reply. Answer using the retrieved data; do not request another tool.'
-        ].join('\n')
+      const toolCallId = randomUUID();
+      sendEvent(res, encoder, {
+        type: EventType.TOOL_CALL_START,
+        toolCallId,
+        toolCallName: 'request_additional_read_tools',
+        parentMessageId: messageId
       });
+      sendEvent(res, encoder, {
+        type: EventType.TOOL_CALL_ARGS,
+        toolCallId,
+        delta: JSON.stringify({ batchSize: GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE })
+      });
+      sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+      response = {
+        content: globalCopilotActionContent({
+          kind: 'continue_reading',
+          batchSize: GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE
+        }),
+        tool_calls: [
+          {
+            id: toolCallId,
+            name: 'request_additional_read_tools',
+            arguments: { batchSize: GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE }
+          }
+        ]
+      };
     }
     await loaded?.mcp.disconnectAll();
     const text =

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { globalCopilotToolDisplayName, globalCopilotToolLabel } from './GlobalCopilotSidebar';
+import type { Message } from '@ag-ui/client';
+import {
+  globalCopilotToolDisplayName,
+  globalCopilotToolLabel,
+  storedGlobalCopilotFrontendAction
+} from './GlobalCopilotSidebar';
 
 describe('globalCopilotToolDisplayName', () => {
   it('removes the internal MCPLab routing prefix while retaining the MCP tool name', () => {
@@ -14,5 +19,17 @@ describe('globalCopilotToolDisplayName', () => {
   it('uses the MCP tool title in the collapsed card', () => {
     expect(globalCopilotToolLabel('mcplab_read_markdown_report')).toBe('Read Markdown Report');
     expect(globalCopilotToolLabel('mcplab_aggregate_runs')).toBe('Aggregate Runs');
+  });
+
+  it('restores a navigation confirmation from its streamed action marker', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '[mcplab-action]{"kind":"navigate_to_view","path":"/mcp-evaluations"}'
+      } as Message)
+    ).toMatchObject({
+      action: { kind: 'navigate_to_view', path: '/mcp-evaluations', status: 'pending' }
+    });
   });
 });

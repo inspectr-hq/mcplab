@@ -24,6 +24,11 @@ export type GlobalCopilotMessage = {
         kind: 'start_action';
         name: 'start_evaluation_run' | 'start_tool_analysis';
         status: 'pending' | 'approved' | 'denied' | 'error';
+      }
+    | {
+        kind: 'continue_reading';
+        batchSize: number;
+        status: 'pending' | 'approved' | 'denied';
       };
 };
 

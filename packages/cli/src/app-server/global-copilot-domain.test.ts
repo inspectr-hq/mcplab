@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE,
   GLOBAL_COPILOT_FRONTEND_TOOLS,
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
@@ -7,6 +8,10 @@ import {
 } from './global-copilot-domain.js';
 
 describe('selectGlobalCopilotAgentName', () => {
+  it('allows five automatic read-only MCP calls before requesting confirmation', () => {
+    expect(GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE).toBe(5);
+  });
+
   it('prefers the dedicated global copilot setting', () => {
     expect(
       selectGlobalCopilotAgentName({
