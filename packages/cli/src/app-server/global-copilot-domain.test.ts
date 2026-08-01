@@ -4,6 +4,7 @@ import {
   GLOBAL_COPILOT_FRONTEND_TOOLS,
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
+  globalCopilotMcplabToolPolicy,
   isExplicitGlobalCopilotNavigationRequest,
   selectGlobalCopilotAgentName,
   toGlobalCopilotLlmMessages
@@ -12,6 +13,37 @@ import {
 describe('selectGlobalCopilotAgentName', () => {
   it('allows five automatic read-only MCP calls before requesting confirmation', () => {
     expect(GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE).toBe(5);
+  });
+
+  it('exposes validation, safe links, and draft generators automatically but confirms report writes', () => {
+    expect(globalCopilotMcplabToolPolicy('mcplab_validate_config')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_build_app_link')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_generate_scenario_entry')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_generate_agent_entry')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_generate_server_entry')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_write_markdown_report')).toEqual({
+      expose: true,
+      automatic: false
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_delete_tool_analysis_result')).toEqual({
+      expose: false,
+      automatic: false
+    });
   });
 
   it('prefers the dedicated global copilot setting', () => {

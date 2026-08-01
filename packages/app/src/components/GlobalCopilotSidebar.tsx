@@ -141,6 +141,23 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         }
       };
     }
+    if (
+      action.kind === 'write_markdown_report' &&
+      action.arguments &&
+      typeof action.arguments === 'object'
+    ) {
+      return {
+        id: message.id,
+        role: 'system',
+        content: 'Markdown report write requested.',
+        createdAt,
+        action: {
+          kind: 'write_markdown_report',
+          arguments: action.arguments as Record<string, unknown>,
+          status: 'pending'
+        }
+      };
+    }
     if (action.kind === 'continue_reading' && typeof action.batchSize === 'number') {
       return {
         id: message.id,
@@ -632,6 +649,55 @@ export function GlobalCopilotSidebar() {
     },
     [save, thread]
   );
+  const confirmMarkdownReportWrite = useCallback(
+    async (message: GlobalCopilotMessage, approved: boolean) => {
+      if (!thread || !message.action || message.action.kind !== 'write_markdown_report') return;
+      const update = (status: 'approved' | 'denied' | 'error') =>
+        thread.messages.map((item) =>
+          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
+        );
+      if (!approved) {
+        await save({ ...thread, messages: update('denied') });
+        return;
+      }
+      try {
+        const response = await fetch('/api/global-copilot/confirm-report-write', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ arguments: message.action.arguments })
+        });
+        const body = (await response.json()) as { content?: string; error?: string };
+        if (!response.ok)
+          throw new Error(body.error ?? 'The Markdown report could not be written.');
+        await save({
+          ...thread,
+          messages: [
+            ...update('approved'),
+            {
+              id: id('report-result'),
+              role: 'system',
+              content: `Markdown report written:\n${body.content ?? 'Report completed.'}`,
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      } catch (error: unknown) {
+        await save({
+          ...thread,
+          messages: [
+            ...update('error'),
+            {
+              id: id('report-error'),
+              role: 'system',
+              content: error instanceof Error ? error.message : String(error),
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      }
+    },
+    [save, thread]
+  );
   const confirmExternalTool = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
       if (!thread || !message.action || message.action.kind !== 'external_mcp_tool') return;
@@ -971,6 +1037,22 @@ export function GlobalCopilotSidebar() {
                     description="This runs an evaluation with the displayed temporary overrides."
                     onApprove={() => void confirmMcpEvaluationRun(message, true)}
                     onDeny={() => void confirmMcpEvaluationRun(message, false)}
+                  />
+                )}
+                {message.action?.kind === 'write_markdown_report' && (
+                  <AssistantToolCallCard
+                    call={{
+                      id: message.id,
+                      server: 'mcplab',
+                      tool: 'Write Markdown Report',
+                      publicToolName: 'mcplab_write_markdown_report',
+                      arguments: message.action.arguments,
+                      status: message.action.status,
+                      createdAt: message.createdAt
+                    }}
+                    description="This writes the displayed Markdown report inside the current workspace."
+                    onApprove={() => void confirmMarkdownReportWrite(message, true)}
+                    onDeny={() => void confirmMarkdownReportWrite(message, false)}
                   />
                 )}
                 {message.action?.kind === 'external_mcp_tool' && (

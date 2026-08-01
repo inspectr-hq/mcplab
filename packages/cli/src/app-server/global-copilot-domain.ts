@@ -11,10 +11,7 @@ import {
 } from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { readLibraries } from './libraries-store.js';
-import {
-  isResultAssistantAllowedTool,
-  isResultAssistantAutoApprovedTool
-} from './result-assistant-tools.js';
+import { isResultAssistantAutoApprovedTool } from './result-assistant-tools.js';
 import { makeAssistantToolPublicName, truncateJson } from './assistant-common.js';
 
 export const GLOBAL_COPILOT_NAVIGATION_TARGETS = [
@@ -33,11 +30,34 @@ export const GLOBAL_COPILOT_NAVIGATION_TARGETS = [
 
 export const GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE = 5;
 const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
+const GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL = 'mcplab_write_markdown_report';
+const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
+  'mcplab_validate_config',
+  'mcplab_build_app_link',
+  'mcplab_generate_scenario_entry',
+  'mcplab_generate_agent_entry',
+  'mcplab_generate_server_entry'
+]);
+const GLOBAL_COPILOT_CONFIRMED_MCP_TOOLS = new Set([
+  GLOBAL_COPILOT_RUN_EVALUATION_TOOL,
+  GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
+]);
 
 const GLOBAL_COPILOT_ACTION_MARKER = '[mcplab-action]';
 
 function globalCopilotActionContent(action: Record<string, unknown>): string {
   return `${GLOBAL_COPILOT_ACTION_MARKER}${JSON.stringify(action)}`;
+}
+
+export function globalCopilotMcplabToolPolicy(name: string): {
+  expose: boolean;
+  automatic: boolean;
+} {
+  if (isResultAssistantAutoApprovedTool(name) || GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS.has(name)) {
+    return { expose: true, automatic: true };
+  }
+  if (GLOBAL_COPILOT_CONFIRMED_MCP_TOOLS.has(name)) return { expose: true, automatic: false };
+  return { expose: false, automatic: false };
 }
 
 export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [
@@ -169,13 +189,10 @@ async function loadMcplabTools(): Promise<{
   const mapping = new Map<string, { server: string; tool: string; autoApprove: boolean }>();
   const usedNames = new Set<string>();
   const tools = (await mcp.listTools('mcplab')).flatMap((tool) => {
-    if (
-      !isResultAssistantAllowedTool(tool.name) &&
-      tool.name !== GLOBAL_COPILOT_RUN_EVALUATION_TOOL
-    )
-      return [];
+    const policy = globalCopilotMcplabToolPolicy(tool.name);
+    if (!policy.expose) return [];
     const publicName = makeAssistantToolPublicName('mcplab', tool.name, usedNames);
-    mapping.set(publicName, { server: 'mcplab', tool: tool.name, autoApprove: true });
+    mapping.set(publicName, { server: 'mcplab', tool: tool.name, autoApprove: policy.automatic });
     return [{ ...tool, name: publicName }];
   });
   return { mcp, tools, mapping };
@@ -315,7 +332,7 @@ export async function handleGlobalCopilotRun(params: {
         break;
       } else {
         const tool = loaded?.mapping.get(call.name);
-        if (tool && loaded && tool.autoApprove && isResultAssistantAutoApprovedTool(tool.tool)) {
+        if (tool && loaded && tool.autoApprove) {
           const arguments_ = call.arguments ?? {};
           if (typeof (arguments_ as Record<string, unknown>).run_id === 'string') {
             suggestedRunId = (arguments_ as Record<string, string>).run_id;
@@ -373,6 +390,8 @@ export async function handleGlobalCopilotRun(params: {
           content: globalCopilotActionContent({
             ...(tool?.server === 'mcplab' && tool.tool === GLOBAL_COPILOT_RUN_EVALUATION_TOOL
               ? { kind: 'run_mcp_evaluation' }
+              : tool?.server === 'mcplab' && tool.tool === GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
+              ? { kind: 'write_markdown_report' }
               : {
                   kind: 'external_mcp_tool',
                   serverName: tool?.server,
@@ -486,6 +505,44 @@ export async function handleGlobalCopilotRunEvaluationConfirmation(params: {
       content: truncateJson(result, 4000),
       ...(typeof runId === 'string' ? { runId } : {})
     });
+  } catch (error: unknown) {
+    params.asJson(params.res, 502, {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    await mcp.disconnectAll().catch(() => undefined);
+  }
+}
+
+export async function handleGlobalCopilotMarkdownReportWriteConfirmation(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  parseBody: (req: IncomingMessage) => Promise<any>;
+  asJson: (res: ServerResponse, status: number, body: unknown) => void;
+}): Promise<void> {
+  const body = (await params.parseBody(params.req)) as Record<string, unknown>;
+  const arguments_ =
+    body.arguments && typeof body.arguments === 'object' && !Array.isArray(body.arguments)
+      ? body.arguments
+      : {};
+  const mcp = new McpClientManager();
+  try {
+    await mcp.connectAll({ mcplab: { transport: 'http', url: localMcplabMcpUrl() } });
+    const knownTool = (await mcp.listTools('mcplab')).find(
+      (tool) => tool.name === GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
+    );
+    if (!knownTool) {
+      params.asJson(params.res, 400, {
+        error: 'The local MCPLab Markdown report tool is unavailable.'
+      });
+      return;
+    }
+    const result = await mcp.callTool(
+      'mcplab',
+      GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL,
+      arguments_
+    );
+    params.asJson(params.res, 200, { content: truncateJson(result, 4000) });
   } catch (error: unknown) {
     params.asJson(params.res, 502, {
       error: error instanceof Error ? error.message : String(error)

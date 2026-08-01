@@ -59,4 +59,24 @@ describe('globalCopilotToolDisplayName', () => {
       }
     });
   });
+
+  it('restores a confirmation-required Markdown report write', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-4',
+        role: 'assistant',
+        content:
+          '[mcplab-action]{"kind":"write_markdown_report","arguments":{"output_path":"mcplab/reports/tag-profile.md","markdown":"# Tag Profile"}}'
+      } as Message)
+    ).toMatchObject({
+      action: {
+        kind: 'write_markdown_report',
+        arguments: {
+          output_path: 'mcplab/reports/tag-profile.md',
+          markdown: '# Tag Profile'
+        },
+        status: 'pending'
+      }
+    });
+  });
 });
