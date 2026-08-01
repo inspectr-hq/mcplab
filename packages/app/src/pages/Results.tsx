@@ -69,6 +69,7 @@ import type { EvalResult } from '@/types/eval';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
+import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
@@ -242,6 +243,7 @@ const Results = () => {
   const [openTimeFilterPicker, setOpenTimeFilterPicker] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const { completionVersion } = useRunQueueStatus();
   const pagination = useOffsetPagination(PAGE_LIMIT);
   const { offset, totalCount, hasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
@@ -365,7 +367,7 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [apiScenarioFilter, apiTimeFilter, offset, source]);
+  }, [apiScenarioFilter, apiTimeFilter, completionVersion, offset, source]);
 
   const {
     assistantMessages,

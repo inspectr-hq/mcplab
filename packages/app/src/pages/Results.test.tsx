@@ -15,10 +15,16 @@ const { sourceMock } = vi.hoisted(() => {
   };
 });
 
+const queueMock = { completionVersion: 0 };
+
 vi.mock('@/contexts/DataSourceContext', () => ({
   useDataSource: () => ({
     source: sourceMock
   })
+}));
+
+vi.mock('@/hooks/use-run-queue-status', () => ({
+  useRunQueueStatus: () => queueMock
 }));
 
 function makeRun(
@@ -122,6 +128,7 @@ function toDatetimeLocalValue(date: Date) {
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    queueMock.completionVersion = 0;
   });
 
   it('opens the global MCP Lab Assistant sidebar from the Results header', async () => {
@@ -140,6 +147,37 @@ describe('Results', () => {
     expect(
       screen.getByPlaceholderText('Ask about historical run differences...')
     ).toBeInTheDocument();
+  });
+
+  it('reloads the overview when an evaluation completes', async () => {
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+    const renderResults = () =>
+      render(
+        <MemoryRouter initialEntries={['/results']}>
+          <Routes>
+            <Route path="/results" element={<Results />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+    const view = renderResults();
+    await screen.findByText('run-a');
+
+    sourceMock.listResults.mockClear();
+    sourceMock.listResults.mockResolvedValue([makeRun('run-b', 900)]);
+    queueMock.completionVersion = 1;
+    view.rerender(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(sourceMock.listResults).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByText('run-b')).toBeInTheDocument();
   });
 
   it('toggles MCP Lab Assistant expand mode in results', async () => {
