@@ -44,6 +44,14 @@ export function globalCopilotToolDisplayName(name: string): string {
     .replace(/^mcplab_mcplab_/, 'mcplab_');
 }
 
+export function globalCopilotToolLabel(name: string): string {
+  const toolName = globalCopilotToolDisplayName(name);
+  const words = toolName.replace(/^mcplab_/, '').split('_').filter(Boolean);
+  return words.length
+    ? words.map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join(' ')
+    : toolName;
+}
+
 function stored(
   message: Message,
   toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
@@ -621,24 +629,27 @@ export function GlobalCopilotSidebar() {
             message.content.startsWith('Previously retrieved tool data:') ? null : (
               <div key={message.id} className="space-y-2">
                 {message.role === 'tool' ? (
-                  <AssistantToolCallCard
-                    call={{
-                      id: message.toolCallId ?? message.id,
-                      server: 'mcplab',
-                      tool: message.toolName
-                        ? globalCopilotToolDisplayName(message.toolName)
-                        : 'MCPLab read tool',
-                      publicToolName: message.toolName
-                        ? globalCopilotToolDisplayName(message.toolName)
-                        : 'mcplab_read',
-                      arguments: message.toolArguments ?? {},
-                      status: 'approved',
-                      createdAt: message.createdAt,
-                      resultPreview: message.content
-                    }}
-                    defaultOpen={false}
-                    description="Read-only MCPLab tool completed."
-                  />
+                  (() => {
+                    const toolName = message.toolName
+                      ? globalCopilotToolDisplayName(message.toolName)
+                      : 'mcplab_read';
+                    return (
+                      <AssistantToolCallCard
+                        call={{
+                          id: message.toolCallId ?? message.id,
+                          server: 'mcplab',
+                          tool: globalCopilotToolLabel(toolName),
+                          publicToolName: toolName,
+                          arguments: message.toolArguments ?? {},
+                          status: 'approved',
+                          createdAt: message.createdAt,
+                          resultPreview: message.content
+                        }}
+                        defaultOpen={false}
+                        description={`Read-only MCPLab tool completed.\n\nMCP tool: \`${toolName}\``}
+                      />
+                    );
+                  })()
                 ) : (
                   <AssistantMessageRow
                     message={{
