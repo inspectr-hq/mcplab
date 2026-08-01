@@ -4,6 +4,7 @@ import {
   Clock,
   MoreHorizontal,
   Eye,
+  LayoutDashboard,
   Download,
   Play,
   Bot,
@@ -951,13 +952,6 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setDashboardVisible((visible) => !visible)}
-            aria-pressed={dashboardVisible}
-          >
-            {dashboardVisible ? 'Hide dashboard' : 'Show dashboard'}
-          </Button>
           <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
             Prev
           </Button>
@@ -970,7 +964,19 @@ const Results = () => {
           </Button>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+          onClick={() => setDashboardVisible((visible) => !visible)}
+          aria-pressed={dashboardVisible}
+        >
+          <LayoutDashboard className="h-3.5 w-3.5" />
+          {dashboardVisible ? 'Hide dashboard' : 'Show dashboard'}
+        </Button>
+      </div>
 
       {dashboardVisible ? (
         <ResultsDashboard runs={dashboardRuns} loading={dashboardLoading} />

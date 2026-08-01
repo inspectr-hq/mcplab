@@ -80,11 +80,13 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
     <div className="space-y-4" data-testid="results-dashboard">
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
-          <CardHeader className="p-3 pb-0">
-            <CardTitle className="text-base">Pass / Fail</CardTitle>
+          <CardHeader className="p-2.5 pb-0">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Pass / Fail
+            </CardTitle>
           </CardHeader>
-          <CardContent className="flex items-center justify-center gap-2 px-3 py-1">
-            <div className="h-[96px] w-[96px] shrink-0">
+          <CardContent className="flex h-[108px] items-center justify-center gap-2 p-0">
+            <div className="h-[108px] w-[108px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
