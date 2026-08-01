@@ -210,27 +210,34 @@ export async function handleGlobalCopilotRun(params: {
       tools: [...frontendTools, ...(loaded?.tools ?? [])],
       system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
     });
-    if (response.tool_calls?.length) {
+    for (let toolTurn = 0; response.tool_calls?.length && toolTurn < 3; toolTurn += 1) {
       const call = response.tool_calls[0]!;
       if (call.name === 'navigate_to_view' || call.name === 'start_evaluation_run' || call.name === 'start_tool_analysis') {
         const toolCallId = call.id ?? randomUUID();
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_START, toolCallId, toolCallName: call.name, parentMessageId: messageId });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(call.arguments ?? {}) });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+        break;
       } else {
         const tool = loaded?.mapping.get(call.name);
         if (tool && loaded && tool.autoApprove && isResultAssistantAutoApprovedTool(tool.tool)) {
+          const toolCallId = call.id ?? randomUUID();
+          sendEvent(res, encoder, { type: EventType.TOOL_CALL_START, toolCallId, toolCallName: call.name, parentMessageId: messageId });
+          sendEvent(res, encoder, { type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(call.arguments ?? {}) });
+          sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+          const result = await loaded.mcp.callTool(tool.server, tool.tool, call.arguments ?? {});
+          const content = truncateJson(result, 4000);
+          sendEvent(res, encoder, { type: EventType.TOOL_CALL_RESULT, messageId: randomUUID(), toolCallId, content });
+          messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: [{ id: toolCallId, name: call.name, arguments: call.arguments ?? {} }] });
+          messages.push({ role: 'tool', content, tool_call_id: toolCallId, name: call.name });
+          response = await chatWithAgent({ agent: agent as AgentConfig, messages, tools: [...frontendTools, ...loaded.tools], system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context) });
+          continue;
+        }
         const toolCallId = call.id ?? randomUUID();
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_START, toolCallId, toolCallName: call.name, parentMessageId: messageId });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(call.arguments ?? {}) });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
-        const result = await loaded.mcp.callTool(tool.server, tool.tool, call.arguments ?? {});
-        const content = truncateJson(result, 4000);
-        sendEvent(res, encoder, { type: EventType.TOOL_CALL_RESULT, messageId: randomUUID(), toolCallId, content });
-        messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: [{ id: toolCallId, name: call.name, arguments: call.arguments ?? {} }] });
-        messages.push({ role: 'tool', content, tool_call_id: toolCallId, name: call.name });
-          response = await chatWithAgent({ agent: agent as AgentConfig, messages, tools: [...frontendTools, ...loaded.tools], system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context) });
-        }
+        break;
       }
     }
     await loaded?.mcp.disconnectAll();
