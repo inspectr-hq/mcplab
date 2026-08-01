@@ -25,6 +25,7 @@ import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -416,6 +417,11 @@ const ToolAnalysisPage = () => {
       setAuthInProgress(false);
     }
   };
+
+  useEffect(
+    () => registerGlobalCopilotAction('start_tool_analysis', startAnalysis),
+    [startAnalysis]
+  );
 
   const downloadToolInfo = () => {
     const selectedServerName = selectedServerNames[0];

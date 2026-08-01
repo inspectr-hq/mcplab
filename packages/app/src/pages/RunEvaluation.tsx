@@ -31,6 +31,7 @@ import {
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
@@ -351,6 +352,11 @@ const RunEvaluation = () => {
   const startRun = () => {
     void startWorkspaceRun();
   };
+
+  useEffect(
+    () => registerGlobalCopilotAction('start_evaluation_run', startWorkspaceRun),
+    [startWorkspaceRun]
+  );
 
   const stopRun = () => {
     if (activeJobId) {

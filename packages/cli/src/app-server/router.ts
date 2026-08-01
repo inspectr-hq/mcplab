@@ -57,7 +57,7 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
-import { handleGlobalCopilotRun } from './global-copilot-domain.js';
+import { handleGlobalCopilotRun, handleGlobalCopilotToolConfirmation } from './global-copilot-domain.js';
 import { createRunQueueService } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
@@ -336,6 +336,10 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/global-copilot/run' && method === 'POST') {
         await handleGlobalCopilotRun({ req, res, settings, parseBody, asJson });
+        return;
+      }
+      if (pathname === '/api/global-copilot/confirm-tool' && method === 'POST') {
+        await handleGlobalCopilotToolConfirmation({ req, res, settings, parseBody, asJson });
         return;
       }
 

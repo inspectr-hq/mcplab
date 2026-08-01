@@ -37,6 +37,27 @@ export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [{
   annotations: { readOnlyHint: true }
 }];
 
+const GLOBAL_COPILOT_START_ACTION_TOOLS: ToolDef[] = [
+  {
+    name: 'start_evaluation_run',
+    description: 'Request a confirmed start of the already configured evaluation run on the current page.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} }
+  },
+  {
+    name: 'start_tool_analysis',
+    description: 'Request a confirmed start of the already configured Tool Analysis on the current page.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} }
+  }
+];
+
+function globalCopilotFrontendTools(context: any): ToolDef[] {
+  const available = new Set(Array.isArray(context?.availableActions) ? context.availableActions : []);
+  return [
+    ...GLOBAL_COPILOT_FRONTEND_TOOLS,
+    ...GLOBAL_COPILOT_START_ACTION_TOOLS.filter((tool) => available.has(tool.name))
+  ];
+}
+
 export function selectGlobalCopilotAgentName(params: {
   globalCopilotAgentName?: string;
   scenarioAssistantAgentName?: string;
@@ -181,15 +202,16 @@ export async function handleGlobalCopilotRun(params: {
     const activeTestCaseId = (input.forwardedProps as any)?.context?.activeTestCaseId;
     const loaded = await loadGlobalCopilotTools(globalCopilotExternalServers(libraries, activeTestCaseId)).catch(() => undefined);
     const messages = toLlmMessages(input);
+    const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context);
     let response = await chatWithAgent({
       agent: agent as AgentConfig,
       messages,
-      tools: [...GLOBAL_COPILOT_FRONTEND_TOOLS, ...(loaded?.tools ?? [])],
+      tools: [...frontendTools, ...(loaded?.tools ?? [])],
       system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
     });
     if (response.tool_calls?.length) {
       const call = response.tool_calls[0]!;
-      if (call.name === 'navigate_to_view') {
+      if (call.name === 'navigate_to_view' || call.name === 'start_evaluation_run' || call.name === 'start_tool_analysis') {
         const toolCallId = call.id ?? randomUUID();
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_START, toolCallId, toolCallName: call.name, parentMessageId: messageId });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(call.arguments ?? {}) });
@@ -206,7 +228,7 @@ export async function handleGlobalCopilotRun(params: {
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_RESULT, toolCallId, content });
         messages.push({ role: 'assistant', content: response.content ?? '', tool_calls: [{ id: toolCallId, name: call.name, arguments: call.arguments ?? {} }] });
         messages.push({ role: 'tool', content, tool_call_id: toolCallId, name: call.name });
-          response = await chatWithAgent({ agent: agent as AgentConfig, messages, tools: [...GLOBAL_COPILOT_FRONTEND_TOOLS, ...loaded.tools], system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context) });
+          response = await chatWithAgent({ agent: agent as AgentConfig, messages, tools: [...frontendTools, ...loaded.tools], system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context) });
         }
       }
     }
@@ -222,5 +244,44 @@ export async function handleGlobalCopilotRun(params: {
     });
   } finally {
     res.end();
+  }
+}
+
+export async function handleGlobalCopilotToolConfirmation(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  settings: AppSettings;
+  parseBody: (req: IncomingMessage) => Promise<any>;
+  asJson: (res: ServerResponse, status: number, body: unknown) => void;
+}): Promise<void> {
+  const body = await params.parseBody(params.req) as Record<string, unknown>;
+  const activeTestCaseId = typeof body.activeTestCaseId === 'string' ? body.activeTestCaseId : undefined;
+  const serverName = typeof body.serverName === 'string' ? body.serverName : undefined;
+  const toolName = typeof body.toolName === 'string' ? body.toolName : undefined;
+  const arguments_ = body.arguments && typeof body.arguments === 'object' && !Array.isArray(body.arguments) ? body.arguments : {};
+  if (!activeTestCaseId || !serverName || !toolName) {
+    params.asJson(params.res, 400, { error: 'A test case, server, and tool are required for confirmation.' });
+    return;
+  }
+  const libraries = readLibraries(params.settings.librariesDir);
+  const server = globalCopilotExternalServers(libraries, activeTestCaseId)[serverName];
+  if (!server) {
+    params.asJson(params.res, 400, { error: 'The requested MCP server is not configured for the active test case.' });
+    return;
+  }
+  const mcp = new McpClientManager();
+  try {
+    await mcp.connectAll({ [serverName]: server as any });
+    const knownTool = (await mcp.listTools(serverName)).find((tool) => tool.name === toolName);
+    if (!knownTool) {
+      params.asJson(params.res, 400, { error: 'The requested MCP tool is not available from the active test-case server.' });
+      return;
+    }
+    const result = await mcp.callTool(serverName, toolName, arguments_);
+    params.asJson(params.res, 200, { content: truncateJson(result, 4000) });
+  } catch (error: unknown) {
+    params.asJson(params.res, 502, { error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    await mcp.disconnectAll().catch(() => undefined);
   }
 }

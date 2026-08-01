@@ -8,6 +8,12 @@ export type GlobalCopilotMessage = {
     path: string;
     reason?: string;
     status: 'pending' | 'approved' | 'denied';
+  } | {
+    kind: 'external_mcp_tool';
+    serverName: string;
+    toolName: string;
+    arguments: Record<string, unknown>;
+    status: 'pending' | 'approved' | 'denied' | 'error';
   };
 };
 
