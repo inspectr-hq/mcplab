@@ -5,7 +5,8 @@ import {
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
   isExplicitGlobalCopilotNavigationRequest,
-  selectGlobalCopilotAgentName
+  selectGlobalCopilotAgentName,
+  toGlobalCopilotLlmMessages
 } from './global-copilot-domain.js';
 
 describe('selectGlobalCopilotAgentName', () => {
@@ -51,6 +52,28 @@ describe('selectGlobalCopilotAgentName', () => {
         { role: 'user', content: 'Go to the evaluations list.' }
       ])
     ).toBe(true);
+  });
+
+  it('converts persisted AG-UI tool results into plain history context', () => {
+    expect(
+      toGlobalCopilotLlmMessages({
+        messages: [
+          { id: 'assistant-1', role: 'assistant', content: 'I will inspect the run.' },
+          {
+            id: 'tool-1',
+            role: 'tool',
+            toolCallId: 'toolu_previous_run',
+            content: '{"status":"failed"}'
+          }
+        ]
+      } as any)
+    ).toEqual([
+      { role: 'assistant', content: 'I will inspect the run.' },
+      {
+        role: 'system',
+        content: 'Previously retrieved MCPLab tool data:\n{"status":"failed"}'
+      }
+    ]);
   });
 
   it('only scopes external MCP servers to the active test case', () => {

@@ -100,10 +100,18 @@ export function isExplicitGlobalCopilotNavigationRequest(messages: LlmMessage[])
   );
 }
 
-function toLlmMessages(input: RunAgentInput): LlmMessage[] {
+export function toGlobalCopilotLlmMessages(input: RunAgentInput): LlmMessage[] {
   return input.messages.flatMap((message: any) => {
     if (!['user', 'assistant', 'system', 'tool'].includes(message.role)) return [];
     if (typeof message.content !== 'string') return [];
+    if (message.role === 'tool') {
+      return [
+        {
+          role: 'system',
+          content: `Previously retrieved MCPLab tool data:\n${message.content}`
+        } as LlmMessage
+      ];
+    }
     return [{ role: message.role, content: message.content } as LlmMessage];
   });
 }
@@ -252,7 +260,7 @@ export async function handleGlobalCopilotRun(params: {
     const loaded = await loadGlobalCopilotTools(
       globalCopilotExternalServers(libraries, activeTestCaseId)
     ).catch(() => undefined);
-    const messages = toLlmMessages(input);
+    const messages = toGlobalCopilotLlmMessages(input);
     const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context).filter(
       (tool) => tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
     );

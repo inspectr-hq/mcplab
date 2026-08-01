@@ -418,7 +418,7 @@ export function GlobalCopilotSidebar() {
         agentId: 'mcplab-global-copilot',
         threadId: optimistic.id,
         initialMessages: optimistic.messages.map((message) => {
-          if (message.role === 'tool' && !message.toolCallId) {
+          if (message.role === 'tool') {
             return {
               id: message.id,
               role: 'system' as const,
