@@ -24,12 +24,7 @@ function removePort(port: MessagePort): void {
 }
 
 function broadcast(data: unknown): void {
-  if (
-    typeof data === 'object' &&
-    data !== null &&
-    'type' in data &&
-    data.type === 'queue_event'
-  ) {
+  if (typeof data === 'object' && data !== null && 'type' in data && data.type === 'queue_event') {
     latestQueueEvent = data;
   }
   for (const port of ports) {

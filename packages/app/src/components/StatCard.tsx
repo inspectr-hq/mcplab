@@ -7,18 +7,26 @@ interface StatCardProps {
   subtitle?: string;
   icon: LucideIcon;
   trend?: 'up' | 'down' | 'neutral';
+  compact?: boolean;
 }
 
-export function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) {
+export function StatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  trend,
+  compact = false
+}: StatCardProps) {
   return (
-    <Card>
-      <CardContent className="p-4">
+    <Card className={compact ? 'h-fit self-start' : undefined}>
+      <CardContent className={compact ? 'p-2' : 'p-4'}>
         <div className="flex items-start justify-between">
-          <div className="space-y-1">
+          <div className={compact ? 'space-y-0.5' : 'space-y-1'}>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               {title}
             </p>
-            <p className="text-2xl font-bold">{value}</p>
+            <p className={compact ? 'text-lg font-bold' : 'text-2xl font-bold'}>{value}</p>
             {subtitle && (
               <p
                 className={`text-xs ${
@@ -35,7 +43,9 @@ export function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCard
               </p>
             )}
           </div>
-          <div className="rounded-lg bg-primary/10 p-2">
+          <div
+            className={compact ? 'rounded-lg bg-primary/10 p-0.5' : 'rounded-lg bg-primary/10 p-2'}
+          >
             <Icon className="h-4 w-4 text-primary" />
           </div>
         </div>

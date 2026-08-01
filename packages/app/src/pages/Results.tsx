@@ -59,6 +59,7 @@ import {
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import ResultsDashboard from '@/components/results/ResultsDashboard';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
@@ -86,6 +87,7 @@ type ResultTableItem =
 
 const RESULTS_TABLE_COLUMN_COUNT = 8;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
+const RESULTS_DASHBOARD_VISIBILITY_KEY = 'mcplab:results:dashboard-visible';
 
 const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
@@ -188,6 +190,15 @@ function readStoredTimeFilter(): TimeFilterQueryState | null {
   }
 }
 
+function readStoredDashboardVisibility(): boolean {
+  try {
+    const stored = localStorage.getItem(RESULTS_DASHBOARD_VISIBILITY_KEY);
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
 const RESULT_ASSISTANT_SNIPPETS = [
   {
     label: 'Summarize Run Trends',
@@ -225,6 +236,9 @@ const Results = () => {
       : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams)
   );
   const [results, setResults] = useState<EvalResult[]>([]);
+  const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
   const [pendingDeleteRunId, setPendingDeleteRunId] = useState<string | null>(null);
   const [deletingRun, setDeletingRun] = useState(false);
@@ -368,6 +382,47 @@ const Results = () => {
       active = false;
     };
   }, [apiScenarioFilter, apiTimeFilter, completionVersion, offset, source]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RESULTS_DASHBOARD_VISIBILITY_KEY, String(dashboardVisible));
+    } catch {
+      // ignore persistence failures
+    }
+  }, [dashboardVisible]);
+
+  useEffect(() => {
+    if (!dashboardVisible) {
+      setDashboardLoading(false);
+      return;
+    }
+    let active = true;
+    setDashboardLoading(true);
+    if (!source.listRunSummaries) {
+      setDashboardRuns(results);
+      setDashboardLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    source
+      .listRunSummaries({
+        ...apiTimeFilter,
+        scenario: apiScenarioFilter
+      })
+      .then((summaries) => {
+        if (active) setDashboardRuns(summaries.map(summaryToResult));
+      })
+      .catch(() => {
+        if (active) setDashboardRuns([]);
+      })
+      .finally(() => {
+        if (active) setDashboardLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, results, source]);
 
   const {
     assistantMessages,
@@ -896,6 +951,13 @@ const Results = () => {
           <Button variant="outline" onClick={() => void loadResults()} disabled={refreshing}>
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setDashboardVisible((visible) => !visible)}
+            aria-pressed={dashboardVisible}
+          >
+            {dashboardVisible ? 'Hide dashboard' : 'Show dashboard'}
+          </Button>
           <Button variant="outline" onClick={pagination.prev} disabled={refreshing || offset === 0}>
             Prev
           </Button>
@@ -909,6 +971,10 @@ const Results = () => {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
+
+      {dashboardVisible ? (
+        <ResultsDashboard runs={dashboardRuns} loading={dashboardLoading} />
+      ) : null}
 
       <div
         className={`grid gap-6 ${

@@ -211,8 +211,40 @@ describe('Results', () => {
 
     await screen.findByText('Results');
     expect(screen.getByRole('columnheader', { name: /Tool Tokens/i })).toBeInTheDocument();
-    expect(screen.getByText('1,200')).toBeInTheDocument();
+    expect(screen.getAllByText('1,200').length).toBeGreaterThan(0);
     expect(screen.getAllByText('n/a').length).toBeGreaterThan(0);
+  });
+
+  it('shows the dashboard by default and persists the visibility preference', async () => {
+    localStorage.removeItem('mcplab:results:dashboard-visible');
+    sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
+
+    const view = render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('results-dashboard')).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: 'Hide dashboard' });
+    fireEvent.click(toggle);
+
+    expect(screen.queryByTestId('results-dashboard')).not.toBeInTheDocument();
+    expect(localStorage.getItem('mcplab:results:dashboard-visible')).toBe('false');
+
+    view.unmount();
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('button', { name: 'Show dashboard' })).toBeInTheDocument();
+    expect(screen.queryByTestId('results-dashboard')).not.toBeInTheDocument();
+    localStorage.removeItem('mcplab:results:dashboard-visible');
   });
 
   it('sorts tool tokens with null values always last', async () => {

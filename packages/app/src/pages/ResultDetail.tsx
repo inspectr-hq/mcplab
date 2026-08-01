@@ -1061,7 +1061,9 @@ const ResultDetail = () => {
                       (scenario) => scenario.id === sc.scenarioId
                     );
                     const testCaseEditHref = libraryTestCase
-                      ? `/libraries/test-cases/${encodeURIComponent(libraryTestCase.id)}?returnTo=${encodeURIComponent(`/results/${result?.id ?? id}`)}`
+                      ? `/libraries/test-cases/${encodeURIComponent(
+                          libraryTestCase.id
+                        )}?returnTo=${encodeURIComponent(`/results/${result?.id ?? id}`)}`
                       : null;
                     return (
                       <Collapsible
