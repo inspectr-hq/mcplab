@@ -4,6 +4,8 @@ export type GlobalCopilotMessage = {
   content: string;
   createdAt: string;
   toolCallId?: string;
+  toolName?: string;
+  toolArguments?: Record<string, unknown>;
   action?:
     | {
         kind: 'navigate_to_view';

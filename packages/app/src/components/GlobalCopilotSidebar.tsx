@@ -38,7 +38,10 @@ const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
-function stored(message: Message): GlobalCopilotMessage | null {
+function stored(
+  message: Message,
+  toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
+): GlobalCopilotMessage | null {
   const navigation =
     message.role === 'assistant'
       ? (
@@ -136,14 +139,15 @@ function stored(message: Message): GlobalCopilotMessage | null {
     typeof message.content !== 'string'
   )
     return null;
+  const toolCallId = (message as Message & { toolCallId?: string }).toolCallId;
+  const toolCall = toolCallId ? toolCalls.get(toolCallId) : undefined;
   return {
     id: message.id,
     role: message.role as GlobalCopilotMessage['role'],
     content: message.content,
     createdAt: new Date().toISOString(),
-    ...((message as Message & { toolCallId?: string }).toolCallId
-      ? { toolCallId: (message as Message & { toolCallId?: string }).toolCallId }
-      : {})
+    ...(toolCallId ? { toolCallId } : {}),
+    ...(toolCall ? { toolName: toolCall.name, toolArguments: toolCall.arguments } : {})
   };
 }
 
@@ -291,8 +295,15 @@ export function GlobalCopilotSidebar() {
           }
         }
       });
+      const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
+      for (const agentMessage of agent.messages) {
+        if (agentMessage.role !== 'assistant') continue;
+        for (const call of (agentMessage as Message & { toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }> }).toolCalls ?? []) {
+          try { toolCalls.set(call.id, { name: call.function.name, arguments: JSON.parse(call.function.arguments) as Record<string, unknown> }); } catch { toolCalls.set(call.id, { name: call.function.name, arguments: {} }); }
+        }
+      }
       const nextMessages = agent.messages
-        .map(stored)
+        .map((message) => stored(message, toolCalls))
         .filter((message): message is GlobalCopilotMessage => message !== null);
       await save({ ...optimistic, messages: nextMessages });
     } catch (error: unknown) {
@@ -599,12 +610,20 @@ export function GlobalCopilotSidebar() {
             message.content.startsWith('Previously retrieved tool data:') ? null : (
               <div key={message.id} className="space-y-2">
                 {message.role === 'tool' ? (
-                  <details className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-900">
-                    <summary className="cursor-pointer font-medium">Used MCPLab data</summary>
-                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px]">
-                      {message.content}
-                    </pre>
-                  </details>
+                  <AssistantToolCallCard
+                    call={{
+                      id: message.toolCallId ?? message.id,
+                      server: 'mcplab',
+                      tool: message.toolName ?? 'MCPLab read tool',
+                      publicToolName: message.toolName ?? 'mcplab_read',
+                      arguments: message.toolArguments ?? {},
+                      status: 'approved',
+                      createdAt: message.createdAt,
+                      resultPreview: message.content
+                    }}
+                    defaultOpen={false}
+                    description="Read-only MCPLab tool completed."
+                  />
                 ) : (
                   <AssistantMessageRow
                     message={{
