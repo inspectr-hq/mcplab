@@ -8,9 +8,7 @@ import {
 
 describe('globalCopilotToolDisplayName', () => {
   it('removes the internal MCPLab routing prefix while retaining the MCP tool name', () => {
-    expect(globalCopilotToolDisplayName('mcplab__mcplab_list_runs')).toBe(
-      'mcplab_list_runs'
-    );
+    expect(globalCopilotToolDisplayName('mcplab__mcplab_list_runs')).toBe('mcplab_list_runs');
     expect(globalCopilotToolDisplayName('mcplab_mcplab_read_run_artifact')).toBe(
       'mcplab_read_run_artifact'
     );
@@ -42,6 +40,23 @@ describe('globalCopilotToolDisplayName', () => {
       } as Message)
     ).toMatchObject({
       action: { kind: 'open_result_detail', runId: 'run-42', status: 'pending' }
+    });
+  });
+
+  it('restores a confirmation-required MCP evaluation run', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-3',
+        role: 'assistant',
+        content:
+          '[mcplab-action]{"kind":"run_mcp_evaluation","arguments":{"scenario_id":"tag-profile","agent_override":["deepseek"]}}'
+      } as Message)
+    ).toMatchObject({
+      action: {
+        kind: 'run_mcp_evaluation',
+        arguments: { scenario_id: 'tag-profile', agent_override: ['deepseek'] },
+        status: 'pending'
+      }
     });
   });
 });

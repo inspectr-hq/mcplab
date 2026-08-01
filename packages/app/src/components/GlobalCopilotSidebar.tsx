@@ -53,14 +53,15 @@ const globalCopilotNavigationTargets = new Set([
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
 export function globalCopilotToolDisplayName(name: string): string {
-  return name
-    .replace(/^mcplab__(?=mcplab_)/, '')
-    .replace(/^mcplab_mcplab_/, 'mcplab_');
+  return name.replace(/^mcplab__(?=mcplab_)/, '').replace(/^mcplab_mcplab_/, 'mcplab_');
 }
 
 export function globalCopilotToolLabel(name: string): string {
   const toolName = globalCopilotToolDisplayName(name);
-  const words = toolName.replace(/^mcplab_/, '').split('_').filter(Boolean);
+  const words = toolName
+    .replace(/^mcplab_/, '')
+    .split('_')
+    .filter(Boolean);
   return words.length
     ? words.map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join(' ')
     : toolName;
@@ -118,6 +119,23 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
           kind: 'external_mcp_tool',
           serverName: action.serverName,
           toolName: action.toolName,
+          arguments: action.arguments as Record<string, unknown>,
+          status: 'pending'
+        }
+      };
+    }
+    if (
+      action.kind === 'run_mcp_evaluation' &&
+      action.arguments &&
+      typeof action.arguments === 'object'
+    ) {
+      return {
+        id: message.id,
+        role: 'system',
+        content: 'MCPLab evaluation run requested.',
+        createdAt,
+        action: {
+          kind: 'run_mcp_evaluation',
           arguments: action.arguments as Record<string, unknown>,
           status: 'pending'
         }
@@ -344,7 +362,8 @@ export function GlobalCopilotSidebar() {
   useEffect(() => {
     if (!thread) return;
     const requested = thread.messages.find(
-      (message) => message.action?.kind === 'navigate_to_view' && message.action.status === 'pending'
+      (message) =>
+        message.action?.kind === 'navigate_to_view' && message.action.status === 'pending'
     );
     if (!requested?.action || !globalCopilotNavigationTargets.has(requested.action.path)) return;
     void save({
@@ -394,99 +413,110 @@ export function GlobalCopilotSidebar() {
     async (continuation?: GlobalCopilotMessage, continuationThread?: GlobalCopilotThread) => {
       const question = continuation?.content ?? input.trim();
       if (!question || !workspaceKey || loading) return;
-    const now = new Date().toISOString();
-    const active =
-      continuationThread ??
-      thread ??
-      (await store.saveThread({
-        id: id('gct'),
-        workspaceKey,
-        title: question.slice(0, 60),
-        messages: [],
-        createdAt: now,
-        updatedAt: now
-      }));
-    const submitted =
-      continuation ??
-      ({
-        id: id('msg'),
-        role: 'user',
-        content: question,
-        createdAt: now
-      } satisfies GlobalCopilotMessage);
-    const optimistic = await save({
-      ...active,
-      title: active.messages.length || continuation ? active.title : question.slice(0, 60),
-      messages: [...active.messages, submitted]
-    });
-    if (!continuation) setInput('');
-    setLoading(true);
-    try {
-      const agent = new HttpAgent({
-        url: '/api/global-copilot/run',
-        agentId: 'mcplab-global-copilot',
-        threadId: optimistic.id,
-        initialMessages: optimistic.messages.map((message) => {
-          if (message.role === 'tool') {
+      const now = new Date().toISOString();
+      const active =
+        continuationThread ??
+        thread ??
+        (await store.saveThread({
+          id: id('gct'),
+          workspaceKey,
+          title: question.slice(0, 60),
+          messages: [],
+          createdAt: now,
+          updatedAt: now
+        }));
+      const submitted =
+        continuation ??
+        ({
+          id: id('msg'),
+          role: 'user',
+          content: question,
+          createdAt: now
+        } satisfies GlobalCopilotMessage);
+      const optimistic = await save({
+        ...active,
+        title: active.messages.length || continuation ? active.title : question.slice(0, 60),
+        messages: [...active.messages, submitted]
+      });
+      if (!continuation) setInput('');
+      setLoading(true);
+      try {
+        const agent = new HttpAgent({
+          url: '/api/global-copilot/run',
+          agentId: 'mcplab-global-copilot',
+          threadId: optimistic.id,
+          initialMessages: optimistic.messages.map((message) => {
+            if (message.role === 'tool') {
+              return {
+                id: message.id,
+                role: 'system' as const,
+                content: `Previously retrieved tool data:\n${message.content}`
+              };
+            }
             return {
               id: message.id,
-              role: 'system' as const,
-              content: `Previously retrieved tool data:\n${message.content}`
+              role: message.role,
+              content: message.content,
+              ...(message.toolCallId ? { toolCallId: message.toolCallId } : {})
             };
+          })
+        });
+        agentRef.current = agent;
+        await agent.runAgent({
+          forwardedProps: {
+            context: {
+              ...globalCopilotRouteContext(location.pathname, location.search),
+              mcplabVersion: version,
+              queue: {
+                runningCount: queue.runningCount,
+                queuedCount: queue.queuedCount,
+                oauthBlockedCount: queue.oauthBlockedCount,
+                streamStatus: queue.streamStatus
+              },
+              availableActions: availableGlobalCopilotActions()
+            }
           }
-          return {
-            id: message.id,
-            role: message.role,
-            content: message.content,
-            ...(message.toolCallId ? { toolCallId: message.toolCallId } : {})
-          };
-        })
-      });
-      agentRef.current = agent;
-      await agent.runAgent({
-        forwardedProps: {
-          context: {
-            ...globalCopilotRouteContext(location.pathname, location.search),
-            mcplabVersion: version,
-            queue: {
-              runningCount: queue.runningCount,
-              queuedCount: queue.queuedCount,
-              oauthBlockedCount: queue.oauthBlockedCount,
-              streamStatus: queue.streamStatus
-            },
-            availableActions: availableGlobalCopilotActions()
+        });
+        const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
+        for (const agentMessage of agent.messages) {
+          if (agentMessage.role !== 'assistant') continue;
+          for (const call of (
+            agentMessage as Message & {
+              toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+            }
+          ).toolCalls ?? []) {
+            try {
+              toolCalls.set(call.id, {
+                name: call.function.name,
+                arguments: JSON.parse(call.function.arguments) as Record<string, unknown>
+              });
+            } catch {
+              toolCalls.set(call.id, { name: call.function.name, arguments: {} });
+            }
           }
         }
-      });
-      const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
-      for (const agentMessage of agent.messages) {
-        if (agentMessage.role !== 'assistant') continue;
-        for (const call of (agentMessage as Message & { toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }> }).toolCalls ?? []) {
-          try { toolCalls.set(call.id, { name: call.function.name, arguments: JSON.parse(call.function.arguments) as Record<string, unknown> }); } catch { toolCalls.set(call.id, { name: call.function.name, arguments: {} }); }
-        }
+        const nextMessages = agent.messages
+          .map((message) => stored(message, toolCalls))
+          .filter((message): message is GlobalCopilotMessage => message !== null);
+        await save({ ...optimistic, messages: nextMessages });
+      } catch (error: unknown) {
+        const text = error instanceof Error ? error.message : String(error);
+        await save({
+          ...optimistic,
+          messages: [
+            ...optimistic.messages,
+            {
+              id: id('system'),
+              role: 'system',
+              content: `Copilot request failed: ${text}`,
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      } finally {
+        agentRef.current = undefined;
+        setLoading(false);
       }
-      const nextMessages = agent.messages
-        .map((message) => stored(message, toolCalls))
-        .filter((message): message is GlobalCopilotMessage => message !== null);
-      await save({ ...optimistic, messages: nextMessages });
-    } catch (error: unknown) {
-      const text = error instanceof Error ? error.message : String(error);
-      await save({
-        ...optimistic,
-        messages: [
-          ...optimistic.messages,
-          {
-            id: id('system'),
-            role: 'system',
-            content: `Copilot request failed: ${text}`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      });
-    } finally {
-      agentRef.current = undefined;
-      setLoading(false);
-    }
     },
     [
       input,
@@ -509,7 +539,10 @@ export function GlobalCopilotSidebar() {
         item.id === message.id
           ? {
               ...item,
-              action: { ...message.action!, status: approved ? ('approved' as const) : ('denied' as const) }
+              action: {
+                ...message.action!,
+                status: approved ? ('approved' as const) : ('denied' as const)
+              }
             }
           : item
       );
@@ -539,6 +572,65 @@ export function GlobalCopilotSidebar() {
       navigate(`/results/${encodeURIComponent(message.action.runId)}`);
     },
     [navigate, save, thread]
+  );
+  const confirmMcpEvaluationRun = useCallback(
+    async (message: GlobalCopilotMessage, approved: boolean) => {
+      if (!thread || !message.action || message.action.kind !== 'run_mcp_evaluation') return;
+      const update = (status: 'approved' | 'denied' | 'error') =>
+        thread.messages.map((item) =>
+          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
+        );
+      if (!approved) {
+        await save({ ...thread, messages: update('denied') });
+        return;
+      }
+      try {
+        const response = await fetch('/api/global-copilot/confirm-run-eval', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ arguments: message.action.arguments })
+        });
+        const body = (await response.json()) as {
+          content?: string;
+          error?: string;
+          runId?: string;
+        };
+        if (!response.ok) throw new Error(body.error ?? 'The MCPLab evaluation failed.');
+        const messages: GlobalCopilotMessage[] = [
+          ...update('approved'),
+          {
+            id: id('run-result'),
+            role: 'system',
+            content: `MCPLab evaluation completed:\n${body.content ?? 'Run completed.'}`,
+            createdAt: new Date().toISOString()
+          }
+        ];
+        if (body.runId) {
+          messages.push({
+            id: id('result-detail'),
+            role: 'system',
+            content: `Result Detail available for run ${body.runId}.`,
+            createdAt: new Date().toISOString(),
+            action: { kind: 'open_result_detail', runId: body.runId, status: 'pending' }
+          });
+        }
+        await save({ ...thread, messages });
+      } catch (error: unknown) {
+        await save({
+          ...thread,
+          messages: [
+            ...update('error'),
+            {
+              id: id('run-error'),
+              role: 'system',
+              content: error instanceof Error ? error.message : String(error),
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      }
+    },
+    [save, thread]
   );
   const confirmExternalTool = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
@@ -640,7 +732,11 @@ export function GlobalCopilotSidebar() {
         type="button"
         aria-label="Open global copilot"
         onClick={() => setOpen(true)}
-        className="fixed right-3 top-14 z-30 rounded-md border bg-card p-2 shadow"
+        className="fixed right-3 top-14 z-30 rounded-md border border-transparent p-2 shadow"
+        style={{
+          background:
+            'linear-gradient(var(--colorNeutralBackground1, hsl(var(--card)))) padding-box, linear-gradient(225deg, #A0E4FC 0%, #DBA9F6 100%) border-box'
+        }}
       >
         <Bot className="h-4 w-4" />
       </button>
@@ -830,8 +926,8 @@ export function GlobalCopilotSidebar() {
                   message.action.status === 'pending' && (
                     <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
                       <p>
-                        Allow up to {message.action.batchSize} additional read-only MCPLab tool calls to
-                        continue this investigation?
+                        Allow up to {message.action.batchSize} additional read-only MCPLab tool
+                        calls to continue this investigation?
                       </p>
                       <div className="mt-2 flex gap-2">
                         <Button
@@ -861,22 +957,38 @@ export function GlobalCopilotSidebar() {
                       </div>
                     </div>
                   )}
+                {message.action?.kind === 'run_mcp_evaluation' && (
+                  <AssistantToolCallCard
+                    call={{
+                      id: message.id,
+                      server: 'mcplab',
+                      tool: 'Run Evaluation',
+                      publicToolName: 'mcplab_run_eval',
+                      arguments: message.action.arguments,
+                      status: message.action.status,
+                      createdAt: message.createdAt
+                    }}
+                    description="This runs an evaluation with the displayed temporary overrides."
+                    onApprove={() => void confirmMcpEvaluationRun(message, true)}
+                    onDeny={() => void confirmMcpEvaluationRun(message, false)}
+                  />
+                )}
                 {message.action?.kind === 'external_mcp_tool' && (
-                    <AssistantToolCallCard
-                      call={{
-                        id: message.id,
-                        server: message.action.serverName,
-                        tool: message.action.toolName,
-                        publicToolName: `${message.action.serverName}__${message.action.toolName}`,
-                        arguments: message.action.arguments,
-                        status: message.action.status,
-                        createdAt: message.createdAt
-                      }}
-                      description={`External MCP call on ${message.action.serverName}.`}
-                      onApprove={() => void confirmExternalTool(message, true)}
-                      onDeny={() => void confirmExternalTool(message, false)}
-                    />
-                  )}
+                  <AssistantToolCallCard
+                    call={{
+                      id: message.id,
+                      server: message.action.serverName,
+                      tool: message.action.toolName,
+                      publicToolName: `${message.action.serverName}__${message.action.toolName}`,
+                      arguments: message.action.arguments,
+                      status: message.action.status,
+                      createdAt: message.createdAt
+                    }}
+                    description={`External MCP call on ${message.action.serverName}.`}
+                    onApprove={() => void confirmExternalTool(message, true)}
+                    onDeny={() => void confirmExternalTool(message, false)}
+                  />
+                )}
                 {message.action?.kind === 'start_action' && message.action.status === 'pending' && (
                   <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
                     <p>

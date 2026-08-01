@@ -34,6 +34,11 @@ export type GlobalCopilotMessage = {
         kind: 'open_result_detail';
         runId: string;
         status: 'pending' | 'approved';
+      }
+    | {
+        kind: 'run_mcp_evaluation';
+        arguments: Record<string, unknown>;
+        status: 'pending' | 'approved' | 'denied' | 'error';
       };
 };
 

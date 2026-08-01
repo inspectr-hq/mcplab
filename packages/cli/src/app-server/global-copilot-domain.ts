@@ -32,6 +32,7 @@ export const GLOBAL_COPILOT_NAVIGATION_TARGETS = [
 ] as const;
 
 export const GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE = 5;
+const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
 
 const GLOBAL_COPILOT_ACTION_MARKER = '[mcplab-action]';
 
@@ -123,6 +124,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'You can navigate the MCPLab interface using available frontend actions.',
     'Only navigate when the user explicitly asks to go, navigate, open, take them, or switch to a view. For questions about runs, results, evaluations, or test cases, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
+    'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',
     `Current application context: ${JSON.stringify(context ?? {})}`
@@ -167,7 +169,11 @@ async function loadMcplabTools(): Promise<{
   const mapping = new Map<string, { server: string; tool: string; autoApprove: boolean }>();
   const usedNames = new Set<string>();
   const tools = (await mcp.listTools('mcplab')).flatMap((tool) => {
-    if (!isResultAssistantAllowedTool(tool.name)) return [];
+    if (
+      !isResultAssistantAllowedTool(tool.name) &&
+      tool.name !== GLOBAL_COPILOT_RUN_EVALUATION_TOOL
+    )
+      return [];
     const publicName = makeAssistantToolPublicName('mcplab', tool.name, usedNames);
     mapping.set(publicName, { server: 'mcplab', tool: tool.name, autoApprove: true });
     return [{ ...tool, name: publicName }];
@@ -262,7 +268,8 @@ export async function handleGlobalCopilotRun(params: {
     ).catch(() => undefined);
     const messages = toGlobalCopilotLlmMessages(input);
     const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context).filter(
-      (tool) => tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
+      (tool) =>
+        tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
     );
     let response = await chatWithAgent({
       agent: agent as AgentConfig,
@@ -364,9 +371,13 @@ export async function handleGlobalCopilotRun(params: {
         response = {
           ...response,
           content: globalCopilotActionContent({
-            kind: 'external_mcp_tool',
-            serverName: tool?.server,
-            toolName: tool?.tool,
+            ...(tool?.server === 'mcplab' && tool.tool === GLOBAL_COPILOT_RUN_EVALUATION_TOOL
+              ? { kind: 'run_mcp_evaluation' }
+              : {
+                  kind: 'external_mcp_tool',
+                  serverName: tool?.server,
+                  toolName: tool?.tool
+                }),
             arguments: call.arguments ?? {}
           })
         };
@@ -413,13 +424,13 @@ export async function handleGlobalCopilotRun(params: {
       messageId: finalMessageId,
       role: 'assistant'
     });
-    sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_CONTENT, messageId: finalMessageId, delta: text });
+    sendEvent(res, encoder, {
+      type: EventType.TEXT_MESSAGE_CONTENT,
+      messageId: finalMessageId,
+      delta: text
+    });
     sendEvent(res, encoder, { type: EventType.TEXT_MESSAGE_END, messageId: finalMessageId });
-    if (
-      suggestedRunId &&
-      !pendingApproval &&
-      !text.startsWith(GLOBAL_COPILOT_ACTION_MARKER)
-    ) {
+    if (suggestedRunId && !pendingApproval && !text.startsWith(GLOBAL_COPILOT_ACTION_MARKER)) {
       const suggestionMessageId = randomUUID();
       sendEvent(res, encoder, {
         type: EventType.TEXT_MESSAGE_START,
@@ -445,6 +456,42 @@ export async function handleGlobalCopilotRun(params: {
     });
   } finally {
     res.end();
+  }
+}
+
+export async function handleGlobalCopilotRunEvaluationConfirmation(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  parseBody: (req: IncomingMessage) => Promise<any>;
+  asJson: (res: ServerResponse, status: number, body: unknown) => void;
+}): Promise<void> {
+  const body = (await params.parseBody(params.req)) as Record<string, unknown>;
+  const arguments_ =
+    body.arguments && typeof body.arguments === 'object' && !Array.isArray(body.arguments)
+      ? body.arguments
+      : {};
+  const mcp = new McpClientManager();
+  try {
+    await mcp.connectAll({ mcplab: { transport: 'http', url: localMcplabMcpUrl() } });
+    const knownTool = (await mcp.listTools('mcplab')).find(
+      (tool) => tool.name === GLOBAL_COPILOT_RUN_EVALUATION_TOOL
+    );
+    if (!knownTool) {
+      params.asJson(params.res, 400, { error: 'The local MCPLab evaluation tool is unavailable.' });
+      return;
+    }
+    const result = await mcp.callTool('mcplab', GLOBAL_COPILOT_RUN_EVALUATION_TOOL, arguments_);
+    const runId = (result as any)?.structuredContent?.metadata?.run_id;
+    params.asJson(params.res, 200, {
+      content: truncateJson(result, 4000),
+      ...(typeof runId === 'string' ? { runId } : {})
+    });
+  } catch (error: unknown) {
+    params.asJson(params.res, 502, {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    await mcp.disconnectAll().catch(() => undefined);
   }
 }
 
