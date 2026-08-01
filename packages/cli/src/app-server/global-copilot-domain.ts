@@ -244,6 +244,7 @@ export async function handleGlobalCopilotRun(params: {
       tools: [...frontendTools, ...(loaded?.tools ?? [])],
       system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
     });
+    let pendingApproval = false;
     for (let toolTurn = 0; response.tool_calls?.length && toolTurn < 3; toolTurn += 1) {
       const call = response.tool_calls[0]!;
       if (
@@ -264,6 +265,7 @@ export async function handleGlobalCopilotRun(params: {
           delta: JSON.stringify(call.arguments ?? {})
         });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+        pendingApproval = true;
         break;
       } else {
         const tool = loaded?.mapping.get(call.name);
@@ -316,8 +318,20 @@ export async function handleGlobalCopilotRun(params: {
           delta: JSON.stringify(call.arguments ?? {})
         });
         sendEvent(res, encoder, { type: EventType.TOOL_CALL_END, toolCallId });
+        pendingApproval = true;
         break;
       }
+    }
+    if (response.tool_calls?.length && !pendingApproval) {
+      response = await chatWithAgent({
+        agent: agent as AgentConfig,
+        messages,
+        tools: [],
+        system: [
+          globalCopilotSystemPrompt((input.forwardedProps as any)?.context),
+          'You have reached the read-tool limit for this reply. Answer using the retrieved data; do not request another tool.'
+        ].join('\n')
+      });
     }
     await loaded?.mcp.disconnectAll();
     const text =

@@ -38,6 +38,12 @@ const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
+export function globalCopilotToolDisplayName(name: string): string {
+  return name
+    .replace(/^mcplab__(?=mcplab_)/, '')
+    .replace(/^mcplab_mcplab_/, 'mcplab_');
+}
+
 function stored(
   message: Message,
   toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
@@ -147,7 +153,12 @@ function stored(
     content: message.content,
     createdAt: new Date().toISOString(),
     ...(toolCallId ? { toolCallId } : {}),
-    ...(toolCall ? { toolName: toolCall.name, toolArguments: toolCall.arguments } : {})
+    ...(toolCall
+      ? {
+          toolName: globalCopilotToolDisplayName(toolCall.name),
+          toolArguments: toolCall.arguments
+        }
+      : {})
   };
 }
 
@@ -614,8 +625,12 @@ export function GlobalCopilotSidebar() {
                     call={{
                       id: message.toolCallId ?? message.id,
                       server: 'mcplab',
-                      tool: message.toolName ?? 'MCPLab read tool',
-                      publicToolName: message.toolName ?? 'mcplab_read',
+                      tool: message.toolName
+                        ? globalCopilotToolDisplayName(message.toolName)
+                        : 'MCPLab read tool',
+                      publicToolName: message.toolName
+                        ? globalCopilotToolDisplayName(message.toolName)
+                        : 'mcplab_read',
                       arguments: message.toolArguments ?? {},
                       status: 'approved',
                       createdAt: message.createdAt,
