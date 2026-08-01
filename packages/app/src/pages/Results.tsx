@@ -755,7 +755,7 @@ const Results = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col">
       <AlertDialog
         open={pendingDeleteRunId !== null}
         onOpenChange={(open) => {
@@ -964,7 +964,7 @@ const Results = () => {
           </Button>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">{pagination.rangeLabel(results.length)}</p>
         <Button
           variant="ghost"
@@ -973,17 +973,19 @@ const Results = () => {
           onClick={() => setDashboardVisible((visible) => !visible)}
           aria-pressed={dashboardVisible}
         >
-          <LayoutDashboard className="h-3.5 w-3.5" />
+          <LayoutDashboard className="h-3 w-3" />
           {dashboardVisible ? 'Hide dashboard' : 'Show dashboard'}
         </Button>
       </div>
 
       {dashboardVisible ? (
-        <ResultsDashboard runs={dashboardRuns} loading={dashboardLoading} />
+        <div className="mt-2">
+          <ResultsDashboard runs={dashboardRuns} loading={dashboardLoading} />
+        </div>
       ) : null}
 
       <div
-        className={`grid gap-6 ${
+        className={`mt-4 grid gap-6 ${
           assistantOpen
             ? assistantExpanded
               ? 'xl:grid-cols-[minmax(0,1fr)_52rem]'

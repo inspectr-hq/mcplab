@@ -77,7 +77,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
   }
 
   return (
-    <div className="space-y-4" data-testid="results-dashboard">
+    <div className="space-y-2" data-testid="results-dashboard">
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader className="p-2.5 pb-0">
