@@ -108,4 +108,25 @@ describe('AppLayout queue indicator', () => {
 
     expect(screen.getByText('3')).toBeInTheDocument();
   });
+
+  it('keeps the main content in an independent viewport scroll area', () => {
+    mockUseDataSource.mockReturnValue({ version: '1.0.0' });
+    mockUseRunQueueStatus.mockReturnValue({
+      isRunning: false,
+      runningCount: 0,
+      queuedCount: 0,
+      oauthBlockedCount: 0,
+      streamStatus: 'connected',
+      reconnectStream: vi.fn()
+    });
+
+    const { container } = render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes><Route element={<AppLayout />}><Route path="/results" element={<div>Results</div>} /></Route></Routes>
+      </MemoryRouter>
+    );
+
+    expect(container.firstElementChild).toHaveClass('h-screen', 'overflow-hidden');
+    expect(screen.getByRole('main')).toHaveClass('min-h-0', 'overflow-y-auto');
+  });
 });
