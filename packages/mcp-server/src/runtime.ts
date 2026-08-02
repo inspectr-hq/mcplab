@@ -33,6 +33,7 @@ import {
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
   createEvaluationConfigFile,
+  createTestCaseFile,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -1308,7 +1309,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_test_case',
     {
       description:
-        'Create one reviewed MCPLab Test Case in the canonical test-cases library directory. This is a scoped write, not a general file writer: it accepts a Test Case definition only and refuses duplicate IDs.',
+        'Create one reviewed MCPLab Test Case in the canonical test-cases library directory. This is a scoped write, not a general file writer: it accepts a Test Case definition only, refuses duplicate IDs, and uses the same validation and persistence logic as the app API.',
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
       inputSchema: {
         id: z.string().min(1).describe('New unique Test Case ID.'),
@@ -1321,20 +1322,25 @@ export function registerTools(server: McpServer): void {
     },
     async ({ id, name, servers, prompt, required_tools, response_regex_patterns }) => {
       return withToolHandling(async () => {
-        if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
-          throw new Error('id must use letters, numbers, hyphens, or underscores.');
-        }
         const bundleRoot = resolveBundleRoot();
         const library = readLibrary(bundleRoot, false);
-        const missingServers = servers.filter((server) => !library.servers.some((item) => item.id === server));
-        if (missingServers.length) throw new Error(`Unknown MCP server(s): ${missingServers.join(', ')}`);
-        const testCasesDir = join(bundleRoot, 'test-cases');
-        mkdirSync(testCasesDir, { recursive: true });
-        const target = join(testCasesDir, `${id}.yaml`);
-        if (existsSync(target)) throw new Error(`Test Case '${id}' already exists.`);
-        const testCase = buildScenario({ id, name, servers, prompt, required_tools, response_regex_patterns });
-        writeFileSync(target, `${stringifyYaml(testCase)}\n`, 'utf8');
-        return ok(`Created Test Case '${id}'`, { id, path: target, test_case: testCase });
+        const created = createTestCaseFile({
+          librariesDir: bundleRoot,
+          knownServerIds: library.servers.map((item) => item.id),
+          testCase: {
+            id,
+            name,
+            servers,
+            prompt,
+            requiredTools: required_tools,
+            responseRegexPatterns: response_regex_patterns
+          }
+        });
+        return ok(`Created Test Case '${created.id}'`, {
+          id: created.id,
+          path: created.path,
+          test_case: created.testCase
+        });
       });
     }
   );

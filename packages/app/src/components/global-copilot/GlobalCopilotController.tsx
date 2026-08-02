@@ -10,7 +10,6 @@ import { invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/gl
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
 import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
-import type { Scenario } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
 import { GlobalCopilotComposer } from './GlobalCopilotComposer';
 import { GlobalCopilotConversation } from './GlobalCopilotConversation';
@@ -46,38 +45,21 @@ export function GlobalCopilotController() {
   useEffect(
     () =>
       registerGlobalCopilotAction('create_test_case', async (arguments_) => {
-        const id = typeof arguments_.id === 'string' ? arguments_.id.trim() : '';
-        const prompt = typeof arguments_.prompt === 'string' ? arguments_.prompt.trim() : '';
-        const servers = Array.isArray(arguments_.servers)
-          ? arguments_.servers.filter((item): item is string => typeof item === 'string' && item.trim())
-          : [];
-        if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Test Case id must use letters, numbers, hyphens, or underscores.');
-        if (!prompt || servers.length === 0) throw new Error('A Test Case needs a prompt and at least one MCP server.');
-        const libraries = await source.getLibraries();
-        if (libraries.scenarios.some((scenario) => scenario.id === id)) {
-          throw new Error(`Test Case '${id}' already exists.`);
-        }
-        const missingServers = servers.filter((server) => !libraries.servers.some((item) => item.id === server));
-        if (missingServers.length) throw new Error(`Unknown MCP server(s): ${missingServers.join(', ')}`);
-        const requiredTools = Array.isArray(arguments_.required_tools)
-          ? arguments_.required_tools.filter((item): item is string => typeof item === 'string' && item.trim())
-          : [];
-        const responsePatterns = Array.isArray(arguments_.response_regex_patterns)
-          ? arguments_.response_regex_patterns.filter((item): item is string => typeof item === 'string' && item.trim())
-          : [];
-        const scenario: Scenario = {
-          id,
-          name: typeof arguments_.name === 'string' ? arguments_.name.trim() || id : id,
-          serverIds: servers,
-          prompt,
-          evalRules: [
-            ...requiredTools.map((value) => ({ type: 'required_tool' as const, value })),
-            ...responsePatterns.map((value) => ({ type: 'response_regex' as const, value }))
-          ],
-          extractRules: []
-        };
-        await source.saveLibraries({ ...libraries, scenarios: [...libraries.scenarios, scenario] });
-        toast({ title: 'Test Case created', description: `Created ${id} in Test Cases.` });
+        const created = await source.createTestCase({
+          id: typeof arguments_.id === 'string' ? arguments_.id : '',
+          name: typeof arguments_.name === 'string' ? arguments_.name : undefined,
+          servers: Array.isArray(arguments_.servers)
+            ? arguments_.servers.filter((item): item is string => typeof item === 'string')
+            : [],
+          prompt: typeof arguments_.prompt === 'string' ? arguments_.prompt : '',
+          requiredTools: Array.isArray(arguments_.required_tools)
+            ? arguments_.required_tools.filter((item): item is string => typeof item === 'string')
+            : undefined,
+          responseRegexPatterns: Array.isArray(arguments_.response_regex_patterns)
+            ? arguments_.response_regex_patterns.filter((item): item is string => typeof item === 'string')
+            : undefined
+        });
+        toast({ title: 'Test Case created', description: `Created ${created.id} in Test Cases.` });
       }),
     [source]
   );

@@ -23,6 +23,7 @@ import type {
 } from '@inspectr/mcplab-core';
 import {
   chatWithAgent,
+  createTestCaseFile,
   expandConfigForAgents,
   loadConfig,
   McpClientManager,
@@ -363,6 +364,39 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/libraries' && method === 'GET') {
         asJson(res, 200, readLibraries(settings.librariesDir));
+        return;
+      }
+
+      if (pathname === '/api/libraries/test-cases' && method === 'POST') {
+        const body = await parseBody(req);
+        const libraries = readLibraries(settings.librariesDir);
+        try {
+          const created = createTestCaseFile({
+            librariesDir: settings.librariesDir,
+            knownServerIds: Object.keys(libraries.servers),
+            testCase: {
+              id: typeof body.id === 'string' ? body.id : '',
+              name: typeof body.name === 'string' ? body.name : undefined,
+              servers: Array.isArray(body.servers)
+                ? body.servers.filter((server: unknown): server is string => typeof server === 'string')
+                : [],
+              prompt: typeof body.prompt === 'string' ? body.prompt : '',
+              requiredTools: Array.isArray(body.required_tools)
+                ? body.required_tools.filter((tool: unknown): tool is string => typeof tool === 'string')
+                : undefined,
+              responseRegexPatterns: Array.isArray(body.response_regex_patterns)
+                ? body.response_regex_patterns.filter((pattern: unknown): pattern is string => typeof pattern === 'string')
+                : undefined
+            }
+          });
+          asJson(res, 201, {
+            id: created.id,
+            path: created.path,
+            test_case: created.testCase
+          });
+        } catch (error) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
 

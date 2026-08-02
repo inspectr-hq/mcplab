@@ -763,6 +763,14 @@ export interface EvalDataSource {
     onEvent: (event: ResultAssistantSseEvent) => void
   ) => () => void;
   getLibraries: () => Promise<LibraryBundle>;
+  createTestCase: (testCase: {
+    id: string;
+    name?: string;
+    servers: string[];
+    prompt: string;
+    requiredTools?: string[];
+    responseRegexPatterns?: string[];
+  }) => Promise<{ id: string }>;
   saveLibraries: (libraries: LibraryBundle) => Promise<void>;
   listProviderModels: (
     provider: 'anthropic' | 'openai' | 'azure'

@@ -191,6 +191,16 @@ export const workspaceSource: EvalDataSource = {
     const libraries = await workspaceApiClient.getLibraries();
     return fromCoreLibraries(libraries);
   },
+  async createTestCase(testCase) {
+    return workspaceApiClient.createTestCase({
+      id: testCase.id,
+      name: testCase.name,
+      servers: testCase.servers,
+      prompt: testCase.prompt,
+      required_tools: testCase.requiredTools,
+      response_regex_patterns: testCase.responseRegexPatterns
+    });
+  },
   async saveLibraries(libraries) {
     await workspaceApiClient.saveLibraries(toCoreLibraries(libraries));
   },

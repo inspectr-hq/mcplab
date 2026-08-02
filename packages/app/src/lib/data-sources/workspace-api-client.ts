@@ -344,6 +344,18 @@ export const workspaceApiClient = {
   ) =>
     subscribeAssistantSessionEvents(`/api/result-assistant/sessions/${sessionId}/events`, onEvent),
   getLibraries: () => request<CoreLibraryBundle>('/api/libraries'),
+  createTestCase: (testCase: {
+    id: string;
+    name?: string;
+    servers: string[];
+    prompt: string;
+    required_tools?: string[];
+    response_regex_patterns?: string[];
+  }) =>
+    request<{ id: string }>('/api/libraries/test-cases', {
+      method: 'POST',
+      body: JSON.stringify(testCase)
+    }),
   saveLibraries: (libraries: CoreLibraryBundle) =>
     request<{ ok: boolean }>('/api/libraries', {
       method: 'PUT',

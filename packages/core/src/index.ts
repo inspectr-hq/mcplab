@@ -24,4 +24,9 @@ export {
   safeEvaluationConfigFileName,
   type CreatedEvaluationConfigFile
 } from './evaluation-config-store.js';
+export {
+  createTestCaseFile,
+  type CreatedTestCaseFile,
+  type TestCaseCreateInput
+} from './test-case-store.js';
 export * from './queue-contract.js';
