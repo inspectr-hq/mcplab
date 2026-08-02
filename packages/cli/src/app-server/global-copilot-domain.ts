@@ -318,6 +318,25 @@ function sendEvent(res: ServerResponse, encoder: EventEncoder, event: any): void
   res.write(encoder.encodeSSE(event));
 }
 
+export function globalCopilotMcpToolErrorMessage(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object' || !(result as { isError?: unknown }).isError) {
+    return undefined;
+  }
+  const text = (result as { content?: unknown }).content;
+  if (!Array.isArray(text)) return 'The MCP tool reported an error.';
+  const messages = text
+    .filter(
+      (item): item is { type: 'text'; text: string } =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        (item as { type?: unknown }).type === 'text' &&
+        typeof (item as { text?: unknown }).text === 'string'
+    )
+    .map((item) => item.text.trim())
+    .filter(Boolean);
+  return messages.join('\n') || 'The MCP tool reported an error.';
+}
+
 export async function handleGlobalCopilotRun(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -592,6 +611,11 @@ export async function handleGlobalCopilotRunEvaluationConfirmation(params: {
       return;
     }
     const result = await mcp.callTool('mcplab', GLOBAL_COPILOT_RUN_EVALUATION_TOOL, arguments_);
+    const toolError = globalCopilotMcpToolErrorMessage(result);
+    if (toolError) {
+      params.asJson(params.res, 502, { error: toolError });
+      return;
+    }
     const runId = (result as any)?.structuredContent?.metadata?.run_id;
     params.asJson(params.res, 200, {
       content: truncateJson(result, 4000),
@@ -634,6 +658,11 @@ export async function handleGlobalCopilotMarkdownReportWriteConfirmation(params:
       GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL,
       arguments_
     );
+    const toolError = globalCopilotMcpToolErrorMessage(result);
+    if (toolError) {
+      params.asJson(params.res, 502, { error: toolError });
+      return;
+    }
     params.asJson(params.res, 200, { content: truncateJson(result, 4000) });
   } catch (error: unknown) {
     params.asJson(params.res, 502, {
@@ -685,6 +714,11 @@ export async function handleGlobalCopilotToolConfirmation(params: {
       return;
     }
     const result = await mcp.callTool(serverName, toolName, arguments_);
+    const toolError = globalCopilotMcpToolErrorMessage(result);
+    if (toolError) {
+      params.asJson(params.res, 502, { error: toolError });
+      return;
+    }
     params.asJson(params.res, 200, { content: truncateJson(result, 4000) });
   } catch (error: unknown) {
     params.asJson(params.res, 502, {

@@ -6,6 +6,7 @@ import {
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
   globalCopilotMcplabToolPolicy,
+  globalCopilotMcpToolErrorMessage,
   isExplicitGlobalCopilotNavigationRequest,
   selectGlobalCopilotAgentName,
   toGlobalCopilotConversationMessages,
@@ -13,6 +14,14 @@ import {
 } from './global-copilot-domain.js';
 
 describe('selectGlobalCopilotAgentName', () => {
+  it('turns MCP error content into a failed confirmation message', () => {
+    expect(
+      globalCopilotMcpToolErrorMessage({
+        isError: true,
+        content: [{ type: 'text', text: 'Error: Evaluation Judge is missing' }]
+      })
+    ).toBe('Error: Evaluation Judge is missing');
+  });
   it('allows five automatic read-only MCP calls before requesting confirmation', () => {
     expect(GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE).toBe(5);
   });
