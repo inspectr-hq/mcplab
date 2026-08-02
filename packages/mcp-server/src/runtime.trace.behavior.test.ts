@@ -6,7 +6,9 @@ import type { ScenarioRunTraceRecord, TraceMessage } from '@inspectr/mcplab-core
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type ToolResponse = {
+  content: Array<{ type: 'text'; text: string }>;
   structuredContent?: Record<string, unknown>;
+  isError?: boolean;
 };
 
 type RegisteredTool = {
@@ -244,20 +246,32 @@ function traceFixture(): ScenarioRunTraceRecord[] {
   ];
 }
 
-async function createTraceTools(
-  records: ScenarioRunTraceRecord[] = traceFixture()
+function jsonl(records: unknown[]): string {
+  return `${records.map((record) => JSON.stringify(record)).join('\n')}\n`;
+}
+
+async function createTraceToolsRaw(
+  runs: Array<{ runId: string; traceContent?: string }>
 ): Promise<Map<string, RegisteredTool>> {
   const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-trace-'));
   temporaryRoots.push(root);
   const libraryRoot = join(root, 'library');
   const runsDir = join(root, 'runs');
-  mkdirSync(join(runsDir, 'run-trace'), { recursive: true });
-  writeFileSync(
-    join(runsDir, 'run-trace', 'trace.jsonl'),
-    `${records.map((record) => JSON.stringify(record)).join('\n')}\n`,
-    'utf8'
-  );
+  mkdirSync(runsDir, { recursive: true });
+  for (const run of runs) {
+    const runDir = join(runsDir, run.runId);
+    mkdirSync(runDir, { recursive: true });
+    if (run.traceContent !== undefined) {
+      writeFileSync(join(runDir, 'trace.jsonl'), run.traceContent, 'utf8');
+    }
+  }
   return setupTools(libraryRoot, 'runs');
+}
+
+async function createTraceTools(
+  records: ScenarioRunTraceRecord[] = traceFixture()
+): Promise<Map<string, RegisteredTool>> {
+  return createTraceToolsRaw([{ runId: 'run-trace', traceContent: jsonl(records) }]);
 }
 
 function structured<T extends Record<string, unknown>>(result: ToolResponse): T {
@@ -428,7 +442,8 @@ describe('trace tool behavior', () => {
 
     const result = await tools.get('mcplab_trace_stats')!.cb({ run_id: 'run-trace' });
 
-    expect(structured<Record<string, unknown>>(result)).toMatchObject({
+    const output = structured<Record<string, unknown>>(result);
+    expect(output).toMatchObject({
       total_scenario_records: 4,
       message_role_counts: { user: 4, assistant: 11, tool: 3 },
       block_type_counts: { text: 12, tool_use: 3, tool_result: 3 },
@@ -442,5 +457,103 @@ describe('trace tool behavior', () => {
         { tool: 'reports::get_summary', count: 1 }
       ]
     });
+    // A clean modern trace must not raise the legacy flag.
+    expect(output.legacy_trace_detected).toBeUndefined();
+  });
+
+  it('resolves run_id "LATEST" to the lexicographically greatest run', async () => {
+    const tools = await createTraceToolsRaw([
+      {
+        runId: 'run-2026-01',
+        traceContent: jsonl([
+          scenarioRun(
+            'older',
+            'scout',
+            [textMessage('assistant', 'Older answer.', '2026-08-01T12:00:00.200Z')],
+            '2026-08-01T12:00:00.000Z',
+            '2026-08-01T12:00:01.000Z'
+          )
+        ])
+      },
+      {
+        runId: 'run-2026-02',
+        traceContent: jsonl([
+          scenarioRun(
+            'newer',
+            'scout',
+            [textMessage('assistant', 'Newer answer.', '2026-08-02T12:00:00.200Z')],
+            '2026-08-02T12:00:00.000Z',
+            '2026-08-02T12:00:01.000Z'
+          )
+        ])
+      }
+    ]);
+
+    const result = await tools.get('mcplab_trace_get_final_answers')!.cb({ run_id: 'LATEST' });
+    const output = structured<FinalAnswersOutput>(result);
+
+    expect(output.run_id).toBe('run-2026-02');
+    expect(output.items).toMatchObject([{ scenario_id: 'newer', text: 'Newer answer.' }]);
+  });
+
+  it('returns an error when the run trace artifact is missing', async () => {
+    const tools = await createTraceToolsRaw([{ runId: 'run-empty' }]);
+
+    const result = await tools.get('mcplab_trace_stats')!.cb({ run_id: 'run-empty' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Artifact not found');
+  });
+
+  it('returns an error for "LATEST" when no runs exist', async () => {
+    const tools = await createTraceToolsRaw([]);
+
+    const result = await tools.get('mcplab_trace_stats')!.cb({ run_id: 'LATEST' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('No runs found');
+  });
+
+  it('flags legacy trace lines that are not scenario_run documents', async () => {
+    const modern = scenarioRun(
+      'alpha',
+      'scout',
+      [textMessage('assistant', 'Modern answer.', '2026-08-01T12:00:00.200Z')],
+      '2026-08-01T12:00:00.000Z',
+      '2026-08-01T12:00:01.000Z'
+    );
+    const tools = await createTraceToolsRaw([
+      {
+        runId: 'run-legacy',
+        // A trace_meta line is ignored; a foreign typed line marks the trace as legacy.
+        traceContent: `${JSON.stringify({ type: 'trace_meta', run_id: 'run-legacy' })}\n${JSON.stringify(
+          { type: 'legacy_event', note: 'old format' }
+        )}\n${JSON.stringify(modern)}\n`
+      }
+    ]);
+
+    const result = await tools.get('mcplab_trace_stats')!.cb({ run_id: 'run-legacy' });
+    const output = structured<Record<string, unknown>>(result);
+
+    expect(output.legacy_trace_detected).toBe(true);
+    expect(output.total_scenario_records).toBe(1);
+  });
+
+  it('caps trace search matches at the requested limit', async () => {
+    const tools = await createTraceTools();
+
+    const capped = await tools.get('mcplab_trace_search')!.cb({
+      run_id: 'run-trace',
+      query: 'alpha',
+      limit: 1
+    });
+    const uncapped = await tools.get('mcplab_trace_search')!.cb({
+      run_id: 'run-trace',
+      query: 'alpha'
+    });
+
+    expect(structured<SearchOutput>(capped).matches).toHaveLength(1);
+    // Without a limit the same query returns strictly more matches, proving the cap is real.
+    expect(structured<SearchOutput>(uncapped).matches.length).toBeGreaterThan(1);
   });
 });

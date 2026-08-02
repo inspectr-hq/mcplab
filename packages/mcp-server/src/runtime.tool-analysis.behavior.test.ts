@@ -344,4 +344,43 @@ describe('tool analysis MCP tool behavior', () => {
     );
     expect(existsSync(resolve(toolAnalysisDir, 'delete-me'))).toBe(false);
   });
+
+  it('reads the lexicographically greatest report when report_id is "LATEST"', async () => {
+    const { root, toolAnalysisDir } = createFixture();
+    writeReport(toolAnalysisDir, 'report-2026-01', {
+      recordVersion: 1,
+      reportId: 'report-2026-01',
+      report: { summary: { issue_count: 5 } }
+    });
+    writeReport(toolAnalysisDir, 'report-2026-02', {
+      recordVersion: 1,
+      reportId: 'report-2026-02',
+      report: { summary: { issue_count: 0 } }
+    });
+
+    const tools = await setupTools(root);
+    const result = await tools.get('mcplab_read_tool_analysis_result')!.cb({
+      report_id: 'LATEST',
+      include_record: false
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(structured(result)).toMatchObject({
+      report_id: 'report-2026-02',
+      summary: { reportId: 'report-2026-02', summary: { issue_count: 0 } }
+    });
+  });
+
+  it('errors when reading "LATEST" with no reports present', async () => {
+    const { root } = createFixture();
+    const tools = await setupTools(root);
+
+    const result = await tools.get('mcplab_read_tool_analysis_result')!.cb({
+      report_id: 'LATEST',
+      include_record: false
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('No tool analysis reports found');
+  });
 });
