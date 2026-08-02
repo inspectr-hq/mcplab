@@ -4,7 +4,18 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 type RegisteredTool = {
-  cb: (args: Record<string, unknown>) => Promise<any> | any;
+  cb: (args: Record<string, unknown>) => Promise<ToolResponse> | ToolResponse;
+};
+
+type ToolResponse = {
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+
+type TestFixture = {
+  root: string;
+  toolAnalysisDir: string;
 };
 
 const originalEnvironment = { ...process.env };
@@ -21,13 +32,16 @@ afterEach(() => {
   vi.resetModules();
 });
 
-async function setupTools(
-  root: string,
-  toolAnalysisDir: string
-): Promise<Map<string, RegisteredTool>> {
+function createFixture(): TestFixture {
+  const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
+  temporaryRoots.push(root);
+  return { root, toolAnalysisDir: join(root, 'results', 'tool-analysis') };
+}
+
+async function setupTools(root: string): Promise<Map<string, RegisteredTool>> {
   process.chdir(root);
   process.env.MCPLAB_BUNDLE_ROOT = join(root, 'library');
-  process.env.MCPLAB_TOOL_ANALYSIS_DIR = toolAnalysisDir;
+  process.env.MCPLAB_TOOL_ANALYSIS_DIR = 'results/tool-analysis';
   mkdirSync(process.env.MCPLAB_BUNDLE_ROOT, { recursive: true });
   vi.resetModules();
   const { registerTools } = await import('./runtime.js');
@@ -37,8 +51,13 @@ async function setupTools(
       tools.set(name, { cb });
       return { name };
     }
-  } as any);
+  } as unknown as Parameters<typeof registerTools>[0]);
   return tools;
+}
+
+function structured(result: ToolResponse): Record<string, unknown> {
+  expect(result.structuredContent).toBeDefined();
+  return result.structuredContent!;
 }
 
 function writeReport(toolAnalysisDir: string, reportId: string, record: Record<string, unknown>) {
@@ -49,10 +68,9 @@ function writeReport(toolAnalysisDir: string, reportId: string, record: Record<s
 
 describe('tool analysis MCP tool behavior', () => {
   it('lists all saved tool analysis reports with parsed metadata', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
+    const { root, toolAnalysisDir } = createFixture();
     writeReport(toolAnalysisDir, 'report-2026-02', {
+      recordVersion: 1,
       reportId: 'report-2026-02',
       createdAt: '2026-08-02T10:00:00.000Z',
       sourceJobId: 'job-02',
@@ -65,6 +83,7 @@ describe('tool analysis MCP tool behavior', () => {
       }
     });
     writeReport(toolAnalysisDir, 'report-2026-01', {
+      recordVersion: 1,
       reportId: 'report-2026-01',
       createdAt: '2026-08-01T10:00:00.000Z',
       sourceJobId: 'job-01',
@@ -72,11 +91,11 @@ describe('tool analysis MCP tool behavior', () => {
       report: { summary: { tool_count: 2, issue_count: 0 } }
     });
 
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const tools = await setupTools(root);
     const result = await tools.get('mcplab_search_tool_analysis_results')!.cb({});
 
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
+    expect(structured(result)).toMatchObject({
       tool_analysis_results_dir: resolve(realpathSync(root), 'results/tool-analysis'),
       total: 2,
       items: [
@@ -94,38 +113,94 @@ describe('tool analysis MCP tool behavior', () => {
   });
 
   it('filters saved tool analysis reports by query across report metadata', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
+    const { root, toolAnalysisDir } = createFixture();
     writeReport(toolAnalysisDir, 'weather-review', {
+      recordVersion: 1,
       reportId: 'weather-review',
       serverNames: ['weather'],
-      report: { assistantAgentName: 'reviewer', summary: { issue_count: 2 } }
+      report: { assistantAgentName: 'reviewer', summary: { issue_count: 2, finding: 'timeout' } }
     });
     writeReport(toolAnalysisDir, 'calendar-review', {
+      recordVersion: 1,
       reportId: 'calendar-review',
       serverNames: ['calendar'],
       report: { assistantAgentName: 'reviewer', summary: { issue_count: 0 } }
     });
+    writeReport(toolAnalysisDir, 'files-review', {
+      recordVersion: 1,
+      reportId: 'files-review',
+      serverNames: ['files'],
+      report: { assistantAgentName: 'other-agent', summary: { issue_count: 1 } }
+    });
 
-    const tools = await setupTools(root, 'results/tool-analysis');
-    const result = await tools.get('mcplab_search_tool_analysis_results')!.cb({
-      query: 'WEATHER',
+    const tools = await setupTools(root);
+    const agentResult = await tools.get('mcplab_search_tool_analysis_results')!.cb({
+      query: 'reviewer',
+      limit: 1
+    });
+    const summaryResult = await tools.get('mcplab_search_tool_analysis_results')!.cb({
+      query: 'TIMEOUT',
       limit: 20
     });
 
-    expect(result.structuredContent).toMatchObject({
-      query: 'weather',
+    expect(structured(agentResult)).toMatchObject({
+      query: 'reviewer',
+      total: 2,
+      items: [expect.objectContaining({ assistantAgentName: 'reviewer' })]
+    });
+    expect((structured(agentResult).items as unknown[]).length).toBe(1);
+    expect(structured(summaryResult)).toMatchObject({
+      query: 'timeout',
       total: 1,
-      items: [expect.objectContaining({ report_id: 'weather-review' })]
+      items: [
+        expect.objectContaining({
+          report_id: 'weather-review',
+          summary: expect.objectContaining({ finding: 'timeout' })
+        })
+      ]
     });
   });
 
-  it('reads parsed metadata and summary with a truncated raw JSON preview', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
+  it('rejects read report IDs that escape the workspace', async () => {
+    const { root } = createFixture();
+    const tools = await setupTools(root);
+
+    const result = await tools.get('mcplab_read_tool_analysis_result')!.cb({
+      report_id: '../../../outside',
+      include_record: false
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Path escapes workspace root');
+  });
+
+  it('reads a report without returning the full record when include_record is false', async () => {
+    const { root, toolAnalysisDir } = createFixture();
     const record = {
+      recordVersion: 1,
+      reportId: 'without-record',
+      report: { summary: { issue_count: 0 } }
+    };
+    writeReport(toolAnalysisDir, 'without-record', record);
+
+    const tools = await setupTools(root);
+    const result = await tools.get('mcplab_read_tool_analysis_result')!.cb({
+      report_id: 'without-record',
+      include_record: false
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(structured(result)).toMatchObject({
+      report_id: 'without-record',
+      summary: { reportId: 'without-record', summary: { issue_count: 0 } }
+    });
+    expect('record' in structured(result)).toBe(false);
+  });
+
+  it('reads parsed metadata and summary with a truncated raw JSON preview', async () => {
+    const { root, toolAnalysisDir } = createFixture();
+    const record = {
+      recordVersion: 1,
       reportId: 'read-me',
       createdAt: '2026-08-02T12:00:00.000Z',
       sourceJobId: 'job-read',
@@ -141,14 +216,14 @@ describe('tool analysis MCP tool behavior', () => {
     writeReport(toolAnalysisDir, 'read-me', record);
     const raw = JSON.stringify(record);
 
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const tools = await setupTools(root);
     const result = await tools.get('mcplab_read_tool_analysis_result')!.cb({
       report_id: 'read-me',
       max_chars: 40,
       include_record: true
     });
 
-    expect(result.structuredContent).toMatchObject({
+    expect(structured(result)).toMatchObject({
       report_id: 'read-me',
       truncated: true,
       summary: {
@@ -163,25 +238,23 @@ describe('tool analysis MCP tool behavior', () => {
       },
       record
     });
-    expect(result.structuredContent.raw_json_preview).toBe(
+    expect(structured(result).raw_json_preview).toBe(
       `${raw.slice(0, 40)}\n...[truncated ${raw.length - 40} chars]`
     );
   });
 
   it('supports a dry-run delete without removing the report directory', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
-    writeReport(toolAnalysisDir, 'keep-me', { reportId: 'keep-me' });
+    const { root, toolAnalysisDir } = createFixture();
+    writeReport(toolAnalysisDir, 'keep-me', { recordVersion: 1, reportId: 'keep-me' });
 
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const tools = await setupTools(root);
     const result = await tools.get('mcplab_delete_tool_analysis_result')!.cb({
       report_id: 'keep-me',
       dry_run: true,
       confirm: false
     });
 
-    expect(result.structuredContent).toMatchObject({
+    expect(structured(result)).toMatchObject({
       status: 'dry_run',
       report_id: 'keep-me',
       existed: true,
@@ -189,18 +262,17 @@ describe('tool analysis MCP tool behavior', () => {
       would_delete: true
     });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent.path).toBe(
+    expect(structured(result).path).toBe(
       resolve(realpathSync(root), 'results/tool-analysis/keep-me')
     );
-    expect(result.structuredContent.tool_analysis_results_dir).toBe(
+    expect(structured(result).tool_analysis_results_dir).toBe(
       resolve(realpathSync(root), 'results/tool-analysis')
     );
   });
 
   it('returns not_found for a confirmed delete of a missing report', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const { root } = createFixture();
+    const tools = await setupTools(root);
 
     const result = await tools.get('mcplab_delete_tool_analysis_result')!.cb({
       report_id: 'missing',
@@ -208,7 +280,7 @@ describe('tool analysis MCP tool behavior', () => {
       confirm: true
     });
 
-    expect(result.structuredContent).toMatchObject({
+    expect(structured(result)).toMatchObject({
       status: 'not_found',
       report_id: 'missing',
       existed: false,
@@ -219,11 +291,9 @@ describe('tool analysis MCP tool behavior', () => {
   });
 
   it('rejects a non-dry-run delete without explicit confirmation', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
-    writeReport(toolAnalysisDir, 'guarded', { reportId: 'guarded' });
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const { root, toolAnalysisDir } = createFixture();
+    writeReport(toolAnalysisDir, 'guarded', { recordVersion: 1, reportId: 'guarded' });
+    const tools = await setupTools(root);
 
     const result = await tools.get('mcplab_delete_tool_analysis_result')!.cb({
       report_id: 'guarded',
@@ -232,16 +302,28 @@ describe('tool analysis MCP tool behavior', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('confirm=true is required');
+    expect(result.content[0]?.text).toContain('confirm=true is required');
     expect(existsSync(resolve(toolAnalysisDir, 'guarded'))).toBe(true);
   });
 
+  it('rejects delete report IDs that escape the workspace', async () => {
+    const { root } = createFixture();
+    const tools = await setupTools(root);
+
+    const result = await tools.get('mcplab_delete_tool_analysis_result')!.cb({
+      report_id: '../../../outside',
+      dry_run: true,
+      confirm: false
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Path escapes workspace root');
+  });
+
   it('deletes a report directory after confirmation', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-tool-analysis-'));
-    temporaryRoots.push(root);
-    const toolAnalysisDir = join(root, 'results', 'tool-analysis');
-    writeReport(toolAnalysisDir, 'delete-me', { reportId: 'delete-me' });
-    const tools = await setupTools(root, 'results/tool-analysis');
+    const { root, toolAnalysisDir } = createFixture();
+    writeReport(toolAnalysisDir, 'delete-me', { recordVersion: 1, reportId: 'delete-me' });
+    const tools = await setupTools(root);
 
     const result = await tools.get('mcplab_delete_tool_analysis_result')!.cb({
       report_id: 'delete-me',
@@ -249,7 +331,7 @@ describe('tool analysis MCP tool behavior', () => {
       confirm: true
     });
 
-    expect(result.structuredContent).toMatchObject({
+    expect(structured(result)).toMatchObject({
       status: 'deleted',
       report_id: 'delete-me',
       existed: true,
@@ -257,7 +339,7 @@ describe('tool analysis MCP tool behavior', () => {
       would_delete: true
     });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent.path).toBe(
+    expect(structured(result).path).toBe(
       resolve(realpathSync(root), 'results/tool-analysis/delete-me')
     );
     expect(existsSync(resolve(toolAnalysisDir, 'delete-me'))).toBe(false);
