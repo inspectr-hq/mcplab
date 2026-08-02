@@ -64,7 +64,7 @@ export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [
   {
     name: 'navigate_to_view',
     description:
-      'Request navigation to a supported MCPLab view. Ask the user to confirm before navigation.',
+      'Navigate to a supported MCPLab view when the user explicitly asks to open or show that view.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -116,8 +116,12 @@ export function selectGlobalCopilotAgentName(params: {
 
 export function isExplicitGlobalCopilotNavigationRequest(messages: LlmMessage[]): boolean {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
-  return /\b(?:go(?:\s+to)?|goto|navigate|open|take me|switch)\b/i.test(
-    String(lastUserMessage?.content ?? '')
+  const content = String(lastUserMessage?.content ?? '');
+  return (
+    /\b(?:go(?:\s+to)?|goto|navigate|open|take me|switch)\b/i.test(content) ||
+    /\b(?:show|display)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:test cases|mcp servers|agents)\b/i.test(
+      content
+    )
   );
 }
 
@@ -142,7 +146,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'You are the MCPLab Global Copilot.',
     'Help users analyze evaluation results and author or improve MCP test cases.',
     'You can navigate the MCPLab interface using available frontend actions.',
-    'Only navigate when the user explicitly asks to go, navigate, open, take them, or switch to a view. For questions about runs, results, evaluations, or test cases, use MCP tools to answer instead of navigating.',
+    'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, or Agents library view. For those explicit library-view requests, call navigate_to_view instead of mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',

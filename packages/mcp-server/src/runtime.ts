@@ -1158,13 +1158,13 @@ export function registerTools(server: McpServer): void {
     'mcplab_list_library',
     {
       description:
-        'List reusable MCPLab library entries (servers, agents, scenarios) from a bundle root such as mcplab/ or examples/libraries/.',
+        'List reusable MCPLab library entries (MCP servers, agents, and Test Cases) from a bundle root such as mcplab/ or examples/libraries/. The scenarios kind returns Test Cases for backwards compatibility.',
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
           .enum(['all', 'servers', 'agents', 'scenarios'])
           .optional()
-          .describe('Which library category to list. Defaults to all.'),
+          .describe('Which library category to list. scenarios returns Test Cases. Defaults to all.'),
         includeContent: z
           .boolean()
           .optional()
@@ -2721,7 +2721,7 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const scenariosDir = join(bundleRoot, 'scenarios');
+  const scenariosDir = resolveLibraryTestCasesDir(bundleRoot);
 
   const servers = existsSync(serversPath)
     ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
@@ -2793,7 +2793,7 @@ function getLibraryItem(
     };
   }
 
-  const dir = join(bundleRoot, 'scenarios');
+  const dir = resolveLibraryTestCasesDir(bundleRoot);
   if (!existsSync(dir)) {
     throw new Error(`Scenario library directory not found: ${dir}`);
   }
@@ -2814,6 +2814,11 @@ function getLibraryItem(
     }
   }
   throw new Error(`Scenario '${id}' not found in ${dir}`);
+}
+
+function resolveLibraryTestCasesDir(bundleRoot: string): string {
+  const testCasesDir = join(bundleRoot, 'test-cases');
+  return existsSync(testCasesDir) ? testCasesDir : join(bundleRoot, 'scenarios');
 }
 
 function buildServerEntry(input: {

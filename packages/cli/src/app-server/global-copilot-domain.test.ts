@@ -84,6 +84,11 @@ describe('selectGlobalCopilotAgentName', () => {
         { role: 'user', content: 'Go to the evaluations list.' }
       ])
     ).toBe(true);
+    expect(
+      isExplicitGlobalCopilotNavigationRequest([
+        { role: 'user', content: 'Can you show me my test cases?' }
+      ])
+    ).toBe(true);
   });
 
   it('converts persisted AG-UI tool results into plain history context', () => {
