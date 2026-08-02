@@ -28,6 +28,10 @@ import { RefreshCw, Pencil, ArrowLeft, Search, Plus, Copy, Trash2, FileCode } fr
 import { toast } from '@/hooks/use-toast';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Scenario } from '@/types/eval';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 
@@ -257,6 +261,18 @@ const ManageTestCases = () => {
     return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenarios, query, serverFilter, sortBy, sortDir, servers]);
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      testCases: {
+        serverFilter,
+        ...(query.trim() ? { searchQuery: query.trim() } : {}),
+        visibleCount: filteredScenarios.length,
+        totalCount: scenarios.length
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [filteredScenarios.length, query, scenarios.length, serverFilter]);
 
   useEffect(() => {
     let active = true;

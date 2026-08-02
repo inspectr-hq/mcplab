@@ -2,6 +2,7 @@ import { HttpAgent, type Message } from '@ag-ui/client';
 import { useCallback, useRef, useState } from 'react';
 import { availableGlobalCopilotActions } from '@/lib/global-copilot-actions';
 import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
+import { globalCopilotPageContext } from '@/lib/global-copilot-page-context';
 import type { GlobalCopilotMessage, GlobalCopilotThread } from '@/lib/global-copilot-thread-store';
 
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
@@ -94,6 +95,7 @@ export function useGlobalCopilotRun({
           forwardedProps: {
             context: {
               ...globalCopilotRouteContext(pathname, search),
+              ...globalCopilotPageContext(),
               mcplabVersion: version,
               queue,
               availableActions: availableGlobalCopilotActions()
