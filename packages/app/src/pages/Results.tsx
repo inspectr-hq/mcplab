@@ -72,7 +72,7 @@ import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
-import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
+import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -86,7 +86,7 @@ type ResultTableItem =
   | { type: 'day-separator'; dayKey: string; dayLabel: string }
   | { type: 'run'; run: EvalResult };
 
-const RESULTS_TABLE_COLUMN_COUNT = 8;
+const RESULTS_TABLE_COLUMN_COUNT = 6;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
 const RESULTS_DASHBOARD_VISIBILITY_KEY = 'mcplab:results:dashboard-visible';
 
@@ -668,11 +668,6 @@ const Results = () => {
     );
   };
 
-  const formatToolTokenTotal = (result: EvalResult) => {
-    const total = result.toolTokenUsage?.totalTokens;
-    return typeof total === 'number' ? total.toLocaleString() : 'n/a';
-  };
-
   const resetTimeFilter = () => {
     setTimeFilterMode('all');
     setTimeFilterPreset('15min');
@@ -1033,30 +1028,10 @@ const Results = () => {
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
-                      onClick={() => toggleSort('scenarios')}
-                    >
-                      Scenarios
-                      {sortIcon('scenarios')}
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 hover:text-foreground"
                       onClick={() => toggleSort('avgToolCalls')}
                     >
                       Avg Tool Calls
                       {sortIcon('avgToolCalls')}
-                    </button>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 hover:text-foreground"
-                      onClick={() => toggleSort('toolTokens')}
-                    >
-                      Tool Tokens
-                      {sortIcon('toolTokens')}
                     </button>
                   </TableHead>
                   <TableHead className="w-10" />
@@ -1155,26 +1130,7 @@ const Results = () => {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
-                          {item.run.totalScenarios}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="space-y-0.5">
-                            <div className="font-mono text-sm">
-                              {formatToolTokenTotal(item.run)}
-                            </div>
-                            {(() => {
-                              const toolTimeMs = getRunToolTimeMs(item.run);
-                              if (toolTimeMs === null) return null;
-                              return (
-                                <div className="font-mono text-[11px] text-muted-foreground/90">
-                                  Tool time: {formatDurationMs(toolTimeMs)}
-                                </div>
-                              );
-                            })()}
-                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-2">
@@ -1184,8 +1140,10 @@ const Results = () => {
                               disabled={rerunningRunId === item.run.id}
                               onClick={() => void handleRerun(item.run)}
                             >
-                              <Play className="mr-1.5 h-3.5 w-3.5" />
-                              {rerunningRunId === item.run.id ? 'Queueing...' : 'Rerun'}
+                              <Play className="h-3.5 w-3.5" />
+                              <span className="mcp-results-rerun-label">
+                                {rerunningRunId === item.run.id ? 'Queueing...' : 'Rerun'}
+                              </span>
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

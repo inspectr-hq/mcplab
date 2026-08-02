@@ -198,7 +198,7 @@ describe('Results', () => {
     expect(screen.getByRole('button', { name: /Compact/i })).toBeInTheDocument();
   });
 
-  it('renders tool token totals and n/a when unavailable', async () => {
+  it('hides the scenarios and tool token columns from the overview table', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200), makeRun('run-b', null)]);
 
     render(
@@ -210,9 +210,8 @@ describe('Results', () => {
     );
 
     await screen.findByText('Results');
-    expect(screen.getByRole('columnheader', { name: /Tool Tokens/i })).toBeInTheDocument();
-    expect(screen.getAllByText('1,200').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('n/a').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('columnheader', { name: /Scenarios/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /Tool Tokens/i })).not.toBeInTheDocument();
   });
 
   it('shows the dashboard by default and persists the visibility preference', async () => {
@@ -245,41 +244,6 @@ describe('Results', () => {
     expect(await screen.findByRole('button', { name: 'Show dashboard' })).toBeInTheDocument();
     expect(screen.queryByTestId('results-dashboard')).not.toBeInTheDocument();
     localStorage.removeItem('mcplab:results:dashboard-visible');
-  });
-
-  it('sorts tool tokens with null values always last', async () => {
-    sourceMock.listResults.mockResolvedValue([
-      makeRun('run-low', 100),
-      makeRun('run-high', 900),
-      makeRun('run-null', null)
-    ]);
-
-    render(
-      <MemoryRouter initialEntries={['/results']}>
-        <Routes>
-          <Route path="/results" element={<Results />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await screen.findByText('run-low');
-    const sortButton = screen.getByRole('button', { name: /Tool Tokens/i });
-
-    fireEvent.click(sortButton);
-    await waitFor(() => {
-      const runLinks = screen
-        .getAllByRole('link')
-        .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
-      expect(runLinks.map((link) => link.textContent)).toEqual(['run-low', 'run-high', 'run-null']);
-    });
-
-    fireEvent.click(sortButton);
-    await waitFor(() => {
-      const runLinks = screen
-        .getAllByRole('link')
-        .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
-      expect(runLinks.map((link) => link.textContent)).toEqual(['run-high', 'run-low', 'run-null']);
-    });
   });
 
   it('surfaces auth and rate-limit failures differently from normal assertion failures', async () => {

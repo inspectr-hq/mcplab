@@ -110,7 +110,7 @@ export function AssistantMessageRow({
           <Icon className="h-3 w-3" />
         </div>
       )}
-      <div className="relative w-full min-w-0 max-w-[92%]">
+      <div className={cn('relative min-w-0 max-w-[92%]', isUser ? 'w-auto' : 'w-full')}>
         <div
           className={`min-w-0 max-w-full break-words rounded-md border px-3 py-2 text-sm ${
             isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-sm'
