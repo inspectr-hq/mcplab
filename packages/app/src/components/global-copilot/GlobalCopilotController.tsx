@@ -825,16 +825,6 @@ export function GlobalCopilotController() {
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="icon"
-            variant="outline"
-            className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
-            onClick={() => void newThread()}
-            aria-label="New chat"
-            title="New chat"
-          >
-            <MessageSquarePlus className="h-4 w-4" />
-          </Button>
-          <Button
-            size="icon"
             variant="ghost"
             onClick={() => setExpanded((value) => !value)}
             aria-label={expanded ? 'Compact global copilot' : 'Expand global copilot'}
@@ -853,6 +843,16 @@ export function GlobalCopilotController() {
             aria-label="Collapse global copilot"
           >
             <Minimize2 className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+            onClick={() => void newThread()}
+            aria-label="New chat"
+            title="New chat"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
           </Button>
         </div>
       </div>
