@@ -244,7 +244,9 @@ function traceFixture(): ScenarioRunTraceRecord[] {
   ];
 }
 
-async function createTraceTools(): Promise<Map<string, RegisteredTool>> {
+async function createTraceTools(
+  records: ScenarioRunTraceRecord[] = traceFixture()
+): Promise<Map<string, RegisteredTool>> {
   const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-trace-'));
   temporaryRoots.push(root);
   const libraryRoot = join(root, 'library');
@@ -252,7 +254,7 @@ async function createTraceTools(): Promise<Map<string, RegisteredTool>> {
   mkdirSync(join(runsDir, 'run-trace'), { recursive: true });
   writeFileSync(
     join(runsDir, 'run-trace', 'trace.jsonl'),
-    `${traceFixture().map((record) => JSON.stringify(record)).join('\n')}\n`,
+    `${records.map((record) => JSON.stringify(record)).join('\n')}\n`,
     'utf8'
   );
   return setupTools(libraryRoot, 'runs');
@@ -285,6 +287,64 @@ describe('trace tool behavior', () => {
     expect(output.items[3].text.length).toBeGreaterThan(40);
   });
 
+  it('assigns contiguous indices when a scenario run has no final answer', async () => {
+    const tools = await createTraceTools([
+      scenarioRun(
+        'gamma-1',
+        'scout',
+        [
+          textMessage('user', 'First question.', '2026-08-01T12:00:00.100Z'),
+          textMessage('assistant', 'Answer one.', '2026-08-01T12:00:00.200Z')
+        ],
+        '2026-08-01T12:00:00.000Z',
+        '2026-08-01T12:00:01.000Z'
+      ),
+      // Middle run ends on a tool call with no assistant text -> no final answer, gets dropped.
+      scenarioRun(
+        'gamma-2',
+        'scout',
+        [
+          textMessage('user', 'Second question.', '2026-08-01T12:01:00.100Z'),
+          {
+            role: 'assistant',
+            ts: '2026-08-01T12:01:00.200Z',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'call-gamma',
+                server: 'directory',
+                name: 'lookup_profile',
+                input: { query: 'gamma' }
+              }
+            ]
+          }
+        ],
+        '2026-08-01T12:01:00.000Z',
+        '2026-08-01T12:01:01.000Z'
+      ),
+      scenarioRun(
+        'gamma-3',
+        'scout',
+        [
+          textMessage('user', 'Third question.', '2026-08-01T12:02:00.100Z'),
+          textMessage('assistant', 'Answer three.', '2026-08-01T12:02:00.200Z')
+        ],
+        '2026-08-01T12:02:00.000Z',
+        '2026-08-01T12:02:01.000Z'
+      )
+    ]);
+
+    const result = await tools.get('mcplab_trace_get_final_answers')!.cb({ run_id: 'run-trace' });
+    const output = structured<FinalAnswersOutput>(result);
+
+    // The record with no final answer is dropped; surviving indices stay contiguous (not 0, 2).
+    expect(output.items.map((item) => item.index)).toEqual([0, 1]);
+    expect(output.items).toMatchObject([
+      { index: 0, scenario_id: 'gamma-1', text: 'Answer one.' },
+      { index: 1, scenario_id: 'gamma-3', text: 'Answer three.' }
+    ]);
+  });
+
   it('returns the ordered conversation timeline for one scenario and agent', async () => {
     const tools = await createTraceTools();
 
@@ -310,8 +370,18 @@ describe('trace tool behavior', () => {
     const timelineTexts = output.timeline
       .filter((item): item is TimelineItem & { text: string } => typeof item.text === 'string')
       .map((item) => item.text);
-    expect(timelineTexts).toEqual(expect.arrayContaining(['Find the a\n...[truncated 13 chars]']));
-    expect(timelineTexts.join('\n')).not.toContain('Verify the record');
+    // Exactly the scout run's three text blocks, truncated to 10 chars. An exact match proves
+    // ordering and truncation, and that the analyst run for the same scenario_id does not leak
+    // into this timeline (a leak would add extra elements).
+    expect(timelineTexts).toEqual([
+      'Find the a\n...[truncated 13 chars]',
+      'I will ins\n...[truncated 23 chars]',
+      'Alpha answ\n...[truncated 26 chars]'
+    ]);
+    // Distinctive analyst-only content (truncated prefixes of "Verify the alpha profile." and
+    // "Alpha verification answer is positive.") must be absent.
+    expect(timelineTexts.join('\n')).not.toContain('Verify the');
+    expect(timelineTexts.join('\n')).not.toContain('Alpha veri');
   });
 
   it('searches case-insensitively and filters matches by event type', async () => {

@@ -1547,7 +1547,8 @@ export function registerTools(server: McpServer): void {
           configHash: effectiveConfigHash,
           cliVersion: `mcplab-mcp-server/${SERVER_VERSION}`,
           runsDir: resolveRunsDir(),
-          cwd: process.cwd()
+          cwd: process.cwd(),
+          evaluationJudge: resolveMcpEvaluationJudge(bundleRoot)
         });
 
         const reportHtml = renderReport(results);
@@ -2108,20 +2109,23 @@ export function registerTools(server: McpServer): void {
               (!scenario_id || record.scenario_id === scenario_id) &&
               (!agent || record.agent === agent)
           )
-          .map((record, index) => {
+          .map((record) => {
             const full = extractFinalAssistantText(record);
             if (!full) return null;
             const text = truncate(full, maxChars);
-            return removeUndefined({
-              index,
-              scenario_id: record.scenario_id,
-              agent: record.agent,
-              ts: record.ts_end,
-              truncated: text.length < full.length,
-              text
-            });
+            return { record, text, truncated: text.length < full.length };
           })
-          .filter(Boolean);
+          .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+          .map((entry, index) =>
+            removeUndefined({
+              index,
+              scenario_id: entry.record.scenario_id,
+              agent: entry.record.agent,
+              ts: entry.record.ts_end,
+              truncated: entry.truncated,
+              text: entry.text
+            })
+          );
         return ok(`Extracted ${items.length} final answer(s) from run ${runId}`, {
           run_id: runId,
           legacy_trace_detected: legacyDetected || undefined,
@@ -2881,6 +2885,27 @@ function getLibraryItem(
 function resolveLibraryTestCasesDir(bundleRoot: string): string {
   const testCasesDir = join(bundleRoot, 'test-cases');
   return existsSync(testCasesDir) ? testCasesDir : join(bundleRoot, 'scenarios');
+}
+
+/** Resolve the same workspace setting used by the local MCPLab app runner. */
+export function resolveMcpEvaluationJudge(bundleRoot: string):
+  | { name: string; agent: EvalConfig['agents'][string] }
+  | undefined {
+  const configured = process.env.MCPLAB_EVALUATION_JUDGE_AGENT?.trim();
+  const settingsPath = join(bundleRoot, '.mcplab-app-settings.yaml');
+  const settings =
+    !configured && existsSync(settingsPath)
+      ? (parseYaml(readFileSync(settingsPath, 'utf8')) as Record<string, unknown> | null)
+      : undefined;
+  const name =
+    configured ||
+    (typeof settings?.evaluation_judge_agent_name === 'string'
+      ? settings.evaluation_judge_agent_name.trim()
+      : '');
+  if (!name) return undefined;
+  const agent = readLibraryAgentsAndServers(bundleRoot).agents[name];
+  if (!agent) throw new Error(`Evaluation judge agent not found: ${name}`);
+  return { name, agent };
 }
 
 type EvaluationConfigListItem = z.infer<typeof EvaluationConfigListItemSchema>;

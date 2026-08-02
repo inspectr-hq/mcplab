@@ -213,6 +213,31 @@ describe('mcp tool behavior', () => {
     expect(readFileSync(configPath, 'utf8')).toBe(source);
   });
 
+  it('resolves the workspace Evaluation Judge for MCP evaluation runs', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-judge-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(libraryRoot, { recursive: true });
+    writeFileSync(
+      join(libraryRoot, 'agents.yaml'),
+      'claude-haiku-45:\n  provider: anthropic\n  model: claude-haiku-4-5\n',
+      'utf8'
+    );
+    writeFileSync(
+      join(libraryRoot, '.mcplab-app-settings.yaml'),
+      'evaluation_judge_agent_name: claude-haiku-45\n',
+      'utf8'
+    );
+
+    await setupTools(libraryRoot);
+    const { resolveMcpEvaluationJudge } = await import('./runtime.js');
+
+    expect(resolveMcpEvaluationJudge(libraryRoot)).toMatchObject({
+      name: 'claude-haiku-45',
+      agent: { provider: 'anthropic', model: 'claude-haiku-4-5' }
+    });
+  });
+
   it('returns generator drafts without writing library files', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-generate-'));
     temporaryRoots.push(root);
