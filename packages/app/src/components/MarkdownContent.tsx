@@ -12,7 +12,13 @@ export function MarkdownContent({
 }) {
   const blocks = parseMarkdownBlocks(text);
   return (
-    <div className={cn('space-y-2', variant === 'system' && 'text-xs', className)}>
+    <div
+      className={cn(
+        'min-w-0 max-w-full space-y-2 break-words',
+        variant === 'system' && 'text-xs',
+        className
+      )}
+    >
       {blocks.map((block, index) => (
         <Fragment key={`md-${index}`}>{renderMarkdownBlock(block, index, variant)}</Fragment>
       ))}
@@ -174,7 +180,7 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number, variant: 'assi
     return (
       <p
         className={cn(
-          'whitespace-pre-wrap leading-relaxed',
+          'whitespace-pre-wrap break-words leading-relaxed',
           variant === 'system' && 'leading-normal'
         )}
       >
@@ -261,7 +267,7 @@ function renderInlineMarkdown(text: string, keyBase: string): React.ReactNode[] 
       return (
         <code
           key={`${keyBase}-${index}`}
-          className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]"
+          className="break-all rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]"
         >
           {part.slice(1, -1)}
         </code>

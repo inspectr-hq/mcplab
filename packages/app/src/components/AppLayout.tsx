@@ -262,7 +262,7 @@ export function AppLayout() {
               </button>
             </div>
           </header>
-          <main className="min-h-0 flex-1 overflow-y-auto p-6">
+          <main className="mcp-app-main min-h-0 flex-1 overflow-y-auto p-6">
             <Outlet />
           </main>
         </div>

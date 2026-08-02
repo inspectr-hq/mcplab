@@ -56,7 +56,12 @@ export function GlobalCopilotController() {
     cancel
   } = useGlobalCopilotRun({
     version,
-    queue: { ...queue, streamStatus: String(queue.streamStatus) },
+    queue: {
+      runningCount: queue.runningCount,
+      queuedCount: queue.queuedCount,
+      oauthBlockedCount: queue.oauthBlockedCount,
+      streamStatus: String(queue.streamStatus)
+    },
     pathname: location.pathname,
     search: location.search,
     workspaceKey,
@@ -292,15 +297,15 @@ export function GlobalCopilotController() {
     );
   return (
     <aside
-      className={`hidden h-screen min-h-0 shrink-0 overflow-hidden border-l bg-card transition-[width] duration-200 ${
+      className={`hidden h-screen min-h-0 min-w-0 shrink-0 overflow-hidden border-l bg-card transition-[width] duration-200 ${
         expanded ? 'w-[52rem] max-w-[60vw]' : 'w-[360px]'
       } lg:flex lg:flex-col`}
       aria-label="Global copilot"
     >
-      <div className="flex items-center gap-2 border-b p-3">
+      <div className="flex w-full min-w-0 items-center gap-2 border-b p-3">
         <Bot className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold">Global Copilot</span>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="min-w-0 truncate text-sm font-semibold">Global Copilot</span>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button
             size="icon"
             variant="ghost"

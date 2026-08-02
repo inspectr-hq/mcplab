@@ -85,11 +85,11 @@ export function AssistantMessageRow({
 
   if (role === 'system') {
     return (
-      <div className={cn('flex items-start gap-2 text-xs', className)}>
+      <div className={cn('flex w-full min-w-0 items-start gap-2 text-xs', className)}>
         <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
           <RectangleEllipsis className="h-3 w-3" />
         </div>
-        <div className="max-w-[92%] rounded-md border border-amber-400/30 bg-amber-50/70 p-3 text-sm">
+        <div className="w-full min-w-0 max-w-[92%] break-words rounded-md border border-amber-400/30 bg-amber-50/70 p-3 text-sm">
           <MarkdownContent text={message.text} variant="assistant" />
         </div>
       </div>
@@ -101,7 +101,7 @@ export function AssistantMessageRow({
   return (
     <div
       className={cn(
-        `flex items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`,
+        `flex w-full min-w-0 items-start gap-2 text-xs ${isUser ? 'justify-end' : 'justify-start'}`,
         className
       )}
     >
@@ -110,9 +110,9 @@ export function AssistantMessageRow({
           <Icon className="h-3 w-3" />
         </div>
       )}
-      <div className="relative max-w-[92%]">
+      <div className="relative w-full min-w-0 max-w-[92%]">
         <div
-          className={`max-w-full break-words rounded-md border px-3 py-2 text-sm ${
+          className={`min-w-0 max-w-full break-words rounded-md border px-3 py-2 text-sm ${
             isUser ? 'border-primary/20 bg-primary/10' : 'border-border/80 bg-background shadow-sm'
           }`}
         >

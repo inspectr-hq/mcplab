@@ -32,15 +32,15 @@ export function GlobalCopilotConversation({
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [loading, messages.length]);
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      <div className="space-y-3 p-3">
+    <ScrollArea className="min-h-0 w-full min-w-0 flex-1">
+      <div className="w-full min-w-0 space-y-3 p-3">
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground">Ask about results, test cases, or MCPLab.</p>
         )}
         {messages.map((message) =>
           message.role === 'system' &&
           message.content.startsWith('Previously retrieved tool data:') ? null : (
-            <div key={message.id} className="space-y-2">
+            <div key={message.id} className="w-full min-w-0 max-w-full space-y-2">
               {message.role === 'tool' ? (
                 <ToolMessage message={message} />
               ) : (
@@ -96,6 +96,7 @@ function ToolMessage({ message }: { message: GlobalCopilotMessage }) {
         resultPreview: message.content
       }}
       defaultOpen={false}
+      className="w-full min-w-0 max-w-full"
       description={`Read-only MCPLab tool completed.\n\nMCP tool: \`${toolName}\``}
     />
   );

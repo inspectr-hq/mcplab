@@ -25,7 +25,7 @@ export function GlobalCopilotThreadList({
     .slice(0, showAll ? 100 : 6);
 
   return (
-    <div className="border-b p-2">
+    <div className="min-w-0 border-b p-2">
       <div className="mb-1 flex items-center justify-between px-1 text-xs text-muted-foreground">
         <button
           type="button"
@@ -56,7 +56,10 @@ export function GlobalCopilotThreadList({
               placeholder="Search conversations"
             />
           )}
-          <ScrollArea className={showAll ? 'max-h-48' : 'max-h-52'}>
+          <ScrollArea
+            data-testid="global-copilot-thread-list-scroll-area"
+            className={showAll ? 'h-48' : 'max-h-52'}
+          >
             <div className="p-1">
               {visible.map((thread) => (
                 <div key={thread.id} className="flex items-center">

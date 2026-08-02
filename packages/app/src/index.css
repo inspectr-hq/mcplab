@@ -2,6 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+.mcp-app-main {
+  container-type: inline-size;
+}
+
+.mcp-evaluations-cta {
+  width: 2.25rem;
+  justify-content: center;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.mcp-evaluations-cta-label {
+  display: none;
+}
+
+.mcp-evaluations-search-input {
+  width: 240px;
+}
+
+.mcp-evaluations-suite-filter {
+  width: 200px;
+}
+
+.mcp-evaluations-actions-column {
+  width: 160px;
+}
+
+@container (min-width: 1000px) {
+  .mcp-evaluations-cta {
+    width: auto;
+    justify-content: flex-start;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .mcp-evaluations-cta-icon {
+    margin-right: 0.5rem;
+  }
+
+  .mcp-evaluations-cta-label {
+    display: inline;
+  }
+}
+
+@container (max-width: 999px) {
+  .mcp-evaluations-search-input {
+    width: 160px;
+  }
+
+  .mcp-evaluations-suite-filter {
+    width: 140px;
+  }
+
+  .mcp-evaluations-suite-run {
+    width: 2.25rem;
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .mcp-evaluations-suite-run-label,
+  .mcp-evaluations-run-label {
+    display: none;
+  }
+}
+
+@container (max-width: 760px) {
+  .mcp-evaluations-date-column,
+  .mcp-evaluations-result-column {
+    display: none;
+  }
+
+  .mcp-evaluations-actions-column {
+    width: 145px;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;

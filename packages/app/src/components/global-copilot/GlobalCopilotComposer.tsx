@@ -14,7 +14,7 @@ export function GlobalCopilotComposer({
   loading: boolean;
 }) {
   return (
-    <div className="border-t p-3">
+    <div className="w-full min-w-0 border-t p-3">
       <AssistantComposer
         input={input}
         onInputChange={onInputChange}

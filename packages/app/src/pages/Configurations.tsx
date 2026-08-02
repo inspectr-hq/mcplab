@@ -457,7 +457,7 @@ const Configurations = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
             <FlaskConical className="h-6 w-6" />
@@ -465,14 +465,16 @@ const Configurations = () => {
           </h1>
           <p className="text-sm text-muted-foreground">Manage your MCP evaluation suites</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <SearchInput
             value={configFilter}
             onValueChange={setConfigFilter}
             placeholder="Search evaluations..."
+            className="mcp-evaluations-search"
+            inputClassName="mcp-evaluations-search-input"
           />
           <Select value={suiteFilter} onValueChange={setSuiteFilter}>
-            <SelectTrigger className="h-9 w-[200px]">
+            <SelectTrigger className="mcp-evaluations-suite-filter h-9 w-[200px]">
               <SelectValue placeholder="All suites" />
             </SelectTrigger>
             <SelectContent>
@@ -484,18 +486,35 @@ const Configurations = () => {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => void reload()}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+          <Button
+            variant="outline"
+            size="sm"
+            className="mcp-evaluations-cta"
+            onClick={() => void reload()}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCw className="mcp-evaluations-cta-icon h-4 w-4" />
+            <span className="mcp-evaluations-cta-label">Refresh</span>
           </Button>
-          <Button variant="outline" size="sm">
-            <Upload className="mr-2 h-4 w-4" />
-            Import YAML
+          <Button
+            variant="outline"
+            size="sm"
+            className="mcp-evaluations-cta"
+            aria-label="Import YAML"
+            title="Import YAML"
+          >
+            <Upload className="mcp-evaluations-cta-icon h-4 w-4" />
+            <span className="mcp-evaluations-cta-label">Import YAML</span>
           </Button>
-          <Button size="sm" asChild>
-            <Link to="/mcp-evaluations/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create New
+          <Button
+            size="sm"
+            className="mcp-evaluations-cta"
+            asChild
+          >
+            <Link to="/mcp-evaluations/new" aria-label="Create New" title="Create New">
+              <Plus className="mcp-evaluations-cta-icon h-4 w-4" />
+              <span className="mcp-evaluations-cta-label">Create New</span>
             </Link>
           </Button>
         </div>
@@ -526,7 +545,7 @@ const Configurations = () => {
                     {sortIcon('scenarios')}
                   </button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="mcp-evaluations-date-column text-right">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 hover:text-foreground"
@@ -546,8 +565,8 @@ const Configurations = () => {
                     {sortIcon('updatedAt')}
                   </button>
                 </TableHead>
-                <TableHead className="text-right">Last Run</TableHead>
-                <TableHead className="w-[220px] text-right" />
+                <TableHead className="mcp-evaluations-result-column text-right">Last Run</TableHead>
+                <TableHead className="mcp-evaluations-actions-column text-right" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -598,12 +617,14 @@ const Configurations = () => {
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-7 px-2 text-xs"
+                            className="mcp-evaluations-suite-run h-7 gap-1 px-2 text-xs"
                             disabled={isRunning}
                             onClick={() => void runSuite(suiteToken, suiteLabel, items)}
-                          >
-                            <Play className="mr-1 h-3.5 w-3.5" />
-                            {isRunning ? 'Queueing...' : 'Run Suite'}
+                            >
+                            <Play className="h-3.5 w-3.5" />
+                            <span className="mcp-evaluations-suite-run-label">
+                              {isRunning ? 'Queueing...' : 'Run Suite'}
+                            </span>
                           </Button>
                         </div>
                       </TableCell>
@@ -650,13 +671,13 @@ const Configurations = () => {
                             <TableCell className="text-right font-mono text-sm">
                               {agentCount(cfg)}
                             </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">
+                            <TableCell className="mcp-evaluations-date-column text-right text-xs text-muted-foreground">
                               <div className="inline-flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {new Date(cfg.updatedAt).toLocaleDateString()}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="mcp-evaluations-result-column text-right">
                               {typeof latestPassRateByConfigId[cfg.id] === 'number' ? (
                                 <div className="inline-flex justify-end">
                                   <PassRateBadge rate={latestPassRateByConfigId[cfg.id]} />
@@ -665,8 +686,8 @@ const Configurations = () => {
                                 ''
                               )}
                             </TableCell>
-                            <TableCell className="w-[220px] whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-2">
+                            <TableCell className="mcp-evaluations-actions-column whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -753,10 +774,18 @@ const Configurations = () => {
                                     <TooltipContent>Queue evaluation run</TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
-                                <Button size="sm" variant="outline" asChild>
-                                  <Link to={`/run?configId=${encodeURIComponent(cfg.id)}`}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="mcp-evaluations-run-button h-8 px-2"
+                                  asChild
+                                >
+                                  <Link
+                                    to={`/run?configId=${encodeURIComponent(cfg.id)}`}
+                                    aria-label={`Run ${displayConfigName(cfg)}`}
+                                  >
                                     <Play className="h-3.5 w-3.5" />
-                                    Run
+                                    <span className="mcp-evaluations-run-label">Run</span>
                                   </Link>
                                 </Button>
                               </div>
