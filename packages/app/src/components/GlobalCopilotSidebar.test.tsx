@@ -43,6 +43,18 @@ describe('globalCopilotToolDisplayName', () => {
     });
   });
 
+  it('restores a Test Case opening request with its validated ID', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-test-case',
+        role: 'assistant',
+        content: '[mcplab-action]{"kind":"open_test_case","testCaseId":"tag-profile"}'
+      } as Message)
+    ).toMatchObject({
+      action: { kind: 'open_test_case', testCaseId: 'tag-profile', status: 'pending' }
+    });
+  });
+
   it('restores a confirmation-required MCP evaluation run', () => {
     expect(
       storedGlobalCopilotFrontendAction({
@@ -75,6 +87,24 @@ describe('globalCopilotToolDisplayName', () => {
           output_path: 'mcplab/reports/tag-profile.md',
           markdown: '# Tag Profile'
         },
+        status: 'pending'
+      }
+    });
+  });
+
+  it('restores a confirmation-required library duplicate action', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-5',
+        role: 'assistant',
+        content:
+          '[mcplab-action]{"kind":"library_action","name":"duplicate_test_case","arguments":{"id":"tag-profile"}}'
+      } as Message)
+    ).toMatchObject({
+      action: {
+        kind: 'library_action',
+        name: 'duplicate_test_case',
+        arguments: { id: 'tag-profile' },
         status: 'pending'
       }
     });

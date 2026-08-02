@@ -32,6 +32,7 @@ import {
   clearGlobalCopilotPageContext,
   setGlobalCopilotPageContext
 } from '@/lib/global-copilot-page-context';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 const RESULT_ASSISTANT_HANDOFF_STORAGE_KEY = 'mcplab.resultAssistantScenarioHandoff';
 
@@ -183,6 +184,16 @@ const ManageTestCases = () => {
       navigate(`/libraries/test-cases/${encodeURIComponent(duplicate.id)}`);
     }
   };
+
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('duplicate_test_case', async ({ id }) => {
+        const scenario = scenarios.find((item) => item.id === id);
+        if (!scenario) throw new Error(`Test Case '${String(id)}' is no longer available.`);
+        await handleDuplicateScenario(scenario);
+      }),
+    [scenarios, handleDuplicateScenario]
+  );
 
   const confirmDeleteScenario = async (scenarioToDelete: Scenario) => {
     if (saveTimerRef.current) {

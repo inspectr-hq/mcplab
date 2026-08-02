@@ -77,21 +77,32 @@ export function GlobalCopilotController() {
     if (!thread) return;
     const requested = thread.messages.find(
       (message) =>
-        message.action?.kind === 'navigate_to_view' && message.action.status === 'pending'
+        (message.action?.kind === 'navigate_to_view' || message.action?.kind === 'open_test_case') &&
+        message.action.status === 'pending'
     );
-    if (!requested?.action || !navigationTargets.has(requested.action.path)) return;
+    if (!requested?.action) return;
+    const destination =
+      requested.action.kind === 'navigate_to_view'
+        ? navigationTargets.has(requested.action.path)
+          ? requested.action.path
+          : undefined
+        : `/libraries/test-cases/${encodeURIComponent(requested.action.testCaseId)}`;
+    if (!destination) return;
     void save({
       ...thread,
       messages: thread.messages.map((message) =>
         message.id === requested.id
           ? {
               ...message,
-              content: `Opened ${requested.action!.path}.`,
+              content:
+                requested.action!.kind === 'open_test_case'
+                  ? `Opened Test Case ${requested.action!.testCaseId}.`
+                  : `Opened ${destination}.`,
               action: { ...requested.action!, status: 'approved' as const }
             }
           : message
       )
-    }).then(() => navigate(requested.action!.path));
+    }).then(() => navigate(destination));
   }, [navigate, save, thread]);
 
   const send = useCallback(
@@ -272,6 +283,33 @@ export function GlobalCopilotController() {
     },
     [save, thread, updateAction]
   );
+  const libraryAction = useCallback(
+    async (message: GlobalCopilotMessage, approved: boolean) => {
+      if (!thread || message.action?.kind !== 'library_action') return;
+      if (!approved) {
+        await save({ ...thread, messages: updateAction(message, 'denied') });
+        return;
+      }
+      try {
+        await invokeGlobalCopilotAction(message.action.name, message.action.arguments);
+        await save({ ...thread, messages: updateAction(message, 'approved') });
+      } catch (error) {
+        await save({
+          ...thread,
+          messages: [
+            ...updateAction(message, 'error'),
+            {
+              id: id('error'),
+              role: 'system',
+              content: error instanceof Error ? error.message : String(error),
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      }
+    },
+    [save, thread, updateAction]
+  );
   const copy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -357,6 +395,7 @@ export function GlobalCopilotController() {
         onWriteReport={(message, approved) => void writeReport(message, approved)}
         onExternalTool={(message, approved) => void externalTool(message, approved)}
         onStartAction={(message, approved) => void startAction(message, approved)}
+        onLibraryAction={(message, approved) => void libraryAction(message, approved)}
       />
       <GlobalCopilotComposer
         input={input}

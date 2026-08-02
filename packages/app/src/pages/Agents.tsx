@@ -30,6 +30,7 @@ import {
   clearGlobalCopilotPageContext,
   setGlobalCopilotPageContext
 } from '@/lib/global-copilot-page-context';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 const Agents = () => {
   const { agents, setAgents, reload, loading } = useLibraries();
@@ -76,6 +77,16 @@ const Agents = () => {
     await setAgents([...agents, duplicate]);
     toast({ title: 'Agent duplicated', description: `Created ${newName}.` });
   };
+
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('duplicate_agent', async ({ id }) => {
+        const agent = agents.find((item) => item.id === id);
+        if (!agent) throw new Error(`Agent '${String(id)}' is no longer available.`);
+        await handleDuplicate(agent);
+      }),
+    [agents, handleDuplicate]
+  );
 
   const handleDelete = async (agent: AgentConfig) => {
     await setAgents(agents.filter((a) => a.id !== agent.id));

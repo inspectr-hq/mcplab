@@ -23,4 +23,13 @@ describe('global copilot actions', () => {
       'no longer available'
     );
   });
+
+  it('passes validated arguments to a registered library action', async () => {
+    const action = vi.fn();
+    cleanups.push(registerGlobalCopilotAction('duplicate_test_case', action));
+
+    await invokeGlobalCopilotAction('duplicate_test_case', { id: 'tag-profile' });
+
+    expect(action).toHaveBeenCalledWith({ id: 'tag-profile' });
+  });
 });

@@ -9,7 +9,8 @@ export function GlobalCopilotActionCard({
   onRunEvaluation,
   onWriteReport,
   onExternalTool,
-  onStartAction
+  onStartAction,
+  onLibraryAction
 }: {
   message: GlobalCopilotMessage;
   onContinue: (message: GlobalCopilotMessage, approved: boolean) => void;
@@ -18,6 +19,7 @@ export function GlobalCopilotActionCard({
   onWriteReport: (message: GlobalCopilotMessage, approved: boolean) => void;
   onExternalTool: (message: GlobalCopilotMessage, approved: boolean) => void;
   onStartAction: (message: GlobalCopilotMessage, approved: boolean) => void;
+  onLibraryAction: (message: GlobalCopilotMessage, approved: boolean) => void;
 }) {
   const action = message.action;
   if (!action) return null;
@@ -49,6 +51,8 @@ export function GlobalCopilotActionCard({
         </div>
       </div>
     );
+  if (action.kind === 'open_test_case' && action.status === 'approved')
+    return <p className="text-xs text-emerald-700">Opened Test Case {action.testCaseId}.</p>;
   if (action.kind === 'run_mcp_evaluation')
     return (
       <AssistantToolCallCard
@@ -116,6 +120,28 @@ export function GlobalCopilotActionCard({
           </Button>
         </div>
       </div>
+    );
+  if (action.kind === 'library_action')
+    return (
+      <AssistantToolCallCard
+        call={{
+          id: message.id,
+          server: 'mcplab',
+          tool:
+            action.name === 'duplicate_test_case'
+              ? 'Duplicate Test Case'
+              : action.name === 'duplicate_mcp_server'
+                ? 'Duplicate MCP Server'
+                : 'Duplicate Agent',
+          publicToolName: action.name,
+          arguments: action.arguments,
+          status: action.status,
+          createdAt: message.createdAt
+        }}
+        description="This creates a copy using the same library-page action as the Duplicate button."
+        onApprove={() => onLibraryAction(message, true)}
+        onDeny={() => onLibraryAction(message, false)}
+      />
     );
   if (action.kind === 'navigate_to_view' && action.status === 'approved')
     return <p className="text-xs text-emerald-700">Opened {action.path}</p>;

@@ -53,6 +53,28 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
       };
     }
     if (
+      action.kind === 'library_action' &&
+      (action.name === 'duplicate_test_case' ||
+        action.name === 'duplicate_mcp_server' ||
+        action.name === 'duplicate_agent') &&
+      action.arguments &&
+      typeof action.arguments === 'object' &&
+      typeof (action.arguments as Record<string, unknown>).id === 'string'
+    ) {
+      return {
+        id: message.id,
+        role: 'system',
+        content: 'Library duplicate requested.',
+        createdAt,
+        action: {
+          kind: 'library_action',
+          name: action.name,
+          arguments: { id: (action.arguments as Record<string, string>).id },
+          status: 'pending'
+        }
+      };
+    }
+    if (
       action.kind === 'external_mcp_tool' &&
       typeof action.serverName === 'string' &&
       typeof action.toolName === 'string' &&
@@ -109,6 +131,15 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         content: `Result Detail available for run ${action.runId}.`,
         createdAt,
         action: { kind: 'open_result_detail', runId: action.runId, status: 'pending' }
+      };
+    }
+    if (action.kind === 'open_test_case' && typeof action.testCaseId === 'string') {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Opening Test Case ${action.testCaseId}.`,
+        createdAt,
+        action: { kind: 'open_test_case', testCaseId: action.testCaseId, status: 'pending' }
       };
     }
   } catch {

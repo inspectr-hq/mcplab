@@ -26,6 +26,7 @@ export function GlobalCopilotConversation({
   onWriteReport: (message: GlobalCopilotMessage, approved: boolean) => void;
   onExternalTool: (message: GlobalCopilotMessage, approved: boolean) => void;
   onStartAction: (message: GlobalCopilotMessage, approved: boolean) => void;
+  onLibraryAction: (message: GlobalCopilotMessage, approved: boolean) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {

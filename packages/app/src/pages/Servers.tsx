@@ -30,6 +30,7 @@ import {
   clearGlobalCopilotPageContext,
   setGlobalCopilotPageContext
 } from '@/lib/global-copilot-page-context';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 const Servers = () => {
   const { servers, setServers, reload, loading } = useLibraries();
@@ -55,6 +56,16 @@ const Servers = () => {
     await setServers([...servers, duplicate]);
     toast({ title: 'Server duplicated', description: `Created ${newName}.` });
   };
+
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('duplicate_mcp_server', async ({ id }) => {
+        const server = servers.find((item) => item.id === id);
+        if (!server) throw new Error(`MCP server '${String(id)}' is no longer available.`);
+        await handleDuplicate(server);
+      }),
+    [handleDuplicate, servers]
+  );
 
   const handleDelete = async (server: ServerConfig) => {
     await setServers(servers.filter((s) => s.id !== server.id));

@@ -26,6 +26,12 @@ export type GlobalCopilotMessage = {
         status: 'pending' | 'approved' | 'denied' | 'error';
       }
     | {
+        kind: 'library_action';
+        name: 'duplicate_test_case' | 'duplicate_mcp_server' | 'duplicate_agent';
+        arguments: { id: string };
+        status: 'pending' | 'approved' | 'denied' | 'error';
+      }
+    | {
         kind: 'continue_reading';
         batchSize: number;
         status: 'pending' | 'approved' | 'denied';
@@ -33,6 +39,11 @@ export type GlobalCopilotMessage = {
     | {
         kind: 'open_result_detail';
         runId: string;
+        status: 'pending' | 'approved';
+      }
+    | {
+        kind: 'open_test_case';
+        testCaseId: string;
         status: 'pending' | 'approved';
       }
     | {
