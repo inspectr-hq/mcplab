@@ -160,7 +160,7 @@ export function AssistantToolCallCard({
     <details
       open={defaultOpen ?? isPending}
       className={cn(
-        'group overflow-hidden rounded-md border border-border/60 bg-background',
+        'group w-full min-w-0 max-w-full overflow-hidden rounded-md border border-border/60 bg-background',
         className
       )}
     >
@@ -192,11 +192,11 @@ export function AssistantToolCallCard({
         </div>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
       </summary>
-      <div className="space-y-2 border-t border-border/50 px-3 py-2">
+      <div className="min-w-0 space-y-2 border-t border-border/50 px-3 py-2">
         {description && (
           <MarkdownContent text={description} variant="assistant" className="text-sm" />
         )}
-        <pre className="max-h-40 w-full max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
+        <pre className="max-h-40 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto whitespace-pre rounded border bg-muted/50 p-2 text-xs">
           <code>{JSON.stringify(call.arguments ?? {}, null, 2)}</code>
         </pre>
         {call.error && <p className="text-xs text-destructive">{call.error}</p>}

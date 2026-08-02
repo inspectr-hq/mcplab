@@ -34,7 +34,7 @@ export function GlobalCopilotConversation({
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [loading, messages.length]);
   return (
-    <ScrollArea className="h-0 min-h-0 w-full min-w-0 flex-1">
+    <ScrollArea className="h-0 min-h-0 w-full min-w-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block [&_[data-radix-scroll-area-viewport]>div]:!w-full [&_[data-radix-scroll-area-viewport]>div]:!min-w-0">
       <div className="w-full min-w-0 space-y-3 p-3">
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground">Ask about results, test cases, or MCPLab.</p>

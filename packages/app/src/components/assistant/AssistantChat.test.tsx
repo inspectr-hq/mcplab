@@ -99,4 +99,23 @@ describe('AssistantChat shared primitives', () => {
     expect(onDeny).toHaveBeenCalledWith('call-1');
     expect(onApprove).toHaveBeenCalledWith('call-1');
   });
+
+  it('keeps a long approval payload inside the tool card instead of widening its container', () => {
+    const { container } = render(
+      <AssistantToolCallCard
+        call={{
+          id: 'call-long',
+          server: 'mcplab',
+          tool: 'Create Test Case',
+          publicToolName: 'mcplab_create_test_case',
+          arguments: { prompt: 'unbroken-value-'.repeat(500) },
+          status: 'pending',
+          createdAt: '2026-04-26T10:00:00.000Z'
+        }}
+      />
+    );
+
+    expect(container.querySelector('details')).toHaveClass('w-full', 'min-w-0', 'max-w-full');
+    expect(container.querySelector('pre')).toHaveClass('min-w-0', 'overflow-x-auto');
+  });
 });

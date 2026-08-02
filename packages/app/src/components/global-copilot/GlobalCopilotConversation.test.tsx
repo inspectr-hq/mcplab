@@ -44,5 +44,9 @@ describe('GlobalCopilotConversation', () => {
       'flex-1',
       'min-h-0'
     );
+    expect(container.querySelector('[data-radix-scroll-area-viewport]')?.parentElement).toHaveClass(
+      '[&_[data-radix-scroll-area-viewport]>div]:!min-w-0',
+      '[&_[data-radix-scroll-area-viewport]>div]:!w-full'
+    );
   });
 });
