@@ -1,6 +1,7 @@
 export type GlobalCopilotRouteContext = {
   pathname: string;
   search: string;
+  currentView?: string;
   activeTestCaseId?: string;
   selectedEntity?: {
     type: 'evaluation' | 'result' | 'tool_analysis_result' | 'server' | 'agent';
@@ -55,6 +56,7 @@ export function globalCopilotRouteContext(
   return {
     pathname,
     search,
+    ...(pathname === '/mcp-evaluations' ? { currentView: 'MCP Evaluations' } : {}),
     ...(activeTestCaseId ? { activeTestCaseId: decodeURIComponent(activeTestCaseId) } : {}),
     ...(pathname === '/results' && resultsFilterFromSearch(search, now)
       ? { resultsFilter: resultsFilterFromSearch(search, now) }

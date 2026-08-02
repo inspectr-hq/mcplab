@@ -3,6 +3,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Configurations from './Configurations';
 import type { EvalConfig } from '@/types/eval';
+import {
+  clearGlobalCopilotPageContext,
+  globalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 const { configsRef, reloadMock, sourceMock, toastMock } = vi.hoisted(() => ({
   configsRef: { value: [] as EvalConfig[] },
@@ -35,6 +39,7 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 
 describe('Configurations suites', () => {
   beforeEach(() => {
+    clearGlobalCopilotPageContext();
     Element.prototype.scrollIntoView = vi.fn();
     reloadMock.mockClear();
     sourceMock.startRun.mockClear();
@@ -153,6 +158,15 @@ describe('Configurations suites', () => {
     expect(screen.getByText('Tag Search')).toBeInTheDocument();
     expect(screen.queryByText('Root Config')).not.toBeInTheDocument();
     expect(screen.queryByText('Alert Check')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(globalCopilotPageContext()).toMatchObject({
+        evaluations: {
+          suiteFilter: 'suite:trendminer/tags',
+          visibleCount: 1,
+          totalCount: 3
+        }
+      })
+    );
   });
 
   it('filters configs by parent suite including nested sublevels', async () => {

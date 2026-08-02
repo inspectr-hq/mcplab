@@ -16,6 +16,12 @@ describe('globalCopilotRouteContext', () => {
     });
   });
 
+  it('labels the MCP Evaluations view for the agent alongside page-specific filters', () => {
+    expect(globalCopilotRouteContext('/mcp-evaluations', '')).toMatchObject({
+      currentView: 'MCP Evaluations'
+    });
+  });
+
   it('resolves the Results 24-hour preset to MCP-neutral ISO bounds', () => {
     expect(
       globalCopilotRouteContext(
