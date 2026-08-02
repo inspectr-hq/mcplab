@@ -1182,7 +1182,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_list_library',
     {
       description:
-        'List reusable MCPLab library entries (MCP servers, agents, and Test Cases) from a bundle root such as mcplab/ or examples/libraries/. The scenarios kind returns Test Cases for backwards compatibility.',
+        'List reusable MCPLab library entries (MCP servers, agents, and Test Cases) from a bundle root such as mcplab/ or examples/libraries/. The scenarios kind returns Test Cases for backwards compatibility. Before using mcplab_run_eval overrides, call this with kind=agents or kind=servers and includeContent=true to discover the exact library IDs; do not infer IDs from friendly names.',
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
@@ -1417,7 +1417,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_validate_config',
     {
       description:
-        'Validate and expand a MCPLab config file via mcplab-core loadConfig(), including server/agent/scenario library references.',
+        'Validate and expand a MCPLab config file via mcplab-core loadConfig(), including server/agent/scenario library references. Use after mcplab_list_evaluation_configs selects a config and before a consequential mcplab_run_eval request when validation is useful.',
       outputSchema: {
         configPath: z.string(),
         bundleRoot: z.string(),
@@ -1462,7 +1462,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_run_eval',
     {
       description:
-        'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics.',
+        'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics. Recommended sequence: first use mcplab_list_evaluation_configs to choose config_path; when overriding agents or MCP servers, use mcplab_list_library with includeContent=true to resolve exact library IDs; optionally use mcplab_validate_config; then call this tool. agent_override and server override values must be exact library IDs, not inferred friendly names.',
       outputSchema: {
         run_dir: z.string(),
         total_scenarios: z.number().int().nonnegative(),
@@ -1486,7 +1486,9 @@ export function registerTools(server: McpServer): void {
         report_html_preview: z.string()
       },
       inputSchema: {
-        config_path: z.string().describe('Path to MCPLab eval YAML config.'),
+        config_path: z
+          .string()
+          .describe('Exact config_path returned by mcplab_list_evaluation_configs.'),
         scenario_id: z.string().optional().describe('Optional scenario id to run.'),
         runs_per_scenario: z
           .number()
@@ -1499,16 +1501,20 @@ export function registerTools(server: McpServer): void {
           .min(1)
           .optional()
           .describe(
-            'Optional evaluation agent IDs to use for all selected scenarios for this run. These are resolved from the effective config and MCPLab agent library without modifying the config.'
+            'Optional exact agent library IDs to use for all selected scenarios for this run. Discover IDs first with mcplab_list_library(kind=agents, includeContent=true).'
           ),
         server_override_all: z
           .array(z.string())
           .optional()
-          .describe('Optional MCP server refs to apply to all selected scenarios for this run.'),
+          .describe(
+            'Optional exact MCP server library IDs to apply to all selected scenarios. Discover IDs first with mcplab_list_library(kind=servers, includeContent=true).'
+          ),
         scenario_server_overrides: z
           .record(z.array(z.string()))
           .optional()
-          .describe('Optional per-scenario MCP server ref overrides for this run.')
+          .describe(
+            'Optional per-scenario exact MCP server library ID overrides. Discover IDs first with mcplab_list_library(kind=servers, includeContent=true).'
+          )
       }
     },
     async ({

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { registerTools } from './runtime.js';
 
 type RegisteredTool = {
-  config: { inputSchema?: unknown; outputSchema?: unknown };
+  config: { description?: string; inputSchema?: unknown; outputSchema?: unknown };
   cb: (args: Record<string, unknown>) => Promise<any> | any;
 };
 
@@ -22,7 +22,7 @@ function setupTools(): Map<string, RegisteredTool> {
   const fakeServer = {
     registerTool: (
       name: string,
-      config: { inputSchema?: unknown; outputSchema?: unknown },
+      config: { description?: string; inputSchema?: unknown; outputSchema?: unknown },
       cb: (args: Record<string, unknown>) => Promise<any> | any
     ) => {
       tools.set(name, { config, cb });
@@ -67,6 +67,9 @@ describe('mcp tool contracts', () => {
     const tools = setupTools();
     const tool = tools.get('mcplab_run_eval');
     expect(tool).toBeDefined();
+    expect(tool!.config.description).toContain('mcplab_list_evaluation_configs');
+    expect(tool!.config.description).toContain('mcplab_list_library');
+    expect(tool!.config.description).toContain('exact library IDs');
 
     const schema = asSchema(tool!.config.inputSchema);
     expect(
