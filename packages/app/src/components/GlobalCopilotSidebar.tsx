@@ -4,7 +4,7 @@ export {
   globalCopilotToolDisplayName,
   globalCopilotToolLabel,
   storedGlobalCopilotFrontendAction
-} from '@/components/global-copilot/GlobalCopilotController';
+} from '@/lib/global-copilot-message';
 
 /** App-layout entry point for the Global Copilot. */
 export function GlobalCopilotSidebar() {

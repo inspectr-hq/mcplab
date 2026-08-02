@@ -1,46 +1,22 @@
-import {
-  Bot,
-  Copy,
-  MessageSquarePlus,
-  Minimize2,
-  PanelRightClose,
-  PanelRightOpen
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { HttpAgent, type Message } from '@ag-ui/client';
+import { Bot, MessageSquarePlus, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  AssistantComposer,
-  AssistantMessageRow,
-  AssistantToolCallCard,
-  AssistantTypingIndicator
-} from '@/components/assistant/AssistantChat';
 import { useDataSource } from '@/contexts/DataSourceContext';
-import {
-  GlobalCopilotThreadStore,
-  type GlobalCopilotMessage,
-  type GlobalCopilotThread,
-  workspaceKeyFromRoot
-} from '@/lib/global-copilot-thread-store';
-import {
-  availableGlobalCopilotActions,
-  invokeGlobalCopilotAction
-} from '@/lib/global-copilot-actions';
-import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
-import { toast } from '@/hooks/use-toast';
-import { GlobalCopilotThreadList } from '@/components/global-copilot/GlobalCopilotThreadList';
-import { GlobalCopilotComposer } from '@/components/global-copilot/GlobalCopilotComposer';
-import { GlobalCopilotConversation } from '@/components/global-copilot/GlobalCopilotConversation';
+import { useGlobalCopilotRun } from '@/hooks/use-global-copilot-run';
+import { useGlobalCopilotThread } from '@/hooks/use-global-copilot-thread';
+import { invokeGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
+import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
+import { toast } from '@/hooks/use-toast';
+import { GlobalCopilotComposer } from './GlobalCopilotComposer';
+import { GlobalCopilotConversation } from './GlobalCopilotConversation';
+import { GlobalCopilotThreadList } from './GlobalCopilotThreadList';
 
-const store = new GlobalCopilotThreadStore();
 const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
-const globalCopilotActionMarker = '[mcplab-action]';
-const globalCopilotNavigationTargets = new Set([
+const navigationTargets = new Set([
   '/',
   '/mcp-evaluations',
   '/run',
@@ -55,282 +31,6 @@ const globalCopilotNavigationTargets = new Set([
 ]);
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
-export function globalCopilotToolDisplayName(name: string): string {
-  return name.replace(/^mcplab__(?=mcplab_)/, '').replace(/^mcplab_mcplab_/, 'mcplab_');
-}
-
-export function globalCopilotToolLabel(name: string): string {
-  const toolName = globalCopilotToolDisplayName(name);
-  const words = toolName
-    .replace(/^mcplab_/, '')
-    .split('_')
-    .filter(Boolean);
-  return words.length
-    ? words.map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`).join(' ')
-    : toolName;
-}
-
-export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopilotMessage | null {
-  if (message.role !== 'assistant' || !message.content?.startsWith(globalCopilotActionMarker)) {
-    return null;
-  }
-  try {
-    const action = JSON.parse(message.content.slice(globalCopilotActionMarker.length)) as Record<
-      string,
-      unknown
-    >;
-    const createdAt = new Date().toISOString();
-    if (action.kind === 'navigate_to_view' && typeof action.path === 'string') {
-      return {
-        id: message.id,
-        role: 'system',
-        content: `Opening ${action.path}.`,
-        createdAt,
-        action: {
-          kind: 'navigate_to_view',
-          path: action.path,
-          reason: typeof action.reason === 'string' ? action.reason : undefined,
-          status: 'pending'
-        }
-      };
-    }
-    if (
-      action.kind === 'start_action' &&
-      (action.name === 'start_evaluation_run' || action.name === 'start_tool_analysis')
-    ) {
-      return {
-        id: message.id,
-        role: 'system',
-        content: 'Run action requested.',
-        createdAt,
-        action: { kind: 'start_action', name: action.name, status: 'pending' }
-      };
-    }
-    if (
-      action.kind === 'external_mcp_tool' &&
-      typeof action.serverName === 'string' &&
-      typeof action.toolName === 'string' &&
-      action.arguments &&
-      typeof action.arguments === 'object'
-    ) {
-      return {
-        id: message.id,
-        role: 'system',
-        content: `External MCP call requested: ${action.serverName}/${action.toolName}`,
-        createdAt,
-        action: {
-          kind: 'external_mcp_tool',
-          serverName: action.serverName,
-          toolName: action.toolName,
-          arguments: action.arguments as Record<string, unknown>,
-          status: 'pending'
-        }
-      };
-    }
-    if (
-      action.kind === 'run_mcp_evaluation' &&
-      action.arguments &&
-      typeof action.arguments === 'object'
-    ) {
-      return {
-        id: message.id,
-        role: 'system',
-        content: 'MCPLab evaluation run requested.',
-        createdAt,
-        action: {
-          kind: 'run_mcp_evaluation',
-          arguments: action.arguments as Record<string, unknown>,
-          status: 'pending'
-        }
-      };
-    }
-    if (
-      action.kind === 'write_markdown_report' &&
-      action.arguments &&
-      typeof action.arguments === 'object'
-    ) {
-      return {
-        id: message.id,
-        role: 'system',
-        content: 'Markdown report write requested.',
-        createdAt,
-        action: {
-          kind: 'write_markdown_report',
-          arguments: action.arguments as Record<string, unknown>,
-          status: 'pending'
-        }
-      };
-    }
-    if (action.kind === 'continue_reading' && typeof action.batchSize === 'number') {
-      return {
-        id: message.id,
-        role: 'system',
-        content: `Additional MCPLab read-tool batch requested (${action.batchSize} calls).`,
-        createdAt,
-        action: { kind: 'continue_reading', batchSize: action.batchSize, status: 'pending' }
-      };
-    }
-    if (action.kind === 'open_result_detail' && typeof action.runId === 'string') {
-      return {
-        id: message.id,
-        role: 'system',
-        content: `Result Detail available for run ${action.runId}.`,
-        createdAt,
-        action: { kind: 'open_result_detail', runId: action.runId, status: 'pending' }
-      };
-    }
-  } catch {
-    /* Invalid action payloads are rendered as normal assistant messages. */
-  }
-  return null;
-}
-
-function stored(
-  message: Message,
-  toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
-): GlobalCopilotMessage | null {
-  return storedGlobalCopilotMessage(message, toolCalls);
-  /* Legacy conversion kept temporarily while the controller moves into useGlobalCopilotRun. */
-  const markedAction = storedGlobalCopilotFrontendAction(message);
-  if (markedAction) return markedAction;
-  if (message.role === 'assistant' && !String(message.content ?? '').trim()) return null;
-  const navigation =
-    message.role === 'assistant'
-      ? (
-          message as Message & {
-            toolCalls?: Array<{ function: { name: string; arguments: string } }>;
-          }
-        ).toolCalls?.find((call) => call.function.name === 'navigate_to_view')
-      : undefined;
-  if (navigation) {
-    try {
-      const args = JSON.parse(navigation.function.arguments) as {
-        path?: unknown;
-        reason?: unknown;
-      };
-      if (typeof args.path === 'string') {
-        return {
-          id: message.id,
-          role: 'system',
-          content: `Navigation requested: ${args.path}`,
-          createdAt: new Date().toISOString(),
-          action: {
-            kind: 'navigate_to_view',
-            path: args.path,
-            reason: typeof args.reason === 'string' ? args.reason : undefined,
-            status: 'pending'
-          }
-        };
-      }
-    } catch {
-      /* Invalid tool arguments are rendered as the normal assistant message. */
-    }
-  }
-  const continueReading =
-    message.role === 'assistant'
-      ? (
-          message as Message & {
-            toolCalls?: Array<{ function: { name: string; arguments: string } }>;
-          }
-        ).toolCalls?.find((call) => call.function.name === 'request_additional_read_tools')
-      : undefined;
-  if (continueReading) {
-    try {
-      const args = JSON.parse(continueReading.function.arguments) as { batchSize?: unknown };
-      const batchSize = typeof args.batchSize === 'number' ? args.batchSize : 5;
-      return {
-        id: message.id,
-        role: 'system',
-        content: `Additional MCPLab read-tool batch requested (${batchSize} calls).`,
-        createdAt: new Date().toISOString(),
-        action: { kind: 'continue_reading', batchSize, status: 'pending' }
-      };
-    } catch {
-      /* Invalid tool arguments are rendered as the normal assistant message. */
-    }
-  }
-  const externalTool =
-    message.role === 'assistant'
-      ? (
-          message as Message & {
-            toolCalls?: Array<{ function: { name: string; arguments: string } }>;
-          }
-        ).toolCalls?.find(
-          (call) =>
-            !['navigate_to_view', 'start_evaluation_run', 'start_tool_analysis'].includes(
-              call.function.name
-            ) && !call.function.name.startsWith('mcplab__')
-        )
-      : undefined;
-  if (externalTool) {
-    try {
-      const args = JSON.parse(externalTool.function.arguments) as Record<string, unknown>;
-      const [serverName, ...toolParts] = externalTool.function.name.split('__');
-      if (serverName && toolParts.length) {
-        return {
-          id: message.id,
-          role: 'system',
-          content: `External MCP call requested: ${serverName}/${toolParts.join('__')}`,
-          createdAt: new Date().toISOString(),
-          action: {
-            kind: 'external_mcp_tool',
-            serverName,
-            toolName: toolParts.join('__'),
-            arguments: args,
-            status: 'pending'
-          }
-        };
-      }
-    } catch {
-      /* Invalid tool arguments are rendered as the normal assistant message. */
-    }
-  }
-  const startAction =
-    message.role === 'assistant'
-      ? (
-          message as Message & {
-            toolCalls?: Array<{ function: { name: string; arguments: string } }>;
-          }
-        ).toolCalls?.find(
-          (call) =>
-            call.function.name === 'start_evaluation_run' ||
-            call.function.name === 'start_tool_analysis'
-        )
-      : undefined;
-  if (startAction)
-    return {
-      id: message.id,
-      role: 'system',
-      content: 'Run action requested.',
-      createdAt: new Date().toISOString(),
-      action: {
-        kind: 'start_action',
-        name: startAction.function.name as 'start_evaluation_run' | 'start_tool_analysis',
-        status: 'pending'
-      }
-    };
-  if (
-    !['user', 'assistant', 'tool', 'system'].includes(message.role) ||
-    typeof message.content !== 'string'
-  )
-    return null;
-  const toolCallId = (message as Message & { toolCallId?: string }).toolCallId;
-  const toolCall = toolCallId ? toolCalls.get(toolCallId) : undefined;
-  return {
-    id: message.id,
-    role: message.role as GlobalCopilotMessage['role'],
-    content: message.content,
-    createdAt: new Date().toISOString(),
-    ...(toolCallId ? { toolCallId } : {}),
-    ...(toolCall
-      ? {
-          toolName: globalCopilotToolDisplayName(toolCall.name),
-          toolArguments: toolCall.arguments
-        }
-      : {})
-  };
-}
-
 export function GlobalCopilotController() {
   const { source, version } = useDataSource();
   const location = useLocation();
@@ -338,56 +38,42 @@ export function GlobalCopilotController() {
   const queue = useRunQueueStatus();
   const [open, setOpen] = useState(() => window.localStorage.getItem(openKey) !== '0');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(expandedKey) === '1');
-  const [workspaceKey, setWorkspaceKey] = useState<string>();
-  const [threads, setThreads] = useState<GlobalCopilotThread[]>([]);
-  const [thread, setThread] = useState<GlobalCopilotThread>();
-  const [showRecentThreads, setShowRecentThreads] = useState(true);
-  const [showAllThreads, setShowAllThreads] = useState(false);
-  const [threadQuery, setThreadQuery] = useState('');
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const agentRef = useRef<HttpAgent>();
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const refresh = useCallback(async (key: string) => {
-    const next = await store.listThreads(key);
-    setThreads(next);
-    return next;
-  }, []);
-
-  useEffect(() => {
-    void source.getWorkspaceSettings().then(async (settings) => {
-      if (!settings) return;
-      const key = await workspaceKeyFromRoot(settings.workspaceRoot);
-      setWorkspaceKey(key);
-      const next = await refresh(key);
-      const activeId = await store.getActiveThreadId(key);
-      setThread(next.find((item) => item.id === activeId) ?? next[0]);
-    });
-  }, [refresh, source]);
+  const {
+    workspaceKey,
+    threads,
+    thread,
+    setThread,
+    save,
+    selectThread,
+    renameThread,
+    deleteThread,
+    newThread
+  } = useGlobalCopilotThread(source);
+  const {
+    loading,
+    send: run,
+    cancel
+  } = useGlobalCopilotRun({
+    version,
+    queue: { ...queue, streamStatus: String(queue.streamStatus) },
+    pathname: location.pathname,
+    search: location.search,
+    workspaceKey,
+    thread,
+    save,
+    storeMessage: storedGlobalCopilotMessage
+  });
+  const messages = useMemo(() => thread?.messages ?? [], [thread]);
   useEffect(() => window.localStorage.setItem(openKey, open ? '1' : '0'), [open]);
   useEffect(() => window.localStorage.setItem(expandedKey, expanded ? '1' : '0'), [expanded]);
-  const messages = useMemo(() => thread?.messages ?? [], [thread]);
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
-  }, [loading, messages.length]);
-  const save = useCallback(
-    async (next: GlobalCopilotThread) => {
-      const saved = await store.saveThread({ ...next, updatedAt: new Date().toISOString() });
-      await store.pruneThreads(saved.workspaceKey);
-      await store.setActiveThreadId(saved.workspaceKey, saved.id);
-      setThread(saved);
-      await refresh(saved.workspaceKey);
-      return saved;
-    },
-    [refresh]
-  );
   useEffect(() => {
     if (!thread) return;
     const requested = thread.messages.find(
       (message) =>
         message.action?.kind === 'navigate_to_view' && message.action.status === 'pending'
     );
-    if (!requested?.action || !globalCopilotNavigationTargets.has(requested.action.path)) return;
+    if (!requested?.action || !navigationTargets.has(requested.action.path)) return;
     void save({
       ...thread,
       messages: thread.messages.map((message) =>
@@ -401,383 +87,175 @@ export function GlobalCopilotController() {
       )
     }).then(() => navigate(requested.action!.path));
   }, [navigate, save, thread]);
-  const selectThread = useCallback((next: GlobalCopilotThread) => {
-    void store.setActiveThreadId(next.workspaceKey, next.id);
-    setThread(next);
-  }, []);
-  const renameThread = useCallback(
-    async (next: GlobalCopilotThread) => {
-      const title = window.prompt('Rename conversation', next.title)?.trim();
-      if (!title || title === next.title) return;
-      const saved = await store.saveThread({ ...next, title, updatedAt: new Date().toISOString() });
-      if (thread?.id === saved.id) setThread(saved);
-      await refresh(saved.workspaceKey);
-    },
-    [refresh, thread?.id]
-  );
-  const newThread = useCallback(async () => {
-    if (!workspaceKey) return;
-    const now = new Date().toISOString();
-    const next = await store.saveThread({
-      id: id('gct'),
-      workspaceKey,
-      title: 'New conversation',
-      messages: [],
-      createdAt: now,
-      updatedAt: now
-    });
-    await store.pruneThreads(workspaceKey);
-    await store.setActiveThreadId(workspaceKey, next.id);
-    setThread(next);
-    await refresh(workspaceKey);
-  }, [refresh, workspaceKey]);
+
   const send = useCallback(
-    async (continuation?: GlobalCopilotMessage, continuationThread?: GlobalCopilotThread) => {
+    async (continuation?: GlobalCopilotMessage, continuationThread = thread) => {
       const question = continuation?.content ?? input.trim();
-      if (!question || !workspaceKey || loading) return;
-      const now = new Date().toISOString();
-      const active =
-        continuationThread ??
-        thread ??
-        (await store.saveThread({
-          id: id('gct'),
-          workspaceKey,
-          title: question.slice(0, 60),
-          messages: [],
-          createdAt: now,
-          updatedAt: now
-        }));
-      const submitted =
-        continuation ??
-        ({
-          id: id('msg'),
-          role: 'user',
-          content: question,
-          createdAt: now
-        } satisfies GlobalCopilotMessage);
-      const optimistic = await save({
-        ...active,
-        title: active.messages.length || continuation ? active.title : question.slice(0, 60),
-        messages: [...active.messages, submitted]
-      });
+      if (!question) return;
       if (!continuation) setInput('');
-      setLoading(true);
-      try {
-        const agent = new HttpAgent({
-          url: '/api/global-copilot/run',
-          agentId: 'mcplab-global-copilot',
-          threadId: optimistic.id,
-          initialMessages: optimistic.messages.map((message) => {
-            if (message.role === 'tool') {
-              return {
-                id: message.id,
-                role: 'system' as const,
-                content: `Previously retrieved tool data:\n${message.content}`
-              };
-            }
-            return {
-              id: message.id,
-              role: message.role,
-              content: message.content,
-              ...(message.toolCallId ? { toolCallId: message.toolCallId } : {})
-            };
-          })
-        });
-        agentRef.current = agent;
-        await agent.runAgent({
-          forwardedProps: {
-            context: {
-              ...globalCopilotRouteContext(location.pathname, location.search),
-              mcplabVersion: version,
-              queue: {
-                runningCount: queue.runningCount,
-                queuedCount: queue.queuedCount,
-                oauthBlockedCount: queue.oauthBlockedCount,
-                streamStatus: queue.streamStatus
-              },
-              availableActions: availableGlobalCopilotActions()
-            }
-          }
-        });
-        const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
-        for (const agentMessage of agent.messages) {
-          if (agentMessage.role !== 'assistant') continue;
-          for (const call of (
-            agentMessage as Message & {
-              toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-            }
-          ).toolCalls ?? []) {
-            try {
-              toolCalls.set(call.id, {
-                name: call.function.name,
-                arguments: JSON.parse(call.function.arguments) as Record<string, unknown>
-              });
-            } catch {
-              toolCalls.set(call.id, { name: call.function.name, arguments: {} });
-            }
-          }
-        }
-        const nextMessages = agent.messages
-          .map((message) => stored(message, toolCalls))
-          .filter((message): message is GlobalCopilotMessage => message !== null);
-        await save({ ...optimistic, messages: nextMessages });
-      } catch (error: unknown) {
-        const text = error instanceof Error ? error.message : String(error);
-        await save({
-          ...optimistic,
-          messages: [
-            ...optimistic.messages,
-            {
-              id: id('system'),
-              role: 'system',
-              content: `Copilot request failed: ${text}`,
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      } finally {
-        agentRef.current = undefined;
-        setLoading(false);
-      }
+      await run(question, continuation, continuationThread);
     },
-    [
-      input,
-      loading,
-      location.pathname,
-      location.search,
-      queue.oauthBlockedCount,
-      queue.queuedCount,
-      queue.runningCount,
-      queue.streamStatus,
-      save,
-      thread,
-      workspaceKey
-    ]
+    [input, run, thread]
   );
-  const confirmAdditionalReadTools = useCallback(
+  const updateAction = useCallback(
+    (message: GlobalCopilotMessage, status: 'approved' | 'denied' | 'error') => {
+      if (!thread) return [];
+      return thread.messages.map((item) =>
+        item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
+      );
+    },
+    [thread]
+  );
+  const continueReading = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'continue_reading') return;
-      const messages = thread.messages.map((item) =>
-        item.id === message.id
-          ? {
-              ...item,
-              action: {
-                ...message.action!,
-                status: approved ? ('approved' as const) : ('denied' as const)
-              }
-            }
-          : item
-      );
-      const saved = await save({ ...thread, messages });
-      if (!approved) return;
-      await send(
-        {
-          id: id('continue'),
-          role: 'system',
-          content: `The user approved up to ${message.action.batchSize} additional read-only MCPLab tool calls. Continue investigating the most recent unresolved request.`,
-          createdAt: new Date().toISOString()
-        },
-        saved
-      );
+      if (!thread || message.action?.kind !== 'continue_reading') return;
+      const saved = await save({
+        ...thread,
+        messages: updateAction(message, approved ? 'approved' : 'denied')
+      });
+      if (approved)
+        await send(
+          {
+            id: id('continue'),
+            role: 'system',
+            content: `The user approved up to ${message.action.batchSize} additional read-only MCPLab tool calls. Continue investigating the most recent unresolved request.`,
+            createdAt: new Date().toISOString()
+          },
+          saved
+        );
     },
-    [save, send, thread]
+    [save, send, thread, updateAction]
   );
-  const openResultDetail = useCallback(
+  const openResult = useCallback(
     async (message: GlobalCopilotMessage) => {
-      if (!thread || !message.action || message.action.kind !== 'open_result_detail') return;
-      const messages = thread.messages.map((item) =>
-        item.id === message.id
-          ? { ...item, action: { ...message.action!, status: 'approved' as const } }
-          : item
-      );
-      await save({ ...thread, messages });
+      if (!thread || message.action?.kind !== 'open_result_detail') return;
+      await save({ ...thread, messages: updateAction(message, 'approved') });
       navigate(`/results/${encodeURIComponent(message.action.runId)}`);
     },
-    [navigate, save, thread]
+    [navigate, save, thread, updateAction]
   );
-  const confirmMcpEvaluationRun = useCallback(
-    async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'run_mcp_evaluation') return;
-      const update = (status: 'approved' | 'denied' | 'error') =>
-        thread.messages.map((item) =>
-          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
-        );
+  const invokeConfirmed = useCallback(
+    async (
+      message: GlobalCopilotMessage,
+      approved: boolean,
+      path: string,
+      label: string,
+      body: Record<string, unknown>
+    ) => {
+      if (!thread) return;
       if (!approved) {
-        await save({ ...thread, messages: update('denied') });
+        await save({ ...thread, messages: updateAction(message, 'denied') });
         return;
       }
       try {
-        const response = await fetch('/api/global-copilot/confirm-run-eval', {
+        const response = await fetch(path, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ arguments: message.action.arguments })
+          body: JSON.stringify(body)
         });
-        const body = (await response.json()) as {
+        const result = (await response.json()) as {
           content?: string;
           error?: string;
           runId?: string;
         };
-        if (!response.ok) throw new Error(body.error ?? 'The MCPLab evaluation failed.');
-        const messages: GlobalCopilotMessage[] = [
-          ...update('approved'),
+        if (!response.ok) throw new Error(result.error ?? `${label} failed.`);
+        const next: GlobalCopilotMessage[] = [
+          ...updateAction(message, 'approved'),
           {
-            id: id('run-result'),
+            id: id('result'),
             role: 'system',
-            content: `MCPLab evaluation completed:\n${body.content ?? 'Run completed.'}`,
+            content: `${label}:\n${result.content ?? 'Completed.'}`,
             createdAt: new Date().toISOString()
           }
         ];
-        if (body.runId) {
-          messages.push({
+        if (result.runId)
+          next.push({
             id: id('result-detail'),
             role: 'system',
-            content: `Result Detail available for run ${body.runId}.`,
+            content: `Result Detail available for run ${result.runId}.`,
             createdAt: new Date().toISOString(),
-            action: { kind: 'open_result_detail', runId: body.runId, status: 'pending' }
+            action: { kind: 'open_result_detail', runId: result.runId, status: 'pending' }
           });
+        await save({ ...thread, messages: next });
+      } catch (error) {
+        await save({
+          ...thread,
+          messages: [
+            ...updateAction(message, 'error'),
+            {
+              id: id('error'),
+              role: 'system',
+              content: error instanceof Error ? error.message : String(error),
+              createdAt: new Date().toISOString()
+            }
+          ]
+        });
+      }
+    },
+    [save, thread, updateAction]
+  );
+  const runEvaluation = useCallback(
+    (message: GlobalCopilotMessage, approved: boolean) =>
+      message.action?.kind === 'run_mcp_evaluation'
+        ? invokeConfirmed(
+            message,
+            approved,
+            '/api/global-copilot/confirm-run-eval',
+            'MCPLab evaluation completed',
+            { arguments: message.action.arguments }
+          )
+        : Promise.resolve(),
+    [invokeConfirmed]
+  );
+  const writeReport = useCallback(
+    (message: GlobalCopilotMessage, approved: boolean) =>
+      message.action?.kind === 'write_markdown_report'
+        ? invokeConfirmed(
+            message,
+            approved,
+            '/api/global-copilot/confirm-report-write',
+            'Markdown report written',
+            { arguments: message.action.arguments }
+          )
+        : Promise.resolve(),
+    [invokeConfirmed]
+  );
+  const externalTool = useCallback(
+    (message: GlobalCopilotMessage, approved: boolean) => {
+      if (message.action?.kind !== 'external_mcp_tool') return Promise.resolve();
+      const activeTestCaseId = location.pathname.match(/^\/libraries\/test-cases\/([^/]+)/)?.[1];
+      return invokeConfirmed(
+        message,
+        approved,
+        '/api/global-copilot/confirm-tool',
+        'External tool result',
+        {
+          activeTestCaseId,
+          serverName: message.action.serverName,
+          toolName: message.action.toolName,
+          arguments: message.action.arguments
         }
-        await save({ ...thread, messages });
-      } catch (error: unknown) {
-        await save({
-          ...thread,
-          messages: [
-            ...update('error'),
-            {
-              id: id('run-error'),
-              role: 'system',
-              content: error instanceof Error ? error.message : String(error),
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      }
+      );
     },
-    [save, thread]
+    [invokeConfirmed, location.pathname]
   );
-  const confirmMarkdownReportWrite = useCallback(
+  const startAction = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'write_markdown_report') return;
-      const update = (status: 'approved' | 'denied' | 'error') =>
-        thread.messages.map((item) =>
-          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
-        );
+      if (!thread || message.action?.kind !== 'start_action') return;
       if (!approved) {
-        await save({ ...thread, messages: update('denied') });
-        return;
-      }
-      try {
-        const response = await fetch('/api/global-copilot/confirm-report-write', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ arguments: message.action.arguments })
-        });
-        const body = (await response.json()) as { content?: string; error?: string };
-        if (!response.ok)
-          throw new Error(body.error ?? 'The Markdown report could not be written.');
-        await save({
-          ...thread,
-          messages: [
-            ...update('approved'),
-            {
-              id: id('report-result'),
-              role: 'system',
-              content: `Markdown report written:\n${body.content ?? 'Report completed.'}`,
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      } catch (error: unknown) {
-        await save({
-          ...thread,
-          messages: [
-            ...update('error'),
-            {
-              id: id('report-error'),
-              role: 'system',
-              content: error instanceof Error ? error.message : String(error),
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      }
-    },
-    [save, thread]
-  );
-  const confirmExternalTool = useCallback(
-    async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'external_mcp_tool') return;
-      const update = (status: 'approved' | 'denied' | 'error') =>
-        thread.messages.map((item) =>
-          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
-        );
-      if (!approved) {
-        await save({ ...thread, messages: update('denied') });
-        return;
-      }
-      try {
-        const activeTestCaseId = location.pathname.match(/^\/libraries\/test-cases\/([^/]+)/)?.[1];
-        const response = await fetch('/api/global-copilot/confirm-tool', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            activeTestCaseId,
-            serverName: message.action.serverName,
-            toolName: message.action.toolName,
-            arguments: message.action.arguments
-          })
-        });
-        const body = (await response.json()) as { content?: string; error?: string };
-        if (!response.ok) throw new Error(body.error ?? 'The MCP call failed.');
-        await save({
-          ...thread,
-          messages: [
-            ...update('approved'),
-            {
-              id: id('tool'),
-              role: 'system',
-              content: `External tool result:\n${body.content ?? 'Tool completed.'}`,
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      } catch (error: unknown) {
-        await save({
-          ...thread,
-          messages: [
-            ...update('error'),
-            {
-              id: id('tool'),
-              role: 'system',
-              content: error instanceof Error ? error.message : String(error),
-              createdAt: new Date().toISOString()
-            }
-          ]
-        });
-      }
-    },
-    [location.pathname, save, thread]
-  );
-  const confirmStartAction = useCallback(
-    async (message: GlobalCopilotMessage, approved: boolean) => {
-      if (!thread || !message.action || message.action.kind !== 'start_action') return;
-      const update = (status: 'approved' | 'denied' | 'error') =>
-        thread.messages.map((item) =>
-          item.id === message.id ? { ...item, action: { ...message.action!, status } } : item
-        );
-      if (!approved) {
-        await save({ ...thread, messages: update('denied') });
+        await save({ ...thread, messages: updateAction(message, 'denied') });
         return;
       }
       try {
         await invokeGlobalCopilotAction(message.action.name);
-        await save({ ...thread, messages: update('approved') });
-      } catch (error: unknown) {
+        await save({ ...thread, messages: updateAction(message, 'approved') });
+      } catch (error) {
         await save({
           ...thread,
           messages: [
-            ...update('error'),
+            ...updateAction(message, 'error'),
             {
-              id: id('system'),
+              id: id('error'),
               role: 'system',
               content: error instanceof Error ? error.message : String(error),
               createdAt: new Date().toISOString()
@@ -786,9 +264,9 @@ export function GlobalCopilotController() {
         });
       }
     },
-    [save, thread]
+    [save, thread, updateAction]
   );
-  const copyMessage = useCallback(async (text: string) => {
+  const copy = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: 'Copied to clipboard' });
@@ -861,217 +339,24 @@ export function GlobalCopilotController() {
         activeThreadId={thread?.id}
         onSelect={selectThread}
         onRename={(item) => void renameThread(item)}
-        onDelete={(item) =>
-          void (async () => {
-            await store.deleteThread(item.workspaceKey, item.id);
-            const next = await refresh(item.workspaceKey);
-            if (thread?.id === item.id) {
-              await store.setActiveThreadId(item.workspaceKey, next[0]?.id);
-              setThread(next[0]);
-            }
-          })()
-        }
+        onDelete={(item) => void deleteThread(item)}
       />
-      <div className="hidden">
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-3 p-3">
-            {messages.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Ask about results, test cases, or MCPLab.
-              </p>
-            )}
-            {messages.map((message) =>
-              message.role === 'system' &&
-              message.content.startsWith('Previously retrieved tool data:') ? null : (
-                <div key={message.id} className="space-y-2">
-                  {message.role === 'tool' ? (
-                    (() => {
-                      const toolName = message.toolName
-                        ? globalCopilotToolDisplayName(message.toolName)
-                        : 'mcplab_read';
-                      return (
-                        <AssistantToolCallCard
-                          call={{
-                            id: message.toolCallId ?? message.id,
-                            server: 'mcplab',
-                            tool: globalCopilotToolLabel(toolName),
-                            publicToolName: toolName,
-                            arguments: message.toolArguments ?? {},
-                            status: 'approved',
-                            createdAt: message.createdAt,
-                            resultPreview: message.content
-                          }}
-                          defaultOpen={false}
-                          description={`Read-only MCPLab tool completed.\n\nMCP tool: \`${toolName}\``}
-                        />
-                      );
-                    })()
-                  ) : (
-                    <AssistantMessageRow
-                      message={{
-                        id: message.id,
-                        role: message.role,
-                        text: message.content,
-                        createdAt: message.createdAt
-                      }}
-                      renderActions={
-                        message.role === 'assistant' ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="mt-1 h-7 w-7"
-                            onClick={() => void copyMessage(message.content)}
-                            aria-label="Copy message"
-                            title="Copy message"
-                          >
-                            <Copy className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  )}
-                  {message.action?.kind === 'continue_reading' &&
-                    message.action.status === 'pending' && (
-                      <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                        <p>
-                          Allow up to {message.action.batchSize} additional read-only MCPLab tool
-                          calls to continue this investigation?
-                        </p>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => void confirmAdditionalReadTools(message, true)}
-                          >
-                            Continue
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void confirmAdditionalReadTools(message, false)}
-                          >
-                            Stop here
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  {message.action?.kind === 'open_result_detail' &&
-                    message.action.status === 'pending' && (
-                      <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-sm">
-                        <p>Result Detail available for run {message.action.runId}.</p>
-                        <div className="mt-2 flex gap-2">
-                          <Button size="sm" onClick={() => void openResultDetail(message)}>
-                            Open Result Detail
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  {message.action?.kind === 'run_mcp_evaluation' && (
-                    <AssistantToolCallCard
-                      call={{
-                        id: message.id,
-                        server: 'mcplab',
-                        tool: 'Run Evaluation',
-                        publicToolName: 'mcplab_run_eval',
-                        arguments: message.action.arguments,
-                        status: message.action.status,
-                        createdAt: message.createdAt
-                      }}
-                      description="This runs an evaluation with the displayed temporary overrides."
-                      onApprove={() => void confirmMcpEvaluationRun(message, true)}
-                      onDeny={() => void confirmMcpEvaluationRun(message, false)}
-                    />
-                  )}
-                  {message.action?.kind === 'write_markdown_report' && (
-                    <AssistantToolCallCard
-                      call={{
-                        id: message.id,
-                        server: 'mcplab',
-                        tool: 'Write Markdown Report',
-                        publicToolName: 'mcplab_write_markdown_report',
-                        arguments: message.action.arguments,
-                        status: message.action.status,
-                        createdAt: message.createdAt
-                      }}
-                      description="This writes the displayed Markdown report inside the current workspace."
-                      onApprove={() => void confirmMarkdownReportWrite(message, true)}
-                      onDeny={() => void confirmMarkdownReportWrite(message, false)}
-                    />
-                  )}
-                  {message.action?.kind === 'external_mcp_tool' && (
-                    <AssistantToolCallCard
-                      call={{
-                        id: message.id,
-                        server: message.action.serverName,
-                        tool: message.action.toolName,
-                        publicToolName: `${message.action.serverName}__${message.action.toolName}`,
-                        arguments: message.action.arguments,
-                        status: message.action.status,
-                        createdAt: message.createdAt
-                      }}
-                      description={`External MCP call on ${message.action.serverName}.`}
-                      onApprove={() => void confirmExternalTool(message, true)}
-                      onDeny={() => void confirmExternalTool(message, false)}
-                    />
-                  )}
-                  {message.action?.kind === 'start_action' &&
-                    message.action.status === 'pending' && (
-                      <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                        <p>
-                          Start{' '}
-                          {message.action.name === 'start_evaluation_run'
-                            ? 'the evaluation run'
-                            : 'Tool Analysis'}{' '}
-                          using the current page settings?
-                        </p>
-                        <div className="mt-2 flex gap-2">
-                          <Button size="sm" onClick={() => void confirmStartAction(message, true)}>
-                            Start
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void confirmStartAction(message, false)}
-                          >
-                            Not now
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  {message.action?.kind === 'navigate_to_view' &&
-                    message.action.status === 'approved' && (
-                      <p className="text-xs text-emerald-700">Opened {message.action.path}</p>
-                    )}
-                  {message.action?.status === 'denied' && (
-                    <p className="text-xs text-muted-foreground">Action declined</p>
-                  )}
-                  {message.action?.status === 'error' && (
-                    <p className="text-xs text-destructive">Action failed</p>
-                  )}
-                </div>
-              )
-            )}
-            {loading && <AssistantTypingIndicator />}
-            <div ref={chatEndRef} />
-          </div>
-        </ScrollArea>
-      </div>
       <GlobalCopilotConversation
         messages={messages}
         loading={loading}
-        onCopy={(text) => void copyMessage(text)}
-        onContinue={(message, approved) => void confirmAdditionalReadTools(message, approved)}
-        onOpenResult={(message) => void openResultDetail(message)}
-        onRunEvaluation={(message, approved) => void confirmMcpEvaluationRun(message, approved)}
-        onWriteReport={(message, approved) => void confirmMarkdownReportWrite(message, approved)}
-        onExternalTool={(message, approved) => void confirmExternalTool(message, approved)}
-        onStartAction={(message, approved) => void confirmStartAction(message, approved)}
+        onCopy={(text) => void copy(text)}
+        onContinue={(message, approved) => void continueReading(message, approved)}
+        onOpenResult={(message) => void openResult(message)}
+        onRunEvaluation={(message, approved) => void runEvaluation(message, approved)}
+        onWriteReport={(message, approved) => void writeReport(message, approved)}
+        onExternalTool={(message, approved) => void externalTool(message, approved)}
+        onStartAction={(message, approved) => void startAction(message, approved)}
       />
       <GlobalCopilotComposer
         input={input}
         onInputChange={setInput}
         onSend={() => void send()}
-        onCancel={() => agentRef.current?.abortRun()}
+        onCancel={cancel}
         loading={loading}
       />
     </aside>
