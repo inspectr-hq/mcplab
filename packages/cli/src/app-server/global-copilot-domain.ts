@@ -34,6 +34,7 @@ const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
 const GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL = 'mcplab_write_markdown_report';
 const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
   'mcplab_validate_config',
+  'mcplab_list_evaluation_configs',
   'mcplab_generate_scenario_entry',
   'mcplab_generate_agent_entry',
   'mcplab_generate_server_entry'
@@ -147,6 +148,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'The Current application context is authoritative page state supplied by the app. When it names a currentView or page filters, answer directly from that context; do not say you cannot see the screen.',
     'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, Agents, Tool Analysis, or OAuth Debugger view. For those explicit view requests, call navigate_to_view instead of mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
+    'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
     'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',

@@ -214,6 +214,30 @@ const LibraryEntrySchema = z.object({
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
 
+const EvaluationConfigListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  relative_path: z.string(),
+  config_path: z.string(),
+  suite_path: z.string(),
+  updated_at: z.string(),
+  scenario_count: z.number().int().nonnegative(),
+  agent_count: z.number().int().nonnegative(),
+  error: z.string().optional()
+});
+
+const EvaluationConfigListSchema = z.object({
+  evals_dir: z.string(),
+  total: z.number().int().nonnegative(),
+  matching: z.number().int().nonnegative(),
+  filters: z.object({ suite: z.string().optional(), query: z.string().optional() }),
+  sort: z.object({
+    by: z.enum(['name', 'scenarios', 'agents', 'updated_at']),
+    direction: z.enum(['asc', 'desc'])
+  }),
+  configs: z.array(EvaluationConfigListItemSchema)
+});
+
 const ServerAuthSchema = z.union([
   z.object({
     type: z.literal('bearer'),
@@ -1353,6 +1377,38 @@ export function registerTools(server: McpServer): void {
           format: asLibraryFile ? 'library-scenario-file' : 'inline-scenarios-list-item',
           warnings
         });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_list_evaluation_configs',
+    {
+      description:
+        'List MCPLab evaluation configurations from the workspace evals directory. Supports the same nested-suite, text-query, and sort behavior as the MCP Evaluations view.',
+      outputSchema: EvaluationConfigListSchema,
+      inputSchema: {
+        suite: z
+          .string()
+          .optional()
+          .describe('Optional suite path. Includes its nested suites, for example basic includes basic/smoke.'),
+        query: z
+          .string()
+          .optional()
+          .describe('Optional case-insensitive text filter over config name and relative path.'),
+        sort_by: z.enum(['name', 'scenarios', 'agents', 'updated_at']).optional(),
+        sort_direction: z.enum(['asc', 'desc']).optional()
+      }
+    },
+    async ({ suite, query, sort_by, sort_direction }) => {
+      return withToolHandling(async () => {
+        const result = listEvaluationConfigs({
+          suite,
+          query,
+          sortBy: sort_by,
+          sortDirection: sort_direction
+        });
+        return ok(`Found ${result.matching} evaluation configuration(s)`, result);
       });
     }
   );
@@ -2819,6 +2875,100 @@ function getLibraryItem(
 function resolveLibraryTestCasesDir(bundleRoot: string): string {
   const testCasesDir = join(bundleRoot, 'test-cases');
   return existsSync(testCasesDir) ? testCasesDir : join(bundleRoot, 'scenarios');
+}
+
+type EvaluationConfigListItem = z.infer<typeof EvaluationConfigListItemSchema>;
+
+function listEvaluationConfigs(params: {
+  suite?: string;
+  query?: string;
+  sortBy?: 'name' | 'scenarios' | 'agents' | 'updated_at';
+  sortDirection?: 'asc' | 'desc';
+}): z.infer<typeof EvaluationConfigListSchema> {
+  const evalsDir = join(resolveBundleRoot(), 'evals');
+  const all = listEvaluationConfigFiles(evalsDir).map((path) => readEvaluationConfigListItem(path, evalsDir));
+  const suite = params.suite?.trim().replace(/^suite:/, '');
+  const query = params.query?.trim().toLowerCase();
+  const matching = all.filter((config) => {
+    if (suite && !(config.suite_path === suite || config.suite_path.startsWith(`${suite}/`))) {
+      return false;
+    }
+    if (!query) return true;
+    return [config.name, config.relative_path, config.error ?? '']
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+  const sortBy = params.sortBy ?? 'name';
+  const sortDirection = params.sortDirection ?? 'asc';
+  matching.sort((a, b) => {
+    const comparison =
+      sortBy === 'scenarios'
+        ? a.scenario_count - b.scenario_count
+        : sortBy === 'agents'
+          ? a.agent_count - b.agent_count
+          : sortBy === 'updated_at'
+            ? new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()
+            : a.name.localeCompare(b.name);
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+  return {
+    evals_dir: evalsDir,
+    total: all.length,
+    matching: matching.length,
+    filters: removeUndefined({ suite, query }),
+    sort: { by: sortBy, direction: sortDirection },
+    configs: matching
+  };
+}
+
+function listEvaluationConfigFiles(root: string): string[] {
+  if (!existsSync(root) || !statSync(root).isDirectory()) return [];
+  const files: string[] = [];
+  const walk = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const target = join(directory, entry.name);
+      if (entry.isDirectory()) walk(target);
+      if (entry.isFile() && ['.yaml', '.yml'].includes(extname(entry.name).toLowerCase())) {
+        files.push(target);
+      }
+    }
+  };
+  walk(root);
+  return files.sort((a, b) => relative(root, a).localeCompare(relative(root, b)));
+}
+
+function readEvaluationConfigListItem(path: string, evalsDir: string): EvaluationConfigListItem {
+  const relativePath = relative(evalsDir, path).split(sep).join('/');
+  const suitePath = dirname(relativePath) === '.' ? '' : dirname(relativePath).split(sep).join('/');
+  const stat = statSync(path);
+  const fallbackName = basename(path, extname(path));
+  try {
+    const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown> | null;
+    const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return {
+      id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+      name: typeof source.name === 'string' && source.name.trim() ? source.name.trim() : fallbackName,
+      relative_path: relativePath,
+      config_path: path,
+      suite_path: suitePath,
+      updated_at: stat.mtime.toISOString(),
+      scenario_count: Array.isArray(source.scenarios) ? source.scenarios.length : 0,
+      agent_count: Array.isArray(source.agents) ? source.agents.length : 0
+    };
+  } catch (error) {
+    return {
+      id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+      name: fallbackName,
+      relative_path: relativePath,
+      config_path: path,
+      suite_path: suitePath,
+      updated_at: stat.mtime.toISOString(),
+      scenario_count: 0,
+      agent_count: 0,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 function buildServerEntry(input: {

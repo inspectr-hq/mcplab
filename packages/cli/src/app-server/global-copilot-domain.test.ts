@@ -22,6 +22,10 @@ describe('selectGlobalCopilotAgentName', () => {
       expose: true,
       automatic: true
     });
+    expect(globalCopilotMcplabToolPolicy('mcplab_list_evaluation_configs')).toEqual({
+      expose: true,
+      automatic: true
+    });
     expect(globalCopilotMcplabToolPolicy('mcplab_build_app_link')).toEqual({
       expose: false,
       automatic: false

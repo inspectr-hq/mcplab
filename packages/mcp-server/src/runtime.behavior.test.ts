@@ -42,6 +42,51 @@ async function setupTools(
 }
 
 describe('mcp tool behavior', () => {
+  it('lists evaluation configs with the same nested-suite filtering as MCP Evaluations', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-evals-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(join(libraryRoot, 'evals', 'basic', 'nested'), { recursive: true });
+    writeFileSync(
+      join(libraryRoot, 'evals', 'basic', 'smoke.yaml'),
+      'name: Basic Smoke\nagents: []\nscenarios: []\n',
+      'utf8'
+    );
+    writeFileSync(
+      join(libraryRoot, 'evals', 'basic', 'nested', 'detail.yaml'),
+      'name: Nested Detail\nagents: []\nscenarios: []\n',
+      'utf8'
+    );
+    writeFileSync(
+      join(libraryRoot, 'evals', 'other.yaml'),
+      'name: Other Evaluation\nagents: []\nscenarios: []\n',
+      'utf8'
+    );
+
+    const tools = await setupTools(libraryRoot);
+    const result = await tools.get('mcplab_list_evaluation_configs')!.cb({
+      suite: 'basic',
+      query: 'detail',
+      sort_by: 'name',
+      sort_direction: 'asc'
+    });
+
+    expect(result.structuredContent).toMatchObject({
+      total: 3,
+      matching: 1,
+      filters: { suite: 'basic', query: 'detail' },
+      configs: [
+        {
+          name: 'Nested Detail',
+          relative_path: 'basic/nested/detail.yaml',
+          suite_path: 'basic/nested',
+          scenario_count: 0,
+          agent_count: 0
+        }
+      ]
+    });
+  });
+
   it('lists Test Cases from the canonical test-cases directory when filtering scenarios', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-library-'));
     temporaryRoots.push(root);
