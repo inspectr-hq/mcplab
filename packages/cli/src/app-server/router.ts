@@ -59,6 +59,7 @@ import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
 import {
   handleGlobalCopilotRun,
+  handleGlobalCopilotEvaluationConfigCreateConfirmation,
   handleGlobalCopilotMarkdownReportWriteConfirmation,
   handleGlobalCopilotRunEvaluationConfirmation,
   handleGlobalCopilotToolConfirmation
@@ -353,6 +354,10 @@ export async function startAppServer(options: AppServerOptions) {
       }
       if (pathname === '/api/global-copilot/confirm-report-write' && method === 'POST') {
         await handleGlobalCopilotMarkdownReportWriteConfirmation({ req, res, parseBody, asJson });
+        return;
+      }
+      if (pathname === '/api/global-copilot/confirm-evaluation-config-create' && method === 'POST') {
+        await handleGlobalCopilotEvaluationConfigCreateConfirmation({ req, res, parseBody, asJson });
         return;
       }
 

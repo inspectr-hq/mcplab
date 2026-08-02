@@ -34,6 +34,7 @@ export const GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE = 5;
 // New Global Copilot runs use the app's queue_evaluation_run frontend action instead.
 const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
 const GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL = 'mcplab_write_markdown_report';
+const GLOBAL_COPILOT_CREATE_EVALUATION_CONFIG_TOOL = 'mcplab_create_evaluation_config';
 const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
   'mcplab_validate_config',
   'mcplab_list_evaluation_configs',
@@ -42,7 +43,8 @@ const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
   'mcplab_generate_server_entry'
 ]);
 const GLOBAL_COPILOT_CONFIRMED_MCP_TOOLS = new Set([
-  GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
+  GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL,
+  GLOBAL_COPILOT_CREATE_EVALUATION_CONFIG_TOOL
 ]);
 
 const GLOBAL_COPILOT_ACTION_MARKER = '[mcplab-action]';
@@ -261,7 +263,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
     'For an explicit request to run an evaluation, use queue_evaluation_run only when the Run Evaluation page is open with the requested configuration selected. It is confirmation-required and uses the existing app OAuth preflight and queue lifecycle. Do not use mcplab_run_eval: that MCP tool is reserved for external MCP clients.',
-    'When the user asks to create a Test Case, draft it first with mcplab_generate_scenario_entry, then request the confirmation-required create_test_case frontend action. Do not give manual filesystem instructions or call mcplab_create_test_case; that MCP tool is for external MCP clients.',
+    'When the user asks to create a Test Case, draft it first with mcplab_generate_scenario_entry, then request the confirmation-required create_test_case frontend action. Do not give manual filesystem instructions or call mcplab_create_test_case; that MCP tool is for external MCP clients. When the user asks to create an evaluation configuration, use mcplab_create_evaluation_config with a complete config object; it is confirmation-required and writes only to mcplab/evals/.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',
     `Current application context: ${JSON.stringify(context ?? {})}`
@@ -554,6 +556,9 @@ export async function handleGlobalCopilotRun(params: {
               ? { kind: 'run_mcp_evaluation' }
               : tool?.server === 'mcplab' && tool.tool === GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
               ? { kind: 'write_markdown_report' }
+              : tool?.server === 'mcplab' &&
+                  tool.tool === GLOBAL_COPILOT_CREATE_EVALUATION_CONFIG_TOOL
+                ? { kind: 'create_evaluation_config' }
               : {
                   kind: 'external_mcp_tool',
                   serverName: tool?.server,
@@ -707,6 +712,49 @@ export async function handleGlobalCopilotMarkdownReportWriteConfirmation(params:
     const result = await mcp.callTool(
       'mcplab',
       GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL,
+      arguments_
+    );
+    const toolError = globalCopilotMcpToolErrorMessage(result);
+    if (toolError) {
+      params.asJson(params.res, 502, { error: toolError });
+      return;
+    }
+    params.asJson(params.res, 200, { content: truncateJson(result, 4000) });
+  } catch (error: unknown) {
+    params.asJson(params.res, 502, {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    await mcp.disconnectAll().catch(() => undefined);
+  }
+}
+
+export async function handleGlobalCopilotEvaluationConfigCreateConfirmation(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  parseBody: (req: IncomingMessage) => Promise<any>;
+  asJson: (res: ServerResponse, status: number, body: unknown) => void;
+}): Promise<void> {
+  const body = (await params.parseBody(params.req)) as Record<string, unknown>;
+  const arguments_ =
+    body.arguments && typeof body.arguments === 'object' && !Array.isArray(body.arguments)
+      ? body.arguments
+      : {};
+  const mcp = new McpClientManager();
+  try {
+    await mcp.connectAll({ mcplab: { transport: 'http', url: localMcplabMcpUrl() } });
+    const knownTool = (await mcp.listTools('mcplab')).find(
+      (tool) => tool.name === GLOBAL_COPILOT_CREATE_EVALUATION_CONFIG_TOOL
+    );
+    if (!knownTool) {
+      params.asJson(params.res, 400, {
+        error: 'The local MCPLab evaluation configuration creation tool is unavailable.'
+      });
+      return;
+    }
+    const result = await mcp.callTool(
+      'mcplab',
+      GLOBAL_COPILOT_CREATE_EVALUATION_CONFIG_TOOL,
       arguments_
     );
     const toolError = globalCopilotMcpToolErrorMessage(result);

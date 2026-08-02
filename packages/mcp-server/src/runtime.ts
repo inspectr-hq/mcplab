@@ -32,6 +32,8 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  createEvaluationConfigFile,
+  type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -1333,6 +1335,45 @@ export function registerTools(server: McpServer): void {
         const testCase = buildScenario({ id, name, servers, prompt, required_tools, response_regex_patterns });
         writeFileSync(target, `${stringifyYaml(testCase)}\n`, 'utf8');
         return ok(`Created Test Case '${id}'`, { id, path: target, test_case: testCase });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_create_evaluation_config',
+    {
+      description:
+        'Create one reviewed MCPLab evaluation configuration in the canonical mcplab/evals directory. This is a scoped configuration write, not a general YAML writer. Provide the complete MCPLab config object; it uses the same filename, normalization, collision, and YAML persistence logic as the app API.',
+      outputSchema: {
+        file_name: z.string(),
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema
+      },
+      inputSchema: {
+        file_name: z
+          .string()
+          .min(1)
+          .describe('Evaluation filename (for example deepseek-library-eval). It is normalized exactly like the app API.'),
+        config: GenericObjectSchema.describe(
+          'Complete MCPLab evaluation configuration: name, agents, scenarios, optional servers and run_defaults.'
+        )
+      }
+    },
+    async ({ file_name, config }) => {
+      return withToolHandling(async () => {
+        const evalsDir = join(resolveBundleRoot(), 'evals');
+        const created = createEvaluationConfigFile({
+          evalsDir,
+          fileName: file_name,
+          config: config as unknown as SourceEvalConfig
+        });
+        return ok(`Created evaluation configuration '${created.fileName}'`, {
+          file_name: created.fileName,
+          path: created.path,
+          relative_path: created.relativePath,
+          config: created.config as unknown as Record<string, unknown>
+        });
       });
     }
   );
@@ -2700,12 +2741,14 @@ const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_delete_tool_analysis_result',
   'mcplab_write_markdown_report',
   'mcplab_run_eval',
-  'mcplab_create_test_case'
+  'mcplab_create_test_case',
+  'mcplab_create_evaluation_config'
 ]);
 const MUTATING_TOOLS = new Set<string>([
   'mcplab_write_markdown_report',
   'mcplab_run_eval',
-  'mcplab_create_test_case'
+  'mcplab_create_test_case',
+  'mcplab_create_evaluation_config'
 ]);
 const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {

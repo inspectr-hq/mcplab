@@ -334,6 +334,19 @@ export function GlobalCopilotController() {
         : Promise.resolve(),
     [invokeConfirmed]
   );
+  const createEvaluationConfig = useCallback(
+    (message: GlobalCopilotMessage, approved: boolean) =>
+      message.action?.kind === 'create_evaluation_config'
+        ? invokeConfirmed(
+            message,
+            approved,
+            '/api/global-copilot/confirm-evaluation-config-create',
+            'Evaluation configuration created',
+            { arguments: message.action.arguments }
+          )
+        : Promise.resolve(),
+    [invokeConfirmed]
+  );
   const externalTool = useCallback(
     (message: GlobalCopilotMessage, approved: boolean) => {
       if (message.action?.kind !== 'external_mcp_tool') return Promise.resolve();
@@ -501,6 +514,9 @@ export function GlobalCopilotController() {
         onContinue={(message, approved) => void continueReading(message, approved)}
         onOpenResult={(message) => void openResult(message)}
         onRunEvaluation={(message, approved) => void runEvaluation(message, approved)}
+        onCreateEvaluationConfig={(message, approved) =>
+          void createEvaluationConfig(message, approved)
+        }
         onWriteReport={(message, approved) => void writeReport(message, approved)}
         onExternalTool={(message, approved) => void externalTool(message, approved)}
         onStartAction={(message, approved) => void startAction(message, approved)}

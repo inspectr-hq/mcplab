@@ -107,7 +107,9 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
       };
     }
     if (
-      (action.kind === 'run_mcp_evaluation' || action.kind === 'write_markdown_report') &&
+      (action.kind === 'run_mcp_evaluation' ||
+        action.kind === 'write_markdown_report' ||
+        action.kind === 'create_evaluation_config') &&
       action.arguments &&
       typeof action.arguments === 'object'
     ) {
@@ -117,6 +119,8 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         content:
           action.kind === 'run_mcp_evaluation'
             ? 'MCPLab evaluation run requested.'
+            : action.kind === 'create_evaluation_config'
+              ? 'Evaluation configuration creation requested.'
             : 'Markdown report write requested.',
         createdAt,
         action: {

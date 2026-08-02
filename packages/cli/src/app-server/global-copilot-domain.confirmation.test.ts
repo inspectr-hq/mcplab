@@ -28,6 +28,7 @@ vi.mock('./libraries-store.js', () => ({
 
 import {
   handleGlobalCopilotMarkdownReportWriteConfirmation,
+  handleGlobalCopilotEvaluationConfigCreateConfirmation,
   handleGlobalCopilotRunEvaluationConfirmation,
   handleGlobalCopilotToolConfirmation
 } from './global-copilot-domain.js';
@@ -56,6 +57,7 @@ describe('global copilot MCP confirmation endpoints', () => {
     mcpMocks.listTools.mockResolvedValue([
       { name: 'mcplab_run_eval' },
       { name: 'mcplab_write_markdown_report' },
+      { name: 'mcplab_create_evaluation_config' },
       { name: 'search' }
     ]);
     mcpMocks.callTool.mockResolvedValue(errorResult);
@@ -82,6 +84,21 @@ describe('global copilot MCP confirmation endpoints', () => {
       req: {} as any,
       res: {} as any,
       parseBody: async () => ({ arguments: { output_path: 'reports/result.md' } }),
+      asJson: captured.asJson
+    });
+
+    expect(captured.responses).toEqual([{ status: 502, body: { error: errorResult.content[0].text } }]);
+  });
+
+  it('returns HTTP 502 when confirmed evaluation config creation returns an MCP error', async () => {
+    const captured = captureResponse();
+
+    await handleGlobalCopilotEvaluationConfigCreateConfirmation({
+      req: {} as any,
+      res: {} as any,
+      parseBody: async () => ({
+        arguments: { file_name: 'deepseek-library-eval', config: { agents: [], scenarios: [] } }
+      }),
       asJson: captured.asJson
     });
 

@@ -1,4 +1,5 @@
 import { join, resolve, sep } from 'node:path';
+export { safeEvaluationConfigFileName as safeFileName } from '@inspectr/mcplab-core';
 
 export function ensureInsideRoot(rootDir: string, candidatePath: string): string {
   const root = resolve(rootDir);
@@ -17,15 +18,4 @@ export function encodeEvalId(absPath: string, rootDir: string): string {
 export function decodeEvalId(id: string, rootDir: string): string {
   const rel = Buffer.from(id, 'base64url').toString('utf8');
   return ensureInsideRoot(rootDir, join(rootDir, rel));
-}
-
-export function safeFileName(name: string): string {
-  return (
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || `config-${Date.now()}`
-  );
 }

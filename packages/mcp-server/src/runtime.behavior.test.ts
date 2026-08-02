@@ -67,6 +67,34 @@ describe('mcp tool behavior', () => {
     expect(existsSync(join(libraryRoot, 'scenarios', 'list-library.yaml'))).toBe(false);
   });
 
+  it('creates an evaluation config in the canonical evals directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-create-eval-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(libraryRoot, { recursive: true });
+    const tools = await setupTools(libraryRoot);
+
+    const tool = tools.get('mcplab_create_evaluation_config');
+    expect(tool).toBeDefined();
+    const result = await tool!.cb({
+      file_name: 'deepseek-library-eval',
+      config: {
+        name: 'DeepSeek Library Evaluation',
+        agents: [{ ref: 'azure-deepseek-v4-flash' }],
+        scenarios: [{ ref: 'deepseek-list-library', mcp_servers: [{ ref: 'mcp-lab' }] }]
+      }
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(readFileSync(join(libraryRoot, 'evals', 'deepseek-library-eval.yaml'), 'utf8')).toContain(
+      'name: DeepSeek Library Evaluation'
+    );
+    expect(result.structuredContent).toMatchObject({
+      file_name: 'deepseek-library-eval',
+      relative_path: 'deepseek-library-eval.yaml'
+    });
+  });
+
   it('lists evaluation configs with the same nested-suite filtering as MCP Evaluations', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-evals-'));
     temporaryRoots.push(root);

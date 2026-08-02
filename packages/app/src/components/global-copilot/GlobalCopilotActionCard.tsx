@@ -7,6 +7,7 @@ export function GlobalCopilotActionCard({
   onContinue,
   onOpenResult,
   onRunEvaluation,
+  onCreateEvaluationConfig,
   onWriteReport,
   onExternalTool,
   onStartAction,
@@ -16,6 +17,7 @@ export function GlobalCopilotActionCard({
   onContinue: (message: GlobalCopilotMessage, approved: boolean) => void;
   onOpenResult: (message: GlobalCopilotMessage) => void;
   onRunEvaluation: (message: GlobalCopilotMessage, approved: boolean) => void;
+  onCreateEvaluationConfig: (message: GlobalCopilotMessage, approved: boolean) => void;
   onWriteReport: (message: GlobalCopilotMessage, approved: boolean) => void;
   onExternalTool: (message: GlobalCopilotMessage, approved: boolean) => void;
   onStartAction: (message: GlobalCopilotMessage, approved: boolean) => void;
@@ -87,6 +89,23 @@ export function GlobalCopilotActionCard({
         description="This writes the displayed Markdown report inside the current workspace."
         onApprove={() => onWriteReport(message, true)}
         onDeny={() => onWriteReport(message, false)}
+      />
+    );
+  if (action.kind === 'create_evaluation_config')
+    return (
+      <AssistantToolCallCard
+        call={{
+          id: message.id,
+          server: 'mcplab',
+          tool: 'Create Evaluation Config',
+          publicToolName: 'mcplab_create_evaluation_config',
+          arguments: action.arguments,
+          status: action.status,
+          createdAt: message.createdAt
+        }}
+        description="This creates the displayed evaluation configuration in the current workspace."
+        onApprove={() => onCreateEvaluationConfig(message, true)}
+        onDeny={() => onCreateEvaluationConfig(message, false)}
       />
     );
   if (action.kind === 'external_mcp_tool')

@@ -23,6 +23,7 @@ export function GlobalCopilotConversation({
   onContinue: (message: GlobalCopilotMessage, approved: boolean) => void;
   onOpenResult: (message: GlobalCopilotMessage) => void;
   onRunEvaluation: (message: GlobalCopilotMessage, approved: boolean) => void;
+  onCreateEvaluationConfig: (message: GlobalCopilotMessage, approved: boolean) => void;
   onWriteReport: (message: GlobalCopilotMessage, approved: boolean) => void;
   onExternalTool: (message: GlobalCopilotMessage, approved: boolean) => void;
   onStartAction: (message: GlobalCopilotMessage, approved: boolean) => void;
@@ -33,7 +34,7 @@ export function GlobalCopilotConversation({
     endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [loading, messages.length]);
   return (
-    <ScrollArea className="min-h-0 w-full min-w-0 flex-1">
+    <ScrollArea className="h-0 min-h-0 w-full min-w-0 flex-1">
       <div className="w-full min-w-0 space-y-3 p-3">
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground">Ask about results, test cases, or MCPLab.</p>

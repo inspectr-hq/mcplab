@@ -2,7 +2,7 @@ import { existsSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
+import { createEvaluationConfigFile, normalizeSourceConfig, type SourceEvalConfig } from '@inspectr/mcplab-core';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 
 export type EvalsRouteDeps = Pick<
@@ -49,25 +49,18 @@ export async function handleEvalsRoutes(params: {
       asJson(res, 400, { error: 'Missing config object' });
       return true;
     }
-    const baseName = safeFileName(body.fileName ?? `config-${Date.now()}`);
-    let filePath = ensureInsideRoot(settings.evalsDir, join(settings.evalsDir, `${baseName}.yaml`));
-    let suffix = 1;
-    while (existsSync(filePath)) {
-      filePath = ensureInsideRoot(
-        settings.evalsDir,
-        join(settings.evalsDir, `${baseName}-${suffix}.yaml`)
-      );
-      suffix += 1;
-    }
-    let normalizedConfig: SourceEvalConfig;
+    let created: ReturnType<typeof createEvaluationConfigFile>;
     try {
-      normalizedConfig = normalizeSourceConfig(config).config;
+      created = createEvaluationConfigFile({
+        evalsDir: settings.evalsDir,
+        fileName: String(body.fileName ?? `config-${Date.now()}`),
+        config
+      });
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
     }
-    writeFileSync(filePath, `${stringifyYaml(normalizedConfig)}\n`, 'utf8');
-    asJson(res, 201, readConfigRecord(filePath, settings.evalsDir, settings.librariesDir));
+    asJson(res, 201, readConfigRecord(created.path, settings.evalsDir, settings.librariesDir));
     return true;
   }
 
