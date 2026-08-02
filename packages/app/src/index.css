@@ -79,6 +79,50 @@
   }
 }
 
+.mcp-results-run-id-column { width: 112px; }
+.mcp-results-evaluated-column { width: 170px; }
+.mcp-results-timestamp-column { width: 145px; }
+.mcp-results-pass-column { width: 82px; }
+.mcp-results-scenarios-column { width: 78px; }
+.mcp-results-tool-calls-column { width: 98px; }
+.mcp-results-tool-tokens-column { width: 90px; }
+.mcp-results-actions-column { width: 128px; }
+
+.mcp-dashboard-kpi-icon {
+  display: block;
+}
+
+.mcp-dashboard-kpi-title {
+  font-size: 0.75rem;
+}
+
+@container (max-width: 999px) {
+  .mcp-results-rerun-label {
+    display: none;
+  }
+
+  .mcp-dashboard-kpi-icon {
+    display: none;
+  }
+
+  .mcp-dashboard-kpi-title {
+    font-size: 10px;
+  }
+}
+
+@container (max-width: 760px) {
+  .mcp-results-evaluated-column,
+  .mcp-results-timestamp-column,
+  .mcp-results-scenarios-column,
+  .mcp-results-tool-tokens-column {
+    display: none;
+  }
+
+  .mcp-results-run-id-column {
+    width: auto;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;

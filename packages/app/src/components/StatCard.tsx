@@ -24,7 +24,7 @@ export function StatCard({
         <div className="flex items-start justify-between">
           <div className={compact ? 'space-y-0.5' : 'space-y-1'}>
             <p
-              className={`${compact ? 'text-[10px]' : 'text-xs'} font-medium uppercase tracking-wider text-muted-foreground`}
+              className="mcp-dashboard-kpi-title font-medium uppercase tracking-wider text-muted-foreground"
             >
               {title}
             </p>
@@ -45,11 +45,9 @@ export function StatCard({
               </p>
             )}
           </div>
-          {compact ? null : (
-            <div className="rounded-lg bg-primary/10 p-2">
-              <Icon className="h-4 w-4 text-primary" />
-            </div>
-          )}
+          <div className="mcp-dashboard-kpi-icon rounded-lg bg-primary/10 p-2">
+            <Icon className="h-4 w-4 text-primary" />
+          </div>
         </div>
       </CardContent>
     </Card>

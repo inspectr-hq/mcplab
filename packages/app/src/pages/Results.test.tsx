@@ -198,7 +198,7 @@ describe('Results', () => {
     expect(screen.getByRole('button', { name: /Compact/i })).toBeInTheDocument();
   });
 
-  it('hides the scenarios and tool token columns from the overview table', async () => {
+  it('renders the scenarios and tool token columns in the overview table', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200), makeRun('run-b', null)]);
 
     render(
@@ -210,8 +210,8 @@ describe('Results', () => {
     );
 
     await screen.findByText('Results');
-    expect(screen.queryByRole('columnheader', { name: /Scenarios/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: /Tool Tokens/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /Scenarios/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /Tool Tokens/i })).toBeInTheDocument();
   });
 
   it('shows the dashboard by default and persists the visibility preference', async () => {

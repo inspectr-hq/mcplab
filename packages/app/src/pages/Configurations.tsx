@@ -563,7 +563,7 @@ const Configurations = () => {
                     {sortIcon('scenarios')}
                   </button>
                 </TableHead>
-                <TableHead className="mcp-evaluations-date-column text-right">
+                <TableHead className="text-right">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 hover:text-foreground"
@@ -573,7 +573,7 @@ const Configurations = () => {
                     {sortIcon('agents')}
                   </button>
                 </TableHead>
-                <TableHead className="text-right">
+                <TableHead className="mcp-evaluations-date-column text-right">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 hover:text-foreground"

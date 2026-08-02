@@ -72,7 +72,7 @@ import { summaryToResult } from '@/lib/run-summary-to-result';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
-import { formatDurationMs, getRunTotalDurationMs } from '@/lib/run-duration';
+import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
 type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
@@ -86,7 +86,7 @@ type ResultTableItem =
   | { type: 'day-separator'; dayKey: string; dayLabel: string }
   | { type: 'run'; run: EvalResult };
 
-const RESULTS_TABLE_COLUMN_COUNT = 6;
+const RESULTS_TABLE_COLUMN_COUNT = 8;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
 const RESULTS_DASHBOARD_VISIBILITY_KEY = 'mcplab:results:dashboard-visible';
 
@@ -990,10 +990,10 @@ const Results = () => {
       >
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className="mcp-results-table table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <TableHead className="mcp-results-run-id-column">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1003,8 +1003,8 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead>Evaluated</TableHead>
-                  <TableHead>
+                  <TableHead className="mcp-results-evaluated-column">Evaluated</TableHead>
+                  <TableHead className="mcp-results-timestamp-column">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1014,7 +1014,7 @@ const Results = () => {
                       {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="mcp-results-pass-column text-right">
                     <button
                       type="button"
                       className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
@@ -1024,7 +1024,17 @@ const Results = () => {
                       {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="mcp-results-scenarios-column text-right">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('scenarios')}
+                    >
+                      Scenarios
+                      {sortIcon('scenarios')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="mcp-results-tool-calls-column text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1034,7 +1044,17 @@ const Results = () => {
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="mcp-results-tool-tokens-column text-right">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() => toggleSort('toolTokens')}
+                    >
+                      Tool Tokens
+                      {sortIcon('toolTokens')}
+                    </button>
+                  </TableHead>
+                  <TableHead className="mcp-results-actions-column" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1068,7 +1088,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell>
+                        <TableCell className="mcp-results-run-id-column">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1083,7 +1103,7 @@ const Results = () => {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-[11px] text-muted-foreground">
+                        <TableCell className="mcp-results-evaluated-column text-[11px] text-muted-foreground">
                           {(() => {
                             const scope = runScopesById.get(item.run.id) ?? {
                               scenarioCount: 0,
@@ -1106,7 +1126,7 @@ const Results = () => {
                             );
                           })()}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="mcp-results-timestamp-column text-xs text-muted-foreground">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -1123,16 +1143,35 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="mcp-results-pass-column text-right">
                           <div className="flex flex-col items-end gap-1">
                             <PassRateBadge rate={item.run.overallPassRate} />
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="mcp-results-scenarios-column text-right font-mono text-sm">
+                          {item.run.totalScenarios}
+                        </TableCell>
+                        <TableCell className="mcp-results-tool-calls-column text-right font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="mcp-results-tool-tokens-column text-right">
+                          <div className="space-y-0.5">
+                            <div className="font-mono text-sm">
+                              {item.run.toolTokenUsage?.totalTokens?.toLocaleString() ?? 'n/a'}
+                            </div>
+                            {(() => {
+                              const toolTimeMs = getRunToolTimeMs(item.run);
+                              if (toolTimeMs === null) return null;
+                              return (
+                                <div className="font-mono text-[11px] text-muted-foreground/90">
+                                  Tool time: {formatDurationMs(toolTimeMs)}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </TableCell>
+                        <TableCell className="mcp-results-actions-column">
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"
