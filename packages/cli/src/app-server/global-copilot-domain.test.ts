@@ -8,6 +8,7 @@ import {
   globalCopilotMcplabToolPolicy,
   isExplicitGlobalCopilotNavigationRequest,
   selectGlobalCopilotAgentName,
+  toGlobalCopilotConversationMessages,
   toGlobalCopilotLlmMessages
 } from './global-copilot-domain.js';
 
@@ -123,6 +124,33 @@ describe('selectGlobalCopilotAgentName', () => {
         content: 'Previously retrieved MCPLab tool data:\n{"status":"failed"}'
       }
     ]);
+  });
+
+  it('puts the current application context before persisted tool data', () => {
+    const messages = toGlobalCopilotConversationMessages({
+      messages: [
+        { id: 'assistant-1', role: 'assistant', content: 'I will inspect the run.' },
+        {
+          id: 'tool-1',
+          role: 'tool',
+          toolCallId: 'toolu_previous_run',
+          content: '{"status":"failed"}'
+        }
+      ],
+      forwardedProps: {
+        context: { pathname: '/tool-analysis', currentView: 'Tool Analysis' }
+      }
+    } as any);
+
+    expect(messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('"currentView":"Tool Analysis"')
+    });
+    expect(messages[1]).toEqual({ role: 'assistant', content: 'I will inspect the run.' });
+    expect(messages[2]).toEqual({
+      role: 'system',
+      content: 'Previously retrieved MCPLab tool data:\n{"status":"failed"}'
+    });
   });
 
   it('only scopes external MCP servers to the active test case', () => {

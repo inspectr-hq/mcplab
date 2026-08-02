@@ -154,6 +154,22 @@ function globalCopilotSystemPrompt(context: unknown): string {
   ].join('\n');
 }
 
+/**
+ * The current context must be the first system message. Anthropic uses the
+ * first system message as its provider-level system prompt, while OpenAI only
+ * receives system text included in the message list. Persisted tool results
+ * are represented as later system messages, so they must never get precedence.
+ */
+export function toGlobalCopilotConversationMessages(input: RunAgentInput): LlmMessage[] {
+  return [
+    {
+      role: 'system',
+      content: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
+    },
+    ...toGlobalCopilotLlmMessages(input)
+  ];
+}
+
 function localMcplabMcpUrl(): string {
   const host = process.env.MCP_HOST || '127.0.0.1';
   const port = process.env.MCP_PORT || '3011';
@@ -282,20 +298,20 @@ export async function handleGlobalCopilotRun(params: {
       threadId: input.threadId,
       runId: input.runId
     });
-    const activeTestCaseId = (input.forwardedProps as any)?.context?.activeTestCaseId;
+    const context = (input.forwardedProps as any)?.context;
+    const activeTestCaseId = context?.activeTestCaseId;
     const loaded = await loadGlobalCopilotTools(
       globalCopilotExternalServers(libraries, activeTestCaseId)
     ).catch(() => undefined);
-    const messages = toGlobalCopilotLlmMessages(input);
-    const frontendTools = globalCopilotFrontendTools((input.forwardedProps as any)?.context).filter(
+    const messages = toGlobalCopilotConversationMessages(input);
+    const frontendTools = globalCopilotFrontendTools(context).filter(
       (tool) =>
         tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
     );
     let response = await chatWithAgent({
       agent: agent as AgentConfig,
       messages,
-      tools: [...frontendTools, ...(loaded?.tools ?? [])],
-      system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
+      tools: [...frontendTools, ...(loaded?.tools ?? [])]
     });
     let pendingApproval = false;
     let suggestedRunId: string | undefined;
@@ -370,8 +386,7 @@ export async function handleGlobalCopilotRun(params: {
           response = await chatWithAgent({
             agent: agent as AgentConfig,
             messages,
-            tools: [...frontendTools, ...loaded.tools],
-            system: globalCopilotSystemPrompt((input.forwardedProps as any)?.context)
+            tools: [...frontendTools, ...loaded.tools]
           });
           continue;
         }

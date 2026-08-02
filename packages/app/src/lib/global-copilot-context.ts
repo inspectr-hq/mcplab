@@ -20,6 +20,21 @@ const PRESET_DURATIONS_MS: Record<string, number> = {
   '30d': 30 * 24 * 60 * 60_000
 };
 
+const CURRENT_VIEW_LABELS: Record<string, string> = {
+  '/': 'Home',
+  '/mcp-evaluations': 'MCP Evaluations',
+  '/run': 'Run Evaluation',
+  '/results': 'Results',
+  '/compare': 'Compare Results',
+  '/tool-analysis': 'Tool Analysis',
+  '/tool-analysis-results': 'Tool Analysis Results',
+  '/oauth-debugger': 'OAuth Debugger',
+  '/libraries/servers': 'MCP Servers',
+  '/libraries/agents': 'Agents',
+  '/libraries/test-cases': 'Test Cases',
+  '/settings': 'Settings'
+};
+
 function resultsFilterFromSearch(
   search: string,
   now: Date
@@ -56,7 +71,7 @@ export function globalCopilotRouteContext(
   return {
     pathname,
     search,
-    ...(pathname === '/mcp-evaluations' ? { currentView: 'MCP Evaluations' } : {}),
+    ...(CURRENT_VIEW_LABELS[pathname] ? { currentView: CURRENT_VIEW_LABELS[pathname] } : {}),
     ...(activeTestCaseId ? { activeTestCaseId: decodeURIComponent(activeTestCaseId) } : {}),
     ...(pathname === '/results' && resultsFilterFromSearch(search, now)
       ? { resultsFilter: resultsFilterFromSearch(search, now) }

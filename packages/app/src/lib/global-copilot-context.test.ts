@@ -22,6 +22,12 @@ describe('globalCopilotRouteContext', () => {
     });
   });
 
+  it('labels the Tool Analysis view for the agent', () => {
+    expect(globalCopilotRouteContext('/tool-analysis', '')).toMatchObject({
+      currentView: 'Tool Analysis'
+    });
+  });
+
   it('resolves the Results 24-hour preset to MCP-neutral ISO bounds', () => {
     expect(
       globalCopilotRouteContext(

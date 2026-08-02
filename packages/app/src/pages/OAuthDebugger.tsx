@@ -610,8 +610,7 @@ export default function OAuthDebuggerPage() {
         <div>
           <h1 className="text-2xl font-bold">OAuth Debugger</h1>
           <p className="text-sm text-muted-foreground">
-            Step-by-step OAuth flow debugging for MCP servers (latest MCP authorization draft
-            profile).
+            Step-by-step OAuth flow debugging for MCP servers.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
