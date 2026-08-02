@@ -136,7 +136,7 @@ export async function startAppServer(options: AppServerOptions) {
 
   const appDist = resolveAppDist(workspaceRoot);
   const viteDevTarget = 'http://127.0.0.1:8685';
-  const devMcp = await maybeStartDevMcpServer(workspaceRoot, options.dev);
+  const devMcp = await maybeStartDevMcpServer(workspaceRoot, options.dev, settings.librariesDir);
   const jobs = new Map<string, RunJob>();
   const toolAnalysisJobs = new Map<string, ToolAnalysisJob>();
   const oauthDebuggerSessions = new Map<string, OAuthDebuggerSession>();

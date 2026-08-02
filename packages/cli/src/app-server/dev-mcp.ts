@@ -8,9 +8,26 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+export function buildDevMcpEnvironment(params: {
+  base: NodeJS.ProcessEnv;
+  host: string;
+  port: number;
+  path: string;
+  librariesDir: string;
+}): NodeJS.ProcessEnv {
+  return {
+    ...params.base,
+    MCP_HOST: params.host,
+    MCP_PORT: String(params.port),
+    MCP_PATH: params.path,
+    MCPLAB_BUNDLE_ROOT: params.librariesDir
+  };
+}
+
 export async function maybeStartDevMcpServer(
   workspaceRoot: string,
-  devMode: boolean
+  devMode: boolean,
+  librariesDir: string
 ): Promise<DevMcpServerRuntime | null> {
   const host = process.env.MCP_HOST || '127.0.0.1';
   const port = parsePositiveInt(process.env.MCP_PORT, 3011);
@@ -27,12 +44,13 @@ export async function maybeStartDevMcpServer(
 
     const child = spawn(command, args, {
       cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        MCP_HOST: host,
-        MCP_PORT: String(port),
-        MCP_PATH: path
-      },
+      env: buildDevMcpEnvironment({
+        base: process.env,
+        host,
+        port,
+        path,
+        librariesDir
+      }),
       stdio: 'inherit'
     });
 
@@ -60,6 +78,7 @@ export async function maybeStartDevMcpServer(
   }
 
   if (String(process.env.MCPLAB_APP_START_MCP ?? '1') === '0') return null;
+  process.env.MCPLAB_BUNDLE_ROOT = librariesDir;
   const { startMcplabMcpServer } = await importMcpRuntime();
   const runtime = await startMcplabMcpServer({ host, port, path });
   return {
