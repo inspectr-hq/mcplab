@@ -45,3 +45,27 @@ export function clearGlobalCopilotPageContext(): void {
 export function globalCopilotPageContext(): GlobalCopilotPageContext {
   return currentContext;
 }
+
+/**
+ * Page state is published by mounted route components. During a route
+ * transition an effect cleanup can lag the new location, so only forward the
+ * context shape that belongs to the route being submitted with the request.
+ */
+export function globalCopilotPageContextForPath(pathname: string): GlobalCopilotPageContext {
+  if (pathname === '/mcp-evaluations') {
+    return currentContext.evaluations ? { evaluations: currentContext.evaluations } : {};
+  }
+  if (pathname === '/tool-analysis') {
+    return currentContext.toolAnalysis ? { toolAnalysis: currentContext.toolAnalysis } : {};
+  }
+  if (pathname.startsWith('/libraries/test-cases')) {
+    return currentContext.testCases ? { testCases: currentContext.testCases } : {};
+  }
+  if (pathname.startsWith('/libraries/servers')) {
+    return currentContext.servers ? { servers: currentContext.servers } : {};
+  }
+  if (pathname.startsWith('/libraries/agents')) {
+    return currentContext.agents ? { agents: currentContext.agents } : {};
+  }
+  return {};
+}

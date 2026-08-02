@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   clearGlobalCopilotPageContext,
   globalCopilotPageContext,
+  globalCopilotPageContextForPath,
   setGlobalCopilotPageContext
 } from './global-copilot-page-context';
 
@@ -26,5 +27,17 @@ describe('globalCopilotPageContext', () => {
         totalCount: 13
       }
     });
+  });
+
+  it('does not leak stale Tool Analysis context into the Test Cases route', () => {
+    setGlobalCopilotPageContext({
+      toolAnalysis: {
+        selectedServerNames: ['weather'],
+        selectedToolCount: 1,
+        runState: 'idle'
+      }
+    });
+
+    expect(globalCopilotPageContextForPath('/libraries/test-cases')).toEqual({});
   });
 });
