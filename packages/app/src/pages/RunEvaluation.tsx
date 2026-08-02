@@ -32,6 +32,14 @@ import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
+import {
+  prepareWorkspaceEvaluationRun,
+  submitWorkspaceEvaluationRun
+} from '@/lib/workspace-evaluation-run';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
@@ -50,6 +58,26 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
 
 function nowTime(): string {
   return new Date().toLocaleTimeString();
+}
+
+function stringArrayArgument(value: unknown, label: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`${label} must be an array of IDs.`);
+  }
+  return value;
+}
+
+function serverOverrideArguments(value: unknown): Record<string, string[]> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('scenarioServerOverrides must map Test Case IDs to server ID arrays.');
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.some(([, serverIds]) => !Array.isArray(serverIds) || serverIds.some((id) => typeof id !== 'string'))) {
+    throw new Error('scenarioServerOverrides must map Test Case IDs to server ID arrays.');
+  }
+  return Object.fromEntries(entries) as Record<string, string[]>;
 }
 
 const RunEvaluation = () => {
@@ -193,144 +221,95 @@ const RunEvaluation = () => {
     setScenarioServerOverrideMap({});
   }, [selectedConfig?.id, selectedConfig?.sourcePath, availableAgents, availableScenarios]);
 
-  const startWorkspaceRun = async () => {
-    if (!selectedConfig?.sourcePath) {
-      setLogs((prev) => [...prev, `[${nowTime()}] Missing source path for selected config.`]);
-      return;
+  const startWorkspaceRun = async (actionArguments: Record<string, unknown> = {}) => {
+    if (!selectedConfig) {
+      const message = 'Select an evaluation configuration before starting a run.';
+      setLogs((prev) => [...prev, `[${nowTime()}] ${message}`]);
+      throw new Error(message);
     }
-    const selectedAgents = availableAgents.filter((agent) => selectedAgentIds.includes(agent.id));
-    if (selectedAgents.length === 0) {
-      setLogs((prev) => [...prev, `[${nowTime()}] Select at least one agent.`]);
-      return;
-    }
-    const selectedScenarios = availableScenarios.filter((scenario) =>
-      selectedScenarioIds.includes(scenario.id)
-    );
-    const selectedScenarioSet = new Set(selectedScenarios.map((scenario) => scenario.id));
-    const runtimeOverridesEnabled =
-      globalServerOverrideEnabled || Object.values(scenarioServerOverrideEnabledMap).some(Boolean);
-    const filteredScenarioServerOverrides = Object.fromEntries(
-      Object.entries(scenarioServerOverrideMap).filter(
-        ([scenarioId]) =>
-          selectedScenarioSet.has(scenarioId) && scenarioServerOverrideEnabledMap[scenarioId]
-      )
-    );
-    const effectiveScenarioServerSummary = selectedScenarios
-      .map((scenario) => {
-        const serverIds =
-          filteredScenarioServerOverrides[scenario.id] ??
-          (globalServerOverrideEnabled ? globalServerOverrideIds : scenario.serverIds || []);
-        return `${scenario.id}=[${serverIds.join(', ')}]`;
-      })
-      .join('; ');
-    if (selectedScenarios.length === 0) {
-      setLogs((prev) => [...prev, `[${nowTime()}] Select at least one test.`]);
-      return;
-    }
-    if (globalServerOverrideEnabled && globalServerOverrideIds.length === 0) {
-      setLogs((prev) => [
-        ...prev,
-        `[${nowTime()}] Select at least one server for "Override MCP Servers for Selected Tests", or turn that override off.`
-      ]);
-      return;
-    }
-    const emptyPerScenarioOverrides = Object.entries(filteredScenarioServerOverrides)
-      .filter(([, serverIds]) => !Array.isArray(serverIds) || serverIds.length === 0)
-      .map(([scenarioId]) => scenarioId);
-    if (emptyPerScenarioOverrides.length > 0) {
-      setLogs((prev) => [
-        ...prev,
-        `[${nowTime()}] Select at least one server for per-scenario overrides on: ${emptyPerScenarioOverrides.join(
-          ', '
-        )}, or turn those overrides off.`
-      ]);
-      return;
-    }
-    const oauthServerNames = Array.from(
-      new Set(
-        selectedScenarios
-          .flatMap((scenario) => {
-            if (!runtimeOverridesEnabled) return scenario.serverIds || [];
-            if (filteredScenarioServerOverrides[scenario.id]) {
-              return filteredScenarioServerOverrides[scenario.id] ?? [];
-            }
-            if (globalServerOverrideEnabled) return globalServerOverrideIds;
-            return scenario.serverIds || [];
-          })
-          .filter((serverName) => {
-            const fromConfig = (selectedConfig.servers ?? []).find(
-              (server) => server.id === serverName
-            );
-            const fromLibrary = libraryServers.find((server) => server.id === serverName);
-            return (fromConfig || fromLibrary)?.authType === 'oauth2';
-          })
-      )
-    );
 
+    let prepared: ReturnType<typeof prepareWorkspaceEvaluationRun>;
     try {
-      if (oauthServerNames.length > 0) {
-        setOauthAuthInProgress(true);
-        await ensureOAuthForServers({
-          serverNames: oauthServerNames,
-          source,
-          onServerAuthStart: (serverName) => {
-            setLogs((prev) => [
-              ...prev,
-              `[${nowTime()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`
-            ]);
-          }
-        });
-        setLogs((prev) => [
-          ...prev,
-          `[${nowTime()}] OAuth login completed for required server(s): ${oauthServerNames.join(
-            ', '
-          )}.`
-        ]);
+      const requestedConfigId = actionArguments.configId;
+      if (requestedConfigId !== undefined && requestedConfigId !== selectedConfig.id) {
+        throw new Error(
+          `The selected evaluation is '${selectedConfig.id}', not '${String(requestedConfigId)}'. Open the requested evaluation in Run Evaluation first.`
+        );
       }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setLogs((prev) => [...prev, `[${nowTime()}] OAuth error: ${message}`]);
-      setOauthAuthInProgress(false);
-      return;
-    } finally {
-      setOauthAuthInProgress(false);
-    }
-
-    setRunning(true);
-    setDone(false);
-    setStopped(false);
-    setRunId('');
-    const compositionMode =
-      (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === 'referenced') ||
-      (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === 'referenced') ||
-      (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === 'referenced')
-        ? 'refs-composed'
-        : 'single-file/inline';
-    setLogs([
-      `[${nowTime()}] Starting evaluation run...`,
-      `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${selectedAgents
-        .map((a) => a.name || a.id)
-        .join(', ')} tests=${selectedScenarios.map((s) => s.id).join(', ')} runs=${Number(
-        varianceRuns
-      )}${runNote.trim() ? ` note=${runNote.trim()}` : ''}`,
-      `[${nowTime()}] Effective MCP servers per selected test: ${
-        effectiveScenarioServerSummary || '(none)'
-      }`
-    ]);
-    setProgress(10);
-    try {
-      const { jobId } = await source.startRun({
-        configPath: selectedConfig.sourcePath,
-        runsPerScenario: Number(varianceRuns),
-        agents: selectedAgents.map((agent) => agent.id),
-        scenarioIds: selectedScenarios.map((scenario) => scenario.id),
-        ...(runtimeOverridesEnabled && globalServerOverrideEnabled
-          ? { serverOverrideAll: globalServerOverrideIds }
-          : {}),
-        ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
-          ? { scenarioServerOverrides: filteredScenarioServerOverrides }
-          : {}),
-        runNote: runNote.trim() ? runNote.trim() : undefined
+      const agentIds = stringArrayArgument(actionArguments.agentIds, 'agentIds') ?? selectedAgentIds;
+      const scenarioIds =
+        stringArrayArgument(actionArguments.scenarioIds, 'scenarioIds') ?? selectedScenarioIds;
+      const serverOverrideAll = stringArrayArgument(
+        actionArguments.serverOverrideAll,
+        'serverOverrideAll'
+      );
+      const scenarioServerOverrides = serverOverrideArguments(
+        actionArguments.scenarioServerOverrides
+      );
+      const runsPerScenario =
+        typeof actionArguments.runsPerScenario === 'number'
+          ? actionArguments.runsPerScenario
+          : Number(varianceRuns);
+      const effectiveRunNote =
+        typeof actionArguments.runNote === 'string' ? actionArguments.runNote : runNote;
+      prepared = prepareWorkspaceEvaluationRun({
+        config: selectedConfig,
+        availableAgents,
+        availableScenarios,
+        libraryServers,
+        selectedAgentIds: agentIds,
+        selectedScenarioIds: scenarioIds,
+        runsPerScenario,
+        globalServerOverrideEnabled:
+          serverOverrideAll !== undefined ? true : globalServerOverrideEnabled,
+        globalServerOverrideIds: serverOverrideAll ?? globalServerOverrideIds,
+        scenarioServerOverrideEnabledMap:
+          scenarioServerOverrides !== undefined
+            ? Object.fromEntries(Object.keys(scenarioServerOverrides).map((id) => [id, true]))
+            : scenarioServerOverrideEnabledMap,
+        scenarioServerOverrides: scenarioServerOverrides ?? scenarioServerOverrideMap,
+        runNote: effectiveRunNote
+      });
+      if (prepared.oauthServerNames.length > 0) {
+        setOauthAuthInProgress(true);
+      }
+      setRunning(true);
+      setDone(false);
+      setStopped(false);
+      setRunId('');
+      const compositionMode =
+        (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === 'referenced') ||
+        (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === 'referenced') ||
+        (selectedConfig.scenarioEntries ?? []).some((entry) => entry.kind === 'referenced')
+          ? 'refs-composed'
+          : 'single-file/inline';
+      setLogs([
+        `[${nowTime()}] Starting evaluation run...`,
+        `[${nowTime()}] Config=${selectedConfig.name} mode=${compositionMode} agents=${prepared.selectedAgents
+          .map((a) => a.name || a.id)
+          .join(', ')} tests=${prepared.selectedScenarios.map((s) => s.id).join(', ')} runs=${prepared.submission.runsPerScenario}${prepared.submission.runNote ? ` note=${prepared.submission.runNote}` : ''}`,
+        `[${nowTime()}] Effective MCP servers per selected test: ${prepared.effectiveScenarioServerSummary || '(none)'}`
+      ]);
+      setProgress(10);
+      const { jobId } = await submitWorkspaceEvaluationRun({
+        prepared,
+        source,
+        ensureOAuth: async (serverNames) => {
+          await ensureOAuthForServers({
+            serverNames,
+            source,
+            onServerAuthStart: (serverName) => {
+              setLogs((prev) => [
+                ...prev,
+                `[${nowTime()}] OAuth login required for '${serverName}'. Complete the browser sign-in flow...`
+              ]);
+            }
+          });
+          setLogs((prev) => [
+            ...prev,
+            `[${nowTime()}] OAuth login completed for required server(s): ${serverNames.join(', ')}.`
+          ]);
+        }
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -346,17 +325,39 @@ const RunEvaluation = () => {
       setProgress(0);
       setActiveJobId(null);
       setOauthAuthInProgress(false);
+      throw error;
+    } finally {
+      setOauthAuthInProgress(false);
     }
   };
 
   const startRun = () => {
-    void startWorkspaceRun();
+    void startWorkspaceRun().catch(() => undefined);
   };
 
   useEffect(
     () => registerGlobalCopilotAction('start_evaluation_run', startWorkspaceRun),
     [startWorkspaceRun]
   );
+
+  useEffect(
+    () => registerGlobalCopilotAction('queue_evaluation_run', startWorkspaceRun),
+    [startWorkspaceRun]
+  );
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      runEvaluation: {
+        configId: selectedConfig?.id,
+        configName: selectedConfig?.name,
+        selectedAgentIds,
+        selectedScenarioIds,
+        availableAgentIds: availableAgents.map((agent) => agent.id),
+        availableTestCaseIds: availableScenarios.map((scenario) => scenario.id)
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [availableAgents, availableScenarios, selectedAgentIds, selectedConfig?.id, selectedConfig?.name, selectedScenarioIds]);
 
   const stopRun = () => {
     if (activeJobId) {

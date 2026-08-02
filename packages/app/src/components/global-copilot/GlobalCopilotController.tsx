@@ -309,7 +309,7 @@ export function GlobalCopilotController() {
         return;
       }
       try {
-        await invokeGlobalCopilotAction(message.action.name);
+        await invokeGlobalCopilotAction(message.action.name, message.action.arguments);
         await save({ ...thread, messages: updateAction(message, 'approved') });
       } catch (error) {
         await save({

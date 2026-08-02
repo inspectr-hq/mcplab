@@ -106,7 +106,25 @@ export function GlobalCopilotActionCard({
         onDeny={() => onExternalTool(message, false)}
       />
     );
-  if (action.kind === 'start_action' && action.status === 'pending')
+  if (action.kind === 'start_action' && action.status === 'pending') {
+    if (action.name === 'queue_evaluation_run') {
+      return (
+        <AssistantToolCallCard
+          call={{
+            id: message.id,
+            server: 'mcplab',
+            tool: 'Queue Evaluation Run',
+            publicToolName: 'queue_evaluation_run',
+            arguments: action.arguments ?? {},
+            status: action.status,
+            createdAt: message.createdAt
+          }}
+          description="This uses the existing Run Evaluation OAuth preflight and queue, with the displayed temporary overrides."
+          onApprove={() => onStartAction(message, true)}
+          onDeny={() => onStartAction(message, false)}
+        />
+      );
+    }
     return (
       <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
         <p>
@@ -123,6 +141,7 @@ export function GlobalCopilotActionCard({
         </div>
       </div>
     );
+  }
   if (action.kind === 'library_action')
     return (
       <AssistantToolCallCard

@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunEvaluation from './RunEvaluation';
 import type { EvalConfig, AgentConfig } from '@/types/eval';
+import { invokeGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn> | null = null;
@@ -325,6 +326,72 @@ describe('RunEvaluation', () => {
         agents: ['agent-a']
       })
     );
+  });
+
+  it('queues a confirmed Copilot run through the same page action with agent overrides', async () => {
+    const configAgent: AgentConfig = {
+      id: 'agent-default',
+      name: 'Default Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const overrideAgent: AgentConfig = {
+      id: 'azure-deepseek-v4-flash',
+      name: 'DeepSeek',
+      provider: 'azure',
+      model: 'deepseek-v4-flash',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const testConfig: EvalConfig = {
+      id: 'tag-profile-config',
+      name: 'Tag Profile',
+      agents: [configAgent],
+      scenarios: [
+        {
+          id: 'tag-profile',
+          name: 'Tag Profile',
+          prompt: 'Profile the tag.',
+          serverIds: [],
+          evalRules: [],
+          extractRules: []
+        }
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      sourcePath: '/path/to/tag-profile.yaml'
+    };
+    configsRef.value = [testConfig];
+    libraryAgentsRef.value = [configAgent, overrideAgent];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=tag-profile-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getByText('DeepSeek')).toBeInTheDocument());
+
+    await act(async () => {
+      await invokeGlobalCopilotAction('queue_evaluation_run', {
+        configId: 'tag-profile-config',
+        agentIds: ['azure-deepseek-v4-flash'],
+        scenarioIds: ['tag-profile'],
+        runsPerScenario: 2
+      });
+    });
+
+    expect(sourceMock.startRun).toHaveBeenCalledWith({
+      configPath: '/path/to/tag-profile.yaml',
+      agents: ['azure-deepseek-v4-flash'],
+      scenarioIds: ['tag-profile'],
+      runsPerScenario: 2,
+      runNote: undefined
+    });
   });
 
   it('advances progress for config-declared agent runs', async () => {

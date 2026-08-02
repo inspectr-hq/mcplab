@@ -33,6 +33,23 @@ describe('global copilot actions', () => {
     expect(action).toHaveBeenCalledWith({ id: 'tag-profile' });
   });
 
+  it('passes temporary overrides to the registered queue-backed evaluation action', async () => {
+    const action = vi.fn();
+    cleanups.push(registerGlobalCopilotAction('queue_evaluation_run', action));
+
+    await invokeGlobalCopilotAction('queue_evaluation_run', {
+      configId: 'tag-profile',
+      agentIds: ['azure-deepseek-v4-flash'],
+      serverOverrideAll: ['mcp-lab']
+    });
+
+    expect(action).toHaveBeenCalledWith({
+      configId: 'tag-profile',
+      agentIds: ['azure-deepseek-v4-flash'],
+      serverOverrideAll: ['mcp-lab']
+    });
+  });
+
   it('registers a confirmation action for creating a Test Case', async () => {
     const action = vi.fn();
     cleanups.push(registerGlobalCopilotAction('create_test_case', action));

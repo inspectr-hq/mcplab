@@ -55,6 +55,10 @@ describe('selectGlobalCopilotAgentName', () => {
       expose: true,
       automatic: false
     });
+    expect(globalCopilotMcplabToolPolicy('mcplab_run_eval')).toEqual({
+      expose: false,
+      automatic: false
+    });
     expect(globalCopilotMcplabToolPolicy('mcplab_delete_tool_analysis_result')).toEqual({
       expose: false,
       automatic: false
@@ -201,6 +205,16 @@ describe('selectGlobalCopilotAgentName', () => {
       'open_test_case',
       'open_result_detail',
       'start_tool_analysis'
+    ]);
+    expect(
+      globalCopilotFrontendTools({ availableActions: ['queue_evaluation_run'] }).map(
+        (tool) => tool.name
+      )
+    ).toEqual([
+      'navigate_to_view',
+      'open_test_case',
+      'open_result_detail',
+      'queue_evaluation_run'
     ]);
     expect(
       globalCopilotFrontendTools({ availableActions: ['duplicate_test_case'] }).map(

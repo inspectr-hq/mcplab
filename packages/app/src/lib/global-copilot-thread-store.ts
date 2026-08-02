@@ -22,7 +22,8 @@ export type GlobalCopilotMessage = {
       }
     | {
         kind: 'start_action';
-        name: 'start_evaluation_run' | 'start_tool_analysis';
+        name: 'start_evaluation_run' | 'queue_evaluation_run' | 'start_tool_analysis';
+        arguments?: Record<string, unknown>;
         status: 'pending' | 'approved' | 'denied' | 'error';
       }
     | {

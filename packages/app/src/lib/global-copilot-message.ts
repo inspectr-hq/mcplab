@@ -42,14 +42,24 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
     }
     if (
       action.kind === 'start_action' &&
-      (action.name === 'start_evaluation_run' || action.name === 'start_tool_analysis')
+      (action.name === 'start_evaluation_run' ||
+        action.name === 'queue_evaluation_run' ||
+        action.name === 'start_tool_analysis')
     ) {
       return {
         id: message.id,
         role: 'system',
         content: 'Run action requested.',
         createdAt,
-        action: { kind: 'start_action', name: action.name, status: 'pending' }
+        action: {
+          kind: 'start_action',
+          name: action.name,
+          arguments:
+            action.arguments && typeof action.arguments === 'object'
+              ? (action.arguments as Record<string, unknown>)
+              : undefined,
+          status: 'pending'
+        }
       };
     }
     if (
@@ -201,6 +211,7 @@ export function storedGlobalCopilotMessage(
         };
       if (
         call.function.name === 'start_evaluation_run' ||
+        call.function.name === 'queue_evaluation_run' ||
         call.function.name === 'start_tool_analysis'
       )
         return {
@@ -208,7 +219,12 @@ export function storedGlobalCopilotMessage(
           role: 'system',
           content: 'Run action requested.',
           createdAt: new Date().toISOString(),
-          action: { kind: 'start_action', name: call.function.name, status: 'pending' }
+          action: {
+            kind: 'start_action',
+            name: call.function.name,
+            arguments: args,
+            status: 'pending'
+          }
         };
       if (!call.function.name.startsWith('mcplab__')) {
         const [serverName, ...toolName] = call.function.name.split('__');

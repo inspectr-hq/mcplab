@@ -30,6 +30,8 @@ export const GLOBAL_COPILOT_NAVIGATION_TARGETS = [
 ] as const;
 
 export const GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE = 5;
+// Kept for the confirmation endpoint used by persisted pre-queue Copilot threads.
+// New Global Copilot runs use the app's queue_evaluation_run frontend action instead.
 const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
 const GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL = 'mcplab_write_markdown_report';
 const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
@@ -40,7 +42,6 @@ const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
   'mcplab_generate_server_entry'
 ]);
 const GLOBAL_COPILOT_CONFIRMED_MCP_TOOLS = new Set([
-  GLOBAL_COPILOT_RUN_EVALUATION_TOOL,
   GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL
 ]);
 
@@ -105,10 +106,40 @@ export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [
 
 const GLOBAL_COPILOT_START_ACTION_TOOLS: ToolDef[] = [
   {
-    name: 'start_evaluation_run',
+    name: 'queue_evaluation_run',
     description:
-      'Request a confirmed start of the already configured evaluation run on the current page.',
-    inputSchema: { type: 'object', additionalProperties: false, properties: {} }
+      'Request a confirmed queue-backed evaluation run from the Run Evaluation page. This follows the app’s existing OAuth preflight and queue lifecycle. Use exact library IDs. The selected page configId must match configId.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['configId', 'agentIds'],
+      properties: {
+        configId: { type: 'string', description: 'Exact evaluation configuration ID selected on the Run Evaluation page.' },
+        agentIds: {
+          type: 'array',
+          minItems: 1,
+          items: { type: 'string' },
+          description: 'Exact agent IDs to use temporarily for this queued run.'
+        },
+        scenarioIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional exact Test Case IDs. Omit to use the page selection.'
+        },
+        runsPerScenario: { type: 'number', minimum: 1 },
+        serverOverrideAll: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional exact MCP server IDs to use for every selected Test Case.'
+        },
+        scenarioServerOverrides: {
+          type: 'object',
+          additionalProperties: { type: 'array', items: { type: 'string' } },
+          description: 'Optional per-Test-Case MCP server overrides, keyed by Test Case ID.'
+        },
+        runNote: { type: 'string' }
+      }
+    }
   },
   {
     name: 'start_tool_analysis',
@@ -229,7 +260,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, Agents, Tool Analysis, or OAuth Debugger view. Use open_test_case with a Test Case ID or open_result_detail with a run ID when the user explicitly asks to open one specific item; otherwise use navigate_to_view for supported views. For “open the last/latest evaluation run”, first call mcplab_list_runs to identify the run ID, then call open_result_detail. Do not use mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
-    'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
+    'For an explicit request to run an evaluation, use queue_evaluation_run only when the Run Evaluation page is open with the requested configuration selected. It is confirmation-required and uses the existing app OAuth preflight and queue lifecycle. Do not use mcplab_run_eval: that MCP tool is reserved for external MCP clients.',
     'When the user asks to create a Test Case, draft it first with mcplab_generate_scenario_entry, then request the confirmation-required create_test_case frontend action. Do not give manual filesystem instructions or call mcplab_create_test_case; that MCP tool is for external MCP clients.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',
@@ -429,6 +460,7 @@ export async function handleGlobalCopilotRun(params: {
         call.name === 'open_test_case' ||
         call.name === 'open_result_detail' ||
         call.name === 'start_evaluation_run' ||
+        call.name === 'queue_evaluation_run' ||
         call.name === 'start_tool_analysis' ||
         GLOBAL_COPILOT_LIBRARY_ACTION_NAMES.has(call.name)
       ) {
@@ -456,7 +488,7 @@ export async function handleGlobalCopilotRun(params: {
                   ? { kind: 'navigate_to_result_detail', ...(call.arguments ?? {}) }
                 : GLOBAL_COPILOT_LIBRARY_ACTION_NAMES.has(call.name)
                 ? { kind: 'library_action', name: call.name, arguments: call.arguments ?? {} }
-              : { kind: 'start_action', name: call.name }
+              : { kind: 'start_action', name: call.name, arguments: call.arguments ?? {} }
           )
         };
         pendingApproval = true;

@@ -23,6 +23,14 @@ export type GlobalCopilotPageContext = {
     visibleCount: number;
     totalCount: number;
   };
+  runEvaluation?: {
+    configId?: string;
+    configName?: string;
+    selectedAgentIds: string[];
+    selectedScenarioIds: string[];
+    availableAgentIds: string[];
+    availableTestCaseIds: string[];
+  };
   toolAnalysis?: {
     selectedServerNames: string[];
     selectedToolCount: number;
@@ -54,6 +62,9 @@ export function globalCopilotPageContext(): GlobalCopilotPageContext {
 export function globalCopilotPageContextForPath(pathname: string): GlobalCopilotPageContext {
   if (pathname === '/mcp-evaluations') {
     return currentContext.evaluations ? { evaluations: currentContext.evaluations } : {};
+  }
+  if (pathname === '/run') {
+    return currentContext.runEvaluation ? { runEvaluation: currentContext.runEvaluation } : {};
   }
   if (pathname === '/tool-analysis') {
     return currentContext.toolAnalysis ? { toolAnalysis: currentContext.toolAnalysis } : {};
