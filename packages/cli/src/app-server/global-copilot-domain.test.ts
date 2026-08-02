@@ -75,7 +75,8 @@ describe('selectGlobalCopilotAgentName', () => {
   it('only offers navigation to supported MCPLab routes', () => {
     expect(GLOBAL_COPILOT_FRONTEND_TOOLS).toEqual([
       expect.objectContaining({ name: 'navigate_to_view' }),
-      expect.objectContaining({ name: 'open_test_case' })
+      expect.objectContaining({ name: 'open_test_case' }),
+      expect.objectContaining({ name: 'open_result_detail' })
     ]);
     expect(JSON.stringify(GLOBAL_COPILOT_FRONTEND_TOOLS)).not.toContain('http://');
     expect(GLOBAL_COPILOT_NAVIGATION_TARGETS).toContain('/oauth-debugger');
@@ -179,17 +180,28 @@ describe('selectGlobalCopilotAgentName', () => {
   it('only offers start actions explicitly published by the active page', () => {
     expect(globalCopilotFrontendTools({ availableActions: [] }).map((tool) => tool.name)).toEqual([
       'navigate_to_view',
-      'open_test_case'
+      'open_test_case',
+      'open_result_detail'
     ]);
     expect(
       globalCopilotFrontendTools({ availableActions: ['start_tool_analysis'] }).map(
         (tool) => tool.name
       )
-    ).toEqual(['navigate_to_view', 'open_test_case', 'start_tool_analysis']);
+    ).toEqual([
+      'navigate_to_view',
+      'open_test_case',
+      'open_result_detail',
+      'start_tool_analysis'
+    ]);
     expect(
       globalCopilotFrontendTools({ availableActions: ['duplicate_test_case'] }).map(
         (tool) => tool.name
       )
-    ).toEqual(['navigate_to_view', 'open_test_case', 'duplicate_test_case']);
+    ).toEqual([
+      'navigate_to_view',
+      'open_test_case',
+      'open_result_detail',
+      'duplicate_test_case'
+    ]);
   });
 });

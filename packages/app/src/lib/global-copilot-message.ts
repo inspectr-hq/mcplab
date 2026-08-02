@@ -142,6 +142,15 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         action: { kind: 'open_test_case', testCaseId: action.testCaseId, status: 'pending' }
       };
     }
+    if (action.kind === 'navigate_to_result_detail' && typeof action.runId === 'string') {
+      return {
+        id: message.id,
+        role: 'system',
+        content: `Opening Result Detail ${action.runId}.`,
+        createdAt,
+        action: { kind: 'navigate_to_result_detail', runId: action.runId, status: 'pending' }
+      };
+    }
   } catch {
     // Invalid action payloads are rendered as normal assistant messages.
   }

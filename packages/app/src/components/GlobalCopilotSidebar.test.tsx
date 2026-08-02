@@ -55,6 +55,18 @@ describe('globalCopilotToolDisplayName', () => {
     });
   });
 
+  it('restores an explicit Result Detail navigation request with its run ID', () => {
+    expect(
+      storedGlobalCopilotFrontendAction({
+        id: 'assistant-result',
+        role: 'assistant',
+        content: '[mcplab-action]{"kind":"navigate_to_result_detail","runId":"run-42"}'
+      } as Message)
+    ).toMatchObject({
+      action: { kind: 'navigate_to_result_detail', runId: 'run-42', status: 'pending' }
+    });
+  });
+
   it('restores a confirmation-required MCP evaluation run', () => {
     expect(
       storedGlobalCopilotFrontendAction({

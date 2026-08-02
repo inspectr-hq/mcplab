@@ -77,7 +77,9 @@ export function GlobalCopilotController() {
     if (!thread) return;
     const requested = thread.messages.find(
       (message) =>
-        (message.action?.kind === 'navigate_to_view' || message.action?.kind === 'open_test_case') &&
+        (message.action?.kind === 'navigate_to_view' ||
+          message.action?.kind === 'open_test_case' ||
+          message.action?.kind === 'navigate_to_result_detail') &&
         message.action.status === 'pending'
     );
     if (!requested?.action) return;
@@ -86,7 +88,9 @@ export function GlobalCopilotController() {
         ? navigationTargets.has(requested.action.path)
           ? requested.action.path
           : undefined
-        : `/libraries/test-cases/${encodeURIComponent(requested.action.testCaseId)}`;
+        : requested.action.kind === 'open_test_case'
+          ? `/libraries/test-cases/${encodeURIComponent(requested.action.testCaseId)}`
+          : `/results/${encodeURIComponent(requested.action.runId)}`;
     if (!destination) return;
     void save({
       ...thread,
@@ -97,6 +101,8 @@ export function GlobalCopilotController() {
               content:
                 requested.action!.kind === 'open_test_case'
                   ? `Opened Test Case ${requested.action!.testCaseId}.`
+                  : requested.action!.kind === 'navigate_to_result_detail'
+                    ? `Opened Result Detail ${requested.action!.runId}.`
                   : `Opened ${destination}.`,
               action: { ...requested.action!, status: 'approved' as const }
             }

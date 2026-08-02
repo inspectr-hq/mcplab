@@ -88,6 +88,18 @@ export const GLOBAL_COPILOT_FRONTEND_TOOLS: ToolDef[] = [
       properties: { testCaseId: { type: 'string' } }
     },
     annotations: { readOnlyHint: true }
+  },
+  {
+    name: 'open_result_detail',
+    description:
+      'Open one specific evaluation Result Detail by run ID when the user explicitly asks to open that run.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['runId'],
+      properties: { runId: { type: 'string' } }
+    },
+    annotations: { readOnlyHint: true }
   }
 ];
 
@@ -196,7 +208,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'Help users analyze evaluation results and author or improve MCP test cases.',
     'You can navigate the MCPLab interface using available frontend actions.',
     'The Current application context is authoritative page state supplied by the app. When it names a currentView or page filters, answer directly from that context; do not say you cannot see the screen.',
-    'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, Agents, Tool Analysis, or OAuth Debugger view. Use open_test_case with a Test Case ID when the user explicitly asks to open one specific Test Case; otherwise use navigate_to_view for supported views. Do not use mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
+    'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, Agents, Tool Analysis, or OAuth Debugger view. Use open_test_case with a Test Case ID or open_result_detail with a run ID when the user explicitly asks to open one specific item; otherwise use navigate_to_view for supported views. For “open the last/latest evaluation run”, first call mcplab_list_runs to identify the run ID, then call open_result_detail. Do not use mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
     'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
@@ -358,7 +370,8 @@ export async function handleGlobalCopilotRun(params: {
     const messages = toGlobalCopilotConversationMessages(input);
     const frontendTools = globalCopilotFrontendTools(context).filter(
       (tool) =>
-        tool.name !== 'navigate_to_view' || isExplicitGlobalCopilotNavigationRequest(messages)
+        !['navigate_to_view', 'open_test_case', 'open_result_detail'].includes(tool.name) ||
+        isExplicitGlobalCopilotNavigationRequest(messages)
     );
     let response = await chatWithAgent({
       agent: agent as AgentConfig,
@@ -376,6 +389,7 @@ export async function handleGlobalCopilotRun(params: {
       if (
         call.name === 'navigate_to_view' ||
         call.name === 'open_test_case' ||
+        call.name === 'open_result_detail' ||
         call.name === 'start_evaluation_run' ||
         call.name === 'start_tool_analysis' ||
         GLOBAL_COPILOT_LIBRARY_ACTION_NAMES.has(call.name)
@@ -400,7 +414,9 @@ export async function handleGlobalCopilotRun(params: {
               ? { kind: 'navigate_to_view', ...(call.arguments ?? {}) }
               : call.name === 'open_test_case'
                 ? { kind: 'open_test_case', ...(call.arguments ?? {}) }
-              : GLOBAL_COPILOT_LIBRARY_ACTION_NAMES.has(call.name)
+                : call.name === 'open_result_detail'
+                  ? { kind: 'navigate_to_result_detail', ...(call.arguments ?? {}) }
+                : GLOBAL_COPILOT_LIBRARY_ACTION_NAMES.has(call.name)
                 ? { kind: 'library_action', name: call.name, arguments: call.arguments ?? {} }
               : { kind: 'start_action', name: call.name }
           )

@@ -53,6 +53,8 @@ export function GlobalCopilotActionCard({
     );
   if (action.kind === 'open_test_case' && action.status === 'approved')
     return <p className="text-xs text-emerald-700">Opened Test Case {action.testCaseId}.</p>;
+  if (action.kind === 'navigate_to_result_detail' && action.status === 'approved')
+    return <p className="text-xs text-emerald-700">Opened Result Detail {action.runId}.</p>;
   if (action.kind === 'run_mcp_evaluation')
     return (
       <AssistantToolCallCard
