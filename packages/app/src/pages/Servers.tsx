@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Database } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -26,6 +26,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import type { ServerConfig } from '@/types/eval';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 const Servers = () => {
   const { servers, setServers, reload, loading } = useLibraries();
@@ -84,6 +88,17 @@ const Servers = () => {
       displayName(a).localeCompare(displayName(b), undefined, { sensitivity: 'base' })
     );
   }, [servers, normalizedServerFilter]);
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      servers: {
+        ...(serverFilter.trim() ? { searchQuery: serverFilter.trim() } : {}),
+        visibleCount: filteredServers.length,
+        totalCount: servers.length
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [filteredServers.length, serverFilter, servers.length]);
 
   return (
     <div className="space-y-6">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -26,6 +26,10 @@ import {
 import { ProviderBadge } from '@/components/ProviderBadge';
 import { toast } from '@/hooks/use-toast';
 import type { AgentConfig } from '@/types/eval';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 const Agents = () => {
   const { agents, setAgents, reload, loading } = useLibraries();
@@ -44,6 +48,17 @@ const Agents = () => {
           }),
     [agents, normalizedAgentFilter]
   );
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      agents: {
+        ...(agentFilter.trim() ? { searchQuery: agentFilter.trim() } : {}),
+        visibleCount: filteredAgents.length,
+        totalCount: agents.length
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [agentFilter, agents.length, filteredAgents.length]);
 
   const handleDuplicate = async (agent: AgentConfig) => {
     const baseName = `${agent.name}-copy`;

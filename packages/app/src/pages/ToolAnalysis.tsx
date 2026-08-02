@@ -26,6 +26,10 @@ import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
 import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -352,6 +356,19 @@ const ToolAnalysisPage = () => {
     [selectedToolsByServer]
   );
   const selectedServerLabel = selectedServerNames[0] ?? '';
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      toolAnalysis: {
+        selectedServerNames,
+        selectedToolCount: totalSelectedTools,
+        ...(toolQuery.trim() ? { toolSearchQuery: toolQuery.trim() } : {}),
+        runState,
+        ...(activeJobId ? { activeJobId } : {})
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [activeJobId, runState, selectedServerNames, toolQuery, totalSelectedTools]);
 
   const startAnalysis = async () => {
     if (!metadataReview && !deeperAnalysis) {

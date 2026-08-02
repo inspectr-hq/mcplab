@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE,
   GLOBAL_COPILOT_FRONTEND_TOOLS,
+  GLOBAL_COPILOT_NAVIGATION_TARGETS,
   globalCopilotExternalServers,
   globalCopilotFrontendTools,
   globalCopilotMcplabToolPolicy,
@@ -15,14 +16,14 @@ describe('selectGlobalCopilotAgentName', () => {
     expect(GLOBAL_COPILOT_AUTOMATIC_READ_TOOL_BATCH_SIZE).toBe(5);
   });
 
-  it('exposes validation, safe links, and draft generators automatically but confirms report writes', () => {
+  it('exposes validation and draft generators automatically but reserves app links for frontend navigation', () => {
     expect(globalCopilotMcplabToolPolicy('mcplab_validate_config')).toEqual({
       expose: true,
       automatic: true
     });
     expect(globalCopilotMcplabToolPolicy('mcplab_build_app_link')).toEqual({
-      expose: true,
-      automatic: true
+      expose: false,
+      automatic: false
     });
     expect(globalCopilotMcplabToolPolicy('mcplab_generate_scenario_entry')).toEqual({
       expose: true,
@@ -71,6 +72,7 @@ describe('selectGlobalCopilotAgentName', () => {
       expect.objectContaining({ name: 'navigate_to_view' })
     ]);
     expect(JSON.stringify(GLOBAL_COPILOT_FRONTEND_TOOLS)).not.toContain('http://');
+    expect(GLOBAL_COPILOT_NAVIGATION_TARGETS).toContain('/oauth-debugger');
   });
 
   it('only treats direct requests to open a view as navigation', () => {
@@ -87,6 +89,16 @@ describe('selectGlobalCopilotAgentName', () => {
     expect(
       isExplicitGlobalCopilotNavigationRequest([
         { role: 'user', content: 'Can you show me my test cases?' }
+      ])
+    ).toBe(true);
+    expect(
+      isExplicitGlobalCopilotNavigationRequest([
+        { role: 'user', content: 'Show the Tool Analysis page.' }
+      ])
+    ).toBe(true);
+    expect(
+      isExplicitGlobalCopilotNavigationRequest([
+        { role: 'user', content: 'Can you navigate to the OAuth Debugger?' }
       ])
     ).toBe(true);
   });

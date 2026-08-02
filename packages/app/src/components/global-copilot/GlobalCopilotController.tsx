@@ -24,6 +24,7 @@ const navigationTargets = new Set([
   '/compare',
   '/tool-analysis',
   '/tool-analysis-results',
+  '/oauth-debugger',
   '/libraries/servers',
   '/libraries/agents',
   '/libraries/test-cases',

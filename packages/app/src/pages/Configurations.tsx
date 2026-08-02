@@ -53,6 +53,10 @@ import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { EvalConfig } from '@/types/eval';
+import {
+  clearGlobalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
   cfg.configName?.trim() || cfg.name;
@@ -311,6 +315,20 @@ const Configurations = () => {
     });
     return sorted;
   }, [filteredConfigs, sortBy, sortDir]);
+
+  useEffect(() => {
+    setGlobalCopilotPageContext({
+      evaluations: {
+        ...(configFilter.trim() ? { searchQuery: configFilter.trim() } : {}),
+        suiteFilter,
+        sortBy,
+        sortDirection: sortDir,
+        visibleCount: sortedConfigs.length,
+        totalCount: configs.length
+      }
+    });
+    return () => clearGlobalCopilotPageContext();
+  }, [configFilter, configs.length, sortBy, sortDir, sortedConfigs.length, suiteFilter]);
 
   const sortIcon = (key: typeof sortBy) => {
     if (sortBy !== key) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
