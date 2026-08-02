@@ -34,7 +34,6 @@ const GLOBAL_COPILOT_RUN_EVALUATION_TOOL = 'mcplab_run_eval';
 const GLOBAL_COPILOT_WRITE_MARKDOWN_REPORT_TOOL = 'mcplab_write_markdown_report';
 const GLOBAL_COPILOT_AUTOMATIC_MCP_TOOLS = new Set([
   'mcplab_validate_config',
-  'mcplab_build_app_link',
   'mcplab_generate_scenario_entry',
   'mcplab_generate_agent_entry',
   'mcplab_generate_server_entry'
