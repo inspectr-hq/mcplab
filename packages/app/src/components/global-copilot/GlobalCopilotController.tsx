@@ -1,5 +1,5 @@
 import { Bot, MessageSquarePlus, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -8,6 +8,7 @@ import { useGlobalCopilotRun } from '@/hooks/use-global-copilot-run';
 import { useGlobalCopilotThread } from '@/hooks/use-global-copilot-thread';
 import { invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
+import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
 import type { Scenario } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
@@ -41,6 +42,7 @@ export function GlobalCopilotController() {
   const [open, setOpen] = useState(() => window.localStorage.getItem(openKey) !== '0');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(expandedKey) === '1');
   const [input, setInput] = useState('');
+  const handlingTestCaseOpenRef = useRef(new Set<string>());
   useEffect(
     () =>
       registerGlobalCopilotAction('create_test_case', async (arguments_) => {
@@ -122,14 +124,64 @@ export function GlobalCopilotController() {
         message.action.status === 'pending'
     );
     if (!requested?.action) return;
+    if (requested.action.kind === 'open_test_case') {
+      if (handlingTestCaseOpenRef.current.has(requested.id)) return;
+      handlingTestCaseOpenRef.current.add(requested.id);
+    }
     const destination =
       requested.action.kind === 'navigate_to_view'
         ? navigationTargets.has(requested.action.path)
           ? requested.action.path
           : undefined
         : requested.action.kind === 'open_test_case'
-          ? `/libraries/test-cases/${encodeURIComponent(requested.action.testCaseId)}`
+          ? undefined
           : `/results/${encodeURIComponent(requested.action.runId)}`;
+    if (requested.action.kind === 'open_test_case') {
+      void resolveGlobalCopilotTestCaseOpen(source, requested.action.testCaseId)
+        .then((resolution) => {
+          if (!resolution.found) {
+            return save({
+              ...thread,
+              messages: thread.messages.map((message) =>
+                message.id === requested.id
+                  ? {
+                      ...message,
+                      content: resolution.message,
+                      action: { ...requested.action!, status: 'error' as const }
+                    }
+                  : message
+              )
+            });
+          }
+          return save({
+            ...thread,
+            messages: thread.messages.map((message) =>
+              message.id === requested.id
+                ? {
+                    ...message,
+                    content: `Opened Test Case ${requested.action!.testCaseId}.`,
+                    action: { ...requested.action!, status: 'approved' as const }
+                  }
+                : message
+            )
+          }).then(() => navigate(resolution.destination));
+        })
+        .catch((error) =>
+          save({
+            ...thread,
+            messages: thread.messages.map((message) =>
+              message.id === requested.id
+                ? {
+                    ...message,
+                    content: error instanceof Error ? error.message : String(error),
+                    action: { ...requested.action!, status: 'error' as const }
+                  }
+                : message
+            )
+          })
+        );
+      return;
+    }
     if (!destination) return;
     void save({
       ...thread,
@@ -148,7 +200,7 @@ export function GlobalCopilotController() {
           : message
       )
     }).then(() => navigate(destination));
-  }, [navigate, save, thread]);
+  }, [navigate, save, source, thread]);
 
   const send = useCallback(
     async (continuation?: GlobalCopilotMessage, continuationThread = thread) => {
@@ -310,7 +362,19 @@ export function GlobalCopilotController() {
       }
       try {
         await invokeGlobalCopilotAction(message.action.name, message.action.arguments);
-        await save({ ...thread, messages: updateAction(message, 'approved') });
+        const saved = await save({ ...thread, messages: updateAction(message, 'approved') });
+        if (message.action.name === 'create_test_case') {
+          const testCaseId = String(message.action.arguments.id);
+          await send(
+            {
+              id: id('test-case-created'),
+              role: 'system',
+              content: `The confirmed create_test_case action saved Test Case '${testCaseId}'. If the user explicitly asked to open it, first call mcplab_get_library_item with kind "test_cases" and id "${testCaseId}". Only then call open_test_case.`,
+              createdAt: new Date().toISOString()
+            },
+            saved
+          );
+        }
       } catch (error) {
         await save({
           ...thread,
@@ -326,7 +390,7 @@ export function GlobalCopilotController() {
         });
       }
     },
-    [save, thread, updateAction]
+    [save, send, thread, updateAction]
   );
   const libraryAction = useCallback(
     async (message: GlobalCopilotMessage, approved: boolean) => {

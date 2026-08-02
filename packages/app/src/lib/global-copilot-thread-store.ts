@@ -49,7 +49,7 @@ export type GlobalCopilotMessage = {
     | {
         kind: 'open_test_case';
         testCaseId: string;
-        status: 'pending' | 'approved';
+        status: 'pending' | 'approved' | 'error';
       }
     | {
         kind: 'navigate_to_result_detail';
