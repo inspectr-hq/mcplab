@@ -120,6 +120,24 @@ const GLOBAL_COPILOT_START_ACTION_TOOLS: ToolDef[] = [
 
 const GLOBAL_COPILOT_LIBRARY_ACTION_TOOLS: ToolDef[] = [
   {
+    name: 'create_test_case',
+    description:
+      'Request confirmed creation of a reviewed Test Case through the MCPLab Library API. This creates only a canonical test-cases entry, never an arbitrary file.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id', 'servers', 'prompt'],
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        servers: { type: 'array', items: { type: 'string' }, minItems: 1 },
+        prompt: { type: 'string' },
+        required_tools: { type: 'array', items: { type: 'string' } },
+        response_regex_patterns: { type: 'array', items: { type: 'string' } }
+      }
+    }
+  },
+  {
     name: 'duplicate_test_case',
     description: 'Request a confirmed duplicate of the selected Test Case in the current library view.',
     inputSchema: {
@@ -212,6 +230,7 @@ function globalCopilotSystemPrompt(context: unknown): string {
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
     'For an explicit request to run an evaluation, use mcplab_run_eval with the chosen configuration and any requested temporary agent or MCP-server overrides. The user must approve that run before it starts.',
+    'When the user asks to create a Test Case, draft it first with mcplab_generate_scenario_entry, then request the confirmation-required create_test_case frontend action. Do not give manual filesystem instructions or call mcplab_create_test_case; that MCP tool is for external MCP clients.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
     'Use concise, practical answers.',
     `Current application context: ${JSON.stringify(context ?? {})}`

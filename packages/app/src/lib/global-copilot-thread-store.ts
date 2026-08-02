@@ -27,8 +27,12 @@ export type GlobalCopilotMessage = {
       }
     | {
         kind: 'library_action';
-        name: 'duplicate_test_case' | 'duplicate_mcp_server' | 'duplicate_agent';
-        arguments: { id: string };
+        name:
+          | 'duplicate_test_case'
+          | 'duplicate_mcp_server'
+          | 'duplicate_agent'
+          | 'create_test_case';
+        arguments: Record<string, unknown>;
         status: 'pending' | 'approved' | 'denied' | 'error';
       }
     | {

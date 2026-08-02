@@ -54,7 +54,8 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
     }
     if (
       action.kind === 'library_action' &&
-      (action.name === 'duplicate_test_case' ||
+      (action.name === 'create_test_case' ||
+        action.name === 'duplicate_test_case' ||
         action.name === 'duplicate_mcp_server' ||
         action.name === 'duplicate_agent') &&
       action.arguments &&
@@ -69,7 +70,7 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
         action: {
           kind: 'library_action',
           name: action.name,
-          arguments: { id: (action.arguments as Record<string, string>).id },
+          arguments: action.arguments as Record<string, unknown>,
           status: 'pending'
         }
       };

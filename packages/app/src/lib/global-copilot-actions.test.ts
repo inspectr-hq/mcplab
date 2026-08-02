@@ -32,4 +32,19 @@ describe('global copilot actions', () => {
 
     expect(action).toHaveBeenCalledWith({ id: 'tag-profile' });
   });
+
+  it('registers a confirmation action for creating a Test Case', async () => {
+    const action = vi.fn();
+    cleanups.push(registerGlobalCopilotAction('create_test_case', action));
+
+    await invokeGlobalCopilotAction('create_test_case', {
+      id: 'list-library',
+      servers: ['mcp-lab'],
+      prompt: 'List library entries.'
+    });
+
+    expect(action).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'list-library', servers: ['mcp-lab'] })
+    );
+  });
 });

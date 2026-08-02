@@ -42,6 +42,31 @@ async function setupTools(
 }
 
 describe('mcp tool behavior', () => {
+  it('creates a Test Case only in the canonical test-cases directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-create-case-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(libraryRoot, { recursive: true });
+    writeFileSync(
+      join(libraryRoot, 'servers.yaml'),
+      'mcp-lab:\n  transport: http\n  url: http://127.0.0.1:3011/mcp\n',
+      'utf8'
+    );
+    const tools = await setupTools(libraryRoot);
+    const result = await tools.get('mcplab_create_test_case')!.cb({
+      id: 'list-library',
+      servers: ['mcp-lab'],
+      prompt: 'List the library entries.',
+      required_tools: ['mcplab_list_library']
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(readFileSync(join(libraryRoot, 'test-cases', 'list-library.yaml'), 'utf8')).toContain(
+      'id: list-library'
+    );
+    expect(existsSync(join(libraryRoot, 'scenarios', 'list-library.yaml'))).toBe(false);
+  });
+
   it('lists evaluation configs with the same nested-suite filtering as MCP Evaluations', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-evals-'));
     temporaryRoots.push(root);
@@ -110,6 +135,25 @@ describe('mcp tool behavior', () => {
         id: 'tag-profile',
         content: expect.objectContaining({ id: 'tag-profile' })
       })
+    ]);
+  });
+
+  it('uses test_cases as the canonical library kind while retaining scenarios as an alias', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-test-cases-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(join(libraryRoot, 'test-cases'), { recursive: true });
+    writeFileSync(join(libraryRoot, 'test-cases', 'tag-profile.yaml'), 'id: tag-profile\n', 'utf8');
+    const tools = await setupTools(libraryRoot);
+
+    const canonical = await tools.get('mcplab_list_library')!.cb({ kind: 'test_cases' });
+    const legacy = await tools.get('mcplab_list_library')!.cb({ kind: 'scenarios' });
+
+    expect(canonical.structuredContent.test_cases).toEqual([
+      expect.objectContaining({ id: 'tag-profile' })
+    ]);
+    expect(legacy.structuredContent.scenarios).toEqual([
+      expect.objectContaining({ id: 'tag-profile' })
     ]);
   });
 
@@ -238,6 +282,25 @@ describe('mcp tool behavior', () => {
     });
   });
 
+  it('rejects a configured Evaluation Judge that is missing from the agent library', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-missing-judge-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(libraryRoot, { recursive: true });
+    writeFileSync(
+      join(libraryRoot, '.mcplab-app-settings.yaml'),
+      'evaluation_judge_agent_name: missing-judge\n',
+      'utf8'
+    );
+
+    await setupTools(libraryRoot);
+    const { resolveMcpEvaluationJudge } = await import('./runtime.js');
+
+    expect(() => resolveMcpEvaluationJudge(libraryRoot)).toThrow(
+      "Evaluation judge agent not found: missing-judge"
+    );
+  });
+
   it('returns generator drafts without writing library files', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-generate-'));
     temporaryRoots.push(root);
@@ -264,7 +327,7 @@ describe('mcp tool behavior', () => {
     expect(agent.structuredContent).toMatchObject({ id: 'draft-agent' });
     expect(scenario.structuredContent).toMatchObject({
       scenario: { id: 'draft-case' },
-      format: 'library-scenario-file'
+      format: 'library-test-case-file'
     });
     expect(server.structuredContent).toMatchObject({ id: 'draft-server' });
     expect(existsSync(join(libraryRoot, 'agents.yaml'))).toBe(false);

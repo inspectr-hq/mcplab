@@ -211,6 +211,7 @@ const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
   servers: z.array(LibraryServerEntrySchema),
   agents: z.array(LibraryAgentEntrySchema),
+  test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
 
@@ -1182,13 +1183,13 @@ export function registerTools(server: McpServer): void {
     'mcplab_list_library',
     {
       description:
-        'List reusable MCPLab library entries (MCP servers, agents, and Test Cases) from a bundle root such as mcplab/ or examples/libraries/. The scenarios kind returns Test Cases for backwards compatibility. Before using mcplab_run_eval overrides, call this with kind=agents or kind=servers and includeContent=true to discover the exact library IDs; do not infer IDs from friendly names.',
+        'List reusable MCPLab library entries (MCP servers, agents, and Test Cases) from a bundle root such as mcplab/ or examples/libraries/. Use kind=test_cases for canonical Test Cases stored in mcplab/test-cases/. kind=scenarios and the scenarios output field remain deprecated aliases for existing clients. Before using mcplab_run_eval overrides, call this with kind=agents or kind=servers and includeContent=true to discover exact library IDs; do not infer IDs from friendly names.',
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
-          .enum(['all', 'servers', 'agents', 'scenarios'])
+          .enum(['all', 'servers', 'agents', 'test_cases', 'scenarios'])
           .optional()
-          .describe('Which library category to list. scenarios returns Test Cases. Defaults to all.'),
+          .describe('Which library category to list. test_cases is canonical; scenarios is deprecated. Defaults to all.'),
         includeContent: z
           .boolean()
           .optional()
@@ -1207,6 +1208,7 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
+                test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
 
@@ -1219,18 +1221,18 @@ export function registerTools(server: McpServer): void {
     'mcplab_get_library_item',
     {
       description:
-        'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
+        'Get a specific reusable server, agent, or Test Case definition from a MCPLab library bundle and return both structured data and YAML. Use kind=test_cases; scenarios is a deprecated alias.',
       outputSchema: {
         bundleRoot: z.string(),
-        kind: z.enum(['servers', 'agents', 'scenarios']),
+        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
         yaml: z.string(),
         content: GenericObjectSchema
       },
       inputSchema: {
-        kind: z.enum(['servers', 'agents', 'scenarios']).describe('Library category.'),
-        id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
+        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']).describe('Library category.'),
+        id: z.string().describe('Entry id (for Test Cases this is testCase.id, not filename).')
       }
     },
     async ({ kind, id }) => {
@@ -1301,16 +1303,51 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_create_test_case',
+    {
+      description:
+        'Create one reviewed MCPLab Test Case in the canonical test-cases library directory. This is a scoped write, not a general file writer: it accepts a Test Case definition only and refuses duplicate IDs.',
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
+      inputSchema: {
+        id: z.string().min(1).describe('New unique Test Case ID.'),
+        name: z.string().optional(),
+        servers: z.array(z.string()).min(1).describe('Existing MCP server IDs.'),
+        prompt: z.string().min(1).max(4000),
+        required_tools: z.array(z.string()).optional(),
+        response_regex_patterns: z.array(z.string()).optional()
+      }
+    },
+    async ({ id, name, servers, prompt, required_tools, response_regex_patterns }) => {
+      return withToolHandling(async () => {
+        if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+          throw new Error('id must use letters, numbers, hyphens, or underscores.');
+        }
+        const bundleRoot = resolveBundleRoot();
+        const library = readLibrary(bundleRoot, false);
+        const missingServers = servers.filter((server) => !library.servers.some((item) => item.id === server));
+        if (missingServers.length) throw new Error(`Unknown MCP server(s): ${missingServers.join(', ')}`);
+        const testCasesDir = join(bundleRoot, 'test-cases');
+        mkdirSync(testCasesDir, { recursive: true });
+        const target = join(testCasesDir, `${id}.yaml`);
+        if (existsSync(target)) throw new Error(`Test Case '${id}' already exists.`);
+        const testCase = buildScenario({ id, name, servers, prompt, required_tools, response_regex_patterns });
+        writeFileSync(target, `${stringifyYaml(testCase)}\n`, 'utf8');
+        return ok(`Created Test Case '${id}'`, { id, path: target, test_case: testCase });
+      });
+    }
+  );
+
+  registerTool(
     'mcplab_generate_scenario_entry',
     {
       description:
-        'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Optimized for scenario authoring workflows.',
+        'Generate a MCPLab Test Case YAML snippet with prompt, server links, and optional evaluation/extract rules. The generated library file belongs in mcplab/test-cases/. The tool name is retained for compatibility.',
       outputSchema: {
         scenario: ScenarioEntrySchema,
         yaml: z.string(),
         yaml_library_file: z.string(),
         yaml_inline_list_item: z.string(),
-        format: z.enum(['library-scenario-file', 'inline-scenarios-list-item']),
+        format: z.enum(['library-test-case-file', 'inline-scenarios-list-item']),
         warnings: z.array(z.string())
       },
       inputSchema: {
@@ -1374,7 +1411,7 @@ export function registerTools(server: McpServer): void {
           yaml: asLibraryFile ? yamlLibraryFile : yamlInlineListItem,
           yaml_library_file: yamlLibraryFile,
           yaml_inline_list_item: yamlInlineListItem,
-          format: asLibraryFile ? 'library-scenario-file' : 'inline-scenarios-list-item',
+          format: asLibraryFile ? 'library-test-case-file' : 'inline-scenarios-list-item',
           warnings
         });
       });
@@ -2588,7 +2625,7 @@ export function registerPrompts(server: McpServer): void {
     'mcplab-scenario-author',
     {
       description:
-        'Guide an LLM to author or refine MCPLab scenarios, prioritizing reusable scenario library files and deterministic eval rules.',
+        'Guide an LLM to author or refine MCPLab Test Cases, prioritizing reusable files in mcplab/test-cases/ and deterministic eval rules.',
       argsSchema: {
         task: z.string().describe('What the scenario should test.'),
         server_ids: z
@@ -2610,15 +2647,15 @@ export function registerPrompts(server: McpServer): void {
             content: {
               type: 'text',
               text:
-                `Help me author a MCPLab scenario for this testing task:\n\n${task}\n\n` +
+                `Help me author a MCPLab Test Case for this testing task:\n\n${task}\n\n` +
                 `${maybeServers}${maybeAgent}` +
                 `Workflow:\n` +
-                `1. Inspect library entries (servers/agents/scenarios) if needed.\n` +
-                `2. Draft a scenario with mcplab_generate_scenario_entry.\n` +
+                `1. Inspect library entries (servers/agents/test_cases) if needed.\n` +
+                `2. Draft a Test Case with mcplab_generate_scenario_entry.\n` +
                 `3. Suggest exact eval rules (required tools / regex assertions / extract rules).\n` +
                 `4. Validate the final config with mcplab_validate_config when a config path is available.\n` +
-                `5. If execution is requested, run scenarios with mcplab_run_eval (instead of suggesting shell commands).\n` +
-                `Prefer reusable scenario files when possible.`
+                `5. If execution is requested, run Test Cases with mcplab_run_eval (instead of suggesting shell commands).\n` +
+                `Prefer reusable files in mcplab/test-cases/ when possible.`
             }
           }
         ]
@@ -2662,9 +2699,14 @@ export function registerPrompts(server: McpServer): void {
 const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_delete_tool_analysis_result',
   'mcplab_write_markdown_report',
-  'mcplab_run_eval'
+  'mcplab_run_eval',
+  'mcplab_create_test_case'
 ]);
-const MUTATING_TOOLS = new Set<string>(['mcplab_write_markdown_report', 'mcplab_run_eval']);
+const MUTATING_TOOLS = new Set<string>([
+  'mcplab_write_markdown_report',
+  'mcplab_run_eval',
+  'mcplab_create_test_case'
+]);
 const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
@@ -2829,6 +2871,8 @@ function readLibrary(
         id,
         ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
       })),
+    test_cases: scenarioEntries,
+    // Deprecated compatibility field. New clients should use test_cases.
     scenarios: scenarioEntries
   };
   return out;
@@ -2836,7 +2880,7 @@ function readLibrary(
 
 function getLibraryItem(
   bundleRoot: string,
-  kind: 'servers' | 'agents' | 'scenarios',
+  kind: 'servers' | 'agents' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents') {
@@ -2879,7 +2923,7 @@ function getLibraryItem(
       };
     }
   }
-  throw new Error(`Scenario '${id}' not found in ${dir}`);
+  throw new Error(`Test Case '${id}' not found in ${dir}`);
 }
 
 function resolveLibraryTestCasesDir(bundleRoot: string): string {
@@ -3364,6 +3408,7 @@ function detectLikelyBundleRoot(configPath: string): string | null {
   const candidateFromConfigs = dirname(configDir);
   if (
     existsSync(join(candidateFromConfigs, 'servers.yaml')) ||
+    existsSync(join(candidateFromConfigs, 'test-cases')) ||
     existsSync(join(candidateFromConfigs, 'scenarios'))
   ) {
     return candidateFromConfigs;

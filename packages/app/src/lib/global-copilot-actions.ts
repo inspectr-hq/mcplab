@@ -2,6 +2,7 @@ export type GlobalCopilotActionName =
   | 'start_evaluation_run'
   | 'start_tool_analysis'
   | 'duplicate_test_case'
+  | 'create_test_case'
   | 'duplicate_mcp_server'
   | 'duplicate_agent';
 

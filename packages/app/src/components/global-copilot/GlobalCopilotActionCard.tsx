@@ -130,7 +130,9 @@ export function GlobalCopilotActionCard({
           id: message.id,
           server: 'mcplab',
           tool:
-            action.name === 'duplicate_test_case'
+            action.name === 'create_test_case'
+              ? 'Create Test Case'
+              : action.name === 'duplicate_test_case'
               ? 'Duplicate Test Case'
               : action.name === 'duplicate_mcp_server'
                 ? 'Duplicate MCP Server'
@@ -140,7 +142,11 @@ export function GlobalCopilotActionCard({
           status: action.status,
           createdAt: message.createdAt
         }}
-        description="This creates a copy using the same library-page action as the Duplicate button."
+        description={
+          action.name === 'create_test_case'
+            ? 'This creates the reviewed Test Case through the same MCPLab Library API as the app.'
+            : 'This creates a copy using the same library-page action as the Duplicate button.'
+        }
         onApprove={() => onLibraryAction(message, true)}
         onDeny={() => onLibraryAction(message, false)}
       />
