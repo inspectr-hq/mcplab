@@ -116,3 +116,95 @@ export function storedGlobalCopilotFrontendAction(message: Message): GlobalCopil
   }
   return null;
 }
+
+export function storedGlobalCopilotMessage(
+  message: Message,
+  toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
+): GlobalCopilotMessage | null {
+  const marked = storedGlobalCopilotFrontendAction(message);
+  if (marked) return marked;
+  if (message.role === 'assistant' && !String(message.content ?? '').trim()) return null;
+  const calls =
+    (message as Message & { toolCalls?: Array<{ function: { name: string; arguments: string } }> })
+      .toolCalls ?? [];
+  const call = calls[0];
+  if (message.role === 'assistant' && call) {
+    try {
+      const args = JSON.parse(call.function.arguments) as Record<string, unknown>;
+      if (call.function.name === 'navigate_to_view' && typeof args.path === 'string')
+        return {
+          id: message.id,
+          role: 'system',
+          content: `Navigation requested: ${args.path}`,
+          createdAt: new Date().toISOString(),
+          action: {
+            kind: 'navigate_to_view',
+            path: args.path,
+            reason: typeof args.reason === 'string' ? args.reason : undefined,
+            status: 'pending'
+          }
+        };
+      if (call.function.name === 'request_additional_read_tools')
+        return {
+          id: message.id,
+          role: 'system',
+          content: `Additional MCPLab read-tool batch requested (${
+            typeof args.batchSize === 'number' ? args.batchSize : 5
+          } calls).`,
+          createdAt: new Date().toISOString(),
+          action: {
+            kind: 'continue_reading',
+            batchSize: typeof args.batchSize === 'number' ? args.batchSize : 5,
+            status: 'pending'
+          }
+        };
+      if (
+        call.function.name === 'start_evaluation_run' ||
+        call.function.name === 'start_tool_analysis'
+      )
+        return {
+          id: message.id,
+          role: 'system',
+          content: 'Run action requested.',
+          createdAt: new Date().toISOString(),
+          action: { kind: 'start_action', name: call.function.name, status: 'pending' }
+        };
+      if (!call.function.name.startsWith('mcplab__')) {
+        const [serverName, ...toolName] = call.function.name.split('__');
+        if (serverName && toolName.length)
+          return {
+            id: message.id,
+            role: 'system',
+            content: `External MCP call requested: ${serverName}/${toolName.join('__')}`,
+            createdAt: new Date().toISOString(),
+            action: {
+              kind: 'external_mcp_tool',
+              serverName,
+              toolName: toolName.join('__'),
+              arguments: args,
+              status: 'pending'
+            }
+          };
+      }
+    } catch {
+      /* Render malformed calls as normal messages. */
+    }
+  }
+  if (
+    !['user', 'assistant', 'tool', 'system'].includes(message.role) ||
+    typeof message.content !== 'string'
+  )
+    return null;
+  const toolCallId = (message as Message & { toolCallId?: string }).toolCallId;
+  const toolCall = toolCallId ? toolCalls.get(toolCallId) : undefined;
+  return {
+    id: message.id,
+    role: message.role as GlobalCopilotMessage['role'],
+    content: message.content,
+    createdAt: new Date().toISOString(),
+    ...(toolCallId ? { toolCallId } : {}),
+    ...(toolCall
+      ? { toolName: globalCopilotToolDisplayName(toolCall.name), toolArguments: toolCall.arguments }
+      : {})
+  };
+}

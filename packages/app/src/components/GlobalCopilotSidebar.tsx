@@ -865,187 +865,201 @@ export function GlobalCopilotSidebar() {
           })()
         }
       />
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-3 p-3">
-          {messages.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Ask about results, test cases, or MCPLab.
-            </p>
-          )}
-          {messages.map((message) =>
-            message.role === 'system' &&
-            message.content.startsWith('Previously retrieved tool data:') ? null : (
-              <div key={message.id} className="space-y-2">
-                {message.role === 'tool' ? (
-                  (() => {
-                    const toolName = message.toolName
-                      ? globalCopilotToolDisplayName(message.toolName)
-                      : 'mcplab_read';
-                    return (
-                      <AssistantToolCallCard
-                        call={{
-                          id: message.toolCallId ?? message.id,
-                          server: 'mcplab',
-                          tool: globalCopilotToolLabel(toolName),
-                          publicToolName: toolName,
-                          arguments: message.toolArguments ?? {},
-                          status: 'approved',
-                          createdAt: message.createdAt,
-                          resultPreview: message.content
-                        }}
-                        defaultOpen={false}
-                        description={`Read-only MCPLab tool completed.\n\nMCP tool: \`${toolName}\``}
-                      />
-                    );
-                  })()
-                ) : (
-                  <AssistantMessageRow
-                    message={{
-                      id: message.id,
-                      role: message.role,
-                      text: message.content,
-                      createdAt: message.createdAt
-                    }}
-                    renderActions={
-                      message.role === 'assistant' ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="mt-1 h-7 w-7"
-                          onClick={() => void copyMessage(message.content)}
-                          aria-label="Copy message"
-                          title="Copy message"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : undefined
-                    }
-                  />
-                )}
-                {message.action?.kind === 'continue_reading' &&
-                  message.action.status === 'pending' && (
-                    <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                      <p>
-                        Allow up to {message.action.batchSize} additional read-only MCPLab tool
-                        calls to continue this investigation?
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => void confirmAdditionalReadTools(message, true)}
-                        >
-                          Continue
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void confirmAdditionalReadTools(message, false)}
-                        >
-                          Stop here
-                        </Button>
+      <div className="hidden">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-3 p-3">
+            {messages.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Ask about results, test cases, or MCPLab.
+              </p>
+            )}
+            {messages.map((message) =>
+              message.role === 'system' &&
+              message.content.startsWith('Previously retrieved tool data:') ? null : (
+                <div key={message.id} className="space-y-2">
+                  {message.role === 'tool' ? (
+                    (() => {
+                      const toolName = message.toolName
+                        ? globalCopilotToolDisplayName(message.toolName)
+                        : 'mcplab_read';
+                      return (
+                        <AssistantToolCallCard
+                          call={{
+                            id: message.toolCallId ?? message.id,
+                            server: 'mcplab',
+                            tool: globalCopilotToolLabel(toolName),
+                            publicToolName: toolName,
+                            arguments: message.toolArguments ?? {},
+                            status: 'approved',
+                            createdAt: message.createdAt,
+                            resultPreview: message.content
+                          }}
+                          defaultOpen={false}
+                          description={`Read-only MCPLab tool completed.\n\nMCP tool: \`${toolName}\``}
+                        />
+                      );
+                    })()
+                  ) : (
+                    <AssistantMessageRow
+                      message={{
+                        id: message.id,
+                        role: message.role,
+                        text: message.content,
+                        createdAt: message.createdAt
+                      }}
+                      renderActions={
+                        message.role === 'assistant' ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="mt-1 h-7 w-7"
+                            onClick={() => void copyMessage(message.content)}
+                            aria-label="Copy message"
+                            title="Copy message"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  )}
+                  {message.action?.kind === 'continue_reading' &&
+                    message.action.status === 'pending' && (
+                      <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
+                        <p>
+                          Allow up to {message.action.batchSize} additional read-only MCPLab tool
+                          calls to continue this investigation?
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => void confirmAdditionalReadTools(message, true)}
+                          >
+                            Continue
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void confirmAdditionalReadTools(message, false)}
+                          >
+                            Stop here
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                {message.action?.kind === 'open_result_detail' &&
-                  message.action.status === 'pending' && (
-                    <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-sm">
-                      <p>Result Detail available for run {message.action.runId}.</p>
-                      <div className="mt-2 flex gap-2">
-                        <Button size="sm" onClick={() => void openResultDetail(message)}>
-                          Open Result Detail
-                        </Button>
+                    )}
+                  {message.action?.kind === 'open_result_detail' &&
+                    message.action.status === 'pending' && (
+                      <div className="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-sm">
+                        <p>Result Detail available for run {message.action.runId}.</p>
+                        <div className="mt-2 flex gap-2">
+                          <Button size="sm" onClick={() => void openResultDetail(message)}>
+                            Open Result Detail
+                          </Button>
+                        </div>
                       </div>
-                    </div>
+                    )}
+                  {message.action?.kind === 'run_mcp_evaluation' && (
+                    <AssistantToolCallCard
+                      call={{
+                        id: message.id,
+                        server: 'mcplab',
+                        tool: 'Run Evaluation',
+                        publicToolName: 'mcplab_run_eval',
+                        arguments: message.action.arguments,
+                        status: message.action.status,
+                        createdAt: message.createdAt
+                      }}
+                      description="This runs an evaluation with the displayed temporary overrides."
+                      onApprove={() => void confirmMcpEvaluationRun(message, true)}
+                      onDeny={() => void confirmMcpEvaluationRun(message, false)}
+                    />
                   )}
-                {message.action?.kind === 'run_mcp_evaluation' && (
-                  <AssistantToolCallCard
-                    call={{
-                      id: message.id,
-                      server: 'mcplab',
-                      tool: 'Run Evaluation',
-                      publicToolName: 'mcplab_run_eval',
-                      arguments: message.action.arguments,
-                      status: message.action.status,
-                      createdAt: message.createdAt
-                    }}
-                    description="This runs an evaluation with the displayed temporary overrides."
-                    onApprove={() => void confirmMcpEvaluationRun(message, true)}
-                    onDeny={() => void confirmMcpEvaluationRun(message, false)}
-                  />
-                )}
-                {message.action?.kind === 'write_markdown_report' && (
-                  <AssistantToolCallCard
-                    call={{
-                      id: message.id,
-                      server: 'mcplab',
-                      tool: 'Write Markdown Report',
-                      publicToolName: 'mcplab_write_markdown_report',
-                      arguments: message.action.arguments,
-                      status: message.action.status,
-                      createdAt: message.createdAt
-                    }}
-                    description="This writes the displayed Markdown report inside the current workspace."
-                    onApprove={() => void confirmMarkdownReportWrite(message, true)}
-                    onDeny={() => void confirmMarkdownReportWrite(message, false)}
-                  />
-                )}
-                {message.action?.kind === 'external_mcp_tool' && (
-                  <AssistantToolCallCard
-                    call={{
-                      id: message.id,
-                      server: message.action.serverName,
-                      tool: message.action.toolName,
-                      publicToolName: `${message.action.serverName}__${message.action.toolName}`,
-                      arguments: message.action.arguments,
-                      status: message.action.status,
-                      createdAt: message.createdAt
-                    }}
-                    description={`External MCP call on ${message.action.serverName}.`}
-                    onApprove={() => void confirmExternalTool(message, true)}
-                    onDeny={() => void confirmExternalTool(message, false)}
-                  />
-                )}
-                {message.action?.kind === 'start_action' && message.action.status === 'pending' && (
-                  <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-                    <p>
-                      Start{' '}
-                      {message.action.name === 'start_evaluation_run'
-                        ? 'the evaluation run'
-                        : 'Tool Analysis'}{' '}
-                      using the current page settings?
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <Button size="sm" onClick={() => void confirmStartAction(message, true)}>
-                        Start
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void confirmStartAction(message, false)}
-                      >
-                        Not now
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {message.action?.kind === 'navigate_to_view' &&
-                  message.action.status === 'approved' && (
-                    <p className="text-xs text-emerald-700">Opened {message.action.path}</p>
+                  {message.action?.kind === 'write_markdown_report' && (
+                    <AssistantToolCallCard
+                      call={{
+                        id: message.id,
+                        server: 'mcplab',
+                        tool: 'Write Markdown Report',
+                        publicToolName: 'mcplab_write_markdown_report',
+                        arguments: message.action.arguments,
+                        status: message.action.status,
+                        createdAt: message.createdAt
+                      }}
+                      description="This writes the displayed Markdown report inside the current workspace."
+                      onApprove={() => void confirmMarkdownReportWrite(message, true)}
+                      onDeny={() => void confirmMarkdownReportWrite(message, false)}
+                    />
                   )}
-                {message.action?.status === 'denied' && (
-                  <p className="text-xs text-muted-foreground">Action declined</p>
-                )}
-                {message.action?.status === 'error' && (
-                  <p className="text-xs text-destructive">Action failed</p>
-                )}
-              </div>
-            )
-          )}
-          {loading && <AssistantTypingIndicator />}
-          <div ref={chatEndRef} />
-        </div>
-      </ScrollArea>
+                  {message.action?.kind === 'external_mcp_tool' && (
+                    <AssistantToolCallCard
+                      call={{
+                        id: message.id,
+                        server: message.action.serverName,
+                        tool: message.action.toolName,
+                        publicToolName: `${message.action.serverName}__${message.action.toolName}`,
+                        arguments: message.action.arguments,
+                        status: message.action.status,
+                        createdAt: message.createdAt
+                      }}
+                      description={`External MCP call on ${message.action.serverName}.`}
+                      onApprove={() => void confirmExternalTool(message, true)}
+                      onDeny={() => void confirmExternalTool(message, false)}
+                    />
+                  )}
+                  {message.action?.kind === 'start_action' &&
+                    message.action.status === 'pending' && (
+                      <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
+                        <p>
+                          Start{' '}
+                          {message.action.name === 'start_evaluation_run'
+                            ? 'the evaluation run'
+                            : 'Tool Analysis'}{' '}
+                          using the current page settings?
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <Button size="sm" onClick={() => void confirmStartAction(message, true)}>
+                            Start
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void confirmStartAction(message, false)}
+                          >
+                            Not now
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  {message.action?.kind === 'navigate_to_view' &&
+                    message.action.status === 'approved' && (
+                      <p className="text-xs text-emerald-700">Opened {message.action.path}</p>
+                    )}
+                  {message.action?.status === 'denied' && (
+                    <p className="text-xs text-muted-foreground">Action declined</p>
+                  )}
+                  {message.action?.status === 'error' && (
+                    <p className="text-xs text-destructive">Action failed</p>
+                  )}
+                </div>
+              )
+            )}
+            {loading && <AssistantTypingIndicator />}
+            <div ref={chatEndRef} />
+          </div>
+        </ScrollArea>
+      </div>
+      <GlobalCopilotConversation
+        messages={messages}
+        loading={loading}
+        onCopy={(text) => void copyMessage(text)}
+        onContinue={(message, approved) => void confirmAdditionalReadTools(message, approved)}
+        onOpenResult={(message) => void openResultDetail(message)}
+        onRunEvaluation={(message, approved) => void confirmMcpEvaluationRun(message, approved)}
+        onWriteReport={(message, approved) => void confirmMarkdownReportWrite(message, approved)}
+        onExternalTool={(message, approved) => void confirmExternalTool(message, approved)}
+        onStartAction={(message, approved) => void confirmStartAction(message, approved)}
+      />
       <GlobalCopilotComposer
         input={input}
         onInputChange={setInput}
