@@ -253,7 +253,7 @@ export function toGlobalCopilotLlmMessages(input: RunAgentInput): LlmMessage[] {
   });
 }
 
-function globalCopilotSystemPrompt(context: unknown): string {
+export function globalCopilotSystemPrompt(context: unknown): string {
   return [
     'You are the MCPLab Global Copilot.',
     'Help users analyze evaluation results and author or improve MCP test cases.',

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.57",
-    "@copilotkit/react-core": "^1.64.2",
+    "@copilotkit/react-core": "^1.66.4",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
