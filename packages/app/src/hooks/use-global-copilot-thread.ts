@@ -36,19 +36,54 @@ function textFromMemoryContent(content: unknown): string {
     .join('');
 }
 
-export function globalCopilotMemoryMessage(message: any): GlobalCopilotMessage | null {
-  if (!message || !['user', 'assistant', 'system'].includes(message.role)) return null;
+function memoryMessageCreatedAt(message: any): string {
+  return typeof message.createdAt === 'string'
+    ? message.createdAt
+    : new Date(message.createdAt ?? Date.now()).toISOString();
+}
+
+function stringifyToolResult(result: unknown): string {
+  if (typeof result === 'string') return result;
+  try {
+    return JSON.stringify(result ?? null, null, 2);
+  } catch {
+    return String(result);
+  }
+}
+
+export function globalCopilotMemoryMessages(message: any): GlobalCopilotMessage[] {
+  if (!message || !['user', 'assistant', 'system'].includes(message.role)) return [];
   const content = textFromMemoryContent(message.content);
-  if (!content.trim()) return null;
-  return {
-    id: String(message.id),
-    role: message.role,
-    content,
-    createdAt:
-      typeof message.createdAt === 'string'
-        ? message.createdAt
-        : new Date(message.createdAt ?? Date.now()).toISOString()
-  };
+  const createdAt = memoryMessageCreatedAt(message);
+  const restored: GlobalCopilotMessage[] = content.trim()
+    ? [{ id: String(message.id), role: message.role, content, createdAt }]
+    : [];
+  const parts = message.content?.parts;
+  if (!Array.isArray(parts)) return restored;
+  for (const part of parts) {
+    if (!part || typeof part !== 'object') continue;
+    const invocation =
+      part.type === 'tool-invocation' && part.toolInvocation && typeof part.toolInvocation === 'object'
+        ? part.toolInvocation
+        : part.type === 'tool-result'
+          ? part
+          : undefined;
+    if (!invocation || !('result' in invocation)) continue;
+    const toolCallId = String(invocation.toolCallId ?? `${message.id}-tool`);
+    restored.push({
+      id: `${message.id}-${toolCallId}`,
+      role: 'tool',
+      content: stringifyToolResult(invocation.result),
+      createdAt,
+      toolCallId,
+      toolName: String(invocation.toolName ?? 'mcplab_read'),
+      toolArguments:
+        invocation.args && typeof invocation.args === 'object'
+          ? (invocation.args as Record<string, unknown>)
+          : {}
+    });
+  }
+  return restored;
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -71,9 +106,7 @@ export function useGlobalCopilotThread(source: DataSource) {
       version: 1 as const,
       workspaceKey: key,
       pendingInterrupts: pendingInterrupts(detail.thread),
-      messages: detail.messages
-        .map(globalCopilotMemoryMessage)
-        .filter((message): message is GlobalCopilotMessage => message !== null)
+      messages: detail.messages.flatMap(globalCopilotMemoryMessages)
     };
   }, []);
 

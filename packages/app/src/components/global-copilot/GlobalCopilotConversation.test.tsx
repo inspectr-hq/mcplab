@@ -27,14 +27,6 @@ describe('GlobalCopilotConversation', () => {
             }
           ]}
           onCopy={vi.fn()}
-          onContinue={vi.fn()}
-          onOpenResult={vi.fn()}
-          onRunEvaluation={vi.fn()}
-          onCreateEvaluationConfig={vi.fn()}
-          onWriteReport={vi.fn()}
-          onExternalTool={vi.fn()}
-          onStartAction={vi.fn()}
-          onLibraryAction={vi.fn()}
         />
       </div>
     );

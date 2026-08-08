@@ -1,4 +1,4 @@
-import type { Message } from '@ag-ui/client';
+import type { Interrupt, Message } from '@ag-ui/client';
 import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GlobalCopilotMessage, GlobalCopilotThread } from '@/lib/global-copilot-thread-store';
@@ -89,12 +89,37 @@ export function useGlobalCopilotRun({
     [agent, copilotkit, isReady, loading, refresh, renameThread, thread]
   );
 
+  const resumeStoredInterrupt = useCallback(
+    async (interrupt: Interrupt, approved: boolean) => {
+      if (!thread || !isReady || loading) return;
+      setLoading(true);
+      try {
+        await copilotkit.runAgent({
+          agent,
+          runId: interrupt.id.split('::')[0],
+          resume: [
+            {
+              interruptId: interrupt.id,
+              status: 'resolved',
+              payload: { approved }
+            }
+          ]
+        });
+        await refresh(thread.workspaceKey);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [agent, copilotkit, isReady, loading, refresh, thread]
+  );
+
   return {
     agent,
     isReady,
     messages,
     loading,
     send,
+    resumeStoredInterrupt,
     cancel: () => agent.abortRun()
   };
 }

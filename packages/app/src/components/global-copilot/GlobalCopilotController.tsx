@@ -111,7 +111,7 @@ function GlobalCopilotControllerInner() {
   );
   useAgentContext({ description: 'Current MCPLab application context', value: appContext });
 
-  const { agent, isReady, messages, loading, send: run, cancel } = useGlobalCopilotRun({
+  const { agent, isReady, messages, loading, send: run, resumeStoredInterrupt, cancel } = useGlobalCopilotRun({
     thread,
     renameThread,
     refresh,
@@ -176,6 +176,14 @@ function GlobalCopilotControllerInner() {
       );
     }
   });
+  const storedInterrupt = thread?.pendingInterrupts?.[0];
+  const storedInterruptElement =
+    !interruptElement && storedInterrupt ? (
+      <NativeInterruptCard
+        message={globalCopilotInterruptMessage(storedInterrupt)}
+        onDecision={(approved) => void resumeStoredInterrupt(storedInterrupt, approved)}
+      />
+    ) : null;
 
   const send = useCallback(async () => {
     const question = input.trim();
@@ -242,7 +250,7 @@ function GlobalCopilotControllerInner() {
       <GlobalCopilotConversation
         messages={messages}
         rawMessages={agent.messages as Message[]}
-        interruptElement={interruptElement}
+        interruptElement={interruptElement ?? storedInterruptElement}
         loading={loading}
         onCopy={(text) => void copy(text)}
       />
@@ -293,7 +301,7 @@ function useGlobalCopilotFrontendTools(params: {
       agentId: params.agentId,
       handler: async ({ testCaseId }) => {
         const resolution = await resolveGlobalCopilotTestCaseOpen(params.source, testCaseId);
-        if (!resolution.found) throw new Error(resolution.message);
+        if ('message' in resolution) throw new Error(resolution.message);
         params.navigate(resolution.destination);
         return { opened: testCaseId };
       }
@@ -411,4 +419,40 @@ function NativeInterruptCard({
       onDeny={() => onDecision(false)}
     />
   );
+}
+
+function globalCopilotInterruptMessage(interrupt: {
+  id: string;
+  metadata?: Record<string, any>;
+}): GlobalCopilotMessage {
+  const mastra = interrupt.metadata?.mastra as
+    | { toolName?: string; suspendPayload?: Record<string, unknown>; args?: Record<string, unknown> }
+    | undefined;
+  const payload = mastra?.suspendPayload ?? {};
+  if (payload.kind === 'continue_reading') {
+    return {
+      id: interrupt.id,
+      role: 'system',
+      content: `Additional MCPLab read-tool batch requested (${Number(payload.batchSize ?? 5)} calls).`,
+      createdAt: new Date().toISOString(),
+      action: {
+        kind: 'continue_reading',
+        batchSize: Number(payload.batchSize ?? 5),
+        status: 'pending'
+      }
+    };
+  }
+  return {
+    id: interrupt.id,
+    role: 'system',
+    content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(payload.toolName ?? mastra?.toolName ?? 'tool')}`,
+    createdAt: new Date().toISOString(),
+    action: {
+      kind: 'external_mcp_tool',
+      serverName: String(payload.serverName ?? 'mcplab'),
+      toolName: String(payload.toolName ?? mastra?.toolName ?? 'tool'),
+      arguments: (payload.arguments ?? mastra?.args ?? {}) as Record<string, unknown>,
+      status: 'pending'
+    }
+  };
 }

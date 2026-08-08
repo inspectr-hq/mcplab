@@ -35,40 +35,37 @@ export function GlobalCopilotConversation({
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground">Ask about results, test cases, or MCPLab.</p>
         )}
-        {messages.map((message) =>
-          message.role === 'system' &&
-          message.content.startsWith('Previously retrieved tool data:') ? null : (
-            <div key={message.id} className="w-full min-w-0 max-w-full space-y-2">
-              {message.role === 'tool' ? (
-                <ToolMessage message={message} />
-              ) : (
-                <AssistantMessageRow
-                  message={{
-                    id: message.id,
-                    role: message.role,
-                    text: message.content,
-                    createdAt: message.createdAt
-                  }}
-                  renderActions={
-                    message.role === 'assistant' ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="mt-1 h-7 w-7"
-                        onClick={() => onCopy(message.content)}
-                        aria-label="Copy message"
-                        title="Copy message"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              )}
-            </div>
-          )
-        )}
+        {messages.map((message) => (
+          <div key={message.id} className="w-full min-w-0 max-w-full space-y-2">
+            {message.role === 'tool' ? (
+              <ToolMessage message={message} />
+            ) : (
+              <AssistantMessageRow
+                message={{
+                  id: message.id,
+                  role: message.role,
+                  text: message.content,
+                  createdAt: message.createdAt
+                }}
+                renderActions={
+                  message.role === 'assistant' ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="mt-1 h-7 w-7"
+                      onClick={() => onCopy(message.content)}
+                      aria-label="Copy message"
+                      title="Copy message"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : undefined
+                }
+              />
+            )}
+          </div>
+        ))}
         {rawMessages.length > 0 && <NativeFrontendToolCalls messages={rawMessages} />}
         {interruptElement}
         {loading && <AssistantTypingIndicator />}

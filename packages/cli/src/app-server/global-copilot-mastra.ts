@@ -81,7 +81,9 @@ export function createGlobalCopilotLanguageModel(
 ): any {
   validateGlobalCopilotProviderEnvironment(agent, environment);
   if (agent.provider === 'openai') {
-    return createOpenAI({ apiKey: requireEnvironment(environment, 'OPENAI_API_KEY') })(agent.model);
+    return createOpenAI({ apiKey: requireEnvironment(environment, 'OPENAI_API_KEY') }).chat(
+      agent.model
+    );
   }
   if (agent.provider === 'anthropic') {
     return createAnthropic({ apiKey: requireEnvironment(environment, 'ANTHROPIC_API_KEY') })(
@@ -94,7 +96,7 @@ export function createGlobalCopilotLanguageModel(
     baseURL: azureOpenAIBaseUrl(requireEnvironment(environment, 'AZURE_OPENAI_ENDPOINT')),
     apiVersion: environment.AZURE_OPENAI_API_VERSION?.trim() || undefined,
     useDeploymentBasedUrls: true
-  })(deployment);
+  }).chat(deployment);
 }
 
 export function createGlobalCopilotMastraAgent(params: {
@@ -175,7 +177,7 @@ export async function persistGlobalCopilotPendingInterrupts(params: {
 }): Promise<void> {
   const threadId = params.agent.threadId;
   if (!threadId) return;
-  const thread = await params.memory.getThreadById({ threadId, resourceId: params.resourceId });
+  const thread = await params.memory.getThreadById({ threadId });
   if (!thread || thread.resourceId !== params.resourceId) return;
   await params.memory.updateThread({
     id: thread.id,
