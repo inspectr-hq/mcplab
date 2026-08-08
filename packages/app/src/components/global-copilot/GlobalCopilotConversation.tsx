@@ -1,5 +1,7 @@
 import { Copy } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import type { Message, ToolCall, ToolMessage } from '@ag-ui/client';
+import { useRenderToolCall } from '@copilotkit/react-core/v2';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -9,25 +11,19 @@ import {
 } from '@/components/assistant/AssistantChat';
 import { globalCopilotToolDisplayName, globalCopilotToolLabel } from '@/lib/global-copilot-message';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
-import { GlobalCopilotActionCard } from './GlobalCopilotActionCard';
 
 export function GlobalCopilotConversation({
   messages,
+  rawMessages = [],
+  interruptElement,
   loading,
-  onCopy,
-  ...actions
+  onCopy
 }: {
   messages: GlobalCopilotMessage[];
+  rawMessages?: Message[];
+  interruptElement?: ReactNode;
   loading: boolean;
   onCopy: (text: string) => void;
-  onContinue: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onOpenResult: (message: GlobalCopilotMessage) => void;
-  onRunEvaluation: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onCreateEvaluationConfig: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onWriteReport: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onExternalTool: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onStartAction: (message: GlobalCopilotMessage, approved: boolean) => void;
-  onLibraryAction: (message: GlobalCopilotMessage, approved: boolean) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -70,14 +66,34 @@ export function GlobalCopilotConversation({
                   }
                 />
               )}
-              <GlobalCopilotActionCard message={message} {...actions} />
             </div>
           )
         )}
+        {rawMessages.length > 0 && <NativeFrontendToolCalls messages={rawMessages} />}
+        {interruptElement}
         {loading && <AssistantTypingIndicator />}
         <div ref={endRef} />
       </div>
     </ScrollArea>
+  );
+}
+
+function NativeFrontendToolCalls({ messages }: { messages: Message[] }) {
+  const renderToolCall = useRenderToolCall();
+  const toolResults = new Map(
+    messages
+      .filter((message): message is ToolMessage => message.role === 'tool')
+      .map((message) => [message.toolCallId, message])
+  );
+  const calls = messages.flatMap((message) =>
+    message.role === 'assistant' ? message.toolCalls ?? [] : []
+  );
+  return (
+    <>
+      {calls.map((toolCall: ToolCall) => (
+        <div key={toolCall.id}>{renderToolCall({ toolCall, toolMessage: toolResults.get(toolCall.id) })}</div>
+      ))}
+    </>
   );
 }
 

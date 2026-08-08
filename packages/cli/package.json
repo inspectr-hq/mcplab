@@ -45,8 +45,6 @@
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.57",
-    "@ag-ui/core": "^0.0.57",
-    "@ag-ui/encoder": "^0.0.57",
     "@ag-ui/mastra": "^1.1.1",
     "@ai-sdk/anthropic": "^4.0.36",
     "@ai-sdk/azure": "^4.0.37",

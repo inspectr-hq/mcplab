@@ -11,7 +11,16 @@ export default defineConfig(() => ({
       overlay: false
     }
   },
-  plugins: [react()],
+  plugins: [
+    {
+      name: 'copilotkit-headless-styles',
+      enforce: 'pre',
+      load(id) {
+        if (id.endsWith('/@copilotkit/react-core/dist/v2/index.css')) return '';
+      }
+    },
+    react()
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')

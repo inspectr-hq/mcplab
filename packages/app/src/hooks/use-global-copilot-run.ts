@@ -1,150 +1,100 @@
-import { HttpAgent, type Message } from '@ag-ui/client';
-import { useCallback, useRef, useState } from 'react';
-import { availableGlobalCopilotActions } from '@/lib/global-copilot-actions';
-import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
-import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-context';
+import type { Message } from '@ag-ui/client';
+import { useAgent, useCopilotKit } from '@copilotkit/react-core/v2';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GlobalCopilotMessage, GlobalCopilotThread } from '@/lib/global-copilot-thread-store';
 
+const runtimeAgentId = 'mcplab-global-copilot';
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
+function aguiMessages(messages: GlobalCopilotMessage[]): Message[] {
+  return messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    ...(message.toolCallId ? { toolCallId: message.toolCallId } : {})
+  })) as Message[];
+}
+
 export function useGlobalCopilotRun({
-  version,
-  queue,
-  pathname,
-  search,
-  workspaceKey,
   thread,
-  save,
+  renameThread,
+  refresh,
   storeMessage
 }: {
-  version?: string;
-  queue: {
-    runningCount: number;
-    queuedCount: number;
-    oauthBlockedCount: number;
-    streamStatus: string;
-  };
-  pathname: string;
-  search: string;
-  workspaceKey?: string;
   thread?: GlobalCopilotThread;
-  save: (thread: GlobalCopilotThread) => Promise<GlobalCopilotThread>;
+  renameThread: (thread: GlobalCopilotThread, title?: string) => Promise<void>;
+  refresh: (workspaceKey: string) => Promise<GlobalCopilotThread[]>;
   storeMessage: (
     message: Message,
     toolCalls: Map<string, { name: string; arguments: Record<string, unknown> }>
   ) => GlobalCopilotMessage | null;
 }) {
+  const fallbackThreadId = useRef(`pending-${crypto.randomUUID()}`);
+  const threadId = thread?.id ?? fallbackThreadId.current;
+  const { agent, isReady } = useAgent({
+    agentId: `mcplab-global-copilot:${threadId}`,
+    runtimeAgentId,
+    threadId
+  });
+  const { copilotkit } = useCopilotKit();
   const [loading, setLoading] = useState(false);
-  const agentRef = useRef<HttpAgent>();
+  const initializedAgent = useRef<string>();
+
+  useEffect(() => {
+    if (!thread || !isReady || initializedAgent.current === thread.id) return;
+    agent.setMessages(aguiMessages(thread.messages));
+    initializedAgent.current = thread.id;
+  }, [agent, isReady, thread]);
+
+  const messages = useMemo(() => {
+    const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
+    for (const message of agent.messages) {
+      if (message.role !== 'assistant') continue;
+      for (const call of message.toolCalls ?? []) {
+        try {
+          toolCalls.set(call.id, {
+            name: call.function.name,
+            arguments: JSON.parse(call.function.arguments) as Record<string, unknown>
+          });
+        } catch {
+          toolCalls.set(call.id, { name: call.function.name, arguments: {} });
+        }
+      }
+    }
+    return agent.messages
+      .map((message) => storeMessage(message, toolCalls))
+      .filter((message): message is GlobalCopilotMessage => message !== null);
+  }, [agent.messages, storeMessage]);
+
   const send = useCallback(
-    async (
-      question: string,
-      continuation?: GlobalCopilotMessage,
-      continuationThread?: GlobalCopilotThread
-    ) => {
-      if (!question || !workspaceKey || loading) return;
-      const now = new Date().toISOString();
-      const active =
-        continuationThread ??
-        thread ??
-        ({
-          id: id('gct'),
-          workspaceKey,
-          title: question.slice(0, 60),
-          messages: [],
-          createdAt: now,
-          updatedAt: now,
-          version: 1
-        } satisfies GlobalCopilotThread);
-      const submitted =
-        continuation ??
-        ({
-          id: id('msg'),
-          role: 'user',
-          content: question,
-          createdAt: now
-        } satisfies GlobalCopilotMessage);
-      const optimistic = await save({
-        ...active,
-        title: active.messages.length || continuation ? active.title : question.slice(0, 60),
-        messages: [...active.messages, submitted]
-      });
+    async (question: string) => {
+      if (!question || !thread || !isReady || loading) return;
+      const wasEmpty = agent.messages.length === 0;
+      agent.addMessage({ id: id('msg'), role: 'user', content: question });
       setLoading(true);
       try {
-        const agent = new HttpAgent({
-          url: '/api/global-copilot/run',
-          agentId: 'mcplab-global-copilot',
-          threadId: optimistic.id,
-          initialMessages: optimistic.messages.map((message) =>
-            message.role === 'tool'
-              ? {
-                  id: message.id,
-                  role: 'system' as const,
-                  content: `Previously retrieved tool data:\n${message.content}`
-                }
-              : {
-                  id: message.id,
-                  role: message.role,
-                  content: message.content,
-                  ...(message.toolCallId ? { toolCallId: message.toolCallId } : {})
-                }
-          )
-        });
-        agentRef.current = agent;
-        await agent.runAgent({
-          forwardedProps: {
-            context: {
-              ...globalCopilotRouteContext(pathname, search),
-              ...globalCopilotPageContextForPath(pathname),
-              mcplabVersion: version,
-              queue,
-              availableActions: availableGlobalCopilotActions()
-            }
-          }
-        });
-        const toolCalls = new Map<string, { name: string; arguments: Record<string, unknown> }>();
-        for (const message of agent.messages) {
-          if (message.role !== 'assistant') continue;
-          for (const call of (
-            message as Message & {
-              toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }>;
-            }
-          ).toolCalls ?? []) {
-            try {
-              toolCalls.set(call.id, {
-                name: call.function.name,
-                arguments: JSON.parse(call.function.arguments) as Record<string, unknown>
-              });
-            } catch {
-              toolCalls.set(call.id, { name: call.function.name, arguments: {} });
-            }
-          }
-        }
-        const messages = agent.messages
-          .map((message) => storeMessage(message, toolCalls))
-          .filter((message): message is GlobalCopilotMessage => message !== null);
-        await save({ ...optimistic, messages });
+        await copilotkit.runAgent({ agent });
+        if (wasEmpty) await renameThread(thread, question.slice(0, 60));
+        await refresh(thread.workspaceKey);
       } catch (error: unknown) {
-        const text = error instanceof Error ? error.message : String(error);
-        await save({
-          ...optimistic,
-          messages: [
-            ...optimistic.messages,
-            {
-              id: id('system'),
-              role: 'system',
-              content: `Copilot request failed: ${text}`,
-              createdAt: new Date().toISOString()
-            }
-          ]
+        agent.addMessage({
+          id: id('system'),
+          role: 'system',
+          content: `Copilot request failed: ${error instanceof Error ? error.message : String(error)}`
         });
       } finally {
-        agentRef.current = undefined;
         setLoading(false);
       }
     },
-    [loading, pathname, queue, save, search, storeMessage, thread, version, workspaceKey]
+    [agent, copilotkit, isReady, loading, refresh, renameThread, thread]
   );
 
-  return { loading, send, cancel: () => agentRef.current?.abortRun() };
+  return {
+    agent,
+    isReady,
+    messages,
+    loading,
+    send,
+    cancel: () => agent.abortRun()
+  };
 }

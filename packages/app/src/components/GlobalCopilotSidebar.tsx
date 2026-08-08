@@ -2,8 +2,7 @@ import { GlobalCopilotController } from '@/components/global-copilot/GlobalCopil
 
 export {
   globalCopilotToolDisplayName,
-  globalCopilotToolLabel,
-  storedGlobalCopilotFrontendAction
+  globalCopilotToolLabel
 } from '@/lib/global-copilot-message';
 
 /** App-layout entry point for the Global Copilot. */

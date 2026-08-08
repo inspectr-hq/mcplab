@@ -94,6 +94,8 @@ The CLI binary and interactive app server.
 | `/api/runs` | Execution queue | enqueue, status, results |
 | `/api/results` | Results browser | list, drill-down, trace |
 | `/api/assistants` | AI assistants | scenario design + result analysis |
+| `/api/copilotkit` | Global Copilot | embedded CopilotKit/AG-UI runtime |
+| `/api/global-copilot/threads` | Global Copilot memory | workspace thread CRUD |
 | `/api/oauth` | OAuth debugger | simulate provider for testing |
 | `/api/tool-analysis` | Tool quality audit | inspect MCP server tools |
 | `/sse/queue` | SSE event stream | live progress to UI |
@@ -114,6 +116,16 @@ React 18 SPA, built with Vite and served as static files by the app server.
 - OAuth Debugger — interactive OAuth flow testing
 - Scenario / Result Assistants — AI chat for designing and analyzing evals
 - Markdown Reports — custom notes per run
+
+### Global Copilot runtime
+
+The Global Copilot is separate from the core evaluation loop and from the Scenario and Result Assistants. Its custom sidebar is wrapped in CopilotKit v2, while `/api/copilotkit` hosts an in-process `MastraAgent` selected from the existing agent library. A fresh Mastra `Agent` is created for each request and registered with the shared workspace storage, so model settings and request context remain isolated between concurrent threads.
+
+Mastra owns Global Copilot messages, working memory, and suspended tool-run snapshots in `mcplab/.mastra/global-copilot.db`. The workspace hash is the memory `resourceId`; each conversation UUID is its `threadId`. Memory includes the last 20 messages, disables semantic recall, and uses thread-scoped structured working memory with exactly `goal`, `constraints`, `decisions`, and `followUps`. The app server owns thread titles, CRUD, and the 100-thread retention cap. The browser stores only the active-thread preference; legacy IndexedDB conversations are ignored.
+
+MCP connection, authentication, discovery, execution, and cleanup still use `McpClientManager`. Mastra tools apply the Global Copilot policy: approved local reads and generators run automatically, selected local writes and every external tool suspend for approval, and automatic reads suspend after each five-call batch. CopilotKit exposes these suspensions as AG-UI interrupts and resumes the same Mastra run after the custom approval card responds. Frontend navigation and page actions are CopilotKit tools whose availability comes from current page context.
+
+Ownership boundaries are deliberate: `runAgentScenario` and evaluation configuration/queue contracts remain in `@inspectr/mcplab-core`; Scenario Assistant and Result Assistant retain their existing routes and protocols. The Mastra/CopilotKit runtime is used only by Global Copilot.
 
 ### `@inspectr/mcplab-mcp-server` (packages/mcp-server/)
 

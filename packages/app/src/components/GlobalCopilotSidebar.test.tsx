@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Message } from '@ag-ui/client';
 import {
   globalCopilotToolDisplayName,
-  globalCopilotToolLabel,
-  storedGlobalCopilotFrontendAction
+  globalCopilotToolLabel
 } from './GlobalCopilotSidebar';
 
 describe('globalCopilotToolDisplayName', () => {
@@ -17,108 +15,5 @@ describe('globalCopilotToolDisplayName', () => {
   it('uses the MCP tool title in the collapsed card', () => {
     expect(globalCopilotToolLabel('mcplab_read_markdown_report')).toBe('Read Markdown Report');
     expect(globalCopilotToolLabel('mcplab_aggregate_runs')).toBe('Aggregate Runs');
-  });
-
-  it('restores a navigation confirmation from its streamed action marker', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '[mcplab-action]{"kind":"navigate_to_view","path":"/mcp-evaluations"}'
-      } as Message)
-    ).toMatchObject({
-      action: { kind: 'navigate_to_view', path: '/mcp-evaluations', status: 'pending' }
-    });
-  });
-
-  it('restores a Result Detail suggestion without navigating automatically', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-2',
-        role: 'assistant',
-        content: '[mcplab-action]{"kind":"open_result_detail","runId":"run-42"}'
-      } as Message)
-    ).toMatchObject({
-      action: { kind: 'open_result_detail', runId: 'run-42', status: 'pending' }
-    });
-  });
-
-  it('restores a Test Case opening request with its validated ID', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-test-case',
-        role: 'assistant',
-        content: '[mcplab-action]{"kind":"open_test_case","testCaseId":"tag-profile"}'
-      } as Message)
-    ).toMatchObject({
-      action: { kind: 'open_test_case', testCaseId: 'tag-profile', status: 'pending' }
-    });
-  });
-
-  it('restores an explicit Result Detail navigation request with its run ID', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-result',
-        role: 'assistant',
-        content: '[mcplab-action]{"kind":"navigate_to_result_detail","runId":"run-42"}'
-      } as Message)
-    ).toMatchObject({
-      action: { kind: 'navigate_to_result_detail', runId: 'run-42', status: 'pending' }
-    });
-  });
-
-  it('restores a confirmation-required MCP evaluation run', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-3',
-        role: 'assistant',
-        content:
-          '[mcplab-action]{"kind":"run_mcp_evaluation","arguments":{"scenario_id":"tag-profile","agent_override":["deepseek"]}}'
-      } as Message)
-    ).toMatchObject({
-      action: {
-        kind: 'run_mcp_evaluation',
-        arguments: { scenario_id: 'tag-profile', agent_override: ['deepseek'] },
-        status: 'pending'
-      }
-    });
-  });
-
-  it('restores a confirmation-required Markdown report write', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-4',
-        role: 'assistant',
-        content:
-          '[mcplab-action]{"kind":"write_markdown_report","arguments":{"output_path":"mcplab/reports/tag-profile.md","markdown":"# Tag Profile"}}'
-      } as Message)
-    ).toMatchObject({
-      action: {
-        kind: 'write_markdown_report',
-        arguments: {
-          output_path: 'mcplab/reports/tag-profile.md',
-          markdown: '# Tag Profile'
-        },
-        status: 'pending'
-      }
-    });
-  });
-
-  it('restores a confirmation-required library duplicate action', () => {
-    expect(
-      storedGlobalCopilotFrontendAction({
-        id: 'assistant-5',
-        role: 'assistant',
-        content:
-          '[mcplab-action]{"kind":"library_action","name":"duplicate_test_case","arguments":{"id":"tag-profile"}}'
-      } as Message)
-    ).toMatchObject({
-      action: {
-        kind: 'library_action',
-        name: 'duplicate_test_case',
-        arguments: { id: 'tag-profile' },
-        status: 'pending'
-      }
-    });
   });
 });

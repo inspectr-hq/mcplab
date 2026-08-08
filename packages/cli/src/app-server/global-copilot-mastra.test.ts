@@ -4,6 +4,7 @@ import {
   GLOBAL_COPILOT_AGENT_ID,
   createGlobalCopilotMastraAgent,
   createGlobalCopilotRuntimeHandler,
+  globalCopilotContextFromAgUi,
   globalCopilotModelDescriptor,
   validateGlobalCopilotProviderEnvironment
 } from './global-copilot-mastra.js';
@@ -96,5 +97,16 @@ describe('globalCopilotModelDescriptor', () => {
     });
 
     expect(createGlobalCopilotRuntimeHandler(wrapped)).toEqual(expect.any(Function));
+  });
+
+  it('decodes CopilotKit v2 agent context for dynamic instructions and tools', () => {
+    expect(
+      globalCopilotContextFromAgUi([
+        {
+          description: 'Current MCPLab application context',
+          value: JSON.stringify({ currentView: 'test-case-detail', activeTestCaseId: 'weather' })
+        }
+      ])
+    ).toEqual({ currentView: 'test-case-detail', activeTestCaseId: 'weather' });
   });
 });

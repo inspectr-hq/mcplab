@@ -55,6 +55,15 @@ npm run build
 npm test
 ```
 
+Global Copilot development uses the same app server and port as the rest of the UI. Its CopilotKit endpoint is `/api/copilotkit`, thread APIs live under `/api/global-copilot/threads`, and its workspace-local LibSQL database is `mcplab/.mastra/global-copilot.db`. Removing that database starts memory from scratch; existing browser IndexedDB conversations are intentionally not migrated or read.
+
+When changing Global Copilot, run both workspace suites because the runtime is in `packages/cli` and the custom headless UI is in `packages/app`:
+
+```bash
+npm run test -w @inspectr/mcplab
+npm run test -w @inspectr/mcplab-app
+```
+
 ## Package Structure
 
 | Package               | Description         |

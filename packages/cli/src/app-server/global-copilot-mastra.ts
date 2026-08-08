@@ -152,6 +152,41 @@ export function globalCopilotWorkspaceResourceId(workspaceRoot: string): string 
   return createHash('sha256').update(workspaceRoot).digest('hex');
 }
 
+export function globalCopilotContextFromAgUi(context: unknown): unknown {
+  if (!Array.isArray(context)) return context;
+  const entry = context.find(
+    (item) =>
+      item &&
+      typeof item === 'object' &&
+      (item as { description?: unknown }).description === 'Current MCPLab application context'
+  ) as { value?: unknown } | undefined;
+  if (typeof entry?.value !== 'string') return entry?.value ?? {};
+  try {
+    return JSON.parse(entry.value);
+  } catch {
+    return {};
+  }
+}
+
+export async function persistGlobalCopilotPendingInterrupts(params: {
+  memory: MastraMemory;
+  resourceId: string;
+  agent: MastraAgent;
+}): Promise<void> {
+  const threadId = params.agent.threadId;
+  if (!threadId) return;
+  const thread = await params.memory.getThreadById({ threadId, resourceId: params.resourceId });
+  if (!thread || thread.resourceId !== params.resourceId) return;
+  await params.memory.updateThread({
+    id: thread.id,
+    title: thread.title ?? 'New conversation',
+    metadata: {
+      ...(thread.metadata ?? {}),
+      globalCopilotPendingInterrupts: params.agent.pendingInterrupts
+    }
+  });
+}
+
 export async function handleGlobalCopilotKit(params: {
   req: IncomingMessage;
   res: ServerResponse;
@@ -180,15 +215,20 @@ export async function handleGlobalCopilotKit(params: {
       memory: memoryRuntime.memory,
       storage: memoryRuntime.storage,
       tools: async ({ requestContext }: any) => {
-        const context = requestContext?.get?.('ag-ui')?.context;
+        const context = globalCopilotContextFromAgUi(requestContext?.get?.('ag-ui')?.context);
         return buildGlobalCopilotMastraTools({ settings: params.settings, context });
       },
       instructions: ({ requestContext }) => {
-        const context = requestContext?.get?.('ag-ui')?.context;
+        const context = globalCopilotContextFromAgUi(requestContext?.get?.('ag-ui')?.context);
         return [agentConfig.system, globalCopilotSystemPrompt(context)].filter(Boolean).join('\n\n');
       }
     });
     await createGlobalCopilotRuntimeHandler(agent)(params.req, params.res);
+    await persistGlobalCopilotPendingInterrupts({
+      memory: memoryRuntime.memory,
+      resourceId: globalCopilotWorkspaceResourceId(params.settings.workspaceRoot),
+      agent
+    });
   } catch (error: unknown) {
     if (params.res.headersSent) {
       params.res.end();

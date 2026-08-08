@@ -58,13 +58,6 @@ import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
 import { handleRunsRoutes } from './runs-routes.js';
-import {
-  handleGlobalCopilotRun,
-  handleGlobalCopilotEvaluationConfigCreateConfirmation,
-  handleGlobalCopilotMarkdownReportWriteConfirmation,
-  handleGlobalCopilotRunEvaluationConfirmation,
-  handleGlobalCopilotToolConfirmation
-} from './global-copilot-domain.js';
 import { handleGlobalCopilotKit } from './global-copilot-mastra.js';
 import { handleGlobalCopilotThreadRoutes } from './global-copilot-threads.js';
 import { createRunQueueService } from './run-queue-domain.js';
@@ -360,27 +353,6 @@ export async function startAppServer(options: AppServerOptions) {
       ) {
         return;
       }
-      if (pathname === '/api/global-copilot/run' && method === 'POST') {
-        await handleGlobalCopilotRun({ req, res, settings, parseBody, asJson });
-        return;
-      }
-      if (pathname === '/api/global-copilot/confirm-tool' && method === 'POST') {
-        await handleGlobalCopilotToolConfirmation({ req, res, settings, parseBody, asJson });
-        return;
-      }
-      if (pathname === '/api/global-copilot/confirm-run-eval' && method === 'POST') {
-        await handleGlobalCopilotRunEvaluationConfirmation({ req, res, parseBody, asJson });
-        return;
-      }
-      if (pathname === '/api/global-copilot/confirm-report-write' && method === 'POST') {
-        await handleGlobalCopilotMarkdownReportWriteConfirmation({ req, res, parseBody, asJson });
-        return;
-      }
-      if (pathname === '/api/global-copilot/confirm-evaluation-config-create' && method === 'POST') {
-        await handleGlobalCopilotEvaluationConfigCreateConfirmation({ req, res, parseBody, asJson });
-        return;
-      }
-
       if (pathname === '/api/libraries' && method === 'GET') {
         asJson(res, 200, readLibraries(settings.librariesDir));
         return;
