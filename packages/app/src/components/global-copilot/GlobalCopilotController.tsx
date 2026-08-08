@@ -20,6 +20,10 @@ import { toast } from '@/hooks/use-toast';
 import { availableGlobalCopilotActions, invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
+import {
+  GLOBAL_COPILOT_NAVIGATION_INPUTS,
+  resolveGlobalCopilotNavigationTarget
+} from '@/lib/global-copilot-navigation';
 import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-context';
 import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
@@ -30,21 +34,6 @@ import { GlobalCopilotThreadList } from './GlobalCopilotThreadList';
 const runtimeAgentId = 'mcplab-global-copilot';
 const openKey = 'mcplab.globalCopilot.open';
 const expandedKey = 'mcplab.globalCopilot.expanded';
-const navigationTargets = new Set([
-  '/',
-  '/mcp-evaluations',
-  '/run',
-  '/results',
-  '/compare',
-  '/tool-analysis',
-  '/tool-analysis-results',
-  '/oauth-debugger',
-  '/libraries/servers',
-  '/libraries/agents',
-  '/libraries/test-cases',
-  '/settings'
-]);
-
 export function GlobalCopilotController() {
   return (
     <CopilotKitProvider runtimeUrl="/api/copilotkit" useSingleEndpoint showDevConsole={false}>
@@ -269,13 +258,17 @@ function useGlobalCopilotFrontendTools(params: {
   useFrontendTool(
     {
       name: 'navigate_to_view',
-      description: 'Navigate to a supported MCPLab view when explicitly requested.',
-      parameters: z.object({ path: z.string(), reason: z.string().optional() }).strict(),
+      description:
+        'Navigate to a supported MCPLab view when explicitly requested. Use /libraries/test-cases for the Test Cases list.',
+      parameters: z
+        .object({ path: z.enum(GLOBAL_COPILOT_NAVIGATION_INPUTS), reason: z.string().optional() })
+        .strict(),
       agentId: params.agentId,
       handler: async ({ path }) => {
-        if (!navigationTargets.has(path)) throw new Error('Unsupported MCPLab navigation target.');
-        params.navigate(path);
-        return { opened: path };
+        const target = resolveGlobalCopilotNavigationTarget(path);
+        if (!target) throw new Error(`Unsupported MCPLab navigation target: ${path}`);
+        params.navigate(target);
+        return { opened: target };
       }
     },
     [params.agentId, params.navigate]
