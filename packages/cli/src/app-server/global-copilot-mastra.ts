@@ -11,7 +11,9 @@ import {
   copilotRuntimeNodeHttpEndpoint
 } from '@copilotkit/runtime';
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import { readLibraries } from './libraries-store.js';
 import {
   globalCopilotSystemPrompt,
@@ -19,6 +21,7 @@ import {
 } from './global-copilot-domain.js';
 import type { AppSettings } from './types.js';
 import { buildGlobalCopilotMastraTools } from './global-copilot-mastra-tools.js';
+import { getGlobalCopilotMemoryRuntime } from './global-copilot-memory.js';
 
 export const GLOBAL_COPILOT_AGENT_ID = 'mcplab-global-copilot';
 
@@ -100,6 +103,7 @@ export function createGlobalCopilotMastraAgent(params: {
   resourceId: string;
   environment?: ProviderEnvironment;
   memory?: MastraMemory;
+  storage?: MastraCompositeStore;
   tools?: any;
 }): MastraAgent {
   const descriptor = globalCopilotModelDescriptor(params.agentConfig);
@@ -122,8 +126,14 @@ export function createGlobalCopilotMastraAgent(params: {
       }
     }
   });
+  const registeredAgent = params.storage
+    ? new Mastra({
+        agents: { [GLOBAL_COPILOT_AGENT_ID]: agent },
+        storage: params.storage
+      }).getAgent(GLOBAL_COPILOT_AGENT_ID)
+    : agent;
   return new MastraAgent({
-    agent,
+    agent: registeredAgent,
     resourceId: params.resourceId,
     emitInterruptOutcome: true
   });
@@ -163,9 +173,12 @@ export async function handleGlobalCopilotKit(params: {
     return;
   }
   try {
+    const memoryRuntime = await getGlobalCopilotMemoryRuntime(params.settings.workspaceRoot);
     const agent = createGlobalCopilotMastraAgent({
       agentConfig,
       resourceId: globalCopilotWorkspaceResourceId(params.settings.workspaceRoot),
+      memory: memoryRuntime.memory,
+      storage: memoryRuntime.storage,
       tools: async ({ requestContext }: any) => {
         const context = requestContext?.get?.('ag-ui')?.context;
         return buildGlobalCopilotMastraTools({ settings: params.settings, context });

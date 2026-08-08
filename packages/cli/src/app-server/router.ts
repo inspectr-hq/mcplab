@@ -66,6 +66,7 @@ import {
   handleGlobalCopilotToolConfirmation
 } from './global-copilot-domain.js';
 import { handleGlobalCopilotKit } from './global-copilot-mastra.js';
+import { handleGlobalCopilotThreadRoutes } from './global-copilot-threads.js';
 import { createRunQueueService } from './run-queue-domain.js';
 import { createRunQueueState, type RunJob, type RunQueueState } from './run-queue-state.js';
 import { fetchProviderModels } from './provider-models.js';
@@ -344,6 +345,19 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/copilotkit') {
         await handleGlobalCopilotKit({ req, res, settings, asJson });
+        return;
+      }
+      if (
+        await handleGlobalCopilotThreadRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          settings,
+          parseBody,
+          asJson
+        })
+      ) {
         return;
       }
       if (pathname === '/api/global-copilot/run' && method === 'POST') {
