@@ -18,6 +18,7 @@ import {
   selectGlobalCopilotAgentName
 } from './global-copilot-domain.js';
 import type { AppSettings } from './types.js';
+import { buildGlobalCopilotMastraTools } from './global-copilot-mastra-tools.js';
 
 export const GLOBAL_COPILOT_AGENT_ID = 'mcplab-global-copilot';
 
@@ -99,7 +100,7 @@ export function createGlobalCopilotMastraAgent(params: {
   resourceId: string;
   environment?: ProviderEnvironment;
   memory?: MastraMemory;
-  tools?: Record<string, any>;
+  tools?: any;
 }): MastraAgent {
   const descriptor = globalCopilotModelDescriptor(params.agentConfig);
   const agent = new Agent({
@@ -165,6 +166,10 @@ export async function handleGlobalCopilotKit(params: {
     const agent = createGlobalCopilotMastraAgent({
       agentConfig,
       resourceId: globalCopilotWorkspaceResourceId(params.settings.workspaceRoot),
+      tools: async ({ requestContext }: any) => {
+        const context = requestContext?.get?.('ag-ui')?.context;
+        return buildGlobalCopilotMastraTools({ settings: params.settings, context });
+      },
       instructions: ({ requestContext }) => {
         const context = requestContext?.get?.('ag-ui')?.context;
         return [agentConfig.system, globalCopilotSystemPrompt(context)].filter(Boolean).join('\n\n');

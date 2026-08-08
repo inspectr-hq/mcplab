@@ -286,7 +286,7 @@ export function toGlobalCopilotConversationMessages(input: RunAgentInput): LlmMe
   ];
 }
 
-function localMcplabMcpUrl(): string {
+export function localMcplabMcpUrl(): string {
   const host = process.env.MCP_HOST || '127.0.0.1';
   const port = process.env.MCP_PORT || '3011';
   return `http://${host}:${port}${process.env.MCP_PATH || '/mcp'}`;

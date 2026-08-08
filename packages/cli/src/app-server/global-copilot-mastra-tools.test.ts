@@ -51,7 +51,8 @@ describe('createGlobalCopilotMcpTool', () => {
     await tool.execute?.({}, { agent: { suspend } } as any);
 
     expect(suspend).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'continue_reading', batchSize: 5 })
+      expect.objectContaining({ kind: 'continue_reading', batchSize: 5 }),
+      undefined
     );
     expect(execute).not.toHaveBeenCalled();
   });
@@ -70,7 +71,8 @@ describe('createGlobalCopilotMcpTool', () => {
 
     await tool.execute?.({ path: 'report.md' }, { agent: { suspend } } as any);
     expect(suspend).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'mcp_tool_approval', serverName: 'mcplab' })
+      expect.objectContaining({ kind: 'mcp_tool_approval', serverName: 'mcplab' }),
+      undefined
     );
     expect(execute).not.toHaveBeenCalled();
 
