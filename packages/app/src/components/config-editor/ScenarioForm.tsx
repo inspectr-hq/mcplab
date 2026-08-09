@@ -183,6 +183,7 @@ export function ScenarioForm({
   allowAdd = !readOnly,
   allowStructureEdits = !readOnly
 }: ScenarioFormProps) {
+  const { source } = useDataSource();
   const update = (index: number, patch: Partial<Scenario>) => {
     const next = scenarios.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange(next);
@@ -226,7 +227,7 @@ export function ScenarioForm({
   useEffect(
     () => {
       if (readOnly) return undefined;
-      return registerGlobalCopilotAction('apply_scenario_patch', async (arguments_) => {
+      const unregisterPatch = registerGlobalCopilotAction('apply_scenario_patch', async (arguments_) => {
         const scenarioId = typeof arguments_.scenarioId === 'string' ? arguments_.scenarioId : '';
         const index = scenarios.findIndex((scenario) => scenario.id === scenarioId);
         if (index < 0) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
@@ -242,8 +243,46 @@ export function ScenarioForm({
         update(index, patch);
         toast({ title: 'Scenario updated', description: `Applied Copilot changes to ${scenarioId}.` });
       });
+
+      const unregisterPreview = registerGlobalCopilotAction('preview_scenario', async (arguments_) => {
+        const scenarioId = typeof arguments_.scenarioId === 'string' ? arguments_.scenarioId : '';
+        const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
+        if (!scenario) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
+        const requestedAgent = typeof arguments_.agentId === 'string' ? arguments_.agentId : '';
+        const selectedAgentName = requestedAgent || defaultAssistantAgentName || agents[0]?.id || '';
+        if (!selectedAgentName) throw new Error('Select an agent before running a scenario preview.');
+        const oauthServerIds = scenario.serverIds.filter((serverId) =>
+          servers.some((server) => server.id === serverId && server.authType === 'oauth2')
+        );
+        await ensureOAuthForServers({ serverNames: oauthServerIds, source });
+        const preview = await source.runScenarioPreview({
+          selectedAgentName,
+          scenario: {
+            id: scenario.id,
+            name: scenario.name,
+            prompt: scenario.prompt,
+            serverNames: scenario.serverIds,
+            attachments: scenario.attachments ?? [],
+            evalRules: scenario.evalRules,
+            extractRules: scenario.extractRules
+          }
+        });
+        return {
+          scenarioId,
+          selectedAgentName,
+          passed: preview.run.passed,
+          finalAnswer: preview.run.finalAnswer,
+          failureReasons: preview.run.failureReasons,
+          checkResults: preview.run.checkResults
+        };
+      });
+
+      return () => {
+        unregisterPatch();
+        unregisterPreview();
+      };
     },
-    [readOnly, scenarios, onChange]
+    [agents, defaultAssistantAgentName, onChange, readOnly, scenarios, servers, source]
   );
 
   return (

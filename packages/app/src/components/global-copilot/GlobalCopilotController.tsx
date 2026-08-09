@@ -412,6 +412,13 @@ function useGlobalCopilotFrontendTools(params: {
       .strict(),
     'Apply a structured edit to an open scenario after user confirmation. Preserve scenarioId and include only the fields being changed; evalRules and extractRules are complete replacement arrays.'
   );
+  useConfirmedFrontendTool(
+    'preview_scenario',
+    params.agentId,
+    available.has('preview_scenario'),
+    z.object({ scenarioId: z.string(), agentId: z.string().optional() }).strict(),
+    'Run the open scenario once with a selected agent and return its preview checks and response. This requires confirmation and does not persist changes.'
+  );
   useConfirmedFrontendTool('start_tool_analysis', params.agentId, available.has('start_tool_analysis'));
   useConfirmedFrontendTool('duplicate_test_case', params.agentId, available.has('duplicate_test_case'));
   useConfirmedFrontendTool('duplicate_mcp_server', params.agentId, available.has('duplicate_mcp_server'));
@@ -461,8 +468,8 @@ function FrontendApprovalCard({
       return;
     }
     try {
-      await invokeGlobalCopilotAction(name, args);
-      await respond({ approved: true });
+      const result = await invokeGlobalCopilotAction(name, args);
+      await respond({ approved: true, result });
     } catch (error: unknown) {
       await respond({ approved: false, error: error instanceof Error ? error.message : String(error) });
     }

@@ -133,6 +133,39 @@ describe('ScenarioForm checks editor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('runs a confirmed Copilot scenario preview with OAuth preflight', async () => {
+    const scenario = { ...baseScenario(), serverIds: ['oauth-server'] };
+    const preview = {
+      run: {
+        passed: true,
+        finalAnswer: 'hello',
+        failureReasons: [],
+        checkResults: []
+      }
+    };
+    mockSource.runScenarioPreview.mockResolvedValue(preview);
+    mockEnsureOAuthForServers.mockResolvedValue(undefined);
+    render(
+      <ScenarioForm
+        scenarios={[scenario]}
+        agents={[{ id: 'agent-1', name: 'Agent 1' } as AgentConfig]}
+        servers={[{ id: 'oauth-server', authType: 'oauth2' } as ServerConfig]}
+        onChange={vi.fn()}
+      />
+    );
+
+    await expect(
+      invokeGlobalCopilotAction('preview_scenario', { scenarioId: scenario.id, agentId: 'agent-1' })
+    ).resolves.toMatchObject({ scenarioId: scenario.id, passed: true, finalAnswer: 'hello' });
+    expect(mockEnsureOAuthForServers).toHaveBeenCalledWith({
+      serverNames: ['oauth-server'],
+      source: mockSource
+    });
+    expect(mockSource.runScenarioPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedAgentName: 'agent-1' })
+    );
+  });
+
   it('adds response_equals checks with literal value', async () => {
     const onChange = vi.fn();
 

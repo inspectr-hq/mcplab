@@ -3,13 +3,14 @@ export type GlobalCopilotActionName =
   | 'queue_evaluation_run'
   | 'queue_evaluation_by_config'
   | 'apply_scenario_patch'
+  | 'preview_scenario'
   | 'start_tool_analysis'
   | 'duplicate_test_case'
   | 'create_test_case'
   | 'duplicate_mcp_server'
   | 'duplicate_agent';
 
-type RegisteredAction = (arguments_: Record<string, unknown>) => Promise<void> | void;
+type RegisteredAction = (arguments_: Record<string, unknown>) => Promise<unknown> | unknown;
 
 const actions = new Map<GlobalCopilotActionName, RegisteredAction>();
 const listeners = new Set<() => void>();
@@ -44,8 +45,8 @@ export function availableGlobalCopilotActions(): GlobalCopilotActionName[] {
 export async function invokeGlobalCopilotAction(
   name: GlobalCopilotActionName,
   arguments_: Record<string, unknown> = {}
-): Promise<void> {
+): Promise<unknown> {
   const action = actions.get(name);
   if (!action) throw new Error('This action is no longer available on the current page.');
-  await action(arguments_);
+  return action(arguments_);
 }
