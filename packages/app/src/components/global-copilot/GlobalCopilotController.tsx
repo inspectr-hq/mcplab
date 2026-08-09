@@ -12,6 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { AssistantToolCallCard } from '@/components/assistant/AssistantChat';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -29,11 +30,13 @@ import {
 import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-context';
 import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { formatEvalRuleLabel } from '@/lib/check-presentation';
 import {
   prepareWorkspaceEvaluationRun,
   submitWorkspaceEvaluationRun
 } from '@/lib/workspace-evaluation-run';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
+import type { EvalRule } from '@/types/eval';
 import { GlobalCopilotComposer } from './GlobalCopilotComposer';
 import { GlobalCopilotConversation } from './GlobalCopilotConversation';
 import { GlobalCopilotThreadList } from './GlobalCopilotThreadList';
@@ -611,6 +614,27 @@ export function ScenarioSuggestionCard({
     }
   };
 
+  const applyRules = async (
+    field: 'evalRules' | 'extractRules',
+    rules: Record<string, unknown>[],
+    mode: 'append' | 'replace'
+  ) => {
+    try {
+      await invokeGlobalCopilotAction('apply_scenario_patch', {
+        scenarioId,
+        [field]: rules,
+        [field === 'evalRules' ? 'evalRuleMode' : 'extractRuleMode']: mode
+      });
+      setApplied((current) => (current.includes(field) ? current : [...current, field]));
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not apply suggestion',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
   const applyRule = async (
     field: 'evalRules' | 'extractRules',
     value: Record<string, unknown>,
@@ -646,7 +670,8 @@ export function ScenarioSuggestionCard({
             label="Checks"
             rules={evalRules}
             applied={applied.includes('evalRules')}
-            onApplyAll={() => void apply('evalRules', evalRules)}
+            onApplySelected={(rules) => void applyRules('evalRules', rules, 'append')}
+            onReplaceSelected={(rules) => void applyRules('evalRules', rules, 'replace')}
             onApplyOne={(rule, index) => void applyRule('evalRules', rule, 'append', `evalRules:add:${index}`)}
             onReplaceOne={(rule, index) => void applyRule('evalRules', rule, 'replace', `evalRules:replace:${index}`)}
           />
@@ -656,7 +681,8 @@ export function ScenarioSuggestionCard({
             label="Value Capture Rules"
             rules={extractRules}
             applied={applied.includes('extractRules')}
-            onApplyAll={() => void apply('extractRules', extractRules)}
+            onApplySelected={(rules) => void applyRules('extractRules', rules, 'append')}
+            onReplaceSelected={(rules) => void applyRules('extractRules', rules, 'replace')}
             onApplyOne={(rule, index) => void applyRule('extractRules', rule, 'append', `extractRules:add:${index}`)}
             onReplaceOne={(rule, index) => void applyRule('extractRules', rule, 'replace', `extractRules:replace:${index}`)}
           />
@@ -672,46 +698,100 @@ export function ScenarioSuggestionCard({
   );
 }
 
+function formatCopilotRuleLabel(rule: Record<string, unknown>, label: string): string {
+  if (label === 'Checks') {
+    return formatEvalRuleLabel(rule as EvalRule);
+  }
+  const name = typeof rule.name === 'string' ? rule.name : 'Value capture rule';
+  const pattern = typeof rule.pattern === 'string' ? rule.pattern : rule.regex;
+  return `${name} · ${typeof pattern === 'string' ? pattern : 'Pattern not specified'}`;
+}
+
 function RuleSuggestionSection({
   label,
   rules,
   applied,
-  onApplyAll,
+  onApplySelected,
+  onReplaceSelected,
   onApplyOne,
   onReplaceOne
 }: {
   label: string;
   rules: Record<string, unknown>[];
   applied: boolean;
-  onApplyAll: () => void;
+  onApplySelected: (rules: Record<string, unknown>[]) => void;
+  onReplaceSelected: (rules: Record<string, unknown>[]) => void;
   onApplyOne: (rule: Record<string, unknown>, index: number) => void;
   onReplaceOne: (rule: Record<string, unknown>, index: number) => void;
 }) {
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
+    () => new Set(rules.map((_, index) => index))
+  );
   const [itemActions, setItemActions] = useState<Set<string>>(new Set());
+  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
+  const allSelected = selectedIndexes.size === rules.length;
   return (
     <div className="rounded border bg-background p-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold">{label}</span>
-        <Button size="sm" variant={applied ? 'secondary' : 'outline'} disabled={applied} onClick={onApplyAll}>
-          {applied ? 'Applied' : 'Apply all'}
-        </Button>
+        <span className="text-sm font-semibold">{label}</span>
       </div>
+      <p className="mt-1 text-xs text-muted-foreground">Suggested {label} update</p>
       <div className="mt-2 space-y-2">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] text-muted-foreground">
+            {selectedIndexes.size} of {rules.length} selected
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-[11px]"
+            disabled={applied || rules.length === 0}
+            onClick={() =>
+              setSelectedIndexes(
+                allSelected ? new Set() : new Set(rules.map((_, index) => index))
+              )
+            }
+          >
+            {allSelected ? 'Unselect all' : 'Select all'}
+          </Button>
+        </div>
         {rules.map((rule, index) => {
           const addKey = `add-${index}`;
           const replaceKey = `replace-${index}`;
+          const itemLabel = label === 'Checks' ? 'check' : 'value capture rule';
+          const checkboxId = `copilot-${label.toLowerCase().replaceAll(' ', '-')}-${index}`;
           return (
             <div key={`${label}-${index}`} className="flex items-start gap-2 rounded bg-muted/50 p-2">
-              <pre className="min-w-0 flex-1 whitespace-pre-wrap text-[11px] text-muted-foreground">
-                {JSON.stringify(rule, null, 2)}
-              </pre>
+              <Checkbox
+                id={checkboxId}
+                checked={selectedIndexes.has(index)}
+                disabled={applied}
+                onCheckedChange={(checked) =>
+                  setSelectedIndexes((current) => {
+                    const next = new Set(current);
+                    if (checked === true) next.add(index);
+                    else next.delete(index);
+                    return next;
+                  })
+                }
+                aria-label={`Select ${itemLabel} ${index + 1}`}
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <span className="block text-xs font-medium">
+                  {formatCopilotRuleLabel(rule, label)}
+                </span>
+                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
+                  {JSON.stringify(rule)}
+                </code>
+              </div>
               <div className="flex shrink-0 gap-1">
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-7 px-2 text-[11px]"
                   disabled={applied || itemActions.has(addKey)}
-                  aria-label={`Add ${label === 'Checks' ? 'check' : 'value capture rule'} ${index + 1}`}
+                  aria-label={`Add ${itemLabel} ${index + 1}`}
                   onClick={() => {
                     onApplyOne(rule, index);
                     setItemActions((current) => new Set(current).add(addKey));
@@ -724,7 +804,7 @@ function RuleSuggestionSection({
                   variant="outline"
                   className="h-7 px-2 text-[11px]"
                   disabled={applied || itemActions.has(replaceKey)}
-                  aria-label={`Replace with ${label === 'Checks' ? 'check' : 'value capture rule'} ${index + 1}`}
+                  aria-label={`Replace with ${itemLabel} ${index + 1}`}
                   onClick={() => {
                     onReplaceOne(rule, index);
                     setItemActions((current) => new Set(current).add(replaceKey));
@@ -736,6 +816,31 @@ function RuleSuggestionSection({
             </div>
           );
         })}
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        {applied ? (
+          <Button type="button" size="sm" variant="secondary" disabled>Applied</Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selectedRules.length === 0}
+              onClick={() => onReplaceSelected(selectedRules)}
+            >
+              Replace all
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={selectedRules.length === 0}
+              onClick={() => onApplySelected(selectedRules)}
+            >
+              Add selected
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

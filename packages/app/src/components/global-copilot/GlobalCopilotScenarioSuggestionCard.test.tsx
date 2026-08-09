@@ -31,6 +31,13 @@ describe('Global Copilot scenario suggestions', () => {
       />
     );
 
+    expect(screen.getByText('Suggested Checks update')).toBeInTheDocument();
+    expect(screen.getByText('Suggested Value Capture Rules update')).toBeInTheDocument();
+    expect(screen.getByText('first · one')).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: 'Add selected' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Replace all' })).toHaveLength(2);
+
     fireEvent.click(screen.getByRole('button', { name: 'Add check 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Replace with check 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add value capture rule 1' }));

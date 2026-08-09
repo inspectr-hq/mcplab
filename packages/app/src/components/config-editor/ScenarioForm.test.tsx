@@ -120,6 +120,30 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('appends an individually added Copilot rule instead of replacing existing rules', async () => {
+    const scenario = {
+      ...baseScenario(),
+      evalRules: [{ type: 'response_contains', value: 'existing' }]
+    };
+    const onChange = vi.fn();
+    render(<ScenarioForm scenarios={[scenario]} agents={[]} servers={[]} onChange={onChange} />);
+
+    await invokeGlobalCopilotAction('apply_scenario_patch', {
+      scenarioId: scenario.id,
+      evalRules: [{ type: 'response_contains', value: 'suggested' }],
+      evalRuleMode: 'append'
+    });
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        evalRules: [
+          { type: 'response_contains', value: 'existing' },
+          { type: 'response_contains', value: 'suggested' }
+        ]
+      })
+    ]);
+  });
+
   it('rejects malformed Copilot scenario rules before changing editor state', async () => {
     const onChange = vi.fn();
     render(<ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={onChange} />);
