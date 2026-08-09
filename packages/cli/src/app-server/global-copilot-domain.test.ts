@@ -5,11 +5,25 @@ import {
   globalCopilotExternalServers,
   globalCopilotMcplabToolPolicy,
   globalCopilotMcpToolErrorMessage,
+  globalCopilotMcpToolPayload,
   globalCopilotSystemPrompt,
   selectGlobalCopilotAgentName
 } from './global-copilot-domain.js';
 
 describe('Global Copilot domain policy', () => {
+  it('prefers structured MCP payloads so metadata remains visible to Copilot', () => {
+    expect(
+      globalCopilotMcpToolPayload({
+        content: [{ type: 'text', text: 'protocol envelope' }],
+        structuredContent: {
+          test_cases: [{ id: 'latest', created_at: '2026-08-09T10:00:00.000Z' }]
+        }
+      })
+    ).toEqual({
+      test_cases: [{ id: 'latest', created_at: '2026-08-09T10:00:00.000Z' }]
+    });
+  });
+
   it('turns MCP error content into a failed tool result', () => {
     expect(
       globalCopilotMcpToolErrorMessage({

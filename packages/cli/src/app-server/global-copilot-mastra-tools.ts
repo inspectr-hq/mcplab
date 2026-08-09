@@ -11,6 +11,7 @@ import {
   globalCopilotExternalServers,
   globalCopilotMcplabToolPolicy,
   globalCopilotMcpToolErrorMessage,
+  globalCopilotMcpToolPayload,
   localMcplabMcpUrl
 } from './global-copilot-domain.js';
 import { readLibraries } from './libraries-store.js';
@@ -160,7 +161,7 @@ async function executeRevalidatedMcpTool(params: {
     );
     const toolError = globalCopilotMcpToolErrorMessage(result);
     if (toolError) throw new Error(toolError);
-    return truncateJson(result, 4000);
+    return truncateJson(globalCopilotMcpToolPayload(result), 4000);
   }
   const mcp = new McpClientManager();
   try {
@@ -172,7 +173,7 @@ async function executeRevalidatedMcpTool(params: {
     const result = await mcp.callTool(params.serverName, params.toolName, params.arguments_);
     const toolError = globalCopilotMcpToolErrorMessage(result);
     if (toolError) throw new Error(toolError);
-    return truncateJson(result, 4000);
+    return truncateJson(globalCopilotMcpToolPayload(result), 4000);
   } finally {
     await mcp.disconnectAll().catch(() => undefined);
   }

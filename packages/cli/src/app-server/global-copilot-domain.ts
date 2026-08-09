@@ -114,3 +114,10 @@ export function globalCopilotMcpToolErrorMessage(result: unknown): string | unde
     .filter(Boolean);
   return messages.join('\n') || 'The MCP tool reported an error.';
 }
+
+/** Prefer the server's structured MCP payload so metadata is not hidden in the protocol envelope. */
+export function globalCopilotMcpToolPayload(result: unknown): unknown {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+  const structuredContent = (result as { structuredContent?: unknown }).structuredContent;
+  return structuredContent === undefined ? result : structuredContent;
+}
