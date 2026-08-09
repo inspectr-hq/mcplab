@@ -146,12 +146,17 @@ export function createGlobalCopilotMastraAgent(params: {
 }
 
 export function createGlobalCopilotRuntimeHandler(agent: MastraAgent) {
+  disableGlobalCopilotKitTelemetry();
   const runtime = new CopilotRuntime({ agents: { [GLOBAL_COPILOT_AGENT_ID]: agent } });
   return copilotRuntimeNodeHttpEndpoint({
     endpoint: '/api/copilotkit',
     runtime,
     serviceAdapter: new ExperimentalEmptyAdapter()
   });
+}
+
+export function disableGlobalCopilotKitTelemetry(): void {
+  process.env.COPILOTKIT_TELEMETRY_DISABLED = 'true';
 }
 
 export function globalCopilotWorkspaceResourceId(workspaceRoot: string): string {

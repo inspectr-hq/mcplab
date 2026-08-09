@@ -5,6 +5,7 @@ import {
   createGlobalCopilotLanguageModel,
   createGlobalCopilotMastraAgent,
   createGlobalCopilotRuntimeHandler,
+  disableGlobalCopilotKitTelemetry,
   globalCopilotContextFromAgUi,
   globalCopilotModelDescriptor,
   persistGlobalCopilotPendingInterrupts,
@@ -12,6 +13,15 @@ import {
 } from './global-copilot-mastra.js';
 
 describe('globalCopilotModelDescriptor', () => {
+  it('disables CopilotKit anonymous telemetry for the embedded runtime', () => {
+    const original = process.env.COPILOTKIT_TELEMETRY_DISABLED;
+    delete process.env.COPILOTKIT_TELEMETRY_DISABLED;
+    disableGlobalCopilotKitTelemetry();
+    expect(process.env.COPILOTKIT_TELEMETRY_DISABLED).toBe('true');
+    if (original === undefined) delete process.env.COPILOTKIT_TELEMETRY_DISABLED;
+    else process.env.COPILOTKIT_TELEMETRY_DISABLED = original;
+  });
+
   it('maps OpenAI library agents without changing generation settings', () => {
     const agent = {
       provider: 'openai',
