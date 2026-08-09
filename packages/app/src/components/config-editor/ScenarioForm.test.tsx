@@ -133,6 +133,31 @@ describe('ScenarioForm checks editor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('normalizes friendly Copilot rule aliases to the stored eval-rule schema', async () => {
+    const scenario = baseScenario();
+    const onChange = vi.fn();
+    render(<ScenarioForm scenarios={[scenario]} agents={[]} servers={[]} onChange={onChange} />);
+
+    await invokeGlobalCopilotAction('apply_scenario_patch', {
+      scenarioId: scenario.id,
+      evalRules: [
+        { type: 'required_tool', tool: 'mcplab_list_library' },
+        { type: 'response_regex', pattern: '\\d{4}-\\d{2}-\\d{2}' },
+        { type: 'tool_sequence', sequence: ['mcplab_list_library'] }
+      ]
+    });
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        evalRules: [
+          { type: 'required_tool', value: 'mcplab_list_library' },
+          { type: 'response_regex', value: '\\d{4}-\\d{2}-\\d{2}' },
+          { type: 'tool_sequence', sequence: ['mcplab_list_library'] }
+        ]
+      })
+    ]);
+  });
+
   it('publishes available preview agents in Copilot scenario context', async () => {
     const { globalCopilotPageContext } = await import('@/lib/global-copilot-page-context');
     render(

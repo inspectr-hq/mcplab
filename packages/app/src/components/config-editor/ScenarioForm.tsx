@@ -135,17 +135,47 @@ const copilotEvalRuleTypes = new Set<EvalRule['type']>([
   'agent_check'
 ]);
 
-function validateCopilotEvalRules(value: unknown): EvalRule[] {
+function normalizeCopilotEvalRules(value: unknown): EvalRule[] {
   if (!Array.isArray(value)) throw new Error('evalRules must be an array.');
-  for (const rule of value) {
-    if (!rule || typeof rule !== 'object' || !copilotEvalRuleTypes.has((rule as EvalRule).type)) {
+  return value.map((rawRule) => {
+    if (!rawRule || typeof rawRule !== 'object') {
       throw new Error('evalRules contains an unsupported rule type.');
     }
-    if ('sequence' in rule && !Array.isArray((rule as EvalRule).sequence)) {
-      throw new Error('tool_sequence rules must contain a sequence array.');
+    const input = rawRule as Record<string, unknown>;
+    const type = input.type;
+    if (typeof type !== 'string' || !copilotEvalRuleTypes.has(type as EvalRule['type'])) {
+      throw new Error('evalRules contains an unsupported rule type.');
     }
-  }
-  return value as EvalRule[];
+    const rule: EvalRule = { type: type as EvalRule['type'] };
+    const copyString = (key: keyof EvalRule, ...aliases: string[]) => {
+      const candidate = [key, ...aliases]
+        .map((name) => input[name as string])
+        .find((candidate): candidate is string => typeof candidate === 'string');
+      if (candidate !== undefined) rule[key] = candidate as never;
+    };
+    if (type === 'required_tool' || type === 'forbidden_tool') {
+      copyString('value', 'tool', 'name');
+    } else if (type === 'tool_sequence') {
+      const sequence = input.sequence ?? input.toolSequence;
+      if (typeof sequence === 'string') rule.sequence = [sequence];
+      else if (Array.isArray(sequence) && sequence.every((item) => typeof item === 'string')) {
+        rule.sequence = sequence;
+      } else {
+        throw new Error('tool_sequence rules must contain a sequence array.');
+      }
+    } else if (type === 'response_jsonpath' || type === 'response_jsonpath_exists' || type === 'response_jsonpath_not_exists') {
+      copyString('path', 'jsonpath');
+      if (typeof input.equals === 'string' || typeof input.equals === 'number' || typeof input.equals === 'boolean') {
+        rule.equals = input.equals;
+      }
+    } else if (type === 'agent_check') {
+      copyString('label');
+      copyString('prompt');
+    } else {
+      copyString('value', 'text', 'contains', 'pattern', 'regex');
+    }
+    return rule;
+  });
 }
 
 function validateCopilotExtractRules(value: unknown): Scenario['extractRules'] {
@@ -237,7 +267,7 @@ export function ScenarioForm({
         const patch: Partial<Scenario> = {};
         if (typeof arguments_.prompt === 'string') patch.prompt = arguments_.prompt;
         if (arguments_.evalRules !== undefined) {
-          patch.evalRules = validateCopilotEvalRules(arguments_.evalRules);
+          patch.evalRules = normalizeCopilotEvalRules(arguments_.evalRules);
         }
         if (Array.isArray(arguments_.extractRules)) {
           patch.extractRules = validateCopilotExtractRules(arguments_.extractRules);
