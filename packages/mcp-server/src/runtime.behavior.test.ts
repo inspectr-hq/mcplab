@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -183,6 +191,47 @@ describe('mcp tool behavior', () => {
     expect(legacy.structuredContent.scenarios).toEqual([
       expect.objectContaining({ id: 'tag-profile' })
     ]);
+  });
+
+  it('includes filesystem timestamps in library list and item responses', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-mcp-library-timestamps-'));
+    temporaryRoots.push(root);
+    const libraryRoot = join(root, 'library');
+    mkdirSync(join(libraryRoot, 'test-cases'), { recursive: true });
+    const serversPath = join(libraryRoot, 'servers.yaml');
+    const agentsPath = join(libraryRoot, 'agents.yaml');
+    const testCasePath = join(libraryRoot, 'test-cases', 'tag-profile.yaml');
+    writeFileSync(serversPath, 'tags:\n  transport: http\n', 'utf8');
+    writeFileSync(agentsPath, 'judge:\n  provider: openai\n  model: gpt-5\n', 'utf8');
+    writeFileSync(testCasePath, 'id: tag-profile\nprompt: test\n', 'utf8');
+
+    const tools = await setupTools(libraryRoot);
+    const listed = await tools.get('mcplab_list_library')!.cb({ includeContent: false });
+    expect(listed.structuredContent.servers[0]).toMatchObject({
+      id: 'tags',
+      created_at: expect.any(String),
+      updated_at: statSync(serversPath).mtime.toISOString()
+    });
+    expect(listed.structuredContent.agents[0]).toMatchObject({
+      id: 'judge',
+      created_at: expect.any(String),
+      updated_at: statSync(agentsPath).mtime.toISOString()
+    });
+    expect(listed.structuredContent.test_cases[0]).toMatchObject({
+      id: 'tag-profile',
+      created_at: expect.any(String),
+      updated_at: statSync(testCasePath).mtime.toISOString()
+    });
+
+    const item = await tools.get('mcplab_get_library_item')!.cb({
+      kind: 'test_cases',
+      id: 'tag-profile'
+    });
+    expect(item.structuredContent).toMatchObject({
+      created_at: expect.any(String),
+      updated_at: statSync(testCasePath).mtime.toISOString()
+    });
+    expect(new Date(item.structuredContent.created_at).toString()).not.toBe('Invalid Date');
   });
 
   it('retrieves a Test Case by its scenario id from the canonical directory', async () => {

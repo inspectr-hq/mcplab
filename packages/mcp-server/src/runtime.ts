@@ -177,6 +177,8 @@ const RunListEntrySchema = z.object({
 const LibraryScenarioEntrySchema = z.object({
   file: z.string(),
   id: z.string().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
   content: GenericObjectSchema.optional(),
   yaml: z.string().optional()
 });
@@ -202,11 +204,15 @@ const LibraryServerEntryContentSchema = z
 
 const LibraryServerEntrySchema = z.object({
   id: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
   entry: LibraryServerEntryContentSchema.optional()
 });
 
 const LibraryAgentEntrySchema = z.object({
   id: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
   entry: AgentEntrySchema.optional()
 });
 
@@ -1230,6 +1236,8 @@ export function registerTools(server: McpServer): void {
         kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
+        created_at: z.string(),
+        updated_at: z.string(),
         yaml: z.string(),
         content: GenericObjectSchema
       },
@@ -2886,6 +2894,8 @@ function readLibrary(
   const agents = existsSync(agentsPath)
     ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
     : {};
+  const serversTimestamps = existsSync(serversPath) ? getFileTimestamps(serversPath) : undefined;
+  const agentsTimestamps = existsSync(agentsPath) ? getFileTimestamps(agentsPath) : undefined;
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
   if (existsSync(scenariosDir)) {
@@ -2900,6 +2910,7 @@ function readLibrary(
         removeUndefined({
           file,
           id: typeof parsed.id === 'string' ? parsed.id : undefined,
+          ...getFileTimestamps(fullPath),
           ...(includeContent ? { content: parsed, yaml: raw } : {})
         })
       );
@@ -2910,16 +2921,24 @@ function readLibrary(
     bundleRoot,
     servers: Object.keys(servers)
       .sort()
-      .map((id) => ({
-        id,
-        ...(includeContent ? { entry: (servers[id] as Record<string, unknown>) ?? {} } : {})
-      })),
+      .map((id) => {
+        if (!serversTimestamps) throw new Error(`Library file not found: ${serversPath}`);
+        return {
+          id,
+          ...serversTimestamps,
+          ...(includeContent ? { entry: (servers[id] as Record<string, unknown>) ?? {} } : {})
+        };
+      }),
     agents: Object.keys(agents)
       .sort()
-      .map((id) => ({
-        id,
-        ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
-      })),
+      .map((id) => {
+        if (!agentsTimestamps) throw new Error(`Library file not found: ${agentsPath}`);
+        return {
+          id,
+          ...agentsTimestamps,
+          ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
+        };
+      }),
     test_cases: scenarioEntries,
     // Deprecated compatibility field. New clients should use test_cases.
     scenarios: scenarioEntries
@@ -2947,6 +2966,7 @@ function getLibraryItem(
       bundleRoot,
       kind,
       id,
+      ...getFileTimestamps(file),
       yaml: stringifyYaml({ [id]: entry }).trimEnd(),
       content: entry as Record<string, unknown>
     };
@@ -2967,12 +2987,23 @@ function getLibraryItem(
         kind,
         id,
         file,
+        ...getFileTimestamps(fullPath),
         yaml: raw.trimEnd(),
         content: parsed
       };
     }
   }
   throw new Error(`Test Case '${id}' not found in ${dir}`);
+}
+
+function getFileTimestamps(filePath: string): { created_at: string; updated_at: string } {
+  const stats = statSync(filePath);
+  const createdAt =
+    Number.isFinite(stats.birthtimeMs) && stats.birthtimeMs > 0 ? stats.birthtime : stats.ctime;
+  return {
+    created_at: createdAt.toISOString(),
+    updated_at: stats.mtime.toISOString()
+  };
 }
 
 function resolveLibraryTestCasesDir(bundleRoot: string): string {
