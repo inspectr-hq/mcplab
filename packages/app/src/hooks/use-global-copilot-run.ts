@@ -37,7 +37,7 @@ export function useGlobalCopilotRun({
   const fallbackThreadId = useRef(`pending-${crypto.randomUUID()}`);
   const threadId = thread?.id ?? fallbackThreadId.current;
   const { agent, isReady } = useAgent({
-    agentId: `mcplab-global-copilot:${threadId}`,
+    agentId: runtimeAgentId,
     runtimeAgentId,
     threadId
   });
