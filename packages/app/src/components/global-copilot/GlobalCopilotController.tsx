@@ -10,9 +10,7 @@ import { Bot, MessageSquarePlus, Minimize2, PanelRightClose, PanelRightOpen } fr
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { AssistantToolCallCard } from '@/components/assistant/AssistantChat';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useConfigs } from '@/contexts/ConfigContext';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -20,7 +18,12 @@ import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { useGlobalCopilotRun } from '@/hooks/use-global-copilot-run';
 import { useGlobalCopilotThread } from '@/hooks/use-global-copilot-thread';
 import { toast } from '@/hooks/use-toast';
-import { availableGlobalCopilotActions, invokeGlobalCopilotAction, registerGlobalCopilotAction, subscribeGlobalCopilotActions } from '@/lib/global-copilot-actions';
+import {
+  availableGlobalCopilotActions,
+  invokeGlobalCopilotAction,
+  registerGlobalCopilotAction,
+  subscribeGlobalCopilotActions
+} from '@/lib/global-copilot-actions';
 import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
 import {
@@ -30,14 +33,18 @@ import {
 import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-context';
 import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { formatEvalRuleLabel } from '@/lib/check-presentation';
 import {
   prepareWorkspaceEvaluationRun,
   submitWorkspaceEvaluationRun
 } from '@/lib/workspace-evaluation-run';
-import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
-import type { EvalRule } from '@/types/eval';
 import { GlobalCopilotComposer } from './GlobalCopilotComposer';
+import {
+  FrontendApprovalCard,
+  globalCopilotInterruptMessage,
+  NativeInterruptCard,
+  ScenarioDraftCard,
+  ScenarioSuggestionCard
+} from './GlobalCopilotCards';
 import { GlobalCopilotConversation } from './GlobalCopilotConversation';
 import { GlobalCopilotThreadList } from './GlobalCopilotThreadList';
 
@@ -64,7 +71,10 @@ function GlobalCopilotControllerInner() {
   const [input, setInput] = useState('');
   const [, refreshAvailableActions] = useState(0);
 
-  useEffect(() => subscribeGlobalCopilotActions(() => refreshAvailableActions((value) => value + 1)), []);
+  useEffect(
+    () => subscribeGlobalCopilotActions(() => refreshAvailableActions((value) => value + 1)),
+    []
+  );
 
   useEffect(
     () =>
@@ -116,8 +126,7 @@ function GlobalCopilotControllerInner() {
         const { jobId } = await submitWorkspaceEvaluationRun({
           prepared,
           source,
-          ensureOAuth: async (serverNames) =>
-            ensureOAuthForServers({ serverNames, source })
+          ensureOAuth: async (serverNames) => ensureOAuthForServers({ serverNames, source })
         });
         toast({ title: 'Evaluation queued', description: `${config.name} (${jobId})` });
       }),
@@ -138,7 +147,9 @@ function GlobalCopilotControllerInner() {
             ? arguments_.required_tools.filter((item): item is string => typeof item === 'string')
             : undefined,
           responseRegexPatterns: Array.isArray(arguments_.response_regex_patterns)
-            ? arguments_.response_regex_patterns.filter((item): item is string => typeof item === 'string')
+            ? arguments_.response_regex_patterns.filter(
+                (item): item is string => typeof item === 'string'
+              )
             : undefined
         });
         toast({ title: 'Test Case created', description: `Created ${created.id} in Test Cases.` });
@@ -164,7 +175,12 @@ function GlobalCopilotControllerInner() {
           }
           return libraries.servers.some((server) => server.id === 'mcp-lab') ? 'mcp-lab' : serverId;
         });
-        await source.createTestCase({ id, name: typeof arguments_.name === 'string' ? arguments_.name : undefined, servers, prompt });
+        await source.createTestCase({
+          id,
+          name: typeof arguments_.name === 'string' ? arguments_.name : undefined,
+          servers,
+          prompt
+        });
         const updatedLibraries = await source.getLibraries();
         const created = updatedLibraries.scenarios.find((scenario) => scenario.id === id);
         if (!created) throw new Error(`Created Test Case '${id}' could not be reloaded.`);
@@ -192,7 +208,11 @@ function GlobalCopilotControllerInner() {
 
   useEffect(() => {
     if (!threadError) return;
-    toast({ title: 'Could not open conversation', description: threadError, variant: 'destructive' });
+    toast({
+      title: 'Could not open conversation',
+      description: threadError,
+      variant: 'destructive'
+    });
   }, [threadError]);
   const appContext = useMemo(
     () => ({
@@ -209,11 +229,27 @@ function GlobalCopilotControllerInner() {
         new Set([...availableGlobalCopilotActions(), 'queue_evaluation_by_config'])
       )
     }),
-    [location.pathname, location.search, queue.oauthBlockedCount, queue.queuedCount, queue.runningCount, queue.streamStatus, version]
+    [
+      location.pathname,
+      location.search,
+      queue.oauthBlockedCount,
+      queue.queuedCount,
+      queue.runningCount,
+      queue.streamStatus,
+      version
+    ]
   );
   useAgentContext({ description: 'Current MCPLab application context', value: appContext });
 
-  const { agent, isReady, messages, loading, send: run, resumeStoredInterrupt, cancel } = useGlobalCopilotRun({
+  const {
+    agent,
+    isReady,
+    messages,
+    loading,
+    send: run,
+    resumeStoredInterrupt,
+    cancel
+  } = useGlobalCopilotRun({
     thread,
     renameThread,
     refresh,
@@ -261,7 +297,9 @@ function GlobalCopilotControllerInner() {
           ? {
               id: interrupt?.id ?? 'pending-read-approval',
               role: 'system',
-              content: `Additional MCPLab read-tool batch requested (${Number(payload.batchSize ?? 5)} calls).`,
+              content: `Additional MCPLab read-tool batch requested (${Number(
+                payload.batchSize ?? 5
+              )} calls).`,
               createdAt: new Date().toISOString(),
               action: {
                 kind: 'continue_reading',
@@ -272,7 +310,9 @@ function GlobalCopilotControllerInner() {
           : {
               id: interrupt?.id ?? 'pending-tool-approval',
               role: 'system',
-              content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(payload.toolName ?? mastra?.toolName ?? 'tool')}`,
+              content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(
+                payload.toolName ?? mastra?.toolName ?? 'tool'
+              )}`,
               createdAt: new Date().toISOString(),
               action: {
                 kind: 'external_mcp_tool',
@@ -343,13 +383,35 @@ function GlobalCopilotControllerInner() {
         <Bot className="h-4 w-4 text-primary" />
         <span className="min-w-0 truncate text-sm font-semibold">Global Copilot</span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => setExpanded((value) => !value)} aria-label={expanded ? 'Compact global copilot' : 'Expand global copilot'} title={expanded ? 'Compact' : 'Expand'}>
-            {expanded ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setExpanded((value) => !value)}
+            aria-label={expanded ? 'Compact global copilot' : 'Expand global copilot'}
+            title={expanded ? 'Compact' : 'Expand'}
+          >
+            {expanded ? (
+              <PanelRightClose className="h-4 w-4" />
+            ) : (
+              <PanelRightOpen className="h-4 w-4" />
+            )}
           </Button>
-          <Button size="icon" variant="ghost" onClick={() => setOpen(false)} aria-label="Collapse global copilot">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setOpen(false)}
+            aria-label="Collapse global copilot"
+          >
             <Minimize2 className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="outline" className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary" onClick={() => void newThread()} aria-label="New chat" title="New chat">
+          <Button
+            size="icon"
+            variant="outline"
+            className="border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+            onClick={() => void newThread()}
+            aria-label="New chat"
+            title="New chat"
+          >
             <MessageSquarePlus className="h-4 w-4" />
           </Button>
         </div>
@@ -368,7 +430,13 @@ function GlobalCopilotControllerInner() {
         loading={loading}
         onCopy={(text) => void copy(text)}
       />
-      <GlobalCopilotComposer input={input} onInputChange={setInput} onSend={() => void send()} onCancel={cancel} loading={loading} />
+      <GlobalCopilotComposer
+        input={input}
+        onInputChange={setInput}
+        onSend={() => void send()}
+        onCancel={cancel}
+        loading={loading}
+      />
     </aside>
   );
 }
@@ -427,8 +495,16 @@ function useGlobalCopilotFrontendTools(params: {
     [params.agentId, params.navigate, params.source]
   );
 
-  useConfirmedFrontendTool('start_evaluation_run', params.agentId, available.has('start_evaluation_run'));
-  useConfirmedFrontendTool('queue_evaluation_run', params.agentId, available.has('queue_evaluation_run'));
+  useConfirmedFrontendTool(
+    'start_evaluation_run',
+    params.agentId,
+    available.has('start_evaluation_run')
+  );
+  useConfirmedFrontendTool(
+    'queue_evaluation_run',
+    params.agentId,
+    available.has('queue_evaluation_run')
+  );
   useConfirmedFrontendTool(
     'queue_evaluation_by_config',
     params.agentId,
@@ -490,19 +566,24 @@ function useGlobalCopilotFrontendTools(params: {
     {
       name: 'propose_new_scenario',
       description: 'Present a complete new Test Case draft for review before creating it.',
-      parameters: z.object({
-        id: z.string(),
-        name: z.string().optional(),
-        servers: z.array(z.string()),
-        prompt: z.string(),
-        evalRules: z.array(z.record(z.unknown())).optional(),
-        extractRules: z.array(z.record(z.unknown())).optional(),
-        rationale: z.string().optional()
-      }).strict(),
+      parameters: z
+        .object({
+          id: z.string(),
+          name: z.string().optional(),
+          servers: z.array(z.string()),
+          prompt: z.string(),
+          evalRules: z.array(z.record(z.unknown())).optional(),
+          extractRules: z.array(z.record(z.unknown())).optional(),
+          rationale: z.string().optional()
+        })
+        .strict(),
       agentId: params.agentId,
       available: available.has('create_test_case'),
       render: (props) => (
-        <ScenarioDraftCard args={props.args as Record<string, unknown>} respond={props.status === 'executing' ? props.respond : undefined} />
+        <ScenarioDraftCard
+          args={props.args as Record<string, unknown>}
+          respond={props.status === 'executing' ? props.respond : undefined}
+        />
       )
     },
     [params.agentId, available.has('create_test_case')]
@@ -514,9 +595,21 @@ function useGlobalCopilotFrontendTools(params: {
     z.object({ scenarioId: z.string(), agentId: z.string().optional() }).strict(),
     'Run the open scenario once with a selected agent and return its preview checks and response. This requires confirmation and does not persist changes.'
   );
-  useConfirmedFrontendTool('start_tool_analysis', params.agentId, available.has('start_tool_analysis'));
-  useConfirmedFrontendTool('duplicate_test_case', params.agentId, available.has('duplicate_test_case'));
-  useConfirmedFrontendTool('duplicate_mcp_server', params.agentId, available.has('duplicate_mcp_server'));
+  useConfirmedFrontendTool(
+    'start_tool_analysis',
+    params.agentId,
+    available.has('start_tool_analysis')
+  );
+  useConfirmedFrontendTool(
+    'duplicate_test_case',
+    params.agentId,
+    available.has('duplicate_test_case')
+  );
+  useConfirmedFrontendTool(
+    'duplicate_mcp_server',
+    params.agentId,
+    available.has('duplicate_mcp_server')
+  );
   useConfirmedFrontendTool('duplicate_agent', params.agentId, available.has('duplicate_agent'));
   useConfirmedFrontendTool('create_test_case', params.agentId, available.has('create_test_case'));
 }
@@ -545,475 +638,4 @@ function useConfirmedFrontendTool(
     },
     [agentId, available, name, description]
   );
-}
-
-function FrontendApprovalCard({
-  name,
-  args,
-  respond
-}: {
-  name: Parameters<typeof invokeGlobalCopilotAction>[0];
-  args: Record<string, unknown>;
-  respond?: (result: unknown) => Promise<void>;
-}) {
-  const decide = async (approved: boolean) => {
-    if (!respond) return;
-    if (!approved) {
-      await respond({ approved: false, reason: 'Denied by user.' });
-      return;
-    }
-    try {
-      const result = await invokeGlobalCopilotAction(name, args);
-      await respond({ approved: true, result });
-    } catch (error: unknown) {
-      await respond({ approved: false, error: error instanceof Error ? error.message : String(error) });
-    }
-  };
-  return (
-    <AssistantToolCallCard
-      call={{
-        id: `frontend-${name}`,
-        server: 'mcplab',
-        tool: name.replaceAll('_', ' '),
-        publicToolName: name,
-        arguments: args,
-        status: respond ? 'pending' : 'approved',
-        createdAt: new Date().toISOString()
-      }}
-      description="This action uses the current page state and requires confirmation."
-      onApprove={() => void decide(true)}
-      onDeny={() => void decide(false)}
-    />
-  );
-}
-
-export function ScenarioSuggestionCard({
-  args,
-  respond
-}: {
-  args: Record<string, unknown>;
-  respond?: (result: unknown) => Promise<void>;
-}) {
-  const [applied, setApplied] = useState<string[]>([]);
-  const scenarioId = typeof args.scenarioId === 'string' ? args.scenarioId : '';
-  const rationale = typeof args.rationale === 'string' ? args.rationale : undefined;
-  const prompt = typeof args.prompt === 'string' ? args.prompt : undefined;
-  const evalRules = Array.isArray(args.evalRules) ? args.evalRules : undefined;
-  const extractRules = Array.isArray(args.extractRules) ? args.extractRules : undefined;
-
-  const apply = async (field: 'prompt' | 'evalRules' | 'extractRules', value: unknown) => {
-    try {
-      await invokeGlobalCopilotAction('apply_scenario_patch', { scenarioId, [field]: value });
-      setApplied((current) => (current.includes(field) ? current : [...current, field]));
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not apply suggestion',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const applyRules = async (
-    field: 'evalRules' | 'extractRules',
-    rules: Record<string, unknown>[],
-    mode: 'append' | 'replace'
-  ) => {
-    try {
-      await invokeGlobalCopilotAction('apply_scenario_patch', {
-        scenarioId,
-        [field]: rules,
-        [field === 'evalRules' ? 'evalRuleMode' : 'extractRuleMode']: mode
-      });
-      setApplied((current) => (current.includes(field) ? current : [...current, field]));
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not apply suggestion',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const applyRule = async (
-    field: 'evalRules' | 'extractRules',
-    value: Record<string, unknown>,
-    mode: 'append' | 'replace',
-    key: string
-  ) => {
-    try {
-      await invokeGlobalCopilotAction('apply_scenario_patch', {
-        scenarioId,
-        [field]: [value],
-        [field === 'evalRules' ? 'evalRuleMode' : 'extractRuleMode']: mode
-      });
-      setApplied((current) => (current.includes(key) ? current : [...current, key]));
-    } catch (error: unknown) {
-      toast({
-        title: 'Could not apply suggestion',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  return (
-    <div className="rounded-md border border-sky-400/40 bg-sky-50 p-3 text-sm">
-      <p className="font-medium">Scenario suggestions{scenarioId ? ` · ${scenarioId}` : ''}</p>
-      {rationale && <p className="mt-1 text-xs text-muted-foreground">{rationale}</p>}
-      <div className="mt-3 space-y-2">
-        {prompt && (
-          <SuggestionSection label="Prompt" value={prompt} applied={applied.includes('prompt')} onApply={() => void apply('prompt', prompt)} />
-        )}
-        {evalRules && (
-          <RuleSuggestionSection
-            label="Checks"
-            rules={evalRules}
-            applied={applied.includes('evalRules')}
-            onApplySelected={(rules) => void applyRules('evalRules', rules, 'append')}
-            onReplaceSelected={(rules) => void applyRules('evalRules', rules, 'replace')}
-            onApplyOne={(rule, index) => void applyRule('evalRules', rule, 'append', `evalRules:add:${index}`)}
-            onReplaceOne={(rule, index) => void applyRule('evalRules', rule, 'replace', `evalRules:replace:${index}`)}
-          />
-        )}
-        {extractRules && (
-          <RuleSuggestionSection
-            label="Value Capture Rules"
-            rules={extractRules}
-            applied={applied.includes('extractRules')}
-            onApplySelected={(rules) => void applyRules('extractRules', rules, 'append')}
-            onReplaceSelected={(rules) => void applyRules('extractRules', rules, 'replace')}
-            onApplyOne={(rule, index) => void applyRule('extractRules', rule, 'append', `extractRules:add:${index}`)}
-            onReplaceOne={(rule, index) => void applyRule('extractRules', rule, 'replace', `extractRules:replace:${index}`)}
-          />
-        )}
-      </div>
-      {respond && (
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" onClick={() => void respond({ approved: true, applied, scenarioId })}>Done</Button>
-          <Button size="sm" variant="outline" onClick={() => void respond({ approved: false, reason: 'No suggestions applied.' })}>Skip</Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function formatCopilotRuleLabel(rule: Record<string, unknown>, label: string): string {
-  if (label === 'Checks') {
-    return formatEvalRuleLabel(rule as EvalRule);
-  }
-  const name = typeof rule.name === 'string' ? rule.name : 'Value capture rule';
-  const pattern = typeof rule.pattern === 'string' ? rule.pattern : rule.regex;
-  return `${name} · ${typeof pattern === 'string' ? pattern : 'Pattern not specified'}`;
-}
-
-function RuleSuggestionSection({
-  label,
-  rules,
-  applied,
-  onApplySelected,
-  onReplaceSelected,
-  onApplyOne,
-  onReplaceOne
-}: {
-  label: string;
-  rules: Record<string, unknown>[];
-  applied: boolean;
-  onApplySelected: (rules: Record<string, unknown>[]) => void;
-  onReplaceSelected: (rules: Record<string, unknown>[]) => void;
-  onApplyOne: (rule: Record<string, unknown>, index: number) => void;
-  onReplaceOne: (rule: Record<string, unknown>, index: number) => void;
-}) {
-  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
-    () => new Set(rules.map((_, index) => index))
-  );
-  const [itemActions, setItemActions] = useState<Set<string>>(new Set());
-  const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
-  const allSelected = selectedIndexes.size === rules.length;
-  return (
-    <div className="rounded border bg-background p-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">{label}</span>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">Suggested {label} update</p>
-      <div className="mt-2 space-y-2">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <span className="text-[11px] text-muted-foreground">
-            {selectedIndexes.size} of {rules.length} selected
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[11px]"
-            disabled={applied || rules.length === 0}
-            onClick={() =>
-              setSelectedIndexes(
-                allSelected ? new Set() : new Set(rules.map((_, index) => index))
-              )
-            }
-          >
-            {allSelected ? 'Unselect all' : 'Select all'}
-          </Button>
-        </div>
-        {rules.map((rule, index) => {
-          const addKey = `add-${index}`;
-          const replaceKey = `replace-${index}`;
-          const itemLabel = label === 'Checks' ? 'check' : 'value capture rule';
-          const checkboxId = `copilot-${label.toLowerCase().replaceAll(' ', '-')}-${index}`;
-          return (
-            <div key={`${label}-${index}`} className="flex items-start gap-2 rounded bg-muted/50 p-2">
-              <Checkbox
-                id={checkboxId}
-                checked={selectedIndexes.has(index)}
-                disabled={applied}
-                onCheckedChange={(checked) =>
-                  setSelectedIndexes((current) => {
-                    const next = new Set(current);
-                    if (checked === true) next.add(index);
-                    else next.delete(index);
-                    return next;
-                  })
-                }
-                aria-label={`Select ${itemLabel} ${index + 1}`}
-              />
-              <div className="min-w-0 flex-1 space-y-1">
-                <span className="block text-xs font-medium">
-                  {formatCopilotRuleLabel(rule, label)}
-                </span>
-                <code className="block break-words rounded bg-muted px-1.5 py-1 text-[11px] text-muted-foreground">
-                  {JSON.stringify(rule)}
-                </code>
-              </div>
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-[11px]"
-                  disabled={applied || itemActions.has(addKey)}
-                  aria-label={`Add ${itemLabel} ${index + 1}`}
-                  onClick={() => {
-                    onApplyOne(rule, index);
-                    setItemActions((current) => new Set(current).add(addKey));
-                  }}
-                >
-                  {itemActions.has(addKey) ? 'Added' : 'Add'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-[11px]"
-                  disabled={applied || itemActions.has(replaceKey)}
-                  aria-label={`Replace with ${itemLabel} ${index + 1}`}
-                  onClick={() => {
-                    onReplaceOne(rule, index);
-                    setItemActions((current) => new Set(current).add(replaceKey));
-                  }}
-                >
-                  {itemActions.has(replaceKey) ? 'Replaced' : 'Replace'}
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex justify-end gap-2">
-        {applied ? (
-          <Button type="button" size="sm" variant="secondary" disabled>Applied</Button>
-        ) : (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={selectedRules.length === 0}
-              onClick={() => onReplaceSelected(selectedRules)}
-            >
-              Replace all
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={selectedRules.length === 0}
-              onClick={() => onApplySelected(selectedRules)}
-            >
-              Add selected
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SuggestionSection({
-  label,
-  value,
-  applied,
-  onApply
-}: {
-  label: string;
-  value: string;
-  applied: boolean;
-  onApply: () => void;
-}) {
-  return (
-    <div className="rounded border bg-background p-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold">{label}</span>
-        <Button size="sm" variant={applied ? 'secondary' : 'outline'} disabled={applied} onClick={onApply}>
-          {applied ? 'Applied' : 'Apply'}
-        </Button>
-      </div>
-      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{value}</pre>
-    </div>
-  );
-}
-
-function ScenarioDraftCard({
-  args,
-  respond
-}: {
-  args: Record<string, unknown>;
-  respond?: (result: unknown) => Promise<void>;
-}) {
-  const [creating, setCreating] = useState(false);
-  const [selected, setSelected] = useState({ prompt: true, evalRules: true, extractRules: true });
-  const id = typeof args.id === 'string' ? args.id : '';
-  const name = typeof args.name === 'string' ? args.name : undefined;
-  const prompt = typeof args.prompt === 'string' ? args.prompt : '';
-  const servers = Array.isArray(args.servers) ? args.servers : [];
-  const evalRules = Array.isArray(args.evalRules) ? args.evalRules : [];
-  const extractRules = Array.isArray(args.extractRules) ? args.extractRules : [];
-  const rationale = typeof args.rationale === 'string' ? args.rationale : undefined;
-
-  const create = async () => {
-    if (!respond || creating) return;
-    setCreating(true);
-    try {
-      const result = await invokeGlobalCopilotAction('create_test_case_from_draft', {
-        ...args,
-        ...(selected.evalRules ? { evalRules } : { evalRules: [] }),
-        ...(selected.extractRules ? { extractRules } : { extractRules: [] })
-      });
-      await respond({ approved: true, result });
-    } catch (error: unknown) {
-      setCreating(false);
-      toast({
-        title: 'Could not create Test Case',
-        description: error instanceof Error ? error.message : String(error),
-        variant: 'destructive'
-      });
-    }
-  };
-
-  return (
-    <div className="rounded-md border border-violet-400/40 bg-violet-50 p-3 text-sm">
-      <p className="font-medium">New Test Case draft{ id ? ` · ${id}` : ''}</p>
-      {rationale && <p className="mt-1 text-xs text-muted-foreground">{rationale}</p>}
-      <div className="mt-2 rounded border bg-background p-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold">Prompt</span>
-          <Button size="sm" variant="secondary" disabled>Included</Button>
-        </div>
-        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{prompt}</pre>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">Servers: {servers.join(', ') || 'none'}</p>
-      <DraftToggle label={`Checks (${evalRules.length})`} selected={selected.evalRules} onToggle={() => setSelected((current) => ({ ...current, evalRules: !current.evalRules }))} />
-      <DraftToggle label={`Value Capture Rules (${extractRules.length})`} selected={selected.extractRules} onToggle={() => setSelected((current) => ({ ...current, extractRules: !current.extractRules }))} />
-      {respond && (
-        <div className="mt-3 flex gap-2">
-          <Button size="sm" disabled={creating || !id || !prompt} onClick={() => void create()}>
-            {creating ? 'Creating...' : 'Create Test Case'}
-          </Button>
-          <Button size="sm" variant="outline" disabled={creating} onClick={() => void respond({ approved: false, reason: 'Draft creation denied.' })}>
-            Skip
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DraftToggle({ label, selected, onToggle }: { label: string; selected: boolean; onToggle: () => void }) {
-  return (
-    <Button type="button" size="sm" variant={selected ? 'secondary' : 'outline'} className="mt-2 w-full justify-start text-xs" onClick={onToggle}>
-      {selected ? '✓' : '○'}&nbsp; {selected ? 'Include' : 'Exclude'} {label}
-    </Button>
-  );
-}
-
-function NativeInterruptCard({
-  message,
-  onDecision
-}: {
-  message: GlobalCopilotMessage;
-  onDecision: (approved: boolean) => void;
-}) {
-  const action = message.action;
-  if (!action) return null;
-  if (action.kind === 'continue_reading') {
-    return (
-      <div className="rounded-md border border-amber-400/40 bg-amber-50 p-2 text-sm">
-        <p>Allow up to {action.batchSize} additional read-only MCPLab tool calls to continue this investigation?</p>
-        <div className="mt-2 flex gap-2">
-          <Button size="sm" onClick={() => onDecision(true)}>Continue</Button>
-          <Button size="sm" variant="outline" onClick={() => onDecision(false)}>Stop here</Button>
-        </div>
-      </div>
-    );
-  }
-  if (action.kind !== 'external_mcp_tool') return null;
-  return (
-    <AssistantToolCallCard
-      call={{
-        id: message.id,
-        server: action.serverName,
-        tool: action.toolName,
-        publicToolName: `${action.serverName}__${action.toolName}`,
-        arguments: action.arguments,
-        status: 'pending',
-        createdAt: message.createdAt
-      }}
-      description={`MCP call on ${action.serverName}.`}
-      onApprove={() => onDecision(true)}
-      onDeny={() => onDecision(false)}
-    />
-  );
-}
-
-function globalCopilotInterruptMessage(interrupt: {
-  id: string;
-  metadata?: Record<string, any>;
-}): GlobalCopilotMessage {
-  const mastra = interrupt.metadata?.mastra as
-    | { toolName?: string; suspendPayload?: Record<string, unknown>; args?: Record<string, unknown> }
-    | undefined;
-  const payload = mastra?.suspendPayload ?? {};
-  if (payload.kind === 'continue_reading') {
-    return {
-      id: interrupt.id,
-      role: 'system',
-      content: `Additional MCPLab read-tool batch requested (${Number(payload.batchSize ?? 5)} calls).`,
-      createdAt: new Date().toISOString(),
-      action: {
-        kind: 'continue_reading',
-        batchSize: Number(payload.batchSize ?? 5),
-        status: 'pending'
-      }
-    };
-  }
-  return {
-    id: interrupt.id,
-    role: 'system',
-    content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(payload.toolName ?? mastra?.toolName ?? 'tool')}`,
-    createdAt: new Date().toISOString(),
-    action: {
-      kind: 'external_mcp_tool',
-      serverName: String(payload.serverName ?? 'mcplab'),
-      toolName: String(payload.toolName ?? mastra?.toolName ?? 'tool'),
-      arguments: (payload.arguments ?? mastra?.args ?? {}) as Record<string, unknown>,
-      status: 'pending'
-    }
-  };
 }

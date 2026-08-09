@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ScenarioSuggestionCard } from './GlobalCopilotController';
+import { ScenarioSuggestionCard } from './GlobalCopilotCards';
 
 const { invokeMock } = vi.hoisted(() => ({ invokeMock: vi.fn() }));
 
