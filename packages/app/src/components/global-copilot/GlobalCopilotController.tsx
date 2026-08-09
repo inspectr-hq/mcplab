@@ -424,6 +424,31 @@ function useGlobalCopilotFrontendTools(params: {
       .strict(),
     'Apply a structured edit to an open scenario after user confirmation. Preserve scenarioId and include only the fields being changed; evalRules and extractRules are complete replacement arrays.'
   );
+  useHumanInTheLoop(
+    {
+      name: 'propose_scenario_changes',
+      description:
+        'Present structured scenario suggestions for selective application. Do not change the scenario until the user chooses which sections to apply.',
+      parameters: z
+        .object({
+          scenarioId: z.string(),
+          rationale: z.string().optional(),
+          prompt: z.string().optional(),
+          evalRules: z.array(z.record(z.unknown())).optional(),
+          extractRules: z.array(z.record(z.unknown())).optional()
+        })
+        .strict(),
+      agentId: params.agentId,
+      available: available.has('apply_scenario_patch'),
+      render: (props) => (
+        <ScenarioSuggestionCard
+          args={props.args as Record<string, unknown>}
+          respond={props.status === 'executing' ? props.respond : undefined}
+        />
+      )
+    },
+    [params.agentId, available.has('apply_scenario_patch')]
+  );
   useConfirmedFrontendTool(
     'preview_scenario',
     params.agentId,
@@ -501,6 +526,82 @@ function FrontendApprovalCard({
       onApprove={() => void decide(true)}
       onDeny={() => void decide(false)}
     />
+  );
+}
+
+function ScenarioSuggestionCard({
+  args,
+  respond
+}: {
+  args: Record<string, unknown>;
+  respond?: (result: unknown) => Promise<void>;
+}) {
+  const [applied, setApplied] = useState<string[]>([]);
+  const scenarioId = typeof args.scenarioId === 'string' ? args.scenarioId : '';
+  const rationale = typeof args.rationale === 'string' ? args.rationale : undefined;
+  const prompt = typeof args.prompt === 'string' ? args.prompt : undefined;
+  const evalRules = Array.isArray(args.evalRules) ? args.evalRules : undefined;
+  const extractRules = Array.isArray(args.extractRules) ? args.extractRules : undefined;
+
+  const apply = async (field: 'prompt' | 'evalRules' | 'extractRules', value: unknown) => {
+    try {
+      await invokeGlobalCopilotAction('apply_scenario_patch', { scenarioId, [field]: value });
+      setApplied((current) => (current.includes(field) ? current : [...current, field]));
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not apply suggestion',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-sky-400/40 bg-sky-50 p-3 text-sm">
+      <p className="font-medium">Scenario suggestions{scenarioId ? ` · ${scenarioId}` : ''}</p>
+      {rationale && <p className="mt-1 text-xs text-muted-foreground">{rationale}</p>}
+      <div className="mt-3 space-y-2">
+        {prompt && (
+          <SuggestionSection label="Prompt" value={prompt} applied={applied.includes('prompt')} onApply={() => void apply('prompt', prompt)} />
+        )}
+        {evalRules && (
+          <SuggestionSection label="Checks" value={JSON.stringify(evalRules, null, 2)} applied={applied.includes('evalRules')} onApply={() => void apply('evalRules', evalRules)} />
+        )}
+        {extractRules && (
+          <SuggestionSection label="Value Capture Rules" value={JSON.stringify(extractRules, null, 2)} applied={applied.includes('extractRules')} onApply={() => void apply('extractRules', extractRules)} />
+        )}
+      </div>
+      {respond && (
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" onClick={() => void respond({ approved: true, applied, scenarioId })}>Done</Button>
+          <Button size="sm" variant="outline" onClick={() => void respond({ approved: false, reason: 'No suggestions applied.' })}>Skip</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SuggestionSection({
+  label,
+  value,
+  applied,
+  onApply
+}: {
+  label: string;
+  value: string;
+  applied: boolean;
+  onApply: () => void;
+}) {
+  return (
+    <div className="rounded border bg-background p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">{label}</span>
+        <Button size="sm" variant={applied ? 'secondary' : 'outline'} disabled={applied} onClick={onApply}>
+          {applied ? 'Applied' : 'Apply'}
+        </Button>
+      </div>
+      <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{value}</pre>
+    </div>
   );
 }
 
