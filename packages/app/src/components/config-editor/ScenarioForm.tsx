@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  Bot,
   ChevronDown,
   ChevronUp,
   Edit,
@@ -49,7 +50,7 @@ import {
 } from '@/lib/attachment-policy';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import { invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import {
   clearGlobalCopilotPageContext,
   globalCopilotPageContext,
@@ -852,6 +853,43 @@ function ScenarioCard({
     setAssistantOpen(true);
   };
 
+  const sendPreviewToCopilot = () => {
+    if (!previewResult) return;
+    const checkSummary = previewResult.run.checkResults.length
+      ? previewResult.run.checkResults
+          .map((result) => `${result.status.toUpperCase()} - ${result.label}`)
+          .join('\n')
+      : 'No checks configured.';
+    const toolSummary = previewResult.run.toolCalls.length
+      ? previewResult.run.toolCalls.map((call, index) => `${index + 1}. ${call.name}`).join('\n')
+      : 'No tool calls.';
+    const message = [
+      `I ran the Run prompt preview for scenario '${scenario.id}'. Please analyze it and suggest concrete updates.`,
+      `Run ID: ${previewResult.runId}`,
+      `Agent: ${previewResult.agentName}`,
+      `Outcome: ${previewResult.run.passed ? 'passed' : 'failed'}`,
+      '',
+      'Check results:',
+      checkSummary,
+      '',
+      'Tool sequence:',
+      toolSummary,
+      '',
+      'Failure reasons:',
+      previewResult.run.failureReasons.join('\n') || 'None',
+      '',
+      'Final answer:',
+      previewResult.run.finalAnswer || '(empty)'
+    ].join('\n');
+    void invokeGlobalCopilotAction('send_copilot_message', { message }).catch((error: unknown) => {
+      toast({
+        title: 'Could not send preview to Copilot',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    });
+  };
+
   const loadAvailableTools = async () => {
     if (!canLoadToolNames || readOnly) return;
     setToolNamesLoading(true);
@@ -1239,6 +1277,16 @@ function ScenarioCard({
                         >
                           <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           Send to Assistant
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 gap-1.5 px-2 text-[11px]"
+                          onClick={sendPreviewToCopilot}
+                        >
+                          <Bot className="h-3.5 w-3.5 text-sky-500" />
+                          Send to Copilot
                         </Button>
                       </div>
                       {scenario.evalRules.length === 0 ? (

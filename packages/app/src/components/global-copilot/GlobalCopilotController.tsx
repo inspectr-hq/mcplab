@@ -185,6 +185,18 @@ function GlobalCopilotControllerInner() {
     storeMessage: storedGlobalCopilotMessage
   });
 
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('send_copilot_message', async (arguments_) => {
+        const message = typeof arguments_.message === 'string' ? arguments_.message.trim() : '';
+        if (!message) throw new Error('A Copilot message is required.');
+        if (!thread) throw new Error('No active Copilot conversation is available.');
+        setOpen(true);
+        await run(message);
+      }),
+    [run, thread]
+  );
+
   useGlobalCopilotFrontendTools({
     agentId: agent.agentId,
     source,

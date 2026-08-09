@@ -4,6 +4,7 @@ export type GlobalCopilotActionName =
   | 'queue_evaluation_by_config'
   | 'apply_scenario_patch'
   | 'preview_scenario'
+  | 'send_copilot_message'
   | 'start_tool_analysis'
   | 'duplicate_test_case'
   | 'create_test_case'
