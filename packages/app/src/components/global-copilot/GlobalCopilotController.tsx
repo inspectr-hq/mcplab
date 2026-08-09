@@ -659,6 +659,7 @@ function ScenarioDraftCard({
   respond?: (result: unknown) => Promise<void>;
 }) {
   const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState({ prompt: true, evalRules: true, extractRules: true });
   const id = typeof args.id === 'string' ? args.id : '';
   const name = typeof args.name === 'string' ? args.name : undefined;
   const prompt = typeof args.prompt === 'string' ? args.prompt : '';
@@ -671,7 +672,11 @@ function ScenarioDraftCard({
     if (!respond || creating) return;
     setCreating(true);
     try {
-      const result = await invokeGlobalCopilotAction('create_test_case_from_draft', args);
+      const result = await invokeGlobalCopilotAction('create_test_case_from_draft', {
+        ...args,
+        ...(selected.evalRules ? { evalRules } : { evalRules: [] }),
+        ...(selected.extractRules ? { extractRules } : { extractRules: [] })
+      });
       await respond({ approved: true, result });
     } catch (error: unknown) {
       setCreating(false);
@@ -688,11 +693,15 @@ function ScenarioDraftCard({
       <p className="font-medium">New Test Case draft{ id ? ` · ${id}` : ''}</p>
       {rationale && <p className="mt-1 text-xs text-muted-foreground">{rationale}</p>}
       <div className="mt-2 rounded border bg-background p-2">
-        <span className="text-xs font-semibold">Prompt</span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold">Prompt</span>
+          <Button size="sm" variant="secondary" disabled>Included</Button>
+        </div>
         <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{prompt}</pre>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">Servers: {servers.join(', ') || 'none'}</p>
-      <p className="text-xs text-muted-foreground">Checks: {evalRules.length} · Value Capture Rules: {extractRules.length}</p>
+      <DraftToggle label={`Checks (${evalRules.length})`} selected={selected.evalRules} onToggle={() => setSelected((current) => ({ ...current, evalRules: !current.evalRules }))} />
+      <DraftToggle label={`Value Capture Rules (${extractRules.length})`} selected={selected.extractRules} onToggle={() => setSelected((current) => ({ ...current, extractRules: !current.extractRules }))} />
       {respond && (
         <div className="mt-3 flex gap-2">
           <Button size="sm" disabled={creating || !id || !prompt} onClick={() => void create()}>
@@ -704,6 +713,14 @@ function ScenarioDraftCard({
         </div>
       )}
     </div>
+  );
+}
+
+function DraftToggle({ label, selected, onToggle }: { label: string; selected: boolean; onToggle: () => void }) {
+  return (
+    <Button type="button" size="sm" variant={selected ? 'secondary' : 'outline'} className="mt-2 w-full justify-start text-xs" onClick={onToggle}>
+      {selected ? '✓' : '○'}&nbsp; {selected ? 'Include' : 'Exclude'} {label}
+    </Button>
   );
 }
 
