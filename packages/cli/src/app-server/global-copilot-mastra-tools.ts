@@ -23,9 +23,18 @@ export type GlobalCopilotReadBudget = {
 
 type GlobalCopilotApprovalMode = 'automatic' | 'confirmation';
 
+export type GlobalCopilotMcpManager = Pick<
+  McpClientManager,
+  'connectAll' | 'listTools' | 'callTool' | 'disconnectAll'
+>;
+
 export class GlobalCopilotMcpConnectionPool {
-  private readonly manager = new McpClientManager();
+  private readonly manager: GlobalCopilotMcpManager;
   private readonly connected = new Map<string, string>();
+
+  constructor(manager: GlobalCopilotMcpManager = new McpClientManager()) {
+    this.manager = manager;
+  }
 
   private configKey(server: ServerConfig): string {
     return JSON.stringify(server);

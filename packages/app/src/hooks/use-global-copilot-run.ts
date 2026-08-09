@@ -6,6 +6,11 @@ import type { GlobalCopilotMessage, GlobalCopilotThread } from '@/lib/global-cop
 const runtimeAgentId = 'mcplab-global-copilot';
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 
+export function globalCopilotRunIdFromInterruptId(interruptId: string): string {
+  const separator = interruptId.indexOf('::');
+  return separator > 0 ? interruptId.slice(0, separator) : interruptId;
+}
+
 function aguiMessages(messages: GlobalCopilotMessage[]): Message[] {
   return messages.map((message) => ({
     id: message.id,
@@ -39,6 +44,14 @@ export function useGlobalCopilotRun({
   const { copilotkit } = useCopilotKit();
   const [loading, setLoading] = useState(false);
   const initializedAgent = useRef<string>();
+  const runGeneration = useRef(0);
+  const activeThreadIdRef = useRef<string>();
+
+  useEffect(() => {
+    activeThreadIdRef.current = thread?.id;
+    runGeneration.current += 1;
+    setLoading(false);
+  }, [thread?.id]);
 
   useEffect(() => {
     if (!thread || !isReady || initializedAgent.current === thread.id) return;
@@ -69,21 +82,27 @@ export function useGlobalCopilotRun({
   const send = useCallback(
     async (question: string) => {
       if (!question || !thread || !isReady || loading) return;
+      const activeThreadId = thread.id;
+      const generation = runGeneration.current;
+      const isCurrentRun = () =>
+        runGeneration.current === generation && activeThreadIdRef.current === activeThreadId;
       const wasEmpty = agent.messages.length === 0;
       agent.addMessage({ id: id('msg'), role: 'user', content: question });
       setLoading(true);
       try {
         await copilotkit.runAgent({ agent });
+        if (!isCurrentRun()) return;
         if (wasEmpty) await renameThread(thread, question.slice(0, 60));
-        await refresh(thread.workspaceKey);
+        if (isCurrentRun()) await refresh(thread.workspaceKey);
       } catch (error: unknown) {
+        if (!isCurrentRun()) return;
         agent.addMessage({
           id: id('system'),
           role: 'system',
           content: `Copilot request failed: ${error instanceof Error ? error.message : String(error)}`
         });
       } finally {
-        setLoading(false);
+        if (isCurrentRun()) setLoading(false);
       }
     },
     [agent, copilotkit, isReady, loading, refresh, renameThread, thread]
@@ -92,11 +111,15 @@ export function useGlobalCopilotRun({
   const resumeStoredInterrupt = useCallback(
     async (interrupt: Interrupt, approved: boolean) => {
       if (!thread || !isReady || loading) return;
+      const activeThreadId = thread.id;
+      const generation = runGeneration.current;
+      const isCurrentRun = () =>
+        runGeneration.current === generation && activeThreadIdRef.current === activeThreadId;
       setLoading(true);
       try {
         await copilotkit.runAgent({
           agent,
-          runId: interrupt.id.split('::')[0],
+          runId: globalCopilotRunIdFromInterruptId(interrupt.id),
           resume: [
             {
               interruptId: interrupt.id,
@@ -105,9 +128,9 @@ export function useGlobalCopilotRun({
             }
           ]
         });
-        await refresh(thread.workspaceKey);
+        if (isCurrentRun()) await refresh(thread.workspaceKey);
       } finally {
-        setLoading(false);
+        if (isCurrentRun()) setLoading(false);
       }
     },
     [agent, copilotkit, isReady, loading, refresh, thread]

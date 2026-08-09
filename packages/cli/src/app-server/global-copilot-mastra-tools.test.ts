@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createGlobalCopilotMcpTool,
+  GlobalCopilotMcpConnectionPool,
   type GlobalCopilotReadBudget
 } from './global-copilot-mastra-tools.js';
 
@@ -128,5 +129,28 @@ describe('createGlobalCopilotMcpTool', () => {
       tool.execute?.({}, { agent: { resumeData: { approved: false } } } as any)
     ).resolves.toEqual({ approved: false, reason: 'Denied by user.' });
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('GlobalCopilotMcpConnectionPool', () => {
+  it('reuses one connection for discovery and execution per server', async () => {
+    const manager = {
+      connectAll: vi.fn().mockResolvedValue(undefined),
+      listTools: vi.fn().mockResolvedValue([{ name: 'mcplab_list_runs' }]),
+      callTool: vi.fn().mockResolvedValue({ runs: [] }),
+      disconnectAll: vi.fn().mockResolvedValue(undefined)
+    };
+    const pool = new GlobalCopilotMcpConnectionPool(manager as any);
+    const server = { transport: 'http', url: 'http://localhost/mcp' } as any;
+
+    await pool.listTools('mcplab', server);
+    await pool.listTools('mcplab', server);
+    await pool.callTool('mcplab', server, 'mcplab_list_runs', {});
+    await pool.close();
+
+    expect(manager.connectAll).toHaveBeenCalledOnce();
+    expect(manager.listTools).toHaveBeenCalledTimes(2);
+    expect(manager.callTool).toHaveBeenCalledOnce();
+    expect(manager.disconnectAll).toHaveBeenCalledOnce();
   });
 });

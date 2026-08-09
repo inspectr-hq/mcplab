@@ -96,6 +96,7 @@ export function useGlobalCopilotThread(source: DataSource) {
   const [workspaceKey, setWorkspaceKey] = useState<string>();
   const [threads, setThreads] = useState<GlobalCopilotThread[]>([]);
   const [thread, setThread] = useState<GlobalCopilotThread>();
+  const selectionRequest = useRef(0);
 
   const loadThread = useCallback(async (record: ThreadRecord, key: string) => {
     const detail = await responseJson<{ thread: ThreadRecord; messages: unknown[] }>(
@@ -144,7 +145,11 @@ export function useGlobalCopilotThread(source: DataSource) {
       }
       const activeId = window.localStorage.getItem(activePreferenceKey(key));
       const selected = next.find((item) => item.id === activeId) ?? next[0];
-      if (selected) setThread(await loadThread(selected, key));
+      if (selected) {
+        const request = ++selectionRequest.current;
+        const loaded = await loadThread(selected, key);
+        if (request === selectionRequest.current) setThread(loaded);
+      }
     });
   }, [loadThread, refresh, source]);
 
@@ -152,7 +157,10 @@ export function useGlobalCopilotThread(source: DataSource) {
     (next: GlobalCopilotThread) => {
       if (!workspaceKey) return;
       window.localStorage.setItem(activePreferenceKey(workspaceKey), next.id);
-      void loadThread(next, workspaceKey).then(setThread);
+      const request = ++selectionRequest.current;
+      void loadThread(next, workspaceKey).then((loaded) => {
+        if (request === selectionRequest.current) setThread(loaded);
+      });
     },
     [loadThread, workspaceKey]
   );
@@ -195,6 +203,7 @@ export function useGlobalCopilotThread(source: DataSource) {
         remaining = await refresh(workspaceKey);
       }
       if (thread?.id === next.id && remaining[0]) {
+        ++selectionRequest.current;
         window.localStorage.setItem(activePreferenceKey(workspaceKey), remaining[0].id);
         setThread(await loadThread(remaining[0], workspaceKey));
       }
@@ -219,6 +228,7 @@ export function useGlobalCopilotThread(source: DataSource) {
       messages: []
     };
     window.localStorage.setItem(activePreferenceKey(workspaceKey), next.id);
+    ++selectionRequest.current;
     setThread(next);
     await refresh(workspaceKey);
     return next;

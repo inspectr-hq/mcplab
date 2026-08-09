@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { globalCopilotMemoryMessages } from './use-global-copilot-thread';
+import { globalCopilotRunIdFromInterruptId } from './use-global-copilot-run';
+
+describe('globalCopilotRunIdFromInterruptId', () => {
+  it('extracts the Mastra run id from a persisted interrupt id', () => {
+    expect(globalCopilotRunIdFromInterruptId('run-42::tool-7')).toBe('run-42');
+  });
+
+  it('preserves ids without the compound interrupt delimiter', () => {
+    expect(globalCopilotRunIdFromInterruptId('run-42')).toBe('run-42');
+  });
+});
 
 describe('globalCopilotMemoryMessages', () => {
   it('restores text messages from Mastra v2 content', () => {
