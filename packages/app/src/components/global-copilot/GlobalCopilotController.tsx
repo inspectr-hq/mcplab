@@ -132,14 +132,14 @@ function GlobalCopilotControllerInner() {
   );
 
   useGlobalCopilotFrontendTools({
-    agentId: agent.agentId,
+    agentId: runtimeAgentId,
     source,
     navigate,
     availableActions: appContext.availableActions
   });
 
   const interruptElement = useGlobalCopilotInterrupts({
-    agentId: agent.agentId,
+    agentId: runtimeAgentId,
     storedInterrupt: thread?.pendingInterrupts?.[0],
     resumeStoredInterrupt
   });

@@ -544,10 +544,21 @@ export function globalCopilotInterruptMessage(interrupt: {
         args?: Record<string, unknown>;
       }
     | undefined;
+  return globalCopilotInterruptMessageFromMastra(interrupt.id, mastra);
+}
+
+export function globalCopilotInterruptMessageFromMastra(
+  id: string,
+  mastra?: {
+    toolName?: string;
+    suspendPayload?: Record<string, unknown>;
+    args?: Record<string, unknown>;
+  }
+): GlobalCopilotMessage {
   const payload = mastra?.suspendPayload ?? {};
   if (payload.kind === 'continue_reading')
     return {
-      id: interrupt.id,
+      id,
       role: 'system',
       content: `Additional MCPLab read-tool batch requested (${Number(
         payload.batchSize ?? 5
@@ -560,7 +571,7 @@ export function globalCopilotInterruptMessage(interrupt: {
       }
     };
   return {
-    id: interrupt.id,
+    id,
     role: 'system',
     content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(
       payload.toolName ?? mastra?.toolName ?? 'tool'

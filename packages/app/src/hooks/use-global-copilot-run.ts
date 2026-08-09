@@ -37,7 +37,7 @@ export function useGlobalCopilotRun({
   const fallbackThreadId = useRef(`pending-${crypto.randomUUID()}`);
   const threadId = thread?.id ?? fallbackThreadId.current;
   const { agent, isReady } = useAgent({
-    agentId: runtimeAgentId,
+    agentId: `${runtimeAgentId}:${threadId}`,
     runtimeAgentId,
     threadId
   });
@@ -81,7 +81,14 @@ export function useGlobalCopilotRun({
 
   const send = useCallback(
     async (question: string) => {
-      if (!question || !thread || !isReady || loading) return;
+      if (
+        !question ||
+        !thread ||
+        !isReady ||
+        loading ||
+        (thread.pendingInterrupts?.length ?? 0) > 0
+      )
+        return;
       const activeThreadId = thread.id;
       const generation = runGeneration.current;
       const isCurrentRun = () =>
@@ -99,7 +106,9 @@ export function useGlobalCopilotRun({
         agent.addMessage({
           id: id('system'),
           role: 'system',
-          content: `Copilot request failed: ${error instanceof Error ? error.message : String(error)}`
+          content: `Copilot request failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
         });
       } finally {
         if (isCurrentRun()) setLoading(false);

@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
 import { useInterrupt } from '@copilotkit/react-core/v2';
-import { NativeInterruptCard, globalCopilotInterruptMessage } from './GlobalCopilotCards';
-import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
+import {
+  NativeInterruptCard,
+  globalCopilotInterruptMessage,
+  globalCopilotInterruptMessageFromMastra
+} from './GlobalCopilotCards';
 
 export function useGlobalCopilotInterrupts({
   agentId,
@@ -28,37 +31,10 @@ export function useGlobalCopilotInterrupts({
             args?: Record<string, unknown>;
           }
         | undefined;
-      const payload = mastra?.suspendPayload ?? {};
-      const message: GlobalCopilotMessage =
-        payload.kind === 'continue_reading'
-          ? {
-              id: interrupt?.id ?? 'pending-read-approval',
-              role: 'system',
-              content: `Additional MCPLab read-tool batch requested (${Number(
-                payload.batchSize ?? 5
-              )} calls).`,
-              createdAt: new Date().toISOString(),
-              action: {
-                kind: 'continue_reading',
-                batchSize: Number(payload.batchSize ?? 5),
-                status: 'pending'
-              }
-            }
-          : {
-              id: interrupt?.id ?? 'pending-tool-approval',
-              role: 'system',
-              content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(
-                payload.toolName ?? mastra?.toolName ?? 'tool'
-              )}`,
-              createdAt: new Date().toISOString(),
-              action: {
-                kind: 'external_mcp_tool',
-                serverName: String(payload.serverName ?? 'mcplab'),
-                toolName: String(payload.toolName ?? mastra?.toolName ?? 'tool'),
-                arguments: (payload.arguments ?? mastra?.args ?? {}) as Record<string, unknown>,
-                status: 'pending'
-              }
-            };
+      const message = globalCopilotInterruptMessageFromMastra(
+        interrupt?.id ?? 'pending-tool-approval',
+        mastra
+      );
       return (
         <NativeInterruptCard
           message={message}

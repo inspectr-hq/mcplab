@@ -1,4 +1,6 @@
 import { useFrontendTool, useHumanInTheLoop } from '@copilotkit/react-core/v2';
+import { useDataSource } from '@/contexts/DataSourceContext';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { invokeGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import {
