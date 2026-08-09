@@ -46,6 +46,16 @@ describe('Global Copilot domain policy', () => {
     expect(globalCopilotMcplabToolPolicy('mcplab_delete_tool_analysis_result')).toEqual({ expose: false, automatic: false });
   });
 
+  it('only exposes direct Test Case creation outside the scenario editor', () => {
+    expect(globalCopilotMcplabToolPolicy('mcplab_create_test_case')).toEqual({
+      expose: true,
+      automatic: false
+    });
+    expect(
+      globalCopilotMcplabToolPolicy('mcplab_create_test_case', { scenarioEditor: true })
+    ).toEqual({ expose: false, automatic: false });
+  });
+
   it('prefers the dedicated Global Copilot setting and preserves fallbacks', () => {
     expect(
       selectGlobalCopilotAgentName({
@@ -71,7 +81,7 @@ describe('Global Copilot domain policy', () => {
     expect(globalCopilotSystemPrompt({ scenarioEditor: { agents: [{ id: 'agent-1' }] } })).toContain(
       'use the confirmation-required preview_scenario frontend action'
     );
-    expect(globalCopilotSystemPrompt({})).toContain('request propose_new_scenario');
+    expect(globalCopilotSystemPrompt({})).toContain('mcplab_create_test_case');
   });
 
   it('only scopes external MCP servers to the active test case', () => {

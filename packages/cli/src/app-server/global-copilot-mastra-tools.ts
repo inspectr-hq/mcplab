@@ -209,7 +209,9 @@ export async function buildGlobalCopilotMastraTools(params: {
     for (const definition of definitions) {
       const policy =
         serverName === 'mcplab'
-          ? globalCopilotMcplabToolPolicy(definition.name)
+          ? globalCopilotMcplabToolPolicy(definition.name, {
+              scenarioEditor: Boolean(scenarioEditor)
+            })
           : { expose: true, automatic: false };
       if (!policy.expose) continue;
       const publicName = makeAssistantToolPublicName(serverName, definition.name, usedNames);

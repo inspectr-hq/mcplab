@@ -20,6 +20,13 @@ function aguiMessages(messages: GlobalCopilotMessage[]): Message[] {
   })) as Message[];
 }
 
+export function preferGlobalCopilotThreadMessages(
+  agentMessages: GlobalCopilotMessage[],
+  threadMessages: GlobalCopilotMessage[]
+): GlobalCopilotMessage[] {
+  return agentMessages.length > 0 ? agentMessages : threadMessages;
+}
+
 export function useGlobalCopilotRun({
   thread,
   renameThread,
@@ -37,7 +44,7 @@ export function useGlobalCopilotRun({
   const fallbackThreadId = useRef(`pending-${crypto.randomUUID()}`);
   const threadId = thread?.id ?? fallbackThreadId.current;
   const { agent, isReady } = useAgent({
-    agentId: runtimeAgentId,
+    agentId: `${runtimeAgentId}:${threadId}`,
     runtimeAgentId,
     threadId
   });
@@ -74,10 +81,11 @@ export function useGlobalCopilotRun({
         }
       }
     }
-    return agent.messages
+    const restored = agent.messages
       .map((message) => storeMessage(message, toolCalls))
       .filter((message): message is GlobalCopilotMessage => message !== null);
-  }, [agent.messages, storeMessage]);
+    return preferGlobalCopilotThreadMessages(restored, thread?.messages ?? []);
+  }, [agent.messages, storeMessage, thread?.messages]);
 
   const send = useCallback(
     async (question: string) => {
