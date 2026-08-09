@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   availableGlobalCopilotActions,
   invokeGlobalCopilotAction,
-  registerGlobalCopilotAction
+  registerGlobalCopilotAction,
+  subscribeGlobalCopilotActions
 } from './global-copilot-actions';
 
 describe('global copilot actions', () => {
@@ -31,6 +32,23 @@ describe('global copilot actions', () => {
     await invokeGlobalCopilotAction('duplicate_test_case', { id: 'tag-profile' });
 
     expect(action).toHaveBeenCalledWith({ id: 'tag-profile' });
+  });
+
+  it('returns frontend action results to the Copilot HITL responder', async () => {
+    cleanups.push(registerGlobalCopilotAction('preview_scenario', async () => ({ passed: true })));
+
+    await expect(invokeGlobalCopilotAction('preview_scenario')).resolves.toEqual({ passed: true });
+  });
+
+  it('notifies the controller when contextual actions change', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeGlobalCopilotActions(listener);
+    const cleanup = registerGlobalCopilotAction('preview_scenario', vi.fn());
+
+    expect(listener).toHaveBeenCalledOnce();
+    cleanup();
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 
   it('passes temporary overrides to the registered queue-backed evaluation action', async () => {
