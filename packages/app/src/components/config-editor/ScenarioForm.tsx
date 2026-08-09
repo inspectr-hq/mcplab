@@ -267,10 +267,18 @@ export function ScenarioForm({
         const patch: Partial<Scenario> = {};
         if (typeof arguments_.prompt === 'string') patch.prompt = arguments_.prompt;
         if (arguments_.evalRules !== undefined) {
-          patch.evalRules = normalizeCopilotEvalRules(arguments_.evalRules);
+          const normalizedRules = normalizeCopilotEvalRules(arguments_.evalRules);
+          patch.evalRules =
+            arguments_.evalRuleMode === 'append'
+              ? [...scenarios[index].evalRules, ...normalizedRules]
+              : normalizedRules;
         }
         if (Array.isArray(arguments_.extractRules)) {
-          patch.extractRules = validateCopilotExtractRules(arguments_.extractRules);
+          const validatedRules = validateCopilotExtractRules(arguments_.extractRules);
+          patch.extractRules =
+            arguments_.extractRuleMode === 'append'
+              ? [...scenarios[index].extractRules, ...validatedRules]
+              : validatedRules;
         }
         if (Object.keys(patch).length === 0) throw new Error('No scenario changes were provided.');
         update(index, patch);

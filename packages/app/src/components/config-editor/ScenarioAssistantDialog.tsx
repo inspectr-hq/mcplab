@@ -468,7 +468,8 @@ export function ScenarioAssistantDialog({
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
     key: 'prompt' | 'evalRules' | 'extractRules',
     selectedEvalRules?: SuggestedEvalRule[],
-    evalRuleMode: 'replace' | 'append' = 'replace'
+    evalRuleMode: 'replace' | 'append' = 'replace',
+    markApplied = true
   ) => {
     if (!suggestions) return;
     if (key === 'prompt' && suggestions.prompt) {
@@ -495,7 +496,7 @@ export function ScenarioAssistantDialog({
     if (key === 'extractRules' && suggestions.extractRules) {
       onApplyPatch({ extractRules: suggestions.extractRules.replacement });
     }
-    if (messageId) {
+    if (messageId && markApplied) {
       const composite = `${messageId}:${key}`;
       setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
     }
@@ -511,7 +512,8 @@ export function ScenarioAssistantDialog({
     messageId: string | undefined,
     suggestions: ScenarioAssistantSuggestionBundle | undefined,
     selectedExtractRules: SuggestedExtractRule[],
-    mode: 'replace' | 'append'
+    mode: 'replace' | 'append',
+    markApplied = true
   ) => {
     if (!suggestions?.extractRules) return;
     onApplyPatch({
@@ -520,7 +522,7 @@ export function ScenarioAssistantDialog({
           ? [...scenario.extractRules, ...selectedExtractRules]
           : selectedExtractRules
     });
-    if (messageId) {
+    if (messageId && markApplied) {
       const composite = `${messageId}:extractRules`;
       setAppliedSuggestionKeys((prev) => new Set([...prev, composite]));
     }
@@ -750,6 +752,26 @@ export function ScenarioAssistantDialog({
                                   'replace'
                                 )
                               }
+                              onApplyOne={(rule) =>
+                                applySuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  'evalRules',
+                                  [rule],
+                                  'append',
+                                  false
+                                )
+                              }
+                              onReplaceOne={(rule) =>
+                                applySuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  'evalRules',
+                                  [rule],
+                                  'replace',
+                                  false
+                                )
+                              }
                             />
                           )}
                           {message.suggestions.extractRules && (
@@ -771,6 +793,24 @@ export function ScenarioAssistantDialog({
                                   message.suggestions,
                                   selectedRules,
                                   'replace'
+                                )
+                              }
+                              onApplyOne={(rule) =>
+                                applyExtractRuleSuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  [rule],
+                                  'append',
+                                  false
+                                )
+                              }
+                              onReplaceOne={(rule) =>
+                                applyExtractRuleSuggestions(
+                                  message.id,
+                                  message.suggestions,
+                                  [rule],
+                                  'replace',
+                                  false
                                 )
                               }
                             />
@@ -898,22 +938,27 @@ function SuggestionCard({
   );
 }
 
-function EvalRulesSuggestionCard({
+export function EvalRulesSuggestionCard({
   rationale,
   rules,
   applied = false,
   onApply,
-  onReplace
+  onReplace,
+  onApplyOne,
+  onReplaceOne
 }: {
   rationale?: string;
   rules: SuggestedEvalRule[];
   applied?: boolean;
   onApply: (selectedRules: SuggestedEvalRule[]) => void;
   onReplace: (selectedRules: SuggestedEvalRule[]) => void;
+  onApplyOne: (rule: SuggestedEvalRule) => void;
+  onReplaceOne: (rule: SuggestedEvalRule) => void;
 }) {
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
     () => new Set(rules.map((_, index) => index))
   );
+  const [itemActions, setItemActions] = useState<Set<string>>(new Set());
   const selectedCount = selectedIndexes.size;
   const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
   const allSelected = selectedCount === rules.length;
@@ -979,6 +1024,36 @@ function EvalRulesSuggestionCard({
                   {JSON.stringify(rule)}
                 </code>
               </label>
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(`add-${index}`)}
+                  aria-label={`Add check ${index + 1}`}
+                  onClick={() => {
+                    onApplyOne(rule);
+                    setItemActions((prev) => new Set(prev).add(`add-${index}`));
+                  }}
+                >
+                  {itemActions.has(`add-${index}`) ? 'Added' : 'Add'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(`replace-${index}`)}
+                  aria-label={`Replace with check ${index + 1}`}
+                  onClick={() => {
+                    onReplaceOne(rule);
+                    setItemActions((prev) => new Set(prev).add(`replace-${index}`));
+                  }}
+                >
+                  {itemActions.has(`replace-${index}`) ? 'Replaced' : 'Replace'}
+                </Button>
+              </div>
             </div>
           );
         })}
@@ -1017,22 +1092,27 @@ function EvalRulesSuggestionCard({
   );
 }
 
-function ExtractRulesSuggestionCard({
+export function ExtractRulesSuggestionCard({
   rationale,
   rules,
   applied = false,
   onApply,
-  onReplace
+  onReplace,
+  onApplyOne,
+  onReplaceOne
 }: {
   rationale?: string;
   rules: SuggestedExtractRule[];
   applied?: boolean;
   onApply: (selectedRules: SuggestedExtractRule[]) => void;
   onReplace: (selectedRules: SuggestedExtractRule[]) => void;
+  onApplyOne: (rule: SuggestedExtractRule) => void;
+  onReplaceOne: (rule: SuggestedExtractRule) => void;
 }) {
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(
     () => new Set(rules.map((_, index) => index))
   );
+  const [itemActions, setItemActions] = useState<Set<string>>(new Set());
   const selectedCount = selectedIndexes.size;
   const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
   const allSelected = selectedCount === rules.length;
@@ -1098,6 +1178,36 @@ function ExtractRulesSuggestionCard({
                   {JSON.stringify(rule)}
                 </code>
               </label>
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(`add-${index}`)}
+                  aria-label={`Add value capture rule ${index + 1}`}
+                  onClick={() => {
+                    onApplyOne(rule);
+                    setItemActions((prev) => new Set(prev).add(`add-${index}`));
+                  }}
+                >
+                  {itemActions.has(`add-${index}`) ? 'Added' : 'Add'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(`replace-${index}`)}
+                  aria-label={`Replace with value capture rule ${index + 1}`}
+                  onClick={() => {
+                    onReplaceOne(rule);
+                    setItemActions((prev) => new Set(prev).add(`replace-${index}`));
+                  }}
+                >
+                  {itemActions.has(`replace-${index}`) ? 'Replaced' : 'Replace'}
+                </Button>
+              </div>
             </div>
           );
         })}

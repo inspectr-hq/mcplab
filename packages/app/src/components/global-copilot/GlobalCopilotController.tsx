@@ -451,7 +451,9 @@ function useGlobalCopilotFrontendTools(params: {
         scenarioId: z.string(),
         prompt: z.string().optional(),
         evalRules: z.array(z.record(z.unknown())).optional(),
-        extractRules: z.array(z.record(z.unknown())).optional()
+        extractRules: z.array(z.record(z.unknown())).optional(),
+        evalRuleMode: z.enum(['append', 'replace']).optional(),
+        extractRuleMode: z.enum(['append', 'replace']).optional()
       })
       .strict(),
     'Apply a structured edit to an open scenario after user confirmation. Preserve scenarioId and include only the fields being changed; evalRules and extractRules are complete replacement arrays.'
@@ -582,7 +584,7 @@ function FrontendApprovalCard({
   );
 }
 
-function ScenarioSuggestionCard({
+export function ScenarioSuggestionCard({
   args,
   respond
 }: {
@@ -609,6 +611,28 @@ function ScenarioSuggestionCard({
     }
   };
 
+  const applyRule = async (
+    field: 'evalRules' | 'extractRules',
+    value: Record<string, unknown>,
+    mode: 'append' | 'replace',
+    key: string
+  ) => {
+    try {
+      await invokeGlobalCopilotAction('apply_scenario_patch', {
+        scenarioId,
+        [field]: [value],
+        [field === 'evalRules' ? 'evalRuleMode' : 'extractRuleMode']: mode
+      });
+      setApplied((current) => (current.includes(key) ? current : [...current, key]));
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not apply suggestion',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
   return (
     <div className="rounded-md border border-sky-400/40 bg-sky-50 p-3 text-sm">
       <p className="font-medium">Scenario suggestions{scenarioId ? ` · ${scenarioId}` : ''}</p>
@@ -618,10 +642,24 @@ function ScenarioSuggestionCard({
           <SuggestionSection label="Prompt" value={prompt} applied={applied.includes('prompt')} onApply={() => void apply('prompt', prompt)} />
         )}
         {evalRules && (
-          <SuggestionSection label="Checks" value={JSON.stringify(evalRules, null, 2)} applied={applied.includes('evalRules')} onApply={() => void apply('evalRules', evalRules)} />
+          <RuleSuggestionSection
+            label="Checks"
+            rules={evalRules}
+            applied={applied.includes('evalRules')}
+            onApplyAll={() => void apply('evalRules', evalRules)}
+            onApplyOne={(rule, index) => void applyRule('evalRules', rule, 'append', `evalRules:add:${index}`)}
+            onReplaceOne={(rule, index) => void applyRule('evalRules', rule, 'replace', `evalRules:replace:${index}`)}
+          />
         )}
         {extractRules && (
-          <SuggestionSection label="Value Capture Rules" value={JSON.stringify(extractRules, null, 2)} applied={applied.includes('extractRules')} onApply={() => void apply('extractRules', extractRules)} />
+          <RuleSuggestionSection
+            label="Value Capture Rules"
+            rules={extractRules}
+            applied={applied.includes('extractRules')}
+            onApplyAll={() => void apply('extractRules', extractRules)}
+            onApplyOne={(rule, index) => void applyRule('extractRules', rule, 'append', `extractRules:add:${index}`)}
+            onReplaceOne={(rule, index) => void applyRule('extractRules', rule, 'replace', `extractRules:replace:${index}`)}
+          />
         )}
       </div>
       {respond && (
@@ -630,6 +668,75 @@ function ScenarioSuggestionCard({
           <Button size="sm" variant="outline" onClick={() => void respond({ approved: false, reason: 'No suggestions applied.' })}>Skip</Button>
         </div>
       )}
+    </div>
+  );
+}
+
+function RuleSuggestionSection({
+  label,
+  rules,
+  applied,
+  onApplyAll,
+  onApplyOne,
+  onReplaceOne
+}: {
+  label: string;
+  rules: Record<string, unknown>[];
+  applied: boolean;
+  onApplyAll: () => void;
+  onApplyOne: (rule: Record<string, unknown>, index: number) => void;
+  onReplaceOne: (rule: Record<string, unknown>, index: number) => void;
+}) {
+  const [itemActions, setItemActions] = useState<Set<string>>(new Set());
+  return (
+    <div className="rounded border bg-background p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">{label}</span>
+        <Button size="sm" variant={applied ? 'secondary' : 'outline'} disabled={applied} onClick={onApplyAll}>
+          {applied ? 'Applied' : 'Apply all'}
+        </Button>
+      </div>
+      <div className="mt-2 space-y-2">
+        {rules.map((rule, index) => {
+          const addKey = `add-${index}`;
+          const replaceKey = `replace-${index}`;
+          return (
+            <div key={`${label}-${index}`} className="flex items-start gap-2 rounded bg-muted/50 p-2">
+              <pre className="min-w-0 flex-1 whitespace-pre-wrap text-[11px] text-muted-foreground">
+                {JSON.stringify(rule, null, 2)}
+              </pre>
+              <div className="flex shrink-0 gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(addKey)}
+                  aria-label={`Add ${label === 'Checks' ? 'check' : 'value capture rule'} ${index + 1}`}
+                  onClick={() => {
+                    onApplyOne(rule, index);
+                    setItemActions((current) => new Set(current).add(addKey));
+                  }}
+                >
+                  {itemActions.has(addKey) ? 'Added' : 'Add'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-[11px]"
+                  disabled={applied || itemActions.has(replaceKey)}
+                  aria-label={`Replace with ${label === 'Checks' ? 'check' : 'value capture rule'} ${index + 1}`}
+                  onClick={() => {
+                    onReplaceOne(rule, index);
+                    setItemActions((current) => new Set(current).add(replaceKey));
+                  }}
+                >
+                  {itemActions.has(replaceKey) ? 'Replaced' : 'Replace'}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
