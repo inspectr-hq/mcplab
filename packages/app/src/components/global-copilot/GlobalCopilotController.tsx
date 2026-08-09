@@ -118,6 +118,7 @@ function GlobalCopilotControllerInner() {
     refresh,
     storeMessage: storedGlobalCopilotMessage
   });
+  const copilotAgentId = agent.agentId ?? runtimeAgentId;
 
   useEffect(
     () =>
@@ -132,14 +133,14 @@ function GlobalCopilotControllerInner() {
   );
 
   useGlobalCopilotFrontendTools({
-    agentId: runtimeAgentId,
+    agentId: copilotAgentId,
     source,
     navigate,
     availableActions: appContext.availableActions
   });
 
   const interruptElement = useGlobalCopilotInterrupts({
-    agentId: runtimeAgentId,
+    agentId: copilotAgentId,
     storedInterrupt: thread?.pendingInterrupts?.[0],
     resumeStoredInterrupt
   });
