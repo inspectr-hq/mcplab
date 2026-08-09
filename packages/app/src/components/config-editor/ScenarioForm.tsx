@@ -118,6 +118,50 @@ const emptyScenario = (): Scenario => ({
   extractRules: []
 });
 
+const copilotEvalRuleTypes = new Set<EvalRule['type']>([
+  'required_tool',
+  'forbidden_tool',
+  'tool_sequence',
+  'response_contains',
+  'response_not_contains',
+  'response_starts_with',
+  'response_ends_with',
+  'response_equals',
+  'response_regex',
+  'response_jsonpath',
+  'response_jsonpath_exists',
+  'response_jsonpath_not_exists',
+  'agent_check'
+]);
+
+function validateCopilotEvalRules(value: unknown): EvalRule[] {
+  if (!Array.isArray(value)) throw new Error('evalRules must be an array.');
+  for (const rule of value) {
+    if (!rule || typeof rule !== 'object' || !copilotEvalRuleTypes.has((rule as EvalRule).type)) {
+      throw new Error('evalRules contains an unsupported rule type.');
+    }
+    if ('sequence' in rule && !Array.isArray((rule as EvalRule).sequence)) {
+      throw new Error('tool_sequence rules must contain a sequence array.');
+    }
+  }
+  return value as EvalRule[];
+}
+
+function validateCopilotExtractRules(value: unknown): Scenario['extractRules'] {
+  if (!Array.isArray(value)) throw new Error('extractRules must be an array.');
+  for (const rule of value) {
+    if (
+      !rule ||
+      typeof rule !== 'object' ||
+      typeof (rule as { name?: unknown }).name !== 'string' ||
+      typeof (rule as { pattern?: unknown }).pattern !== 'string'
+    ) {
+      throw new Error('extractRules entries require string name and pattern fields.');
+    }
+  }
+  return value as Scenario['extractRules'];
+}
+
 function formatToolSequenceText(sequence: string[]): string {
   return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
 }
@@ -188,9 +232,11 @@ export function ScenarioForm({
         if (index < 0) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
         const patch: Partial<Scenario> = {};
         if (typeof arguments_.prompt === 'string') patch.prompt = arguments_.prompt;
-        if (Array.isArray(arguments_.evalRules)) patch.evalRules = arguments_.evalRules as EvalRule[];
+        if (arguments_.evalRules !== undefined) {
+          patch.evalRules = validateCopilotEvalRules(arguments_.evalRules);
+        }
         if (Array.isArray(arguments_.extractRules)) {
-          patch.extractRules = arguments_.extractRules as Scenario['extractRules'];
+          patch.extractRules = validateCopilotExtractRules(arguments_.extractRules);
         }
         if (Object.keys(patch).length === 0) throw new Error('No scenario changes were provided.');
         update(index, patch);

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ScenarioForm } from './ScenarioForm';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
+import { invokeGlobalCopilotAction } from '@/lib/global-copilot-actions';
 
 const mockSource = {
   discoverToolsForAnalysis: vi.fn().mockResolvedValue({ servers: [] }),
@@ -97,6 +98,39 @@ describe('ScenarioForm checks editor', () => {
         serverNames: ['oauth-server']
       })
     );
+  });
+
+  it('applies a validated Copilot scenario patch through the existing change handler', async () => {
+    const scenario = baseScenario();
+    const onChange = vi.fn();
+    render(<ScenarioForm scenarios={[scenario]} agents={[]} servers={[]} onChange={onChange} />);
+
+    await invokeGlobalCopilotAction('apply_scenario_patch', {
+      scenarioId: scenario.id,
+      prompt: 'Updated prompt',
+      evalRules: [{ type: 'response_contains', value: 'hello' }]
+    });
+
+    expect(onChange).toHaveBeenCalledWith([
+      {
+        ...scenario,
+        prompt: 'Updated prompt',
+        evalRules: [{ type: 'response_contains', value: 'hello' }]
+      }
+    ]);
+  });
+
+  it('rejects malformed Copilot scenario rules before changing editor state', async () => {
+    const onChange = vi.fn();
+    render(<ScenarioForm scenarios={[baseScenario()]} agents={[]} servers={[]} onChange={onChange} />);
+
+    await expect(
+      invokeGlobalCopilotAction('apply_scenario_patch', {
+        scenarioId: 'scn-1',
+        evalRules: [{ type: 'not-a-rule' }]
+      })
+    ).rejects.toThrow('unsupported rule type');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('adds response_equals checks with literal value', async () => {

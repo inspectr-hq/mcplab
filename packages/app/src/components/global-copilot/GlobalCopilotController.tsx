@@ -409,7 +409,8 @@ function useGlobalCopilotFrontendTools(params: {
         evalRules: z.array(z.record(z.unknown())).optional(),
         extractRules: z.array(z.record(z.unknown())).optional()
       })
-      .strict()
+      .strict(),
+    'Apply a structured edit to an open scenario after user confirmation. Preserve scenarioId and include only the fields being changed; evalRules and extractRules are complete replacement arrays.'
   );
   useConfirmedFrontendTool('start_tool_analysis', params.agentId, available.has('start_tool_analysis'));
   useConfirmedFrontendTool('duplicate_test_case', params.agentId, available.has('duplicate_test_case'));
@@ -422,12 +423,13 @@ function useConfirmedFrontendTool(
   name: Parameters<typeof invokeGlobalCopilotAction>[0],
   agentId: string | undefined,
   available: boolean,
-  parameters: z.ZodTypeAny = z.record(z.unknown())
+  parameters: z.ZodTypeAny = z.record(z.unknown()),
+  description = `Request confirmation before ${name.replaceAll('_', ' ')}.`
 ) {
   useHumanInTheLoop(
     {
       name,
-      description: `Request confirmation before ${name.replaceAll('_', ' ')}.`,
+      description,
       parameters,
       agentId,
       available,
@@ -439,7 +441,7 @@ function useConfirmedFrontendTool(
         />
       )
     },
-    [agentId, available, name]
+    [agentId, available, name, description]
   );
 }
 
