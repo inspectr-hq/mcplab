@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { globalCopilotMemoryMessages } from './use-global-copilot-thread';
-import { globalCopilotRunIdFromInterruptId } from './use-global-copilot-run';
+import {
+  globalCopilotMemoryMessages,
+  mergeRefreshedGlobalCopilotThread
+} from './use-global-copilot-thread';
+import {
+  globalCopilotRunIdFromInterruptId,
+  preferGlobalCopilotThreadMessages
+} from './use-global-copilot-run';
 
 describe('globalCopilotRunIdFromInterruptId', () => {
   it('extracts the Mastra run id from a persisted interrupt id', () => {
@@ -67,5 +73,39 @@ describe('globalCopilotMemoryMessages', () => {
 
   it('does not expose unsupported stored message roles', () => {
     expect(globalCopilotMemoryMessages({ id: 'tool-1', role: 'tool', content: 'raw' })).toEqual([]);
+  });
+});
+
+describe('mergeRefreshedGlobalCopilotThread', () => {
+  it('updates pending interrupts on the active thread without clearing loaded messages', () => {
+    const current = {
+      id: 'thread-1',
+      messages: [{ id: 'message-1', role: 'assistant' as const, content: 'Stored' }]
+    };
+    const refreshed = {
+      id: 'thread-1',
+      messages: [],
+      pendingInterrupts: [{ id: 'run-1::tool-1' }]
+    };
+
+    expect(mergeRefreshedGlobalCopilotThread(current as any, refreshed as any)).toEqual({
+      ...current,
+      pendingInterrupts: refreshed.pendingInterrupts
+    });
+  });
+});
+
+describe('preferGlobalCopilotThreadMessages', () => {
+  it('shows persisted messages while the CopilotKit agent is still empty', () => {
+    const persisted = [{ id: 'message-1', role: 'assistant' as const, content: 'Previous answer' }];
+
+    expect(preferGlobalCopilotThreadMessages([], persisted)).toBe(persisted);
+  });
+
+  it('uses live agent messages once they are available', () => {
+    const live = [{ id: 'message-2', role: 'assistant' as const, content: 'Current answer' }];
+    const persisted = [{ id: 'message-1', role: 'assistant' as const, content: 'Previous answer' }];
+
+    expect(preferGlobalCopilotThreadMessages(live, persisted)).toBe(live);
   });
 });

@@ -16,6 +16,14 @@ function pendingInterrupts(record: ThreadRecord) {
     : undefined;
 }
 
+export function mergeRefreshedGlobalCopilotThread(
+  current: GlobalCopilotThread | undefined,
+  refreshed: GlobalCopilotThread | undefined
+): GlobalCopilotThread | undefined {
+  if (!current || !refreshed || current.id !== refreshed.id) return current;
+  return { ...current, ...refreshed, messages: current.messages };
+}
+
 function textFromMemoryContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!content || typeof content !== 'object') return '';
@@ -123,6 +131,12 @@ export function useGlobalCopilotThread(source: DataSource) {
       messages: []
     }));
     setThreads(next);
+    setThread((current) =>
+      mergeRefreshedGlobalCopilotThread(
+        current,
+        next.find((item) => item.id === current?.id)
+      )
+    );
     return next;
   }, []);
 
