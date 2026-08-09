@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { useDataSource } from '@/contexts/DataSourceContext';
-import type {
-  GlobalCopilotMessage,
-  GlobalCopilotThread
-} from '@/lib/global-copilot-thread-store';
+import type { GlobalCopilotMessage, GlobalCopilotThread } from '@/lib/global-copilot-thread-store';
 import { workspaceKeyFromRoot } from '@/lib/global-copilot-thread-store';
 
 const activePreferenceKey = (workspaceKey: string) =>
@@ -63,11 +60,13 @@ export function globalCopilotMemoryMessages(message: any): GlobalCopilotMessage[
   for (const part of parts) {
     if (!part || typeof part !== 'object') continue;
     const invocation =
-      part.type === 'tool-invocation' && part.toolInvocation && typeof part.toolInvocation === 'object'
+      part.type === 'tool-invocation' &&
+      part.toolInvocation &&
+      typeof part.toolInvocation === 'object'
         ? part.toolInvocation
         : part.type === 'tool-result'
-          ? part
-          : undefined;
+        ? part
+        : undefined;
     if (!invocation || !('result' in invocation)) continue;
     const toolCallId = String(invocation.toolCallId ?? `${message.id}-tool`);
     restored.push({
@@ -128,38 +127,41 @@ export function useGlobalCopilotThread(source: DataSource) {
   }, []);
 
   useEffect(() => {
-    void source.getWorkspaceSettings().then(async (settings) => {
-      if (!settings) return;
-      const key = await workspaceKeyFromRoot(settings.workspaceRoot);
-      setWorkspaceKey(key);
-      let next = await refresh(key);
-      if (!next.length) {
-        const created = await responseJson<{ thread: ThreadRecord }>(
-          await fetch('/api/global-copilot/threads', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ title: 'New conversation' })
-          })
-        );
-        next = await refresh(key);
-        window.localStorage.setItem(activePreferenceKey(key), created.thread.id);
-      }
-      const activeId = window.localStorage.getItem(activePreferenceKey(key));
-      const selected = next.find((item) => item.id === activeId) ?? next[0];
-      if (selected) {
-        const request = ++selectionRequest.current;
-        try {
-          const loaded = await loadThread(selected, key);
-          if (request === selectionRequest.current) setThread(loaded);
-        } catch (error: unknown) {
-          if (request === selectionRequest.current) {
-            setThreadError(error instanceof Error ? error.message : String(error));
+    void source
+      .getWorkspaceSettings()
+      .then(async (settings) => {
+        if (!settings) return;
+        const key = await workspaceKeyFromRoot(settings.workspaceRoot);
+        setWorkspaceKey(key);
+        let next = await refresh(key);
+        if (!next.length) {
+          const created = await responseJson<{ thread: ThreadRecord }>(
+            await fetch('/api/global-copilot/threads', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ title: 'New conversation' })
+            })
+          );
+          next = await refresh(key);
+          window.localStorage.setItem(activePreferenceKey(key), created.thread.id);
+        }
+        const activeId = window.localStorage.getItem(activePreferenceKey(key));
+        const selected = next.find((item) => item.id === activeId) ?? next[0];
+        if (selected) {
+          const request = ++selectionRequest.current;
+          try {
+            const loaded = await loadThread(selected, key);
+            if (request === selectionRequest.current) setThread(loaded);
+          } catch (error: unknown) {
+            if (request === selectionRequest.current) {
+              setThreadError(error instanceof Error ? error.message : String(error));
+            }
           }
         }
-      }
-    }).catch((error: unknown) => {
-      setThreadError(error instanceof Error ? error.message : String(error));
-    });
+      })
+      .catch((error: unknown) => {
+        setThreadError(error instanceof Error ? error.message : String(error));
+      });
   }, [loadThread, refresh, source]);
 
   const selectThread = useCallback(
@@ -168,6 +170,7 @@ export function useGlobalCopilotThread(source: DataSource) {
       window.localStorage.setItem(activePreferenceKey(workspaceKey), next.id);
       const request = ++selectionRequest.current;
       setThreadError(undefined);
+      setThread(next);
       void loadThread(next, workspaceKey)
         .then((loaded) => {
           if (request === selectionRequest.current) setThread(loaded);
