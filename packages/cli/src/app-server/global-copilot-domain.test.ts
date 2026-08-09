@@ -71,6 +71,7 @@ describe('Global Copilot domain policy', () => {
     expect(globalCopilotSystemPrompt({ scenarioEditor: { agents: [{ id: 'agent-1' }] } })).toContain(
       'use the confirmation-required preview_scenario frontend action'
     );
+    expect(globalCopilotSystemPrompt({})).toContain('request propose_new_scenario');
   });
 
   it('only scopes external MCP servers to the active test case', () => {
