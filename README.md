@@ -498,6 +498,10 @@ An interactive AI chat that helps you design and refine evaluation scenarios. Gi
 
 Open the app, navigate to an eval, and open the **Scenario Assistant** panel on any scenario.
 
+### Global Copilot
+
+The Global Copilot is available from the app sidebar for navigation, evaluation analysis, MCP tool work, and scenario authoring. When an editable scenario is open, it receives the current prompt, Checks, Value Capture Rules, referenced servers, and available agents. It can inspect tools, run a confirmed one-shot preview, and propose confirmed structured edits. The Scenario Assistant remains available alongside it for the dedicated scenario suggestion workflow.
+
 ### Result Assistant
 
 An AI chat that analyzes completed evaluation runs. Ask it to explain failures, identify patterns across scenarios, or summarize what went wrong in a specific run. It has read-only access to run artifacts, traces, and results.

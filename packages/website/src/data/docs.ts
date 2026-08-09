@@ -1386,11 +1386,25 @@ const appAssistants: DocPage = {
   slug: 'app-ai-assistants',
   label: 'AI Assistants',
   href: '/docs/app/ai-assistants/',
-  description: 'Use the Scenario and Result AI assistants to work faster.',
-  keywords: ['ai', 'assistant', 'scenario assistant', 'result assistant', 'chat'],
+  description: 'Use the Global Copilot, Scenario Assistant, and Result Assistant to work faster.',
+  keywords: ['ai', 'assistant', 'global copilot', 'scenario assistant', 'result assistant', 'chat'],
   seoTitle: 'App — AI Assistants',
   track: 'app',
   sections: [
+    {
+      id: 'global-copilot',
+      title: 'Global Copilot',
+      paragraphs: [
+        'Global Copilot is the in-app assistant for navigation, evaluation analysis, queueing runs, and MCP tool work. When an editable scenario is open, it receives the current prompt, Checks, Value Capture Rules, referenced servers, and available agents.',
+        'Ask it to inspect the referenced MCP tools, propose a prompt or assertion change, or run a one-shot preview. Scenario changes and previews always require confirmation. The existing Scenario Assistant remains available for its focused chat and structured suggestion cards.'
+      ],
+      bullets: [
+        'Ask: "What should this scenario verify?"',
+        'Ask: "Preview this scenario with agent-1."',
+        'Ask: "Strengthen the response check and apply the change."',
+        'Use the Scenario Assistant for its dedicated iterative suggestion workflow.'
+      ]
+    },
     {
       id: 'scenario-assistant',
       title: 'Scenario Assistant',
