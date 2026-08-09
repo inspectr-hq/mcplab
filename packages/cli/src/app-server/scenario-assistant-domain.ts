@@ -602,9 +602,84 @@ export function parseAssistantModelOutput(text: string): ParsedAssistantModelOut
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Assistant response must be a JSON object');
   }
-  const parsedObj = parsed as Partial<ParsedAssistantModelOutput> & {
+  let parsedObj = parsed as Partial<ParsedAssistantModelOutput> & {
     toolCalls?: unknown;
+    content?: unknown;
+    response?: unknown;
+    message?: unknown;
+    output?: unknown;
   };
+  const nested = [parsedObj.response, parsedObj.message, parsedObj.output].find(
+    (value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  );
+  if (nested) {
+    parsedObj = { ...parsedObj, ...nested };
+  }
+  if (typeof parsedObj.text !== 'string' && typeof parsedObj.content === 'string') {
+    parsedObj.text = parsedObj.content;
+  }
+  if (
+    parsedObj.type === undefined &&
+    ('prompt_updates' in parsedObj || 'check_updates' in parsedObj || 'value_capture_rules' in parsedObj)
+  ) {
+    const legacy = parsedObj as Record<string, unknown>;
+    const suggestions: Record<string, unknown> = {};
+    const firstText = (value: unknown): string | undefined => {
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) {
+        return value.map(firstText).find((item): item is string => Boolean(item));
+      }
+      if (!value || typeof value !== 'object') return undefined;
+      const record = value as Record<string, unknown>;
+      for (const key of ['replacement', 'prompt', 'updated_prompt', 'text', 'content', 'suggestion', 'value']) {
+        const text = firstText(record[key]);
+        if (text) return text;
+      }
+      return undefined;
+    };
+    if (legacy.prompt_updates !== undefined) {
+      const replacement = firstText(legacy.prompt_updates);
+      suggestions.prompt = {
+        replacement: replacement ?? '',
+        rationale: 'Suggested prompt update'
+      };
+    }
+    if (Array.isArray(legacy.check_updates)) {
+      suggestions.evalRules = {
+        replacement: legacy.check_updates.map((rule) =>
+          rule && typeof rule === 'object' && 'rule' in rule
+            ? (rule as { rule: unknown }).rule
+            : rule
+        ),
+        rationale: 'Suggested Checks update'
+      };
+    }
+    if (Array.isArray(legacy.value_capture_rules)) {
+      suggestions.extractRules = {
+        replacement: legacy.value_capture_rules.map((rule) => {
+          if (!rule || typeof rule !== 'object') return rule;
+          const entry = rule as Record<string, unknown>;
+          return {
+            ...entry,
+            ...(typeof entry.pattern === 'string'
+              ? {}
+              : typeof entry.regex === 'string'
+                ? { pattern: entry.regex }
+                : {})
+          };
+        }),
+        rationale: 'Suggested Value Capture Rules update'
+      };
+    }
+    parsedObj = {
+      type: 'assistant_message',
+      text:
+        typeof legacy.summary === 'string'
+          ? legacy.summary
+          : 'I prepared structured scenario suggestions for review.',
+      suggestions
+    } as unknown as typeof parsedObj;
+  }
   if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
     // Some providers occasionally preserve a generic envelope type (for example
     // `message` or `final`) even though the payload already matches our protocol.
@@ -614,7 +689,10 @@ export function parseAssistantModelOutput(text: string): ParsedAssistantModelOut
     } else if (typeof parsedObj.text === 'string') {
       parsedObj.type = 'assistant_message';
     } else {
-      throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
+      const keys = Object.keys(parsedObj).slice(0, 12).join(', ');
+      throw new Error(
+        `Assistant response type must be 'assistant_message' or 'tool_call_request' (received ${String(parsedObj.type ?? 'missing')}; keys: ${keys || 'none'})`
+      );
     }
   }
   if (typeof parsedObj.text !== 'string') {

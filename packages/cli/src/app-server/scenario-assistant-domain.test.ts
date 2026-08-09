@@ -323,4 +323,60 @@ describe('parseAssistantModelOutput', () => {
       )
     ).toMatchObject({ type: 'tool_call_request', text: 'Checking' });
   });
+
+  it('unwraps nested response content from provider envelopes', () => {
+    expect(
+      parseAssistantModelOutput(
+        JSON.stringify({ type: 'response', response: { type: 'final', content: 'Ready' } })
+      )
+    ).toMatchObject({ type: 'assistant_message', text: 'Ready' });
+  });
+
+  it('maps the legacy structured suggestion bundle into assistant suggestions', () => {
+    expect(
+      parseAssistantModelOutput(
+        JSON.stringify({
+          prompt_updates: 'Use the library tool.',
+          check_updates: [{ type: 'required_tool', value: 'mcplab_list_library' }],
+          value_capture_rules: [{ name: 'first_id', pattern: '(?<value>scn-[^ ]+)' }],
+          summary: 'I prepared focused suggestions.'
+        })
+      )
+    ).toEqual({
+      type: 'assistant_message',
+      text: 'I prepared focused suggestions.',
+      suggestions: {
+        prompt: { replacement: 'Use the library tool.', rationale: 'Suggested prompt update' },
+        evalRules: {
+          replacement: [{ type: 'required_tool', value: 'mcplab_list_library' }],
+          rationale: 'Suggested Checks update'
+        },
+        extractRules: {
+          replacement: [{ name: 'first_id', pattern: '(?<value>scn-[^ ]+)' }],
+          rationale: 'Suggested Value Capture Rules update'
+        }
+      }
+    });
+  });
+
+  it('maps legacy prompt and regex aliases used by provider responses', () => {
+    const parsed = parseAssistantModelOutput(
+      JSON.stringify({
+        prompt_updates: { updated_prompt: 'Use the library tool and return metadata.' },
+        value_capture_rules: [
+          { name: 'link', regex: '(https?://\\S+)' },
+          { name: 'host', regex: 'https?://([^/]+)' }
+        ],
+        summary: 'Updated the scenario.'
+      })
+    );
+
+    expect(parsed.suggestions?.prompt?.replacement).toBe(
+      'Use the library tool and return metadata.'
+    );
+    expect(parsed.suggestions?.extractRules?.replacement).toEqual([
+      { name: 'link', regex: '(https?://\\S+)', pattern: '(https?://\\S+)' },
+      { name: 'host', regex: 'https?://([^/]+)', pattern: 'https?://([^/]+)' }
+    ]);
+  });
 });
