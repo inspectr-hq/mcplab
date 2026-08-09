@@ -143,6 +143,31 @@ function GlobalCopilotControllerInner() {
     [source]
   );
 
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('create_test_case_from_draft', async (arguments_) => {
+        const id = typeof arguments_.id === 'string' ? arguments_.id.trim() : '';
+        const prompt = typeof arguments_.prompt === 'string' ? arguments_.prompt : '';
+        if (!id || !prompt) throw new Error('A draft Test Case requires an id and prompt.');
+        const servers = Array.isArray(arguments_.servers)
+          ? arguments_.servers.filter((item): item is string => typeof item === 'string')
+          : [];
+        const evalRules = Array.isArray(arguments_.evalRules) ? arguments_.evalRules : [];
+        const extractRules = Array.isArray(arguments_.extractRules) ? arguments_.extractRules : [];
+        await source.createTestCase({ id, name: typeof arguments_.name === 'string' ? arguments_.name : undefined, servers, prompt });
+        const libraries = await source.getLibraries();
+        const created = libraries.scenarios.find((scenario) => scenario.id === id);
+        if (!created) throw new Error(`Created Test Case '${id}' could not be reloaded.`);
+        created.evalRules = evalRules as typeof created.evalRules;
+        created.extractRules = extractRules as typeof created.extractRules;
+        await source.saveLibraries(libraries);
+        navigate(`/libraries/test-cases/${encodeURIComponent(id)}`);
+        toast({ title: 'Test Case created', description: `Created ${id} in Test Cases.` });
+        return { id };
+      }),
+    [navigate, source]
+  );
+
   const {
     workspaceKey,
     threads,
@@ -449,6 +474,27 @@ function useGlobalCopilotFrontendTools(params: {
     },
     [params.agentId, available.has('apply_scenario_patch')]
   );
+  useHumanInTheLoop(
+    {
+      name: 'propose_new_scenario',
+      description: 'Present a complete new Test Case draft for review before creating it.',
+      parameters: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        servers: z.array(z.string()),
+        prompt: z.string(),
+        evalRules: z.array(z.record(z.unknown())).optional(),
+        extractRules: z.array(z.record(z.unknown())).optional(),
+        rationale: z.string().optional()
+      }).strict(),
+      agentId: params.agentId,
+      available: available.has('create_test_case'),
+      render: (props) => (
+        <ScenarioDraftCard args={props.args as Record<string, unknown>} respond={props.status === 'executing' ? props.respond : undefined} />
+      )
+    },
+    [params.agentId, available.has('create_test_case')]
+  );
   useConfirmedFrontendTool(
     'preview_scenario',
     params.agentId,
@@ -601,6 +647,62 @@ function SuggestionSection({
         </Button>
       </div>
       <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{value}</pre>
+    </div>
+  );
+}
+
+function ScenarioDraftCard({
+  args,
+  respond
+}: {
+  args: Record<string, unknown>;
+  respond?: (result: unknown) => Promise<void>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const id = typeof args.id === 'string' ? args.id : '';
+  const name = typeof args.name === 'string' ? args.name : undefined;
+  const prompt = typeof args.prompt === 'string' ? args.prompt : '';
+  const servers = Array.isArray(args.servers) ? args.servers : [];
+  const evalRules = Array.isArray(args.evalRules) ? args.evalRules : [];
+  const extractRules = Array.isArray(args.extractRules) ? args.extractRules : [];
+  const rationale = typeof args.rationale === 'string' ? args.rationale : undefined;
+
+  const create = async () => {
+    if (!respond || creating) return;
+    setCreating(true);
+    try {
+      const result = await invokeGlobalCopilotAction('create_test_case_from_draft', args);
+      await respond({ approved: true, result });
+    } catch (error: unknown) {
+      setCreating(false);
+      toast({
+        title: 'Could not create Test Case',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-violet-400/40 bg-violet-50 p-3 text-sm">
+      <p className="font-medium">New Test Case draft{ id ? ` · ${id}` : ''}</p>
+      {rationale && <p className="mt-1 text-xs text-muted-foreground">{rationale}</p>}
+      <div className="mt-2 rounded border bg-background p-2">
+        <span className="text-xs font-semibold">Prompt</span>
+        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{prompt}</pre>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Servers: {servers.join(', ') || 'none'}</p>
+      <p className="text-xs text-muted-foreground">Checks: {evalRules.length} · Value Capture Rules: {extractRules.length}</p>
+      {respond && (
+        <div className="mt-3 flex gap-2">
+          <Button size="sm" disabled={creating || !id || !prompt} onClick={() => void create()}>
+            {creating ? 'Creating...' : 'Create Test Case'}
+          </Button>
+          <Button size="sm" variant="outline" disabled={creating} onClick={() => void respond({ approved: false, reason: 'Draft creation denied.' })}>
+            Skip
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

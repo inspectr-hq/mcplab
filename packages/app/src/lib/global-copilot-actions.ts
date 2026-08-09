@@ -8,6 +8,7 @@ export type GlobalCopilotActionName =
   | 'start_tool_analysis'
   | 'duplicate_test_case'
   | 'create_test_case'
+  | 'create_test_case_from_draft'
   | 'duplicate_mcp_server'
   | 'duplicate_agent';
 
