@@ -50,7 +50,14 @@ import {
 } from '@/lib/attachment-policy';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import {
+  normalizeCopilotEvalRules,
+  validateCopilotExtractRules
+} from '@/lib/global-copilot-validation';
+import {
+  invokeGlobalCopilotAction,
+  registerGlobalCopilotAction
+} from '@/lib/global-copilot-actions';
 import {
   clearGlobalCopilotPageContext,
   globalCopilotPageContext,
@@ -119,80 +126,6 @@ const emptyScenario = (): Scenario => ({
   extractRules: []
 });
 
-const copilotEvalRuleTypes = new Set<EvalRule['type']>([
-  'required_tool',
-  'forbidden_tool',
-  'tool_sequence',
-  'response_contains',
-  'response_not_contains',
-  'response_starts_with',
-  'response_ends_with',
-  'response_equals',
-  'response_regex',
-  'response_jsonpath',
-  'response_jsonpath_exists',
-  'response_jsonpath_not_exists',
-  'agent_check'
-]);
-
-function normalizeCopilotEvalRules(value: unknown): EvalRule[] {
-  if (!Array.isArray(value)) throw new Error('evalRules must be an array.');
-  return value.map((rawRule) => {
-    if (!rawRule || typeof rawRule !== 'object') {
-      throw new Error('evalRules contains an unsupported rule type.');
-    }
-    const input = rawRule as Record<string, unknown>;
-    const type = input.type;
-    if (typeof type !== 'string' || !copilotEvalRuleTypes.has(type as EvalRule['type'])) {
-      throw new Error('evalRules contains an unsupported rule type.');
-    }
-    const rule: EvalRule = { type: type as EvalRule['type'] };
-    const copyString = (key: keyof EvalRule, ...aliases: string[]) => {
-      const candidate = [key, ...aliases]
-        .map((name) => input[name as string])
-        .find((candidate): candidate is string => typeof candidate === 'string');
-      if (candidate !== undefined) rule[key] = candidate as never;
-    };
-    if (type === 'required_tool' || type === 'forbidden_tool') {
-      copyString('value', 'tool', 'name');
-    } else if (type === 'tool_sequence') {
-      const sequence = input.sequence ?? input.toolSequence;
-      if (typeof sequence === 'string') rule.sequence = [sequence];
-      else if (Array.isArray(sequence) && sequence.every((item) => typeof item === 'string')) {
-        rule.sequence = sequence;
-      } else {
-        throw new Error('tool_sequence rules must contain a sequence array.');
-      }
-    } else if (type === 'response_jsonpath' || type === 'response_jsonpath_exists' || type === 'response_jsonpath_not_exists') {
-      copyString('path', 'jsonpath');
-      if (typeof input.equals === 'string' || typeof input.equals === 'number' || typeof input.equals === 'boolean') {
-        rule.equals = input.equals;
-      }
-    } else if (type === 'agent_check') {
-      copyString('label');
-      copyString('prompt');
-    } else {
-      copyString('value', 'text', 'contains', 'pattern', 'regex');
-    }
-    return rule;
-  });
-}
-
-function validateCopilotExtractRules(value: unknown): Scenario['extractRules'] {
-  if (!Array.isArray(value)) throw new Error('extractRules must be an array.');
-  for (const rule of value) {
-    if (
-      !rule ||
-      typeof rule !== 'object' ||
-      typeof (rule as { name?: unknown }).name !== 'string' ||
-      typeof (rule as { pattern?: unknown }).pattern !== 'string'
-    ) {
-      throw new Error('extractRules entries require string name and pattern fields.');
-    }
-  }
-  return value as Scenario['extractRules'];
-}
-
 function formatToolSequenceText(sequence: string[]): string {
   return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
 }
@@ -257,10 +190,11 @@ export function ScenarioForm({
     };
   }, [agents, configId, configPath, defaultAssistantAgentName, readOnly, scenarios]);
 
-  useEffect(
-    () => {
-      if (readOnly) return undefined;
-      const unregisterPatch = registerGlobalCopilotAction('apply_scenario_patch', async (arguments_) => {
+  useEffect(() => {
+    if (readOnly) return undefined;
+    const unregisterPatch = registerGlobalCopilotAction(
+      'apply_scenario_patch',
+      async (arguments_) => {
         const scenarioId = typeof arguments_.scenarioId === 'string' ? arguments_.scenarioId : '';
         const index = scenarios.findIndex((scenario) => scenario.id === scenarioId);
         if (index < 0) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
@@ -282,16 +216,24 @@ export function ScenarioForm({
         }
         if (Object.keys(patch).length === 0) throw new Error('No scenario changes were provided.');
         update(index, patch);
-        toast({ title: 'Scenario updated', description: `Applied Copilot changes to ${scenarioId}.` });
-      });
+        toast({
+          title: 'Scenario updated',
+          description: `Applied Copilot changes to ${scenarioId}.`
+        });
+      }
+    );
 
-      const unregisterPreview = registerGlobalCopilotAction('preview_scenario', async (arguments_) => {
+    const unregisterPreview = registerGlobalCopilotAction(
+      'preview_scenario',
+      async (arguments_) => {
         const scenarioId = typeof arguments_.scenarioId === 'string' ? arguments_.scenarioId : '';
         const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
         if (!scenario) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
         const requestedAgent = typeof arguments_.agentId === 'string' ? arguments_.agentId : '';
-        const selectedAgentName = requestedAgent || defaultAssistantAgentName || agents[0]?.id || '';
-        if (!selectedAgentName) throw new Error('Select an agent before running a scenario preview.');
+        const selectedAgentName =
+          requestedAgent || defaultAssistantAgentName || agents[0]?.id || '';
+        if (!selectedAgentName)
+          throw new Error('Select an agent before running a scenario preview.');
         const oauthServerIds = scenario.serverIds.filter((serverId) =>
           servers.some((server) => server.id === serverId && server.authType === 'oauth2')
         );
@@ -316,15 +258,14 @@ export function ScenarioForm({
           failureReasons: preview.run.failureReasons,
           checkResults: preview.run.checkResults
         };
-      });
+      }
+    );
 
-      return () => {
-        unregisterPatch();
-        unregisterPreview();
-      };
-    },
-    [agents, defaultAssistantAgentName, onChange, readOnly, scenarios, servers, source]
-  );
+    return () => {
+      unregisterPatch();
+      unregisterPreview();
+    };
+  }, [agents, defaultAssistantAgentName, onChange, readOnly, scenarios, servers, source]);
 
   return (
     <div className={readOnly ? 'space-y-2' : 'space-y-4'}>

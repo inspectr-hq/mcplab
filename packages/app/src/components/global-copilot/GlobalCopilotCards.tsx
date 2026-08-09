@@ -58,6 +58,7 @@ export function ScenarioSuggestionCard({
   respond?: Respond;
 }) {
   const [applied, setApplied] = useState<string[]>([]);
+  const [inFlight, setInFlight] = useState<Set<string>>(new Set());
   const scenarioId = typeof args.scenarioId === 'string' ? args.scenarioId : '';
   const prompt = typeof args.prompt === 'string' ? args.prompt : undefined;
   const evalRules = Array.isArray(args.evalRules) ? args.evalRules.filter(isRecord) : undefined;
@@ -66,6 +67,8 @@ export function ScenarioSuggestionCard({
     : undefined;
   const rationale = typeof args.rationale === 'string' ? args.rationale : undefined;
   const apply = async (field: 'prompt' | 'evalRules' | 'extractRules', value: unknown) => {
+    if (inFlight.has(field)) return;
+    setInFlight((current) => new Set(current).add(field));
     try {
       await invokeGlobalCopilotAction('apply_scenario_patch', { scenarioId, [field]: value });
       setApplied((current) => (current.includes(field) ? current : [...current, field]));
@@ -75,6 +78,12 @@ export function ScenarioSuggestionCard({
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
+    } finally {
+      setInFlight((current) => {
+        const next = new Set(current);
+        next.delete(field);
+        return next;
+      });
     }
   };
   const applyRules = async (
@@ -83,6 +92,9 @@ export function ScenarioSuggestionCard({
     mode: 'append' | 'replace',
     key?: string
   ) => {
+    const actionKey = key ?? field;
+    if (inFlight.has(actionKey)) return false;
+    setInFlight((current) => new Set(current).add(actionKey));
     try {
       await invokeGlobalCopilotAction('apply_scenario_patch', {
         scenarioId,
@@ -91,11 +103,19 @@ export function ScenarioSuggestionCard({
       });
       if (key) setApplied((current) => (current.includes(key) ? current : [...current, key]));
       else setApplied((current) => (current.includes(field) ? current : [...current, field]));
+      return true;
     } catch (error: unknown) {
       toast({
         title: 'Could not apply suggestion',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
+      });
+      return false;
+    } finally {
+      setInFlight((current) => {
+        const next = new Set(current);
+        next.delete(actionKey);
+        return next;
       });
     }
   };
@@ -120,10 +140,10 @@ export function ScenarioSuggestionCard({
             onApplySelected={(rules) => void applyRules('evalRules', rules, 'append')}
             onReplaceSelected={(rules) => void applyRules('evalRules', rules, 'replace')}
             onApplyOne={(rule, index) =>
-              void applyRules('evalRules', [rule], 'append', `evalRules:add:${index}`)
+              applyRules('evalRules', [rule], 'append', `evalRules:add:${index}`)
             }
             onReplaceOne={(rule, index) =>
-              void applyRules('evalRules', [rule], 'replace', `evalRules:replace:${index}`)
+              applyRules('evalRules', [rule], 'replace', `evalRules:replace:${index}`)
             }
           />
         )}
@@ -135,10 +155,10 @@ export function ScenarioSuggestionCard({
             onApplySelected={(rules) => void applyRules('extractRules', rules, 'append')}
             onReplaceSelected={(rules) => void applyRules('extractRules', rules, 'replace')}
             onApplyOne={(rule, index) =>
-              void applyRules('extractRules', [rule], 'append', `extractRules:add:${index}`)
+              applyRules('extractRules', [rule], 'append', `extractRules:add:${index}`)
             }
             onReplaceOne={(rule, index) =>
-              void applyRules('extractRules', [rule], 'replace', `extractRules:replace:${index}`)
+              applyRules('extractRules', [rule], 'replace', `extractRules:replace:${index}`)
             }
           />
         )}
@@ -185,13 +205,14 @@ function RuleSuggestionSection({
   applied: boolean;
   onApplySelected: (rules: Record<string, unknown>[]) => void;
   onReplaceSelected: (rules: Record<string, unknown>[]) => void;
-  onApplyOne: (rule: Record<string, unknown>, index: number) => void;
-  onReplaceOne: (rule: Record<string, unknown>, index: number) => void;
+  onApplyOne: (rule: Record<string, unknown>, index: number) => Promise<boolean> | void;
+  onReplaceOne: (rule: Record<string, unknown>, index: number) => Promise<boolean> | void;
 }) {
   const [selectedIndexes, setSelectedIndexes] = useState(
     () => new Set(rules.map((_, index) => index))
   );
   const [itemActions, setItemActions] = useState<Set<string>>(new Set());
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
   const selectedRules = rules.filter((_, index) => selectedIndexes.has(index));
   const allSelected = selectedIndexes.size === rules.length;
   return (
@@ -250,11 +271,22 @@ function RuleSuggestionSection({
                   size="sm"
                   variant="outline"
                   className="h-7 px-2 text-[11px]"
-                  disabled={applied || itemActions.has(addKey)}
+                  disabled={applied || itemActions.has(addKey) || pendingActions.has(addKey)}
                   aria-label={`Add ${item} ${index + 1}`}
                   onClick={() => {
-                    onApplyOne(rule, index);
-                    setItemActions((current) => new Set(current).add(addKey));
+                    setPendingActions((current) => new Set(current).add(addKey));
+                    void Promise.resolve(onApplyOne(rule, index))
+                      .then((succeeded) => {
+                        if (succeeded !== false)
+                          setItemActions((current) => new Set(current).add(addKey));
+                      })
+                      .finally(() =>
+                        setPendingActions((current) => {
+                          const next = new Set(current);
+                          next.delete(addKey);
+                          return next;
+                        })
+                      );
                   }}
                 >
                   {itemActions.has(addKey) ? 'Added' : 'Add'}
@@ -263,11 +295,24 @@ function RuleSuggestionSection({
                   size="sm"
                   variant="outline"
                   className="h-7 px-2 text-[11px]"
-                  disabled={applied || itemActions.has(replaceKey)}
+                  disabled={
+                    applied || itemActions.has(replaceKey) || pendingActions.has(replaceKey)
+                  }
                   aria-label={`Replace with ${item} ${index + 1}`}
                   onClick={() => {
-                    onReplaceOne(rule, index);
-                    setItemActions((current) => new Set(current).add(replaceKey));
+                    setPendingActions((current) => new Set(current).add(replaceKey));
+                    void Promise.resolve(onReplaceOne(rule, index))
+                      .then((succeeded) => {
+                        if (succeeded !== false)
+                          setItemActions((current) => new Set(current).add(replaceKey));
+                      })
+                      .finally(() =>
+                        setPendingActions((current) => {
+                          const next = new Set(current);
+                          next.delete(replaceKey);
+                          return next;
+                        })
+                      );
                   }}
                 >
                   {itemActions.has(replaceKey) ? 'Replaced' : 'Replace'}
@@ -366,12 +411,13 @@ export function ScenarioDraftCard({
       });
       await respond({ approved: true, result });
     } catch (error: unknown) {
-      setCreating(false);
       toast({
         title: 'Could not create Test Case',
         description: error instanceof Error ? error.message : String(error),
         variant: 'destructive'
       });
+    } finally {
+      setCreating(false);
     }
   };
   return (

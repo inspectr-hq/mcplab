@@ -4,6 +4,10 @@ import { toast } from '@/hooks/use-toast';
 import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import {
+  normalizeCopilotEvalRules,
+  validateCopilotExtractRules
+} from '@/lib/global-copilot-validation';
+import {
   prepareWorkspaceEvaluationRun,
   submitWorkspaceEvaluationRun
 } from '@/lib/workspace-evaluation-run';
@@ -111,8 +115,8 @@ export function useGlobalCopilotActions({
         const requestedServers = Array.isArray(arguments_.servers)
           ? arguments_.servers.filter((item): item is string => typeof item === 'string')
           : [];
-        const evalRules = Array.isArray(arguments_.evalRules) ? arguments_.evalRules : [];
-        const extractRules = Array.isArray(arguments_.extractRules) ? arguments_.extractRules : [];
+        const evalRules = normalizeCopilotEvalRules(arguments_.evalRules ?? []);
+        const extractRules = validateCopilotExtractRules(arguments_.extractRules ?? []);
         const libraries = await source.getLibraries();
         const servers = requestedServers.map((serverId) =>
           serverId === 'mcplab' &&
@@ -130,8 +134,8 @@ export function useGlobalCopilotActions({
         const updatedLibraries = await source.getLibraries();
         const created = updatedLibraries.scenarios.find((scenario) => scenario.id === id);
         if (!created) throw new Error(`Created Test Case '${id}' could not be reloaded.`);
-        created.evalRules = evalRules as typeof created.evalRules;
-        created.extractRules = extractRules as typeof created.extractRules;
+        created.evalRules = evalRules;
+        created.extractRules = extractRules;
         await source.saveLibraries(updatedLibraries);
         navigate(`/libraries/test-cases/${encodeURIComponent(id)}`);
         toast({ title: 'Test Case created', description: `Created ${id} in Test Cases.` });
