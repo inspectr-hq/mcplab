@@ -5,10 +5,10 @@ Map user goals to reliable starting points.
 ## Goal -> Starting Point
 
 - "I need a baseline config to start from."
-  Use the minimal template from `references/config-recipes.md` and tailor IDs/URLs.
+  Use skill `mcplab-test-case-authoring` for config authoring guidance.
 
 - "I need OAuth auth."
-  Use the OAuth client credentials snippet in `references/config-recipes.md`.
+  Use skill `mcplab-test-case-authoring` for auth config guidance.
 
 - "I need to compare models."
   Start with one scenario and run `mcplab run -c <config> --agents <id1,id2>`.
@@ -20,7 +20,7 @@ Map user goals to reliable starting points.
   Use `mcplab run -c <directory>/` to run all `.yaml`/`.yml` files recursively. Add `--bail` to stop on first failure. See `references/cli-recipes.md` Batch Runs section.
 
 - "I need examples for assertions."
-  Use `references/config-recipes.md` section `eval` and provide copy-ready snippets for tool constraints, tool sequences, and all response assertion types.
+  Use skill `mcplab-test-case-authoring` for copy-ready snippets covering tool constraints, tool sequences, and all response assertion types (`eval` section).
 
 ## Selection Heuristic
 

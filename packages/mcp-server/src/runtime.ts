@@ -53,6 +53,7 @@ import {
   buildCompareRunsReport,
   type LoadedRunResult
 } from './mcp-run-calculations.js';
+import { loadSkills, readSkillFile, registerSkills } from './skills.js';
 
 const PACKAGE_JSON = JSON.parse(
   readFileSync(new URL('../package.json', import.meta.url), 'utf8')
@@ -715,6 +716,7 @@ export function createConfiguredServer(): McpServer {
   });
   registerTools(server);
   registerPrompts(server);
+  registerSkills(server);
   return server;
 }
 
@@ -2670,6 +2672,64 @@ export function registerTools(server: McpServer): void {
         return ok(`Loaded context for run ${resolvedRunId} scenario ${scenario_id}.`, {
           ...result
         });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_list_skills',
+    {
+      description:
+        'List MCPLab skills bundled with this MCP server (agent skill instructions for authoring, running, or troubleshooting evaluations). Use mcplab_get_skill to fetch a specific file.',
+      annotations: { readOnlyHint: true },
+      outputSchema: {
+        skills: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            files: z.array(z.string())
+          })
+        )
+      },
+      inputSchema: {}
+    },
+    async () => {
+      return withToolHandling(() => {
+        const skills = loadSkills();
+        const structured = skills.map((skill) => ({
+          name: skill.name,
+          description: skill.description,
+          files: skill.files
+        }));
+        return ok(`Found ${structured.length} MCPLab skill(s)`, { skills: structured });
+      });
+    }
+  );
+
+  registerTool(
+    'mcplab_get_skill',
+    {
+      description:
+        "Get the text content of one file from a MCPLab skill bundled with this MCP server. Defaults to the skill's SKILL.md instructions. Use mcplab_list_skills first to discover skill names and file paths.",
+      annotations: { readOnlyHint: true },
+      outputSchema: {
+        name: z.string(),
+        file: z.string(),
+        content: z.string()
+      },
+      inputSchema: {
+        name: z.string().describe('Skill name, from mcplab_list_skills.'),
+        file: z
+          .string()
+          .optional()
+          .describe('Relative file path within the skill. Defaults to SKILL.md.')
+      }
+    },
+    async ({ name, file }) => {
+      return withToolHandling(() => {
+        const targetFile = file ?? 'SKILL.md';
+        const content = readSkillFile(name, targetFile);
+        return ok(`Read ${name}/${targetFile}`, { name, file: targetFile, content });
       });
     }
   );

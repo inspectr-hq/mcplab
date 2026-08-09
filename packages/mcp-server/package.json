@@ -47,7 +47,7 @@
     "mcplab-mcp-server": "dist/index.js"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -b --force",
+    "build": "rm -rf dist && tsc -b --force && node ../../scripts/copy-mcp-server-skills.mjs",
     "test": "vitest run src --pool=forks --no-file-parallelism"
   },
   "devDependencies": {

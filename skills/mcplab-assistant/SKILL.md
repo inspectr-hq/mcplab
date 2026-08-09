@@ -1,31 +1,29 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and execution workflows. Use when users need help writing or debugging MCPLab eval YAML, running scenarios (prefer MCP tool `mcplab_run_eval` when available; CLI fallback `mcplab run/app/report/results`), troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab execution and analysis workflows. Use when users need help running scenarios (prefer MCP tool `mcplab_run_eval` when available; CLI fallback `mcplab run/app/report/results`), troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`. For creating or editing Test Cases and evaluation config YAML, use skill `mcplab-test-case-authoring` instead.
 ---
 
 # MCPLab Assistant
 
 ## Overview
 
-Use this skill to operate MCPLab evaluations end-to-end: create or update configs, run scenarios, diagnose failures, and analyze outputs.
+Use this skill to operate MCPLab evaluations end-to-end: run scenarios, diagnose failures, and analyze outputs.
 Stay in operator scope only. Do not include repository build/setup instructions.
 
 ## Execution Policy
 
 1. When MCP tools are available, execute scenarios with `mcplab_run_eval` first.
 2. Use CLI commands (`mcplab run`) as fallback when MCP tool execution is unavailable.
-3. Keep config authoring and validation in MCP flow when possible (`mcplab_generate_*`, `mcplab_validate_config`).
 
 ## Workflow Router
 
 1. Classify the request:
-- Config authoring/edits -> follow "Config Workflow".
+- Config authoring/edits -> use skill `mcplab-test-case-authoring` instead.
 - Command execution/help -> follow "CLI Workflow".
 - Failure/debugging -> follow "Troubleshooting Workflow".
 - Results interpretation/comparison -> follow "Output Analysis Workflow".
 
 2. Load only needed references:
-- Config patterns: `references/config-recipes.md`
 - Command patterns: `references/cli-recipes.md`
 - Error diagnosis: `references/troubleshooting.md`
 - Example selection: `references/examples-map.md`
@@ -34,29 +32,12 @@ Stay in operator scope only. Do not include repository build/setup instructions.
 
 Always structure responses in this order when helping with MCPLab operations:
 
-1. `Intent`: one line stating what is being done (configing, running, debugging, analysis).
-2. `Actions`: exact commands or config edits to apply.
+1. `Intent`: one line stating what is being done (running, debugging, analysis).
+2. `Actions`: exact commands or corrective config fixes to apply.
 3. `Verification`: how to confirm success (expected files, output lines, or pass metrics).
 4. `If It Fails`: the next diagnostic step and exact artifact to inspect.
 
 Use concrete file paths and command lines. Avoid generic advice.
-
-## LLM Configuration Assistant Mode
-
-When the request is about creating or editing MCPLab config, the assistant must:
-
-1. Ask for only missing critical inputs:
-- MCP endpoint URL(s)
-- target agent/model(s)
-- scenario intent
-- auth mode (`bearer`, `oauth_client_credentials`, or `oauth_authorization_code`)
-2. Produce a minimal valid config first (single scenario), then optional expansions.
-3. Return copy-ready YAML plus one verification command (`mcplab run -c ...`).
-4. Include a short validation checklist:
-- schema shape valid
-- env var names present (never values)
-- scenario references resolve
-5. If user provides a broken config, return the smallest patch instead of full rewrites.
 
 ## LLM Report Analysis Mode
 
@@ -82,24 +63,6 @@ When the request is about analyzing results, the assistant must:
 - median/typical latency
 - scenario-level win/loss notes
 5. Always reference exact artifact paths and scenario IDs in findings.
-
-## Config Workflow
-
-1. Start from the smallest valid skeleton (`agents`, `scenarios`).
-2. Add explicit scenario MCP connectivity with `scenarios[].mcp_servers` entries (`ref` or inline server object).
-3. Add one working agent, then add variants if needed.
-4. Add scenarios with:
-- unique kebab-case `id`
-- optional `agent` key when scenario should pin to one model
-- at least one `servers` entry (labels available to the scenario)
-- `prompt`
-5. For reusable test-cases across environments, prefer referenced scenario overlays:
-- `scenarios: [{ ref: "<test-case-id>", mcp_servers: [{ ref: "<env-server-id>" }] }]`
-- This keeps prompt/eval in library test-case and swaps only MCP target per eval.
-6. Add optional `eval` and `extract` blocks after baseline run succeeds.
-7. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
-8. Validate references and shape against `config-schema.json`.
-9. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
 
@@ -161,20 +124,9 @@ When a user asks about analyzing results in the UI, clarify which scope applies:
 ## Source Of Truth
 
 - CLI contract: `packages/cli/src/cli.ts`
-- Config schema: `config-schema.json`
 - Usage examples: `README.md`
 
 ## Concrete Request Patterns
-
-### Pattern 1: OAuth Config Request
-
-User request:
-"Help me write mcplab eval YAML with OAuth auth."
-
-Assistant behavior:
-1. Provide minimal valid YAML with `agents`, `scenarios`, and scenario-scoped `mcp_servers`.
-2. Use `auth.type: oauth_client_credentials` with `token_url`, `client_id_env`, and `client_secret_env`.
-3. List required env var names and provide one `mcplab run -c ...` verification command.
 
 ### Pattern 2: CLI Comparison Request
 
