@@ -57,6 +57,34 @@ describe('createGlobalCopilotMcpTool', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('accumulates automatic reads when the dynamic tool set is rebuilt', async () => {
+    const execute = vi.fn().mockResolvedValue({ runs: [] });
+    const suspend = vi.fn().mockResolvedValue(undefined);
+    const budget: GlobalCopilotReadBudget = { used: 0, batchSize: 5 };
+    const createRead = () =>
+      createGlobalCopilotMcpTool({
+        definition,
+        serverName: 'mcplab',
+        toolName: definition.name,
+        approval: 'automatic',
+        budget,
+        execute
+      });
+
+    for (let index = 0; index < 4; index += 1) {
+      await createRead().execute?.({}, { agent: { suspend } } as any);
+    }
+    await createRead().execute?.({}, { agent: { suspend } } as any);
+    expect(budget.used).toBe(5);
+
+    await createRead().execute?.({}, { agent: { suspend } } as any);
+    expect(suspend).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'continue_reading', batchSize: 5 }),
+      undefined
+    );
+    expect(execute).toHaveBeenCalledTimes(5);
+  });
+
   it('requires approval before executing a protected MCP tool', async () => {
     const execute = vi.fn().mockResolvedValue({ ok: true });
     const suspend = vi.fn().mockResolvedValue(undefined);

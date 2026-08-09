@@ -23,6 +23,42 @@ export type GlobalCopilotReadBudget = {
 
 type GlobalCopilotApprovalMode = 'automatic' | 'confirmation';
 
+export class GlobalCopilotMcpConnectionPool {
+  private readonly manager = new McpClientManager();
+  private readonly connected = new Map<string, string>();
+
+  private configKey(server: ServerConfig): string {
+    return JSON.stringify(server);
+  }
+
+  async ensureConnected(serverName: string, server: ServerConfig): Promise<void> {
+    const key = this.configKey(server);
+    if (this.connected.get(serverName) === key) return;
+    await this.manager.connectAll({ [serverName]: server });
+    this.connected.set(serverName, key);
+  }
+
+  async listTools(serverName: string, server: ServerConfig): Promise<ToolDef[]> {
+    await this.ensureConnected(serverName, server);
+    return this.manager.listTools(serverName);
+  }
+
+  async callTool(
+    serverName: string,
+    server: ServerConfig,
+    toolName: string,
+    arguments_: Record<string, unknown>
+  ): Promise<unknown> {
+    await this.ensureConnected(serverName, server);
+    return this.manager.callTool(serverName, toolName, arguments_);
+  }
+
+  async close(): Promise<void> {
+    this.connected.clear();
+    await this.manager.disconnectAll().catch(() => undefined);
+  }
+}
+
 const approvalResumeSchema = z
   .object({ approved: z.boolean() })
   .strict();
@@ -82,8 +118,10 @@ export function createGlobalCopilotMcpTool(params: {
 
 async function discoverServerTools(
   serverName: string,
-  server: ServerConfig
+  server: ServerConfig,
+  pool?: GlobalCopilotMcpConnectionPool
 ): Promise<ToolDef[]> {
+  if (pool) return pool.listTools(serverName, server);
   const mcp = new McpClientManager();
   try {
     await mcp.connectAll({ [serverName]: server });
@@ -98,7 +136,23 @@ async function executeRevalidatedMcpTool(params: {
   server: ServerConfig;
   toolName: string;
   arguments_: Record<string, unknown>;
+  pool?: GlobalCopilotMcpConnectionPool;
 }): Promise<unknown> {
+  if (params.pool) {
+    const known = (await params.pool.listTools(params.serverName, params.server)).some(
+      (tool) => tool.name === params.toolName
+    );
+    if (!known) throw new Error(`MCP tool '${params.toolName}' is no longer available.`);
+    const result = await params.pool.callTool(
+      params.serverName,
+      params.server,
+      params.toolName,
+      params.arguments_
+    );
+    const toolError = globalCopilotMcpToolErrorMessage(result);
+    if (toolError) throw new Error(toolError);
+    return truncateJson(result, 4000);
+  }
   const mcp = new McpClientManager();
   try {
     await mcp.connectAll({ [params.serverName]: params.server });
@@ -118,6 +172,8 @@ async function executeRevalidatedMcpTool(params: {
 export async function buildGlobalCopilotMastraTools(params: {
   settings: AppSettings;
   context: any;
+  budget?: GlobalCopilotReadBudget;
+  pool?: GlobalCopilotMcpConnectionPool;
 }): Promise<Record<string, ReturnType<typeof createGlobalCopilotMcpTool>>> {
   const libraries = readLibraries(params.settings.librariesDir);
   const activeTestCaseId =
@@ -129,13 +185,13 @@ export async function buildGlobalCopilotMastraTools(params: {
     ...globalCopilotExternalServers(libraries, activeTestCaseId)
   };
   const usedNames = new Set<string>();
-  const budget: GlobalCopilotReadBudget = { used: 0, batchSize: 5 };
+  const budget = params.budget ?? { used: 0, batchSize: 5 };
   const tools: Record<string, ReturnType<typeof createGlobalCopilotMcpTool>> = {};
 
   for (const [serverName, server] of Object.entries(servers)) {
     let definitions: ToolDef[];
     try {
-      definitions = await discoverServerTools(serverName, server);
+      definitions = await discoverServerTools(serverName, server, params.pool);
     } catch {
       continue;
     }
@@ -160,13 +216,14 @@ export async function buildGlobalCopilotMastraTools(params: {
         toolName: definition.name,
         approval: policy.automatic ? 'automatic' : 'confirmation',
         budget,
-        execute: (arguments_) =>
-          executeRevalidatedMcpTool({
-            serverName,
-            server,
-            toolName: definition.name,
-            arguments_: arguments_
-          })
+          execute: (arguments_) =>
+            executeRevalidatedMcpTool({
+              serverName,
+              server,
+              toolName: definition.name,
+              arguments_: arguments_,
+              pool: params.pool
+            })
       });
     }
   }

@@ -20,7 +20,11 @@ import {
   selectGlobalCopilotAgentName
 } from './global-copilot-domain.js';
 import type { AppSettings } from './types.js';
-import { buildGlobalCopilotMastraTools } from './global-copilot-mastra-tools.js';
+import {
+  buildGlobalCopilotMastraTools,
+  GlobalCopilotMcpConnectionPool,
+  type GlobalCopilotReadBudget
+} from './global-copilot-mastra-tools.js';
 import { getGlobalCopilotMemoryRuntime } from './global-copilot-memory.js';
 
 export const GLOBAL_COPILOT_AGENT_ID = 'mcplab-global-copilot';
@@ -209,8 +213,10 @@ export async function handleGlobalCopilotKit(params: {
     });
     return;
   }
+  const connectionPool = new GlobalCopilotMcpConnectionPool();
   try {
     const memoryRuntime = await getGlobalCopilotMemoryRuntime(params.settings.workspaceRoot);
+    const readBudget: GlobalCopilotReadBudget = { used: 0, batchSize: 5 };
     const agent = createGlobalCopilotMastraAgent({
       agentConfig,
       resourceId: globalCopilotWorkspaceResourceId(params.settings.workspaceRoot),
@@ -218,7 +224,12 @@ export async function handleGlobalCopilotKit(params: {
       storage: memoryRuntime.storage,
       tools: async ({ requestContext }: any) => {
         const context = globalCopilotContextFromAgUi(requestContext?.get?.('ag-ui')?.context);
-        return buildGlobalCopilotMastraTools({ settings: params.settings, context });
+        return buildGlobalCopilotMastraTools({
+          settings: params.settings,
+          context,
+          budget: readBudget,
+          pool: connectionPool
+        });
       },
       instructions: ({ requestContext }) => {
         const context = globalCopilotContextFromAgUi(requestContext?.get?.('ag-ui')?.context);
@@ -239,5 +250,7 @@ export async function handleGlobalCopilotKit(params: {
     params.asJson(params.res, 500, {
       error: error instanceof Error ? error.message : String(error)
     });
+  } finally {
+    await connectionPool.close();
   }
 }
