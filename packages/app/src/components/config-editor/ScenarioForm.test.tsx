@@ -133,6 +133,24 @@ describe('ScenarioForm checks editor', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('publishes available preview agents in Copilot scenario context', async () => {
+    const { globalCopilotPageContext } = await import('@/lib/global-copilot-page-context');
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[{ id: 'agent-1', name: 'Agent 1' } as AgentConfig]}
+        servers={[]}
+        defaultAssistantAgentName="agent-1"
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(globalCopilotPageContext().scenarioEditor).toMatchObject({
+      agents: [{ id: 'agent-1', name: 'Agent 1' }],
+      defaultAgentId: 'agent-1'
+    });
+  });
+
   it('runs a confirmed Copilot scenario preview with OAuth preflight', async () => {
     const scenario = { ...baseScenario(), serverIds: ['oauth-server'] };
     const preview = {

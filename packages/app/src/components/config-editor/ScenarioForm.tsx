@@ -205,6 +205,8 @@ export function ScenarioForm({
     const scenarioEditor = {
       configId,
       configPath,
+      agents: agents.map((agent) => ({ id: agent.id, name: agent.name })),
+      defaultAgentId: defaultAssistantAgentName || agents[0]?.id,
       scenarios: scenarios.map((scenario) => ({
         id: scenario.id,
         name: scenario.name,
@@ -222,7 +224,7 @@ export function ScenarioForm({
         clearGlobalCopilotPageContext();
       }
     };
-  }, [configId, configPath, readOnly, scenarios]);
+  }, [agents, configId, configPath, defaultAssistantAgentName, readOnly, scenarios]);
 
   useEffect(
     () => {

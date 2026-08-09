@@ -44,6 +44,8 @@ describe('globalCopilotPageContext', () => {
   it('forwards scenario editor context on configuration and test-case editor routes', () => {
     const scenarioEditor = {
       configId: 'cfg-1',
+      agents: [{ id: 'agent-1', name: 'Agent 1' }],
+      defaultAgentId: 'agent-1',
       scenarios: [
         {
           id: 'scn-1',

@@ -2,6 +2,8 @@ export type GlobalCopilotPageContext = {
   scenarioEditor?: {
     configId?: string;
     configPath?: string;
+    agents: Array<{ id: string; name?: string }>;
+    defaultAgentId?: string;
     scenarios: Array<{
       id: string;
       name?: string;
