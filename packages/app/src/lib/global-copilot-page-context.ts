@@ -16,6 +16,7 @@ export type GlobalCopilotPageContext = {
   testCases?: {
     serverFilter: string;
     searchQuery?: string;
+    availableServerIds?: string[];
     visibleCount: number;
     totalCount: number;
   };

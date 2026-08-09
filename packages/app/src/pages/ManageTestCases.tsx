@@ -278,6 +278,7 @@ const ManageTestCases = () => {
       testCases: {
         serverFilter,
         ...(query.trim() ? { searchQuery: query.trim() } : {}),
+        availableServerIds: servers.map((server) => server.id),
         visibleCount: filteredScenarios.length,
         totalCount: scenarios.length
       }

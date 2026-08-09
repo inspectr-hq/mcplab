@@ -149,18 +149,25 @@ function GlobalCopilotControllerInner() {
         const id = typeof arguments_.id === 'string' ? arguments_.id.trim() : '';
         const prompt = typeof arguments_.prompt === 'string' ? arguments_.prompt : '';
         if (!id || !prompt) throw new Error('A draft Test Case requires an id and prompt.');
-        const servers = Array.isArray(arguments_.servers)
+        const requestedServers = Array.isArray(arguments_.servers)
           ? arguments_.servers.filter((item): item is string => typeof item === 'string')
           : [];
         const evalRules = Array.isArray(arguments_.evalRules) ? arguments_.evalRules : [];
         const extractRules = Array.isArray(arguments_.extractRules) ? arguments_.extractRules : [];
-        await source.createTestCase({ id, name: typeof arguments_.name === 'string' ? arguments_.name : undefined, servers, prompt });
         const libraries = await source.getLibraries();
-        const created = libraries.scenarios.find((scenario) => scenario.id === id);
+        const servers = requestedServers.map((serverId) => {
+          if (serverId !== 'mcplab' || libraries.servers.some((server) => server.id === 'mcplab')) {
+            return serverId;
+          }
+          return libraries.servers.some((server) => server.id === 'mcp-lab') ? 'mcp-lab' : serverId;
+        });
+        await source.createTestCase({ id, name: typeof arguments_.name === 'string' ? arguments_.name : undefined, servers, prompt });
+        const updatedLibraries = await source.getLibraries();
+        const created = updatedLibraries.scenarios.find((scenario) => scenario.id === id);
         if (!created) throw new Error(`Created Test Case '${id}' could not be reloaded.`);
         created.evalRules = evalRules as typeof created.evalRules;
         created.extractRules = extractRules as typeof created.extractRules;
-        await source.saveLibraries(libraries);
+        await source.saveLibraries(updatedLibraries);
         navigate(`/libraries/test-cases/${encodeURIComponent(id)}`);
         toast({ title: 'Test Case created', description: `Created ${id} in Test Cases.` });
         return { id };
