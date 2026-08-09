@@ -148,8 +148,14 @@ function GlobalCopilotControllerInner() {
     selectThread,
     renameThread,
     deleteThread,
-    newThread
+    newThread,
+    threadError
   } = useGlobalCopilotThread(source);
+
+  useEffect(() => {
+    if (!threadError) return;
+    toast({ title: 'Could not open conversation', description: threadError, variant: 'destructive' });
+  }, [threadError]);
   const appContext = useMemo(
     () => ({
       ...globalCopilotRouteContext(location.pathname, location.search),

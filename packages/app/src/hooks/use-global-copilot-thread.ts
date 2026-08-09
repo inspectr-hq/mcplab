@@ -96,6 +96,7 @@ export function useGlobalCopilotThread(source: DataSource) {
   const [workspaceKey, setWorkspaceKey] = useState<string>();
   const [threads, setThreads] = useState<GlobalCopilotThread[]>([]);
   const [thread, setThread] = useState<GlobalCopilotThread>();
+  const [threadError, setThreadError] = useState<string>();
   const selectionRequest = useRef(0);
 
   const loadThread = useCallback(async (record: ThreadRecord, key: string) => {
@@ -147,9 +148,17 @@ export function useGlobalCopilotThread(source: DataSource) {
       const selected = next.find((item) => item.id === activeId) ?? next[0];
       if (selected) {
         const request = ++selectionRequest.current;
-        const loaded = await loadThread(selected, key);
-        if (request === selectionRequest.current) setThread(loaded);
+        try {
+          const loaded = await loadThread(selected, key);
+          if (request === selectionRequest.current) setThread(loaded);
+        } catch (error: unknown) {
+          if (request === selectionRequest.current) {
+            setThreadError(error instanceof Error ? error.message : String(error));
+          }
+        }
       }
+    }).catch((error: unknown) => {
+      setThreadError(error instanceof Error ? error.message : String(error));
     });
   }, [loadThread, refresh, source]);
 
@@ -158,9 +167,16 @@ export function useGlobalCopilotThread(source: DataSource) {
       if (!workspaceKey) return;
       window.localStorage.setItem(activePreferenceKey(workspaceKey), next.id);
       const request = ++selectionRequest.current;
-      void loadThread(next, workspaceKey).then((loaded) => {
-        if (request === selectionRequest.current) setThread(loaded);
-      });
+      setThreadError(undefined);
+      void loadThread(next, workspaceKey)
+        .then((loaded) => {
+          if (request === selectionRequest.current) setThread(loaded);
+        })
+        .catch((error: unknown) => {
+          if (request === selectionRequest.current) {
+            setThreadError(error instanceof Error ? error.message : String(error));
+          }
+        });
     },
     [loadThread, workspaceKey]
   );
@@ -238,6 +254,7 @@ export function useGlobalCopilotThread(source: DataSource) {
     workspaceKey,
     threads,
     thread,
+    threadError,
     setThread,
     refresh,
     selectThread,
