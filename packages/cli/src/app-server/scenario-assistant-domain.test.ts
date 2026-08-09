@@ -3,6 +3,7 @@ import type { AgentConfig } from '@inspectr/mcplab-core';
 import {
   continueAssistantTurn,
   normalizeScenarioAssistantEvalRules,
+  parseAssistantModelOutput,
   type ScenarioAssistantSession
 } from './scenario-assistant-domain.js';
 
@@ -303,5 +304,23 @@ describe('continueAssistantTurn normalization integration', () => {
       { type: 'response_contains', value: 'refund processed' },
       { type: 'response_jsonpath_exists', path: '$.count' }
     ]);
+  });
+});
+
+describe('parseAssistantModelOutput', () => {
+  it('recovers assistant messages wrapped in a provider-specific envelope type', () => {
+    expect(parseAssistantModelOutput(JSON.stringify({ type: 'final', text: 'Ready', suggestions: {} }))).toEqual({
+      type: 'assistant_message',
+      text: 'Ready',
+      suggestions: {}
+    });
+  });
+
+  it('recovers tool calls wrapped in a provider-specific envelope type', () => {
+    expect(
+      parseAssistantModelOutput(
+        JSON.stringify({ type: 'message', text: 'Checking', toolCall: { name: 'srv__tool', arguments: {} } })
+      )
+    ).toMatchObject({ type: 'tool_call_request', text: 'Checking' });
   });
 });

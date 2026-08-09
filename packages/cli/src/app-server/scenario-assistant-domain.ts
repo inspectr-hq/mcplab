@@ -585,7 +585,7 @@ function normalizeEvalRuleSuggestions(
   );
 }
 
-function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
+export function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   const cleaned = text.trim();
   let parsed: unknown;
   try {
@@ -602,9 +602,20 @@ function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Assistant response must be a JSON object');
   }
-  const parsedObj = parsed as Partial<ParsedAssistantModelOutput>;
+  const parsedObj = parsed as Partial<ParsedAssistantModelOutput> & {
+    toolCalls?: unknown;
+  };
   if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
-    throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
+    // Some providers occasionally preserve a generic envelope type (for example
+    // `message` or `final`) even though the payload already matches our protocol.
+    // Recover the protocol from its fields instead of failing the whole turn.
+    if (parsedObj.toolCall || Array.isArray(parsedObj.toolCalls)) {
+      parsedObj.type = 'tool_call_request';
+    } else if (typeof parsedObj.text === 'string') {
+      parsedObj.type = 'assistant_message';
+    } else {
+      throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
+    }
   }
   if (typeof parsedObj.text !== 'string') {
     throw new Error('Assistant response missing text');
