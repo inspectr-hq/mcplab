@@ -2,6 +2,7 @@ export type GlobalCopilotActionName =
   | 'start_evaluation_run'
   | 'queue_evaluation_run'
   | 'queue_evaluation_by_config'
+  | 'apply_scenario_patch'
   | 'start_tool_analysis'
   | 'duplicate_test_case'
   | 'create_test_case'
@@ -11,15 +12,29 @@ export type GlobalCopilotActionName =
 type RegisteredAction = (arguments_: Record<string, unknown>) => Promise<void> | void;
 
 const actions = new Map<GlobalCopilotActionName, RegisteredAction>();
+const listeners = new Set<() => void>();
+
+function notify() {
+  for (const listener of listeners) listener();
+}
 
 export function registerGlobalCopilotAction(
   name: GlobalCopilotActionName,
   action: RegisteredAction
 ): () => void {
   actions.set(name, action);
+  notify();
   return () => {
-    if (actions.get(name) === action) actions.delete(name);
+    if (actions.get(name) === action) {
+      actions.delete(name);
+      notify();
+    }
   };
+}
+
+export function subscribeGlobalCopilotActions(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function availableGlobalCopilotActions(): GlobalCopilotActionName[] {

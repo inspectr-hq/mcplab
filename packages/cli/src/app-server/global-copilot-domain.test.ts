@@ -85,4 +85,19 @@ describe('Global Copilot domain policy', () => {
     expect(Object.keys(globalCopilotExternalServers(libraries, 'weather-case'))).toEqual(['weather']);
     expect(globalCopilotExternalServers(libraries, undefined)).toEqual({});
   });
+
+  it('includes servers referenced by the scenario editor context', () => {
+    const libraries = {
+      servers: { weather: { transport: 'http', url: 'http://weather.test/mcp' } },
+      scenarios: []
+    } as any;
+
+    expect(
+      Object.keys(
+        globalCopilotExternalServers(libraries, undefined, {
+          scenarios: [{ serverIds: ['weather'] }]
+        })
+      )
+    ).toEqual(['weather']);
+  });
 });

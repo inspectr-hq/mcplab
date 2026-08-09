@@ -190,9 +190,10 @@ export async function buildGlobalCopilotMastraTools(params: {
     typeof params.context?.activeTestCaseId === 'string'
       ? params.context.activeTestCaseId
       : undefined;
+  const scenarioEditor = params.context?.scenarioEditor;
   const servers: Record<string, ServerConfig> = {
     mcplab: { transport: 'http', url: localMcplabMcpUrl() },
-    ...globalCopilotExternalServers(libraries, activeTestCaseId)
+    ...globalCopilotExternalServers(libraries, activeTestCaseId, scenarioEditor)
   };
   const usedNames = new Set<string>();
   const budget = params.budget ?? { used: 0, batchSize: 5 };

@@ -60,6 +60,7 @@ export function globalCopilotSystemPrompt(context: unknown): string {
     'Only navigate when the user explicitly asks to go, navigate, open, take them, switch to a view, or to show the Test Cases, MCP Servers, Agents, Tool Analysis, or OAuth Debugger view. Before calling open_test_case, always call mcplab_get_library_item with kind "test_cases" and the exact ID; never open a generated draft that has not been saved. Use open_result_detail with a run ID when the user explicitly asks to open one specific result; otherwise use navigate_to_view for supported views. For “open the last/latest evaluation run”, first call mcplab_list_runs to identify the run ID, then call open_result_detail. Do not use mcplab_build_app_link. For analysis questions, use MCP tools to answer instead of navigating.',
     'When the current context contains resultsFilter, call mcplab_list_runs with its ISO bounds before analyzing the current Results view.',
     'When the current context identifies the MCP Evaluations view and the user asks which evaluations are shown, call mcplab_list_evaluation_configs using its suiteFilter (without the suite: prefix), searchQuery, sortBy, and sortDirection before answering.',
+    'When scenarioEditor context is present, act as a Scenario Authoring Assistant. Use the current prompt, Checks, Value Capture Rules, and server IDs as authoritative. Use MCP tools to inspect live behavior when useful, and propose structured edits. Only apply edits through the confirmation-required apply_scenario_patch frontend action, preserving the scenarioId and changing only the requested fields.',
     'For an explicit request to run an evaluation, use queue_evaluation_by_config with the exact configId and optional agentIds, scenarioIds, runsPerScenario, serverOverrideAll, scenarioServerOverrides, and runNote. It is confirmation-required and uses the existing app OAuth preflight and queue lifecycle; use queue_evaluation_run only for the page-selected Run Evaluation state. Do not use mcplab_run_eval: that MCP tool is reserved for external MCP clients.',
     'When the user asks to create a Test Case, draft it first with mcplab_generate_scenario_entry, then request the confirmation-required create_test_case frontend action. Do not give manual filesystem instructions or call mcplab_create_test_case; that MCP tool is for external MCP clients. When the user asks to create an evaluation configuration, use mcplab_create_evaluation_config with a complete config object; it is confirmation-required and writes only to mcplab/evals/.',
     'Never claim that a write, evaluation run, or tool analysis job happened until its confirmed action succeeds.',
@@ -76,15 +77,26 @@ export function localMcplabMcpUrl(): string {
 
 export function globalCopilotExternalServers(
   libraries: ReturnType<typeof readLibraries>,
-  activeTestCaseId: string | undefined
+  activeTestCaseId: string | undefined,
+  scenarioEditor?: {
+    scenarios?: Array<{ serverIds?: string[]; mcp_servers?: unknown[]; servers?: unknown[] }>;
+  }
 ): Record<
   string,
   { transport: 'http'; url: string; headers?: Record<string, string>; auth?: unknown }
 > {
-  if (!activeTestCaseId) return {};
-  const scenario = libraries.scenarios.find((item: any) => item.id === activeTestCaseId) as any;
-  if (!scenario) return {};
-  const entries = scenario.mcp_servers ?? (scenario.servers ?? []).map((ref: string) => ({ ref }));
+  const scenario = activeTestCaseId
+    ? (libraries.scenarios.find((item: any) => item.id === activeTestCaseId) as any)
+    : undefined;
+  const editorEntries = (scenarioEditor?.scenarios ?? []).flatMap((item) =>
+    item.mcp_servers ?? item.servers ?? item.serverIds?.map((ref) => ({ ref })) ?? []
+  );
+  const entries = [
+    ...(scenario
+      ? scenario.mcp_servers ?? (scenario.servers ?? []).map((ref: string) => ({ ref }))
+      : []),
+    ...editorEntries
+  ];
   return entries.reduce((servers: Record<string, any>, entry: any) => {
     if (entry?.ref && libraries.servers[entry.ref])
       servers[entry.ref] = libraries.servers[entry.ref];

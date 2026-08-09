@@ -1,4 +1,16 @@
 export type GlobalCopilotPageContext = {
+  scenarioEditor?: {
+    configId?: string;
+    configPath?: string;
+    scenarios: Array<{
+      id: string;
+      name?: string;
+      prompt: string;
+      serverIds: string[];
+      evalRules: unknown[];
+      extractRules: unknown[];
+    }>;
+  };
   testCases?: {
     serverFilter: string;
     searchQuery?: string;
@@ -70,7 +82,14 @@ export function globalCopilotPageContextForPath(pathname: string): GlobalCopilot
     return currentContext.toolAnalysis ? { toolAnalysis: currentContext.toolAnalysis } : {};
   }
   if (pathname.startsWith('/libraries/test-cases')) {
-    return currentContext.testCases ? { testCases: currentContext.testCases } : {};
+    return pathname !== '/libraries/test-cases' && currentContext.scenarioEditor
+      ? { scenarioEditor: currentContext.scenarioEditor }
+      : currentContext.testCases
+        ? { testCases: currentContext.testCases }
+        : {};
+  }
+  if (pathname.startsWith('/mcp-evaluations/')) {
+    return currentContext.scenarioEditor ? { scenarioEditor: currentContext.scenarioEditor } : {};
   }
   if (pathname.startsWith('/libraries/servers')) {
     return currentContext.servers ? { servers: currentContext.servers } : {};

@@ -19,7 +19,7 @@ import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { useGlobalCopilotRun } from '@/hooks/use-global-copilot-run';
 import { useGlobalCopilotThread } from '@/hooks/use-global-copilot-thread';
 import { toast } from '@/hooks/use-toast';
-import { availableGlobalCopilotActions, invokeGlobalCopilotAction, registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import { availableGlobalCopilotActions, invokeGlobalCopilotAction, registerGlobalCopilotAction, subscribeGlobalCopilotActions } from '@/lib/global-copilot-actions';
 import { globalCopilotRouteContext } from '@/lib/global-copilot-context';
 import { storedGlobalCopilotMessage } from '@/lib/global-copilot-message';
 import {
@@ -59,6 +59,9 @@ function GlobalCopilotControllerInner() {
   const [open, setOpen] = useState(() => window.localStorage.getItem(openKey) !== '0');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(expandedKey) === '1');
   const [input, setInput] = useState('');
+  const [, refreshAvailableActions] = useState(0);
+
+  useEffect(() => subscribeGlobalCopilotActions(() => refreshAvailableActions((value) => value + 1)), []);
 
   useEffect(
     () =>
@@ -392,6 +395,19 @@ function useGlobalCopilotFrontendTools(params: {
         serverOverrideAll: z.array(z.string()).optional(),
         scenarioServerOverrides: z.record(z.array(z.string())).optional(),
         runNote: z.string().optional()
+      })
+      .strict()
+  );
+  useConfirmedFrontendTool(
+    'apply_scenario_patch',
+    params.agentId,
+    available.has('apply_scenario_patch'),
+    z
+      .object({
+        scenarioId: z.string(),
+        prompt: z.string().optional(),
+        evalRules: z.array(z.record(z.unknown())).optional(),
+        extractRules: z.array(z.record(z.unknown())).optional()
       })
       .strict()
   );

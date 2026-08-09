@@ -40,4 +40,26 @@ describe('globalCopilotPageContext', () => {
 
     expect(globalCopilotPageContextForPath('/libraries/test-cases')).toEqual({});
   });
+
+  it('forwards scenario editor context on configuration and test-case editor routes', () => {
+    const scenarioEditor = {
+      configId: 'cfg-1',
+      scenarios: [
+        {
+          id: 'scn-1',
+          name: 'Greeting',
+          prompt: 'Say hello',
+          serverIds: ['server-1'],
+          evalRules: [],
+          extractRules: []
+        }
+      ]
+    };
+    setGlobalCopilotPageContext({ scenarioEditor });
+
+    expect(globalCopilotPageContextForPath('/mcp-evaluations/cfg-1')).toEqual({ scenarioEditor });
+    expect(globalCopilotPageContextForPath('/libraries/test-cases/scn-1')).toEqual({
+      scenarioEditor
+    });
+  });
 });

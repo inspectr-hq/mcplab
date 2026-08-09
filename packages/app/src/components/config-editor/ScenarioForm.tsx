@@ -49,6 +49,12 @@ import {
 } from '@/lib/attachment-policy';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { registerGlobalCopilotAction } from '@/lib/global-copilot-actions';
+import {
+  clearGlobalCopilotPageContext,
+  globalCopilotPageContext,
+  setGlobalCopilotPageContext
+} from '@/lib/global-copilot-page-context';
 
 interface ScenarioFormProps {
   scenarios: Scenario[];
@@ -148,6 +154,51 @@ export function ScenarioForm({
     next.splice(nextIndex, 0, item);
     onChange(next);
   };
+
+  useEffect(() => {
+    if (readOnly) return;
+    const scenarioEditor = {
+      configId,
+      configPath,
+      scenarios: scenarios.map((scenario) => ({
+        id: scenario.id,
+        name: scenario.name,
+        prompt: scenario.prompt,
+        serverIds: scenario.serverIds,
+        evalRules: scenario.evalRules,
+        extractRules: scenario.extractRules
+      }))
+    };
+    setGlobalCopilotPageContext({
+      scenarioEditor
+    });
+    return () => {
+      if (globalCopilotPageContext().scenarioEditor === scenarioEditor) {
+        clearGlobalCopilotPageContext();
+      }
+    };
+  }, [configId, configPath, readOnly, scenarios]);
+
+  useEffect(
+    () => {
+      if (readOnly) return undefined;
+      return registerGlobalCopilotAction('apply_scenario_patch', async (arguments_) => {
+        const scenarioId = typeof arguments_.scenarioId === 'string' ? arguments_.scenarioId : '';
+        const index = scenarios.findIndex((scenario) => scenario.id === scenarioId);
+        if (index < 0) throw new Error(`Scenario '${scenarioId}' is not open in the editor.`);
+        const patch: Partial<Scenario> = {};
+        if (typeof arguments_.prompt === 'string') patch.prompt = arguments_.prompt;
+        if (Array.isArray(arguments_.evalRules)) patch.evalRules = arguments_.evalRules as EvalRule[];
+        if (Array.isArray(arguments_.extractRules)) {
+          patch.extractRules = arguments_.extractRules as Scenario['extractRules'];
+        }
+        if (Object.keys(patch).length === 0) throw new Error('No scenario changes were provided.');
+        update(index, patch);
+        toast({ title: 'Scenario updated', description: `Applied Copilot changes to ${scenarioId}.` });
+      });
+    },
+    [readOnly, scenarios, onChange]
+  );
 
   return (
     <div className={readOnly ? 'space-y-2' : 'space-y-4'}>
