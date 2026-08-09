@@ -1,5 +1,5 @@
 import type { Message } from '@ag-ui/client';
-import { CopilotKitProvider, useAgentContext, useInterrupt } from '@copilotkit/react-core/v2';
+import { CopilotKitProvider, useAgentContext } from '@copilotkit/react-core/v2';
 import { Bot, MessageSquarePlus, Minimize2, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,7 +23,7 @@ import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-conte
 import { GlobalCopilotComposer } from './GlobalCopilotComposer';
 import { useGlobalCopilotActions } from './GlobalCopilotActions';
 import { useGlobalCopilotFrontendTools } from './GlobalCopilotTools';
-import { globalCopilotInterruptMessage, NativeInterruptCard } from './GlobalCopilotCards';
+import { useGlobalCopilotInterrupts } from './GlobalCopilotInterrupts';
 import { GlobalCopilotConversation } from './GlobalCopilotConversation';
 import { GlobalCopilotThreadList } from './GlobalCopilotThreadList';
 
@@ -138,69 +138,11 @@ function GlobalCopilotControllerInner() {
     availableActions: appContext.availableActions
   });
 
-  const interruptElement = useInterrupt({
+  const interruptElement = useGlobalCopilotInterrupts({
     agentId: agent.agentId,
-    renderInChat: false,
-    enabled: (event) => {
-      const interrupt = event.value as { reason?: string } | undefined;
-      return interrupt?.reason === 'mastra:tool_suspend';
-    },
-    render: ({ interrupt, resolve }) => {
-      const mastra = interrupt?.metadata?.mastra as
-        | {
-            toolName?: string;
-            suspendPayload?: Record<string, unknown>;
-            args?: Record<string, unknown>;
-          }
-        | undefined;
-      const payload = mastra?.suspendPayload ?? {};
-      const kind = payload.kind;
-      const message: GlobalCopilotMessage =
-        kind === 'continue_reading'
-          ? {
-              id: interrupt?.id ?? 'pending-read-approval',
-              role: 'system',
-              content: `Additional MCPLab read-tool batch requested (${Number(
-                payload.batchSize ?? 5
-              )} calls).`,
-              createdAt: new Date().toISOString(),
-              action: {
-                kind: 'continue_reading',
-                batchSize: Number(payload.batchSize ?? 5),
-                status: 'pending'
-              }
-            }
-          : {
-              id: interrupt?.id ?? 'pending-tool-approval',
-              role: 'system',
-              content: `MCP call requested: ${String(payload.serverName ?? 'mcplab')}/${String(
-                payload.toolName ?? mastra?.toolName ?? 'tool'
-              )}`,
-              createdAt: new Date().toISOString(),
-              action: {
-                kind: 'external_mcp_tool',
-                serverName: String(payload.serverName ?? 'mcplab'),
-                toolName: String(payload.toolName ?? mastra?.toolName ?? 'tool'),
-                arguments: (payload.arguments ?? mastra?.args ?? {}) as Record<string, unknown>,
-                status: 'pending'
-              }
-            };
-      return (
-        <NativeInterruptCard
-          message={message}
-          onDecision={(approved) => void resolve({ approved }, interrupt?.id)}
-        />
-      );
-    }
+    storedInterrupt: thread?.pendingInterrupts?.[0],
+    resumeStoredInterrupt
   });
-  const storedInterrupt = thread?.pendingInterrupts?.[0];
-  const storedInterruptElement =
-    !interruptElement && storedInterrupt ? (
-      <NativeInterruptCard
-        message={globalCopilotInterruptMessage(storedInterrupt)}
-        onDecision={(approved) => void resumeStoredInterrupt(storedInterrupt, approved)}
-      />
-    ) : null;
 
   const send = useCallback(async () => {
     const question = input.trim();
@@ -289,7 +231,7 @@ function GlobalCopilotControllerInner() {
       <GlobalCopilotConversation
         messages={messages}
         rawMessages={agent.messages as Message[]}
-        interruptElement={interruptElement ?? storedInterruptElement}
+        interruptElement={interruptElement}
         loading={loading}
         onCopy={(text) => void copy(text)}
       />
