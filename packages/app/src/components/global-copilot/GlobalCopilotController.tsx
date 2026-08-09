@@ -13,6 +13,8 @@ import { z } from 'zod';
 import { AssistantToolCallCard } from '@/components/assistant/AssistantChat';
 import { Button } from '@/components/ui/button';
 import { useDataSource } from '@/contexts/DataSourceContext';
+import { useConfigs } from '@/contexts/ConfigContext';
+import { useLibraries } from '@/contexts/LibraryContext';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { useGlobalCopilotRun } from '@/hooks/use-global-copilot-run';
 import { useGlobalCopilotThread } from '@/hooks/use-global-copilot-thread';
@@ -26,6 +28,11 @@ import {
 } from '@/lib/global-copilot-navigation';
 import { globalCopilotPageContextForPath } from '@/lib/global-copilot-page-context';
 import { resolveGlobalCopilotTestCaseOpen } from '@/lib/global-copilot-test-case-open';
+import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import {
+  prepareWorkspaceEvaluationRun,
+  submitWorkspaceEvaluationRun
+} from '@/lib/workspace-evaluation-run';
 import type { GlobalCopilotMessage } from '@/lib/global-copilot-thread-store';
 import { GlobalCopilotComposer } from './GlobalCopilotComposer';
 import { GlobalCopilotConversation } from './GlobalCopilotConversation';
@@ -44,12 +51,72 @@ export function GlobalCopilotController() {
 
 function GlobalCopilotControllerInner() {
   const { source, version } = useDataSource();
+  const { configs } = useConfigs();
+  const { servers: libraryServers } = useLibraries();
   const location = useLocation();
   const navigate = useNavigate();
   const queue = useRunQueueStatus();
   const [open, setOpen] = useState(() => window.localStorage.getItem(openKey) !== '0');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(expandedKey) === '1');
   const [input, setInput] = useState('');
+
+  useEffect(
+    () =>
+      registerGlobalCopilotAction('queue_evaluation_by_config', async (arguments_) => {
+        const configId = typeof arguments_.configId === 'string' ? arguments_.configId : '';
+        const config = configs.find((item) => item.id === configId);
+        if (!config) throw new Error(`Evaluation configuration '${configId}' was not found.`);
+        const selectedAgentIds = Array.isArray(arguments_.agentIds)
+          ? arguments_.agentIds.filter((item): item is string => typeof item === 'string')
+          : config.agents.map((agent) => agent.id);
+        const selectedScenarioIds = Array.isArray(arguments_.scenarioIds)
+          ? arguments_.scenarioIds.filter((item): item is string => typeof item === 'string')
+          : config.scenarios.map((scenario) => scenario.id);
+        const serverOverrideAll = Array.isArray(arguments_.serverOverrideAll)
+          ? arguments_.serverOverrideAll.filter((item): item is string => typeof item === 'string')
+          : undefined;
+        const scenarioServerOverrides =
+          arguments_.scenarioServerOverrides &&
+          typeof arguments_.scenarioServerOverrides === 'object' &&
+          !Array.isArray(arguments_.scenarioServerOverrides)
+            ? Object.fromEntries(
+                Object.entries(arguments_.scenarioServerOverrides).map(([id, value]) => [
+                  id,
+                  Array.isArray(value)
+                    ? value.filter((item): item is string => typeof item === 'string')
+                    : []
+                ])
+              )
+            : undefined;
+        const runsPerScenario =
+          typeof arguments_.runsPerScenario === 'number' ? arguments_.runsPerScenario : 1;
+        const prepared = prepareWorkspaceEvaluationRun({
+          config,
+          availableAgents: config.agents,
+          availableScenarios: config.scenarios,
+          libraryServers,
+          selectedAgentIds,
+          selectedScenarioIds,
+          runsPerScenario,
+          globalServerOverrideEnabled: serverOverrideAll !== undefined,
+          globalServerOverrideIds: serverOverrideAll ?? [],
+          scenarioServerOverrideEnabledMap:
+            scenarioServerOverrides === undefined
+              ? {}
+              : Object.fromEntries(Object.keys(scenarioServerOverrides).map((id) => [id, true])),
+          scenarioServerOverrides,
+          runNote: typeof arguments_.runNote === 'string' ? arguments_.runNote : undefined
+        });
+        const { jobId } = await submitWorkspaceEvaluationRun({
+          prepared,
+          source,
+          ensureOAuth: async (serverNames) =>
+            ensureOAuthForServers({ serverNames, source })
+        });
+        toast({ title: 'Evaluation queued', description: `${config.name} (${jobId})` });
+      }),
+    [configs, libraryServers, source]
+  );
 
   useEffect(
     () =>
@@ -94,7 +161,9 @@ function GlobalCopilotControllerInner() {
         oauthBlockedCount: queue.oauthBlockedCount,
         streamStatus: String(queue.streamStatus)
       },
-      availableActions: availableGlobalCopilotActions()
+      availableActions: Array.from(
+        new Set([...availableGlobalCopilotActions(), 'queue_evaluation_by_config'])
+      )
     }),
     [location.pathname, location.search, queue.oauthBlockedCount, queue.queuedCount, queue.runningCount, queue.streamStatus, version]
   );
@@ -304,6 +373,22 @@ function useGlobalCopilotFrontendTools(params: {
 
   useConfirmedFrontendTool('start_evaluation_run', params.agentId, available.has('start_evaluation_run'));
   useConfirmedFrontendTool('queue_evaluation_run', params.agentId, available.has('queue_evaluation_run'));
+  useConfirmedFrontendTool(
+    'queue_evaluation_by_config',
+    params.agentId,
+    available.has('queue_evaluation_by_config'),
+    z
+      .object({
+        configId: z.string(),
+        agentIds: z.array(z.string()).optional(),
+        scenarioIds: z.array(z.string()).optional(),
+        runsPerScenario: z.number().int().positive().optional(),
+        serverOverrideAll: z.array(z.string()).optional(),
+        scenarioServerOverrides: z.record(z.array(z.string())).optional(),
+        runNote: z.string().optional()
+      })
+      .strict()
+  );
   useConfirmedFrontendTool('start_tool_analysis', params.agentId, available.has('start_tool_analysis'));
   useConfirmedFrontendTool('duplicate_test_case', params.agentId, available.has('duplicate_test_case'));
   useConfirmedFrontendTool('duplicate_mcp_server', params.agentId, available.has('duplicate_mcp_server'));
@@ -314,13 +399,14 @@ function useGlobalCopilotFrontendTools(params: {
 function useConfirmedFrontendTool(
   name: Parameters<typeof invokeGlobalCopilotAction>[0],
   agentId: string | undefined,
-  available: boolean
+  available: boolean,
+  parameters: z.ZodTypeAny = z.record(z.unknown())
 ) {
   useHumanInTheLoop(
     {
       name,
       description: `Request confirmation before ${name.replaceAll('_', ' ')}.`,
-      parameters: z.record(z.unknown()),
+      parameters,
       agentId,
       available,
       render: (props) => (

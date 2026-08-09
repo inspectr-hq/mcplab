@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { useDataSource } from '@/contexts/DataSourceContext';
 import type {
   GlobalCopilotMessage,
