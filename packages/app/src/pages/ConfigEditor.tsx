@@ -1213,7 +1213,7 @@ const ConfigEditor = () => {
                                 min={0}
                                 max={2}
                                 step={0.01}
-                                value={entry.agent.temperature}
+                                value={entry.agent.temperature ?? 0}
                                 onChange={(e) => {
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
@@ -1330,7 +1330,7 @@ const ConfigEditor = () => {
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
                             <Badge variant="outline" className="text-xs font-mono">
-                              temperature: {row.agent.temperature}
+                              temperature: {row.agent.temperature ?? 0}
                             </Badge>
                           </div>
                         )}

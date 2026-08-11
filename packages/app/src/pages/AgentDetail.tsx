@@ -513,11 +513,11 @@ const AgentDetail = () => {
             <div className="flex items-center justify-between">
               <Label>Temperature</Label>
               <span className="font-mono text-xs text-muted-foreground">
-                {form.temperature.toFixed(2)}
+                {(form.temperature ?? 0).toFixed(2)}
               </span>
             </div>
             <Slider
-              value={[form.temperature]}
+              value={[form.temperature ?? 0]}
               onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
               min={0}
               max={2}

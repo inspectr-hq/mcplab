@@ -659,6 +659,34 @@ describe('fromCoreResultsJson conversation mapping', () => {
 });
 
 describe('config adapters round-trip', () => {
+  it('preserves an omitted agent temperature when loading and saving config YAML', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-no-temperature',
+      name: 'no-temperature',
+      path: '/tmp/no-temperature.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-no-temperature',
+      config: {
+        servers: [],
+        agents: [
+          {
+            id: 'agent-without-temperature',
+            provider: 'openai',
+            model: 'gpt-4o',
+            max_tokens: 2048
+          }
+        ],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const roundTripped = toCoreConfigYaml(uiConfig);
+
+    expect(uiConfig.agents[0]).not.toHaveProperty('temperature');
+    expect(roundTripped.agents?.[0]).not.toHaveProperty('temperature');
+  });
+
   it('round-trips mixed inline/reference entries in stable order', () => {
     const sourceRecord: WorkspaceConfigRecord = {
       id: 'cfg-1',

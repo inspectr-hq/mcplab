@@ -152,7 +152,7 @@ const Agents = () => {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
                     <TableCell className="font-mono text-xs">
-                      {agent.temperature.toFixed(2)}
+                      {(agent.temperature ?? 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">

@@ -419,7 +419,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       name: String(entry.name || inlineId),
       provider,
       model: entry.model,
-      temperature: entry.temperature ?? 0,
+      ...(entry.temperature !== undefined ? { temperature: entry.temperature } : {}),
       maxTokens: entry.max_tokens ?? 2048,
       maxTurns: entry.max_turns,
       systemPrompt: entry.system
@@ -685,7 +685,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
           ? 'anthropic'
           : 'openai',
       model: agent.model,
-      temperature: agent.temperature,
+      ...(agent.temperature !== undefined ? { temperature: agent.temperature } : {}),
       max_tokens: agent.maxTokens,
       max_turns: agent.maxTurns,
       system: agent.systemPrompt
@@ -831,7 +831,7 @@ export function toCoreLibraries(
             ? 'anthropic'
             : 'openai',
         model: agent.model,
-        temperature: agent.temperature,
+        ...(agent.temperature !== undefined ? { temperature: agent.temperature } : {}),
         max_tokens: agent.maxTokens,
         max_turns: agent.maxTurns,
         system: agent.systemPrompt
