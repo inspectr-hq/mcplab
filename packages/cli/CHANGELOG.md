@@ -1,5 +1,14 @@
 # @inspectr/mcplab
 
+## 1.25.1
+
+### Patch Changes
+
+- feat: support multiple OAuth authorization servers
+- fix: discover path-specific OAuth protected resource metadata
+- fix: skip omitted agent temperature
+- fix: sync results dashboard after refresh and delete
+
 ## 1.25.0
 
 ### Minor Changes
