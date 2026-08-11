@@ -85,9 +85,26 @@ describe('ToolAnalysisReportView', () => {
     );
 
     fireEvent.click(screen.getByText('get_user_profile'));
+    fireEvent.click(screen.getByText('Schemas'));
 
     expect(screen.getByText('Output schema')).toBeInTheDocument();
     expect(screen.getByText(/"name": \{/)).toBeInTheDocument();
+  });
+
+  it('supports UI and JSON schema modes', () => {
+    render(
+      <MemoryRouter>
+        <ToolAnalysisReportView report={report} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByText('get_user_profile'));
+    fireEvent.click(screen.getByText('Schemas'));
+
+    fireEvent.click(screen.getAllByRole('tab', { name: 'UI' })[0]);
+    expect(screen.getAllByText('Properties')).not.toHaveLength(0);
+    fireEvent.click(screen.getAllByRole('tab', { name: 'JSON' })[0]);
+    expect(screen.getAllByText(/"type": "object"/)).not.toHaveLength(0);
   });
 
   it('does not throw when rendering a tool with a circular schema', () => {

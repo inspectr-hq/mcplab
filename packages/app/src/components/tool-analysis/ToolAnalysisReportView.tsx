@@ -19,6 +19,7 @@ import { ChevronDown, Copy, Lightbulb } from 'lucide-react';
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification, safeJsonStringify } from '@/lib/tool-analysis-utils';
 import { toast } from '@/hooks/use-toast';
+import { ToolSchemaPreview } from './ToolSchemaPreview';
 
 const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -743,37 +744,10 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                                 Copy Metadata Review
                               </Button>
                             </div>
-                            {(tool.inputSchema !== undefined ||
-                              tool.outputSchema !== undefined) && (
-                              <details className="group/schema rounded border bg-muted/10 p-2">
-                                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium">
-                                  <span>Schemas</span>
-                                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open/schema:rotate-180" />
-                                </summary>
-                                <div className="mt-2 space-y-2">
-                                  {tool.inputSchema !== undefined && (
-                                    <div className="space-y-1">
-                                      <div className="text-[11px] font-medium text-muted-foreground">
-                                        Input schema
-                                      </div>
-                                      <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
-                                        {safeJsonStringify(tool.inputSchema)}
-                                      </pre>
-                                    </div>
-                                  )}
-                                  {tool.outputSchema !== undefined && (
-                                    <div className="space-y-1">
-                                      <div className="text-[11px] font-medium text-muted-foreground">
-                                        Output schema
-                                      </div>
-                                      <pre className="max-h-52 overflow-auto rounded border bg-muted/20 p-2 text-[11px]">
-                                        {safeJsonStringify(tool.outputSchema)}
-                                      </pre>
-                                    </div>
-                                  )}
-                                </div>
-                              </details>
-                            )}
+                            <ToolSchemaPreview
+                              inputSchema={tool.inputSchema}
+                              outputSchema={tool.outputSchema}
+                            />
                             {tool.metadataReview && (
                               <div className="space-y-1">
                                 <div className="text-xs font-medium">Metadata review</div>
