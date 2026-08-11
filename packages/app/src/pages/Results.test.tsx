@@ -2,14 +2,17 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Results from './Results';
+import type { WorkspaceRunSummary } from '@/lib/data-sources/types';
 import type { EvalResult } from '@/types/eval';
 
 const { sourceMock } = vi.hoisted(() => {
   const listResults = vi.fn();
+  const listRunSummaries = vi.fn();
   const deleteResult = vi.fn();
   return {
     sourceMock: {
       listResults,
+      listRunSummaries: undefined as unknown as typeof listRunSummaries,
       deleteResult
     }
   };
@@ -63,6 +66,23 @@ function makeRun(
             outputTokens: tokenTotal - Math.floor(tokenTotal / 2),
             totalTokens: tokenTotal
           }
+  };
+}
+
+function makeSummary(runId: string, toolTokensTotal: number): WorkspaceRunSummary {
+  return {
+    runId,
+    path: `/tmp/${runId}`,
+    timestamp: '2026-03-10T10:00:00.000Z',
+    configHash: 'hash',
+    scenarioIds: ['scn-1'],
+    scenarioNames: ['Scenario 1'],
+    totalScenarios: 1,
+    totalRuns: 1,
+    passRate: 1,
+    avgToolCalls: 1,
+    avgLatencyMs: 100,
+    toolTokensTotal
   };
 }
 
@@ -128,6 +148,8 @@ function toDatetimeLocalValue(date: Date) {
 describe('Results', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    sourceMock.listRunSummaries = undefined as unknown as typeof sourceMock.listRunSummaries;
+    localStorage.removeItem('mcplab:results:time-filter');
     queueMock.completionVersion = 0;
   });
 
@@ -178,6 +200,29 @@ describe('Results', () => {
       expect(sourceMock.listResults).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByText('run-b')).toBeInTheDocument();
+  });
+
+  it('refreshes the dashboard when the results are manually refreshed', async () => {
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([makeSummary('run-a', 1200)]);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-a');
+    expect(screen.getAllByText('1,200').length).toBeGreaterThan(0);
+
+    sourceMock.listRunSummaries.mockResolvedValue([makeSummary('run-b', 900)]);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await screen.findByText('run-b');
+    await waitFor(() => {
+      expect(screen.getAllByText('900').length).toBeGreaterThan(0);
+    });
   });
 
   it('toggles MCP Lab Assistant expand mode in results', async () => {
@@ -413,5 +458,35 @@ describe('Results', () => {
       .queryAllByRole('link')
       .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
     expect(runLinks).toHaveLength(0);
+  });
+
+  it('removes deleted runs from the dashboard immediately', async () => {
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([makeSummary('run-a', 1200)]);
+    sourceMock.deleteResult.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-a');
+    expect(screen.getAllByText('1,200').length).toBeGreaterThan(0);
+    const menuButton = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('aria-haspopup') === 'menu');
+    expect(menuButton).toBeDefined();
+    fireEvent.pointerDown(menuButton!, { button: 0 });
+    fireEvent.pointerUp(menuButton!, { button: 0 });
+    fireEvent.click(menuButton!);
+    fireEvent.click(await screen.findByText('Delete'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete run' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('1,200')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('No results in the selected range.')).toBeInTheDocument();
   });
 });

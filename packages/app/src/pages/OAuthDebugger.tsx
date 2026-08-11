@@ -311,13 +311,17 @@ export default function OAuthDebuggerPage() {
     const responseExchanges = (session?.network ?? []).filter(
       (exchange) => exchange.phase === 'response'
     );
+    const latestResponse = (label: string) => {
+      const matching = responseExchanges.filter((exchange) => exchange.label === label);
+      return (
+        [...matching].reverse().find((exchange) => {
+          return typeof exchange.status === 'number' && exchange.status < 400;
+        }) ?? [...matching].reverse()[0]
+      );
+    };
     return {
-      resourceMetadata: responseExchanges.find(
-        (exchange) => exchange.label === 'Protected Resource Metadata'
-      ),
-      authorizationServerMetadata: responseExchanges.find(
-        (exchange) => exchange.label === 'Authorization Server Metadata'
-      )
+      resourceMetadata: latestResponse('Protected Resource Metadata'),
+      authorizationServerMetadata: latestResponse('Authorization Server Metadata')
     };
   }, [session?.network]);
 

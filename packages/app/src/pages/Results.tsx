@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Clock,
@@ -238,6 +238,7 @@ const Results = () => {
   );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
+  const dashboardRequestIdRef = useRef(0);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -293,6 +294,29 @@ const Results = () => {
     setSortDir(next === 'timestamp' ? 'desc' : 'asc');
   };
 
+  const refreshDashboard = useCallback(async () => {
+    if (!dashboardVisible || !source.listRunSummaries) return;
+    const requestId = ++dashboardRequestIdRef.current;
+    setDashboardLoading(true);
+    try {
+      const summaries = await source.listRunSummaries({
+        ...apiTimeFilter,
+        scenario: apiScenarioFilter
+      });
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardRuns(summaries.map(summaryToResult));
+      }
+    } catch {
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardRuns([]);
+      }
+    } finally {
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardLoading(false);
+      }
+    }
+  }, [apiScenarioFilter, apiTimeFilter, dashboardVisible, source]);
+
   const loadResults = async () => {
     setRefreshing(true);
     try {
@@ -320,6 +344,7 @@ const Results = () => {
         pagination.setHasMore(false);
         setResults(await source.listResults());
       }
+      void refreshDashboard();
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -393,27 +418,8 @@ const Results = () => {
   }, [dashboardVisible]);
 
   useEffect(() => {
-    if (!dashboardVisible || !source.listRunSummaries) return;
-    let active = true;
-    setDashboardLoading(true);
-    source
-      .listRunSummaries({
-        ...apiTimeFilter,
-        scenario: apiScenarioFilter
-      })
-      .then((summaries) => {
-        if (active) setDashboardRuns(summaries.map(summaryToResult));
-      })
-      .catch(() => {
-        if (active) setDashboardRuns([]);
-      })
-      .finally(() => {
-        if (active) setDashboardLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, source]);
+    void refreshDashboard();
+  }, [completionVersion, refreshDashboard]);
 
   useEffect(() => {
     if (dashboardVisible && source.listRunSummaries) return;
@@ -713,6 +719,8 @@ const Results = () => {
     try {
       await source.deleteResult(runId);
       setResults((prev) => prev.filter((r) => r.id !== runId));
+      setDashboardRuns((prev) => prev.filter((r) => r.id !== runId));
+      pagination.setTotalCount((count) => Math.max(0, count - 1));
       toast({ title: 'Run deleted', description: runId });
       setPendingDeleteRunId(null);
     } catch (error: unknown) {
@@ -1189,7 +1197,12 @@ const Results = () => {
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="More actions"
+                                >
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>

@@ -38,7 +38,7 @@ export interface AgentConfig {
   name: string;
   provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
   model: string;
-  temperature: number;
+  temperature?: number;
   maxTokens: number;
   maxTurns?: number;
   systemPrompt?: string;
