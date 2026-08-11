@@ -35,7 +35,7 @@
     "validate:configs": "node scripts/validate-configs.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   }
