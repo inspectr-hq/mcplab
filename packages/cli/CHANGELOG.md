@@ -1,5 +1,12 @@
 # @inspectr/mcplab
 
+## 1.26.0
+
+### Minor Changes
+
+- feat: JSON schema viewer- #104
+- fix: fall back to inferred OAuth resource metadata
+
 ## 1.25.1
 
 ### Patch Changes
