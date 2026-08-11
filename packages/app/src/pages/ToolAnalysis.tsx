@@ -23,8 +23,17 @@ import type {
 } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
+import {
+  CircleHelp,
+  Copy,
+  Download,
+  Loader2,
+  RefreshCw,
+  Search,
+  Microscope
+} from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
+import { ToolSchemaPreview, type SchemaViewMode } from '@/components/tool-analysis/ToolSchemaPreview';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 
@@ -154,6 +163,7 @@ const ToolAnalysisPage = () => {
   const [savedReportId, setSavedReportId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [viewStep, setViewStep] = useState<'configure' | 'run' | 'report'>('configure');
+  const [schemaMode, setSchemaMode] = useState<SchemaViewMode>('explorer');
   const [runState, setRunState] = useState<'idle' | 'running' | 'stopped' | 'error'>('idle');
   const [authInProgress, setAuthInProgress] = useState(false);
   const cleanupRef = useRef<null | (() => void)>(null);
@@ -858,6 +868,12 @@ const ToolAnalysisPage = () => {
                                       {tool.description}
                                     </p>
                                   )}
+                                  <ToolSchemaPreview
+                                    inputSchema={tool.inputSchema}
+                                    outputSchema={tool.outputSchema}
+                                    mode={schemaMode}
+                                    onModeChange={setSchemaMode}
+                                  />
                                 </div>
                               </label>
                             );
@@ -1184,7 +1200,11 @@ const ToolAnalysisPage = () => {
               </Button>
             </div>
           </div>
-          <ToolAnalysisReportView report={report} />
+          <ToolAnalysisReportView
+            report={report}
+            schemaMode={schemaMode}
+            onSchemaModeChange={setSchemaMode}
+          />
         </div>
       )}
     </div>
