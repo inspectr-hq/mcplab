@@ -14,4 +14,16 @@ describe('resourceMetadataCandidates', () => {
       'https://mcp.example.com/.well-known/oauth-protected-resource'
     ]);
   });
+
+  it('tries an advertised URL first, then inferred candidates if needed', () => {
+    expect(
+      resourceMetadataCandidates(
+        'http://mcp.example.com/mcp',
+        'http://mcp.example.com/.well-known/oauth-protected-resource'
+      )
+    ).toEqual([
+      'http://mcp.example.com/.well-known/oauth-protected-resource',
+      'http://mcp.example.com/.well-known/oauth-protected-resource/mcp'
+    ]);
+  });
 });

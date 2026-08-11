@@ -511,14 +511,14 @@ function requiredString(value: unknown, error: string): string {
   return text;
 }
 
-export function resourceMetadataCandidates(baseUrl: string): string[] {
+export function resourceMetadataCandidates(baseUrl: string, preferredUrl?: string): string[] {
   const u = new URL(baseUrl);
   const resourcePath = u.pathname.replace(/^\/+|\/+$/g, '');
   const pathSpecific = resourcePath
     ? `${u.origin}/.well-known/oauth-protected-resource/${resourcePath}`
     : `${u.origin}/.well-known/oauth-protected-resource`;
   const root = `${u.origin}/.well-known/oauth-protected-resource`;
-  return [...new Set([pathSpecific, root])];
+  return [...new Set([...(preferredUrl ? [preferredUrl] : []), pathSpecific, root])];
 }
 
 // Returns candidate URLs to try for auth server metadata, in priority order:
@@ -657,9 +657,10 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
 
   const resourceMetadataUrls = session.config.target.overrides?.authorizationServerMetadataUrl
     ? []
-    : probedResourceMetadataUrl
-    ? [probedResourceMetadataUrl]
-    : resourceMetadataCandidates(session.config.target.overrides?.resourceBaseUrl || server.url);
+    : resourceMetadataCandidates(
+        session.config.target.overrides?.resourceBaseUrl || server.url,
+        probedResourceMetadataUrl
+      );
   let resourceMetadataFetched = false;
   let resourceMetadataStatus: number | undefined;
   let resourceMetadataError: unknown;
