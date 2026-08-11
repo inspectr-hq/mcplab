@@ -124,16 +124,21 @@ describe('ToolAnalysisReportView', () => {
     fireEvent.click(screen.getByText('Schemas'));
 
     fireEvent.click(screen.getAllByRole('tab', { name: 'EXPLORER' })[0]);
-    expect(screen.getByRole('button', { name: 'Expand All' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Collapse All' })).toBeInTheDocument();
-    expect(screen.getByText('3 Properties')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Expand All' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Collapse All' })).toHaveLength(2);
+    expect(screen.getByText('1 Properties')).toBeInTheDocument();
+    expect(screen.getByText('2 Properties')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse All' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Collapse All' })[0]);
     expect(screen.getAllByRole('button', { name: 'Expand root' })[0]).toHaveAttribute(
       'aria-expanded',
       'false'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Expand All' }));
+    expect(screen.getAllByRole('button', { name: 'Collapse root' })[0]).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Expand All' })[0]);
     expect(screen.getAllByRole('button', { name: 'Collapse root' })[0]).toHaveAttribute(
       'aria-expanded',
       'true'

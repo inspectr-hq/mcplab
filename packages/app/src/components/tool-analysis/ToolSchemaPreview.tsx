@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { safeJsonStringify } from '@/lib/tool-analysis-utils';
@@ -168,7 +168,45 @@ function ExplorerNode({
   );
 }
 
-function SchemaHeading({ title, schema }: { title: string; schema: unknown }) {
+function ExplorerControls({
+  propertyCount,
+  onExpandAll,
+  onCollapseAll
+}: {
+  propertyCount: number;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <span className="text-[10px] text-muted-foreground">{propertyCount} Properties</span>
+      <button
+        type="button"
+        className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={onExpandAll}
+      >
+        Expand All
+      </button>
+      <button
+        type="button"
+        className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+        onClick={onCollapseAll}
+      >
+        Collapse All
+      </button>
+    </span>
+  );
+}
+
+function SchemaHeading({
+  title,
+  schema,
+  explorerControls
+}: {
+  title: string;
+  schema: unknown;
+  explorerControls?: ReactNode;
+}) {
   const copyLabel = title.toLowerCase();
   const copySchema = async () => {
     try {
@@ -186,16 +224,19 @@ function SchemaHeading({ title, schema }: { title: string; schema: unknown }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
       <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
-      <button
-        type="button"
-        className="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
-        aria-label={`Copy ${copyLabel} JSON`}
-        title={`Copy ${copyLabel} JSON`}
-        onClick={() => void copySchema()}
-      >
-        <Copy className="h-3 w-3" />
-        Copy JSON
-      </button>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+        {explorerControls}
+        <button
+          type="button"
+          className="inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label={`Copy ${copyLabel} JSON`}
+          title={`Copy ${copyLabel} JSON`}
+          onClick={() => void copySchema()}
+        >
+          <Copy className="h-3 w-3" />
+          Copy JSON
+        </button>
+      </div>
     </div>
   );
 }
@@ -212,7 +253,8 @@ export function ToolSchemaPreview({
   onModeChange?: (mode: SchemaViewMode) => void;
 }) {
   const [uncontrolledMode, setUncontrolledMode] = useState<SchemaViewMode>('explorer');
-  const [explorerExpanded, setExplorerExpanded] = useState<boolean | null>(null);
+  const [inputExplorerExpanded, setInputExplorerExpanded] = useState<boolean | null>(null);
+  const [outputExplorerExpanded, setOutputExplorerExpanded] = useState<boolean | null>(null);
   const mode = controlledMode ?? uncontrolledMode;
   const setMode = (nextMode: SchemaViewMode) => {
     onModeChange?.(nextMode);
@@ -220,7 +262,6 @@ export function ToolSchemaPreview({
   };
 
   if (inputSchema === undefined && outputSchema === undefined) return null;
-  const propertyCount = countSchemaProperties(inputSchema) + countSchemaProperties(outputSchema);
 
   return (
     <details
@@ -287,33 +328,36 @@ export function ToolSchemaPreview({
         )}
         {mode === 'explorer' && (
           <div className="mt-2 min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={() => setExplorerExpanded(true)}
-              >
-                Expand All
-              </button>
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={() => setExplorerExpanded(false)}
-              >
-                Collapse All
-              </button>
-              <span className="text-[11px] text-muted-foreground">{propertyCount} Properties</span>
-            </div>
             {inputSchema !== undefined && (
               <div className="min-w-0 space-y-2 rounded border bg-muted/10 p-2">
-                <SchemaHeading title="Input schema" schema={inputSchema} />
-                <ExplorerNode name="root" schema={inputSchema} expandAll={explorerExpanded} />
+                <SchemaHeading
+                  title="Input schema"
+                  schema={inputSchema}
+                  explorerControls={
+                    <ExplorerControls
+                      propertyCount={countSchemaProperties(inputSchema)}
+                      onExpandAll={() => setInputExplorerExpanded(true)}
+                      onCollapseAll={() => setInputExplorerExpanded(false)}
+                    />
+                  }
+                />
+                <ExplorerNode name="root" schema={inputSchema} expandAll={inputExplorerExpanded} />
               </div>
             )}
             {outputSchema !== undefined && (
               <div className="min-w-0 space-y-2 rounded border bg-muted/10 p-2">
-                <SchemaHeading title="Output schema" schema={outputSchema} />
-                <ExplorerNode name="root" schema={outputSchema} expandAll={explorerExpanded} />
+                <SchemaHeading
+                  title="Output schema"
+                  schema={outputSchema}
+                  explorerControls={
+                    <ExplorerControls
+                      propertyCount={countSchemaProperties(outputSchema)}
+                      onExpandAll={() => setOutputExplorerExpanded(true)}
+                      onCollapseAll={() => setOutputExplorerExpanded(false)}
+                    />
+                  }
+                />
+                <ExplorerNode name="root" schema={outputSchema} expandAll={outputExplorerExpanded} />
               </div>
             )}
           </div>
