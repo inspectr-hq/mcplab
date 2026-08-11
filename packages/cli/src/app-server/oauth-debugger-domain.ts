@@ -511,11 +511,14 @@ function requiredString(value: unknown, error: string): string {
   return text;
 }
 
-function inferResourceMetadataUrl(baseUrl: string): string {
+export function resourceMetadataCandidates(baseUrl: string): string[] {
   const u = new URL(baseUrl);
-  u.pathname = '/.well-known/oauth-protected-resource';
-  u.search = '';
-  return u.toString();
+  const resourcePath = u.pathname.replace(/^\/+|\/+$/g, '');
+  const pathSpecific = resourcePath
+    ? `${u.origin}/.well-known/oauth-protected-resource/${resourcePath}`
+    : `${u.origin}/.well-known/oauth-protected-resource`;
+  const root = `${u.origin}/.well-known/oauth-protected-resource`;
+  return [...new Set([pathSpecific, root])];
 }
 
 // Returns candidate URLs to try for auth server metadata, in priority order:
@@ -652,11 +655,15 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
     }
   }
 
-  const resourceMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl
-    ? undefined
-    : probedResourceMetadataUrl ??
-      inferResourceMetadataUrl(session.config.target.overrides?.resourceBaseUrl || server.url);
-  if (resourceMetadataUrl) {
+  const resourceMetadataUrls = session.config.target.overrides?.authorizationServerMetadataUrl
+    ? []
+    : probedResourceMetadataUrl
+    ? [probedResourceMetadataUrl]
+    : resourceMetadataCandidates(session.config.target.overrides?.resourceBaseUrl || server.url);
+  let resourceMetadataFetched = false;
+  let resourceMetadataStatus: number | undefined;
+  let resourceMetadataError: unknown;
+  for (const resourceMetadataUrl of resourceMetadataUrls) {
     try {
       const { response, responseJson, responseText } = await fetchWithTrace({
         session,
@@ -664,26 +671,37 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
         label: 'Protected Resource Metadata',
         url: resourceMetadataUrl
       });
-      if (!response.ok) {
-        addValidation(session, {
-          stepId,
-          severity: 'warning',
-          code: 'resource_metadata_fetch_failed',
-          title: 'Resource metadata fetch failed',
-          detail: `Protected resource metadata returned HTTP ${response.status}.`,
-          recommendation:
-            'Provide manual endpoint overrides or verify the protected resource metadata URL.'
-        });
-      } else {
+      resourceMetadataStatus = response.status;
+      if (response.ok) {
         session.context.resourceMetadata = responseJson ?? { raw: responseText };
+        resourceMetadataFetched = true;
+        break;
       }
     } catch (error: unknown) {
+      resourceMetadataError = error;
+    }
+  }
+  if (resourceMetadataUrls.length > 0 && !resourceMetadataFetched) {
+    if (resourceMetadataStatus !== undefined) {
+      addValidation(session, {
+        stepId,
+        severity: 'warning',
+        code: 'resource_metadata_fetch_failed',
+        title: 'Resource metadata fetch failed',
+        detail: `Protected resource metadata returned HTTP ${resourceMetadataStatus}.`,
+        recommendation:
+          'Provide manual endpoint overrides or verify the protected resource metadata URL.'
+      });
+    } else {
       addValidation(session, {
         stepId,
         severity: 'warning',
         code: 'resource_metadata_unreachable',
         title: 'Protected resource metadata unreachable',
-        detail: error instanceof Error ? error.message : String(error),
+        detail:
+          resourceMetadataError instanceof Error
+            ? resourceMetadataError.message
+            : String(resourceMetadataError),
         recommendation:
           'Check the MCP server URL and network connectivity, or use manual endpoint overrides.'
       });
