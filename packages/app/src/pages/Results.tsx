@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Clock,
@@ -238,7 +238,7 @@ const Results = () => {
   );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
-  const [dashboardRefreshVersion, setDashboardRefreshVersion] = useState(0);
+  const dashboardRequestIdRef = useRef(0);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -294,6 +294,29 @@ const Results = () => {
     setSortDir(next === 'timestamp' ? 'desc' : 'asc');
   };
 
+  const refreshDashboard = useCallback(async () => {
+    if (!dashboardVisible || !source.listRunSummaries) return;
+    const requestId = ++dashboardRequestIdRef.current;
+    setDashboardLoading(true);
+    try {
+      const summaries = await source.listRunSummaries({
+        ...apiTimeFilter,
+        scenario: apiScenarioFilter
+      });
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardRuns(summaries.map(summaryToResult));
+      }
+    } catch {
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardRuns([]);
+      }
+    } finally {
+      if (dashboardRequestIdRef.current === requestId) {
+        setDashboardLoading(false);
+      }
+    }
+  }, [apiScenarioFilter, apiTimeFilter, dashboardVisible, source]);
+
   const loadResults = async () => {
     setRefreshing(true);
     try {
@@ -306,7 +329,6 @@ const Results = () => {
         });
         pagination.updateMeta(page);
         setResults(page.data.map(summaryToResult));
-        setDashboardRefreshVersion((version) => version + 1);
       } else if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({
           ...apiTimeFilter,
@@ -317,13 +339,12 @@ const Results = () => {
         pagination.setTotalCount(summaries.length);
         pagination.setHasMore(false);
         setResults(summaries.map(summaryToResult));
-        setDashboardRefreshVersion((version) => version + 1);
       } else {
         pagination.setTotalCount(0);
         pagination.setHasMore(false);
         setResults(await source.listResults());
-        setDashboardRefreshVersion((version) => version + 1);
       }
+      void refreshDashboard();
     } catch (error: unknown) {
       toast({
         title: 'Could not load results',
@@ -397,34 +418,8 @@ const Results = () => {
   }, [dashboardVisible]);
 
   useEffect(() => {
-    if (!dashboardVisible || !source.listRunSummaries) return;
-    let active = true;
-    setDashboardLoading(true);
-    source
-      .listRunSummaries({
-        ...apiTimeFilter,
-        scenario: apiScenarioFilter
-      })
-      .then((summaries) => {
-        if (active) setDashboardRuns(summaries.map(summaryToResult));
-      })
-      .catch(() => {
-        if (active) setDashboardRuns([]);
-      })
-      .finally(() => {
-        if (active) setDashboardLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [
-    apiScenarioFilter,
-    apiTimeFilter,
-    completionVersion,
-    dashboardRefreshVersion,
-    dashboardVisible,
-    source
-  ]);
+    void refreshDashboard();
+  }, [completionVersion, refreshDashboard]);
 
   useEffect(() => {
     if (dashboardVisible && source.listRunSummaries) return;

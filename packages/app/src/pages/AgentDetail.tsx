@@ -37,6 +37,7 @@ import { useLibraries } from '@/contexts/LibraryContext';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
 import type { AgentConfig } from '@/types/eval';
 
 const modelSuggestions: Record<string, string[]> = {
@@ -65,7 +66,7 @@ const emptyAgent = (): AgentConfig => ({
   name: '',
   provider: 'openai',
   model: 'gpt-4o',
-  temperature: 0,
+  temperature: DEFAULT_AGENT_TEMPERATURE,
   maxTokens: 4096
 });
 
@@ -513,11 +514,11 @@ const AgentDetail = () => {
             <div className="flex items-center justify-between">
               <Label>Temperature</Label>
               <span className="font-mono text-xs text-muted-foreground">
-                {(form.temperature ?? 0).toFixed(2)}
+                {resolveAgentTemperature(form.temperature).toFixed(2)}
               </span>
             </div>
             <Slider
-              value={[form.temperature ?? 0]}
+              value={[resolveAgentTemperature(form.temperature)]}
               onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
               min={0}
               max={2}

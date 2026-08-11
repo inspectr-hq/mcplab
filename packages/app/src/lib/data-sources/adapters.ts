@@ -43,6 +43,10 @@ function normalizeText(value: unknown): string | undefined {
   return safeText(value) || undefined;
 }
 
+function withOptionalTemperature(temperature: number | undefined): { temperature?: number } {
+  return temperature !== undefined ? { temperature } : {};
+}
+
 function normalizeScenarioAttachment(att: SourceScenarioAttachment): ScenarioAttachment {
   const mediaType = att.media_type ?? inferAttachmentMediaType(att) ?? 'application/octet-stream';
   return {
@@ -419,7 +423,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
       name: String(entry.name || inlineId),
       provider,
       model: entry.model,
-      ...(entry.temperature !== undefined ? { temperature: entry.temperature } : {}),
+      ...withOptionalTemperature(entry.temperature),
       maxTokens: entry.max_tokens ?? 2048,
       maxTurns: entry.max_turns,
       systemPrompt: entry.system
@@ -685,7 +689,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
           ? 'anthropic'
           : 'openai',
       model: agent.model,
-      ...(agent.temperature !== undefined ? { temperature: agent.temperature } : {}),
+      ...withOptionalTemperature(agent.temperature),
       max_tokens: agent.maxTokens,
       max_turns: agent.maxTurns,
       system: agent.systemPrompt
@@ -831,7 +835,7 @@ export function toCoreLibraries(
             ? 'anthropic'
             : 'openai',
         model: agent.model,
-        ...(agent.temperature !== undefined ? { temperature: agent.temperature } : {}),
+        ...withOptionalTemperature(agent.temperature),
         max_tokens: agent.maxTokens,
         max_turns: agent.maxTurns,
         system: agent.systemPrompt

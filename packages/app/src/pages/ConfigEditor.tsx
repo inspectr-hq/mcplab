@@ -34,6 +34,7 @@ import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
 import { toast } from '@/hooks/use-toast';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import { safeText } from '@/lib/utils';
+import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
 import type {
   AgentConfig,
   AgentEntry,
@@ -339,7 +340,7 @@ const ConfigEditor = () => {
       name: '',
       provider: 'openai',
       model: 'gpt-4o',
-      temperature: 0,
+      temperature: DEFAULT_AGENT_TEMPERATURE,
       maxTokens: 4096
     };
     setAgentEntries([{ kind: 'inline', agent: inlineAgent }, ...agentEntries]);
@@ -1213,14 +1214,14 @@ const ConfigEditor = () => {
                                 min={0}
                                 max={2}
                                 step={0.01}
-                                value={entry.agent.temperature ?? 0}
+                                value={resolveAgentTemperature(entry.agent.temperature)}
                                 onChange={(e) => {
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
                                     kind: 'inline',
                                     agent: {
                                       ...entry.agent,
-                                      temperature: Number(e.target.value) || 0
+                                      temperature: Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
                                     }
                                   };
                                   setAgentEntries(nextEntries);
@@ -1330,7 +1331,7 @@ const ConfigEditor = () => {
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
                             <Badge variant="outline" className="text-xs font-mono">
-                              temperature: {row.agent.temperature ?? 0}
+                              temperature: {resolveAgentTemperature(row.agent.temperature)}
                             </Badge>
                           </div>
                         )}
