@@ -19,7 +19,7 @@ import { ChevronDown, Copy, Lightbulb } from 'lucide-react';
 import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification, safeJsonStringify } from '@/lib/tool-analysis-utils';
 import { toast } from '@/hooks/use-toast';
-import { ToolSchemaPreview } from './ToolSchemaPreview';
+import { ToolSchemaPreview, type SchemaViewMode } from './ToolSchemaPreview';
 
 const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -197,7 +197,15 @@ export function toolAnalysisReportToMarkdown(report: ToolAnalysisReport): string
   return `${lines.join('\n')}\n`;
 }
 
-export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport }) {
+export function ToolAnalysisReportView({
+  report,
+  schemaMode: controlledSchemaMode,
+  onSchemaModeChange
+}: {
+  report: ToolAnalysisReport;
+  schemaMode?: SchemaViewMode;
+  onSchemaModeChange?: (mode: SchemaViewMode) => void;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeSeverityFilters, setActiveSeverityFilters] = useState<FindingSeverity[]>([
     ...ALL_SEVERITIES
@@ -205,6 +213,12 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
   const [collapsedSeveritySet, setCollapsedSeveritySet] = useState<Set<FindingSeverity>>(new Set());
   const [toolFilter, setToolFilter] = useState('');
   const [openToolFilterPicker, setOpenToolFilterPicker] = useState(false);
+  const [uncontrolledSchemaMode, setUncontrolledSchemaMode] = useState<SchemaViewMode>('explorer');
+  const schemaMode = controlledSchemaMode ?? uncontrolledSchemaMode;
+  const setSchemaMode = (mode: SchemaViewMode) => {
+    onSchemaModeChange?.(mode);
+    if (!controlledSchemaMode) setUncontrolledSchemaMode(mode);
+  };
   const groupBy = searchParams.get('groupBy') === 'severity' ? 'severity' : 'tool';
   const toolReportContainerRef = useRef<HTMLDivElement | null>(null);
   const normalizedToolFilter = toolFilter.trim().toLowerCase();
@@ -747,6 +761,8 @@ export function ToolAnalysisReportView({ report }: { report: ToolAnalysisReport 
                             <ToolSchemaPreview
                               inputSchema={tool.inputSchema}
                               outputSchema={tool.outputSchema}
+                              mode={schemaMode}
+                              onModeChange={setSchemaMode}
                             />
                             {tool.metadataReview && (
                               <div className="space-y-1">
