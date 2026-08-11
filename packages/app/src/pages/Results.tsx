@@ -238,6 +238,7 @@ const Results = () => {
   );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
+  const [dashboardRefreshVersion, setDashboardRefreshVersion] = useState(0);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardVisible, setDashboardVisible] = useState(readStoredDashboardVisibility);
   const [refreshing, setRefreshing] = useState(false);
@@ -305,6 +306,7 @@ const Results = () => {
         });
         pagination.updateMeta(page);
         setResults(page.data.map(summaryToResult));
+        setDashboardRefreshVersion((version) => version + 1);
       } else if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({
           ...apiTimeFilter,
@@ -315,10 +317,12 @@ const Results = () => {
         pagination.setTotalCount(summaries.length);
         pagination.setHasMore(false);
         setResults(summaries.map(summaryToResult));
+        setDashboardRefreshVersion((version) => version + 1);
       } else {
         pagination.setTotalCount(0);
         pagination.setHasMore(false);
         setResults(await source.listResults());
+        setDashboardRefreshVersion((version) => version + 1);
       }
     } catch (error: unknown) {
       toast({
@@ -413,7 +417,14 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [apiScenarioFilter, apiTimeFilter, completionVersion, dashboardVisible, source]);
+  }, [
+    apiScenarioFilter,
+    apiTimeFilter,
+    completionVersion,
+    dashboardRefreshVersion,
+    dashboardVisible,
+    source
+  ]);
 
   useEffect(() => {
     if (dashboardVisible && source.listRunSummaries) return;
@@ -713,6 +724,8 @@ const Results = () => {
     try {
       await source.deleteResult(runId);
       setResults((prev) => prev.filter((r) => r.id !== runId));
+      setDashboardRuns((prev) => prev.filter((r) => r.id !== runId));
+      pagination.setTotalCount((count) => Math.max(0, count - 1));
       toast({ title: 'Run deleted', description: runId });
       setPendingDeleteRunId(null);
     } catch (error: unknown) {
@@ -1189,7 +1202,12 @@ const Results = () => {
                             </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="More actions"
+                                >
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
