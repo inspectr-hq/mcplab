@@ -664,6 +664,8 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   let resourceMetadataStatus: number | undefined;
   let resourceMetadataError: unknown;
   for (const resourceMetadataUrl of resourceMetadataUrls) {
+    resourceMetadataStatus = undefined;
+    resourceMetadataError = undefined;
     try {
       const { response, responseJson, responseText } = await fetchWithTrace({
         session,
