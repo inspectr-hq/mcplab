@@ -541,12 +541,6 @@ function authServerMetadataCandidates(issuerUrl: string): string[] {
   return [...new Set(candidates)];
 }
 
-export function authorizationServerMetadataCandidates(issuerUrls: string[]): string[] {
-  return [
-    ...new Set(issuerUrls.flatMap((issuerUrl) => authServerMetadataCandidates(issuerUrl)))
-  ];
-}
-
 function localCallbackUrl(session: OAuthDebuggerSession, appBaseUrl: string): string {
   return `${appBaseUrl.replace(/\/$/, '')}/api/oauth-debugger/sessions/${session.id}/callback`;
 }
@@ -719,27 +713,15 @@ async function stepResolveTargetMetadata(session: OAuthDebuggerSession) {
   // Otherwise derive candidates from the issuer URL found in resource metadata,
   // or fall back to candidates based on the MCP server URL itself.
   const overrideMetadataUrl = session.config.target.overrides?.authorizationServerMetadataUrl;
-  const advertisedIssuers = Array.isArray(
-    session.context.resourceMetadata?.authorization_servers
-  )
-    ? session.context.resourceMetadata.authorization_servers
-        .filter((issuer: unknown): issuer is string => typeof issuer === 'string')
-        .map((issuer: string) => issuer.trim())
-        .filter(Boolean)
-    : [];
-  const singularIssuer =
-    typeof session.context.resourceMetadata?.authorization_server === 'string'
-      ? session.context.resourceMetadata.authorization_server.trim()
-      : '';
-  const issuerUrls = [
-    ...new Set([...advertisedIssuers, ...(singularIssuer ? [singularIssuer] : [])])
-  ];
+  const issuerFromMetadata = session.context.resourceMetadata?.authorization_servers?.[0]
+    ? String(session.context.resourceMetadata.authorization_servers[0])
+    : session.context.resourceMetadata?.authorization_server
+    ? String(session.context.resourceMetadata.authorization_server)
+    : undefined;
   const metadataCandidates = overrideMetadataUrl
     ? [overrideMetadataUrl]
-    : authorizationServerMetadataCandidates(
-        issuerUrls.length > 0
-          ? issuerUrls
-          : [session.config.target.overrides?.resourceBaseUrl ?? server.url]
+    : authServerMetadataCandidates(
+        issuerFromMetadata ?? session.config.target.overrides?.resourceBaseUrl ?? server.url
       );
 
   let authMetadataFetched = false;
