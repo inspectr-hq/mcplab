@@ -38,12 +38,30 @@ describe('Global Copilot domain policy', () => {
   });
 
   it('auto-approves reads and generators, confirms selected writes, and hides other writes', () => {
-    expect(globalCopilotMcplabToolPolicy('mcplab_validate_config')).toEqual({ expose: true, automatic: true });
-    expect(globalCopilotMcplabToolPolicy('mcplab_generate_scenario_entry')).toEqual({ expose: true, automatic: true });
-    expect(globalCopilotMcplabToolPolicy('mcplab_write_markdown_report')).toEqual({ expose: true, automatic: false });
-    expect(globalCopilotMcplabToolPolicy('mcplab_create_evaluation_config')).toEqual({ expose: true, automatic: false });
-    expect(globalCopilotMcplabToolPolicy('mcplab_run_eval')).toEqual({ expose: false, automatic: false });
-    expect(globalCopilotMcplabToolPolicy('mcplab_delete_tool_analysis_result')).toEqual({ expose: false, automatic: false });
+    expect(globalCopilotMcplabToolPolicy('mcplab_validate_config')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_generate_scenario_entry')).toEqual({
+      expose: true,
+      automatic: true
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_write_markdown_report')).toEqual({
+      expose: true,
+      automatic: false
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_create_evaluation_config')).toEqual({
+      expose: true,
+      automatic: false
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_run_eval')).toEqual({
+      expose: false,
+      automatic: false
+    });
+    expect(globalCopilotMcplabToolPolicy('mcplab_delete_tool_analysis_result')).toEqual({
+      expose: false,
+      automatic: false
+    });
   });
 
   it('only exposes direct Test Case creation outside the scenario editor', () => {
@@ -78,10 +96,16 @@ describe('Global Copilot domain policy', () => {
     expect(globalCopilotSystemPrompt({ currentView: 'Tool Analysis' })).toContain(
       '"currentView":"Tool Analysis"'
     );
-    expect(globalCopilotSystemPrompt({ scenarioEditor: { agents: [{ id: 'agent-1' }] } })).toContain(
-      'use the confirmation-required preview_scenario frontend action'
-    );
+    expect(
+      globalCopilotSystemPrompt({ scenarioEditor: { agents: [{ id: 'agent-1' }] } })
+    ).toContain('use the confirmation-required preview_scenario frontend action');
     expect(globalCopilotSystemPrompt({})).toContain('mcplab_create_test_case');
+  });
+
+  it('prioritizes persisted Test Case YAML creation over markdown reports', () => {
+    const prompt = globalCopilotSystemPrompt({});
+    expect(prompt).toContain('mcplab_create_test_case');
+    expect(prompt).toContain('Never use mcplab_write_markdown_report as a substitute');
   });
 
   it('only scopes external MCP servers to the active test case', () => {
@@ -96,7 +120,9 @@ describe('Global Copilot domain policy', () => {
       ]
     } as any;
 
-    expect(Object.keys(globalCopilotExternalServers(libraries, 'weather-case'))).toEqual(['weather']);
+    expect(Object.keys(globalCopilotExternalServers(libraries, 'weather-case'))).toEqual([
+      'weather'
+    ]);
     expect(globalCopilotExternalServers(libraries, undefined)).toEqual({});
   });
 
