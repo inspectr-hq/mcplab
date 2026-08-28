@@ -21,7 +21,7 @@ export interface TraceSpan {
 }
 
 export interface ScenarioTraceSpan extends TraceSpan {
-  startLlm(values: { turn: number; inputs: Values }): TraceSpan;
+  startLlm(values: { turn: number; inputs: Values; metadata?: Values }): TraceSpan;
   startTool(values: { server: string; tool: string; inputs: Values }): TraceSpan;
 }
 
@@ -46,14 +46,16 @@ function toLangSmithContentBlock(block: TraceMessageContentBlock): LangSmithMess
     case 'image':
       return {
         type: 'image',
-        base64: block.data,
+        source_type: 'base64',
+        data: block.data,
         mime_type: block.media_type,
         ...(block.name ? { name: block.name } : {})
       };
     case 'document':
       return {
         type: 'file',
-        base64: block.data,
+        source_type: 'base64',
+        data: block.data,
         mime_type: block.media_type,
         ...(block.name ? { name: block.name } : {})
       };
@@ -160,12 +162,13 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           requestIdsByRoot.set(root, values.requestId);
         }
         return {
-          startLlm({ turn, inputs }) {
+          startLlm({ turn, inputs, metadata }) {
             try {
               const child = root.createChild({
                 name: `LLM turn ${turn}`,
                 run_type: 'llm',
                 inputs,
+                ...(metadata ? { metadata } : {}),
                 serialized: { name: 'mcplab-llm' }
               });
               runsByRoot.get(root)?.push(child);

@@ -65,6 +65,13 @@ describe('createLangSmithTraceExporter', () => {
       {
         role: 'assistant',
         content: [{ type: 'text', text: 'The tag profile is ready.' }]
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'image', media_type: 'image/png', data: 'image-data', name: 'chart.png' },
+          { type: 'document', media_type: 'application/pdf', data: 'pdf-data', name: 'report.pdf' }
+        ]
       }
     ];
 
@@ -80,7 +87,26 @@ describe('createLangSmithTraceExporter', () => {
         name: 'search_tags',
         content: [{ type: 'text', text: '{"matches":["TM5"]}' }]
       },
-      { role: 'assistant', content: [{ type: 'text', text: 'The tag profile is ready.' }] }
+      { role: 'assistant', content: [{ type: 'text', text: 'The tag profile is ready.' }] },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source_type: 'base64',
+            data: 'image-data',
+            mime_type: 'image/png',
+            name: 'chart.png'
+          },
+          {
+            type: 'file',
+            source_type: 'base64',
+            data: 'pdf-data',
+            mime_type: 'application/pdf',
+            name: 'report.pdf'
+          }
+        ]
+      }
     ]);
   });
 
@@ -116,7 +142,11 @@ describe('createLangSmithTraceExporter', () => {
       configHash: 'hash-1',
       cliVersion: '1.0.0'
     });
-    const llm = parent.startLlm({ turn: 0, inputs: { prompt: 'hello' } });
+    const llm = parent.startLlm({
+      turn: 0,
+      inputs: { prompt: 'hello' },
+      metadata: { ls_provider: 'openai', ls_model_name: 'gpt-test' }
+    });
     await llm.end({ outputs: { text: 'hi' } });
     const tool = parent.startTool({ server: 'server-1', tool: 'tool-1', inputs: { x: 1 } });
     await tool.end({ outputs: { ok: true } });
@@ -133,7 +163,11 @@ describe('createLangSmithTraceExporter', () => {
         ls_model_name: 'gpt-test'
       }
     });
-    expect(runs[1]?.config).toMatchObject({ name: 'LLM turn 0', run_type: 'llm' });
+    expect(runs[1]?.config).toMatchObject({
+      name: 'LLM turn 0',
+      run_type: 'llm',
+      metadata: { ls_provider: 'openai', ls_model_name: 'gpt-test' }
+    });
     expect(runs[2]?.config).toMatchObject({
       name: 'tool-1',
       run_type: 'tool',

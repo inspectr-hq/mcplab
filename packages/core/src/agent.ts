@@ -108,6 +108,21 @@ function toLangSmithMessage(message: LlmMessage) {
   };
 }
 
+function toLangSmithResponseMessage(response: LlmResponse) {
+  return {
+    role: 'assistant',
+    content: [
+      ...(response.content ? [{ type: 'text', text: response.content }] : []),
+      ...(response.tool_calls ?? []).map((toolCall, index) => ({
+        type: 'tool_call',
+        id: toolCall.id ?? `tool_call_${index}`,
+        name: toolCall.name,
+        args: toolCall.arguments
+      }))
+    ]
+  };
+}
+
 export interface JsonSchemaResponseFormat {
   type: 'json_schema';
   json_schema: {
@@ -247,6 +262,10 @@ export async function runAgentScenario(params: {
     });
     const llmSpan = params.trace?.startLlm({
       turn,
+      metadata: {
+        ls_provider: agent.provider,
+        ls_model_name: agent.model
+      },
       inputs: {
         messages: messages.map(toLangSmithMessage),
         tools: tools.map((tool) => ({
@@ -267,7 +286,7 @@ export async function runAgentScenario(params: {
       });
       await llmSpan?.end({
         outputs: {
-          response,
+          messages: [toLangSmithResponseMessage(response)],
           ...(response.usage ? { usage_metadata: response.usage } : {})
         }
       });
