@@ -25,7 +25,8 @@ import {
   Clock3,
   Play,
   Pencil,
-  FileCode
+  FileCode,
+  ExternalLink
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -833,6 +834,20 @@ const ResultDetail = () => {
               </span>
             ) : null}
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+              {Object.entries(result.langsmithTraceUrls ?? {}).map(([requestId, url]) => (
+                <a
+                  key={requestId}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                  aria-label="LangSmith trace"
+                  title="Open LangSmith trace"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {!isEmbedded && 'LangSmith trace'}
+                </a>
+              ))}
               <Button
                 variant="outline"
                 size="sm"

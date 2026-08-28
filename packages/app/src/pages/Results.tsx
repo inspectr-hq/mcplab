@@ -1115,20 +1115,6 @@ const Results = () => {
                                 Note: {item.run.runNote}
                               </div>
                             ) : null}
-                            {Object.entries(item.run.langsmithTraceUrls ?? {}).map(
-                              ([requestId, url]) => (
-                                <a
-                                  key={requestId}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-cyan-700 hover:underline dark:text-cyan-400"
-                                >
-                                  LangSmith trace
-                                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                                </a>
-                              )
-                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-[11px] text-muted-foreground">

@@ -1352,6 +1352,7 @@ export function fromCoreResultsJson(
     configHash: results.metadata.config_hash,
     configPath: results.metadata.config_path,
     configName: results.metadata.config_name,
+    langsmithTraceUrls: results.metadata.langsmith_trace_urls,
     rerunAgents: results.metadata.rerun_agents,
     rerunScenarioIds: results.metadata.rerun_scenario_ids,
     rerunServerOverrideAll: results.metadata.rerun_server_override_all,

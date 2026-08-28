@@ -192,6 +192,27 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
+    const result = makeResult();
+    result.langsmithTraceUrls = {
+      'request-1': 'https://eu.smith.langchain.com/public/trace-1'
+    };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    const traceLink = screen.getByRole('link', { name: 'LangSmith trace' });
+    expect(traceLink).toHaveAttribute('href', 'https://eu.smith.langchain.com/public/trace-1');
+    expect(traceLink).toHaveAttribute('target', '_blank');
+  });
+
   it('offers subtle links to edit the parent scenario and reusable test case', async () => {
     const result = makeResult();
     result.configId = '';
