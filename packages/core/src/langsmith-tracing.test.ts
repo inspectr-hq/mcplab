@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createLangSmithTraceExporter,
+  toLangSmithMessages,
   type LangSmithRunFactory,
   type TraceExporter
 } from './langsmith-tracing.js';
+import type { TraceMessage } from './types.js';
 
 function makeFactory() {
   const runs: Array<{
@@ -29,6 +31,59 @@ function makeFactory() {
 }
 
 describe('createLangSmithTraceExporter', () => {
+  it('maps the complete MCPLab conversation to LangSmith messages', () => {
+    const traceMessages: TraceMessage[] = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'Find the tag profile.' }]
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'call-1',
+            name: 'search_tags',
+            input: { name: 'TM5' },
+            server: 'server-1'
+          }
+        ]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call-1',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{"matches":["TM5"]}' }],
+            is_error: false,
+            server: 'server-1'
+          }
+        ]
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'The tag profile is ready.' }]
+      }
+    ];
+
+    expect(toLangSmithMessages(traceMessages)).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'Find the tag profile.' }] },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_call', id: 'call-1', name: 'search_tags', args: { name: 'TM5' } }]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call-1',
+        name: 'search_tags',
+        content: [{ type: 'text', text: '{"matches":["TM5"]}' }]
+      },
+      { role: 'assistant', content: [{ type: 'text', text: 'The tag profile is ready.' }] }
+    ]);
+  });
+
   it('is a no-op unless tracing and an API key are configured', async () => {
     const { factory, runs } = makeFactory();
     const exporter = createLangSmithTraceExporter({}, factory);
@@ -72,18 +127,20 @@ describe('createLangSmithTraceExporter', () => {
     expect(runs[0]?.config).toMatchObject({
       name: 'MCPLab scenario: scenario-1',
       run_type: 'chain',
-      project_name: 'mcplab-tests'
+      project_name: 'mcplab-tests',
+      metadata: {
+        ls_provider: 'openai',
+        ls_model_name: 'gpt-test'
+      }
     });
     expect(runs[1]?.config).toMatchObject({ name: 'LLM turn 0', run_type: 'llm' });
     expect(runs[2]?.config).toMatchObject({
       name: 'tool-1',
       run_type: 'tool',
       inputs: { x: 1 },
-      metadata: { tool: 'tool-1' },
-      tags: ['mcp-server:server-1']
+      metadata: { server: 'server-1', tool: 'tool-1' }
     });
-    expect(runs[2]?.config.inputs).not.toHaveProperty('server');
-    expect(runs[2]?.config.metadata).not.toHaveProperty('server');
+    expect(runs[2]?.config.tags ?? []).not.toContain('mcp-server:server-1');
     expect(runs.every((run) => run.end)).toBe(true);
     expect(runs.every((run) => run.postRun)).toBe(true);
     expect(runs[0]?.postRun).toHaveBeenCalledWith();

@@ -1,4 +1,5 @@
 import { Client, RunTree, type RunTreeConfig } from 'langsmith';
+import type { TraceMessage, TraceMessageContentBlock } from './types.js';
 
 type Environment = Record<string, string | undefined>;
 type Values = Record<string, unknown>;
@@ -27,6 +28,71 @@ export interface ScenarioTraceSpan extends TraceSpan {
 export interface TraceExporter {
   startScenario(values: Values): ScenarioTraceSpan;
   flush(): Promise<{ traceUrls: Record<string, string> }>;
+}
+
+type LangSmithMessage = Record<string, unknown>;
+
+function toLangSmithContentBlock(block: TraceMessageContentBlock): LangSmithMessage {
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', text: block.text };
+    case 'tool_use':
+      return {
+        type: 'tool_call',
+        id: block.id,
+        name: block.name,
+        args: block.input
+      };
+    case 'image':
+      return {
+        type: 'image',
+        base64: block.data,
+        mime_type: block.media_type,
+        ...(block.name ? { name: block.name } : {})
+      };
+    case 'document':
+      return {
+        type: 'file',
+        base64: block.data,
+        mime_type: block.media_type,
+        ...(block.name ? { name: block.name } : {})
+      };
+    case 'tool_result':
+      return {
+        type: 'tool_result',
+        tool_call_id: block.tool_use_id,
+        name: block.name,
+        content: block.content.map((content) => ({ type: 'text', text: content.text })),
+        ...(block.is_error ? { is_error: true } : {})
+      };
+  }
+}
+
+/** Convert MCPLab's local trace schema to LangSmith's message schema. */
+export function toLangSmithMessages(traceMessages: TraceMessage[]): LangSmithMessage[] {
+  return traceMessages.flatMap((message): LangSmithMessage[] => {
+    if (message.role === 'tool') {
+      return message.content
+        .filter((block): block is Extract<TraceMessageContentBlock, { type: 'tool_result' }> =>
+          block.type === 'tool_result'
+        )
+        .map((block) => ({
+          role: 'tool',
+          tool_call_id: block.tool_use_id,
+          name: block.name,
+          content: block.content.map((content) => ({ type: 'text', text: content.text }))
+        }));
+    }
+
+    return [
+      {
+        role: message.role,
+        content: message.content
+          .filter((block) => block.type !== 'tool_result')
+          .map(toLangSmithContentBlock)
+      }
+    ];
+  });
 }
 
 const noopSpan: TraceSpan = { end: async () => undefined };
@@ -79,7 +145,11 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           name: `MCPLab scenario: ${String(values.scenarioId ?? 'unknown')}`,
           run_type: 'chain',
           inputs: values,
-          metadata: values,
+          metadata: {
+            ...values,
+            ...(typeof values.provider === 'string' ? { ls_provider: values.provider } : {}),
+            ...(typeof values.model === 'string' ? { ls_model_name: values.model } : {})
+          },
           tags: ['mcplab', 'evaluation'],
           ...(env.LANGSMITH_PROJECT ? { project_name: env.LANGSMITH_PROJECT } : {}),
           serialized: { name: 'mcplab-scenario' }
@@ -111,8 +181,7 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
                 name: tool,
                 run_type: 'tool',
                 inputs,
-                metadata: { tool },
-                tags: [`mcp-server:${server}`],
+                metadata: { server, tool },
                 serialized: { name: 'mcplab-mcp-tool' }
               });
               runsByRoot.get(root)?.push(child);

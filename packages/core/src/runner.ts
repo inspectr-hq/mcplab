@@ -29,6 +29,7 @@ import { aggregateResults, renderSummaryMarkdown } from './results.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 import {
   createLangSmithTraceExporter,
+  toLangSmithMessages,
   type TraceExporter
 } from './langsmith-tracing.js';
 
@@ -348,7 +349,7 @@ export async function runAll(
             outputs: {
               finalText: runResult.finalText,
               pass: evalResult.pass,
-              messages: runResult.traceMessages,
+              messages: toLangSmithMessages(runResult.traceMessages),
               traceMessages: runResult.traceMessages,
               metrics: traceRecord.metrics
             }

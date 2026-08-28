@@ -85,6 +85,29 @@ interface AdapterOptions {
   responseFormat?: JsonSchemaResponseFormat;
 }
 
+function toLangSmithToolCall(toolCall: ToolCall) {
+  return {
+    ...(toolCall.id ? { id: toolCall.id } : {}),
+    type: 'function',
+    function: {
+      name: toolCall.name,
+      arguments: stringifySafe(toolCall.arguments)
+    }
+  };
+}
+
+function toLangSmithMessage(message: LlmMessage) {
+  return {
+    role: message.role,
+    content: message.content,
+    ...(message.tool_call_id ? { tool_call_id: message.tool_call_id } : {}),
+    ...(message.name ? { name: message.name } : {}),
+    ...(message.tool_calls?.length
+      ? { tool_calls: message.tool_calls.map(toLangSmithToolCall) }
+      : {})
+  };
+}
+
 export interface JsonSchemaResponseFormat {
   type: 'json_schema';
   json_schema: {
@@ -225,10 +248,7 @@ export async function runAgentScenario(params: {
     const llmSpan = params.trace?.startLlm({
       turn,
       inputs: {
-        messages: messages.map((message) => ({
-          ...message,
-          ...(message.tool_calls ? { tool_calls: [...message.tool_calls] } : {})
-        })),
+        messages: messages.map(toLangSmithMessage),
         tools: tools.map((tool) => ({
           name: tool.name,
           description: tool.description,
@@ -245,16 +265,10 @@ export async function runAgentScenario(params: {
         system: agent.system,
         signal: params.signal
       });
-      const assistantMessage = {
-        role: 'assistant',
-        content: response.content ?? '',
-        ...(response.tool_calls?.length ? { tool_calls: response.tool_calls } : {})
-      };
       await llmSpan?.end({
         outputs: {
           response,
-          messages: [assistantMessage],
-          generations: [[{ text: response.content ?? '', message: assistantMessage }]]
+          ...(response.usage ? { usage_metadata: response.usage } : {})
         }
       });
     } catch (error) {
