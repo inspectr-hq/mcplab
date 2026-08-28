@@ -75,7 +75,11 @@ describe('createLangSmithTraceExporter', () => {
       project_name: 'mcplab-tests'
     });
     expect(runs[1]?.config).toMatchObject({ name: 'LLM turn 0', run_type: 'llm' });
-    expect(runs[2]?.config).toMatchObject({ name: 'MCP tool: server-1/tool-1', run_type: 'tool' });
+    expect(runs[2]?.config).toMatchObject({
+      name: 'tool-1',
+      run_type: 'tool',
+      metadata: { server: 'server-1', tool: 'tool-1' }
+    });
     expect(runs.every((run) => run.end)).toBe(true);
     expect(runs.every((run) => run.postRun)).toBe(true);
     expect(runs[0]?.postRun).toHaveBeenCalledWith();

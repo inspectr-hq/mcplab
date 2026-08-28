@@ -108,9 +108,10 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           startTool({ server, tool, inputs }) {
             try {
               const child = root.createChild({
-                name: `MCP tool: ${server}/${tool}`,
+                name: tool,
                 run_type: 'tool',
                 inputs,
+                metadata: { server, tool },
                 serialized: { name: 'mcplab-mcp-tool' }
               });
               runsByRoot.get(root)?.push(child);
