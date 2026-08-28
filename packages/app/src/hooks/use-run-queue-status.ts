@@ -46,6 +46,7 @@ export function useRunQueueStatus() {
     let reconnectAttempts = 0;
     let reconnectTimer: number | null = null;
     let unsubscribeCurrent: (() => void) | null = null;
+    let connectionGeneration = 0;
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -57,6 +58,7 @@ export function useRunQueueStatus() {
     const connectStream = () => {
       if (disposed) return;
       clearReconnectTimer();
+      const currentConnectionGeneration = ++connectionGeneration;
       setStreamStatus('connecting');
       streamStatusRef.current = 'connecting';
       unsubscribeCurrent?.();
@@ -111,6 +113,29 @@ export function useRunQueueStatus() {
           }, delay);
         }
       });
+
+      const snapshotRevision = revisionRef.current;
+      void source
+        .getRunQueue()
+        .then((queueSnapshot) => {
+          if (
+            disposed ||
+            currentConnectionGeneration !== connectionGeneration ||
+            snapshotRevision !== revisionRef.current
+          ) {
+            return;
+          }
+          const nextQueueState = normalizeQueueState(queueSnapshot);
+          inFlightJobIdsRef.current = new Set(
+            [...nextQueueState.active_jobs, ...nextQueueState.admitting_jobs].map(
+              (job) => job.jobId
+            )
+          );
+          setQueueState(nextQueueState);
+        })
+        .catch(() => {
+          // SSE remains authoritative when the best-effort snapshot request fails.
+        });
     };
     connectStream();
 

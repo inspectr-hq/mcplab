@@ -4,6 +4,7 @@ import { useRunQueueStatus } from './use-run-queue-status';
 
 const sourceRef = {
   current: {
+    getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
     subscribeRunQueue: (_onEvent: (event: any) => void) => () => undefined
   }
 };
@@ -18,6 +19,7 @@ describe('useRunQueueStatus', () => {
   it('tolerates queue_event payloads from older servers without active_jobs', async () => {
     let emit: ((event: any) => void) | null = null;
     sourceRef.current = {
+      getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
       subscribeRunQueue: (onEvent: (event: any) => void) => {
         emit = onEvent;
         return () => undefined;
@@ -49,6 +51,7 @@ describe('useRunQueueStatus', () => {
   it('reconstructs active_jobs from legacy active payloads', async () => {
     let emit: ((event: any) => void) | null = null;
     sourceRef.current = {
+      getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
       subscribeRunQueue: (onEvent: (event: any) => void) => {
         emit = onEvent;
         return () => undefined;
@@ -91,6 +94,7 @@ describe('useRunQueueStatus', () => {
   it('treats admitting jobs as in-flight work', async () => {
     let emit: ((event: any) => void) | null = null;
     sourceRef.current = {
+      getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
       subscribeRunQueue: (onEvent: (event: any) => void) => {
         emit = onEvent;
         return () => undefined;
@@ -139,6 +143,7 @@ describe('useRunQueueStatus', () => {
   it('increments completionVersion when an in-flight job leaves the queue state', async () => {
     let emit: ((event: any) => void) | null = null;
     sourceRef.current = {
+      getRunQueue: async () => ({ active: null, active_jobs: [], admitting_jobs: [], queued: [] }),
       subscribeRunQueue: (onEvent: (event: any) => void) => {
         emit = onEvent;
         return () => undefined;
@@ -178,6 +183,41 @@ describe('useRunQueueStatus', () => {
 
     await waitFor(() => {
       expect(result.current.completionVersion).toBe(1);
+    });
+  });
+
+  it('hydrates queue state from the API when the SSE event was missed', async () => {
+    sourceRef.current = {
+      getRunQueue: async () => ({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: [
+          {
+            jobId: 'rerun-1',
+            status: 'queued',
+            runParams: {
+              configPath: '/tmp/eval.yaml',
+              runsPerScenario: 1,
+              scenarioIds: null,
+              agents: null,
+              runNote: null,
+              serverOverrideAll: null,
+              scenarioServerOverrides: null
+            }
+          }
+        ]
+      }),
+      subscribeRunQueue: (onEvent: (event: any) => void) => {
+        onEvent({ type: 'connected', payload: {} });
+        return () => undefined;
+      }
+    };
+
+    const { result } = renderHook(() => useRunQueueStatus());
+
+    await waitFor(() => {
+      expect(result.current.queuedCount).toBe(1);
     });
   });
 });

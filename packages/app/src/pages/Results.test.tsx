@@ -187,7 +187,9 @@ describe('Results', () => {
     );
 
     await screen.findByText('run-with-trace');
-    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    const actionsButton = screen.getByRole('button', { name: 'More actions' });
+    fireEvent.pointerDown(actionsButton, { button: 0 });
+    fireEvent.click(actionsButton);
 
     const menuItems = screen.getAllByRole('menuitem');
     expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
