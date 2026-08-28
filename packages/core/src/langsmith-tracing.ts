@@ -4,6 +4,10 @@ type Environment = Record<string, string | undefined>;
 type Values = Record<string, unknown>;
 
 export interface LangSmithRun {
+  id?: string;
+  trace_id?: string;
+  project_name?: string;
+  client?: { getProjectUrl(options: { projectName?: string; projectId?: string }): Promise<string> };
   end(outputs?: Values, error?: string): Promise<void>;
   postRun(excludeChildRuns?: boolean): Promise<void>;
   createChild(config: RunTreeConfig): LangSmithRun;
@@ -22,7 +26,7 @@ export interface ScenarioTraceSpan extends TraceSpan {
 
 export interface TraceExporter {
   startScenario(values: Values): ScenarioTraceSpan;
-  flush(): Promise<void>;
+  flush(): Promise<{ traceUrls: Record<string, string> }>;
 }
 
 const noopSpan: TraceSpan = { end: async () => undefined };
@@ -66,6 +70,8 @@ function createRunFactory(env: Environment): LangSmithRunFactory {
 
 function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): TraceExporter {
   const roots: LangSmithRun[] = [];
+  const runsByRoot = new Map<LangSmithRun, LangSmithRun[]>();
+  const requestIdsByRoot = new Map<LangSmithRun, string>();
   return {
     startScenario(values) {
       try {
@@ -79,15 +85,21 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           serialized: { name: 'mcplab-scenario' }
         });
         roots.push(root);
+        runsByRoot.set(root, [root]);
+        if (typeof values.requestId === 'string' && values.requestId) {
+          requestIdsByRoot.set(root, values.requestId);
+        }
         return {
           startLlm({ turn, inputs }) {
             try {
-              return spanFromRun(root.createChild({
+              const child = root.createChild({
                 name: `LLM turn ${turn}`,
                 run_type: 'llm',
                 inputs,
                 serialized: { name: 'mcplab-llm' }
-              }));
+              });
+              runsByRoot.get(root)?.push(child);
+              return spanFromRun(child);
             } catch (error) {
               warn(error);
               return noopSpan;
@@ -95,12 +107,14 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
           },
           startTool({ server, tool, inputs }) {
             try {
-              return spanFromRun(root.createChild({
+              const child = root.createChild({
                 name: `MCP tool: ${server}/${tool}`,
                 run_type: 'tool',
                 inputs,
                 serialized: { name: 'mcplab-mcp-tool' }
-              }));
+              });
+              runsByRoot.get(root)?.push(child);
+              return spanFromRun(child);
             } catch (error) {
               warn(error);
               return noopSpan;
@@ -114,13 +128,26 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
       }
     },
     async flush() {
+      const traceUrls: Record<string, string> = {};
       for (const root of roots.splice(0)) {
         try {
+          const runs = runsByRoot.get(root) ?? [root];
+          for (const run of runs.slice(1)) await run.postRun();
           await root.postRun();
+          const requestId = requestIdsByRoot.get(root);
+          if (requestId && root.id && root.client) {
+            const projectUrl = await root.client.getProjectUrl({
+              projectName: root.project_name
+            });
+            traceUrls[requestId] = `${projectUrl}/r/${root.id}?poll=true`;
+          }
+          runsByRoot.delete(root);
+          requestIdsByRoot.delete(root);
         } catch (error) {
           warn(error);
         }
       }
+      return { traceUrls };
     }
   };
 }
@@ -134,7 +161,7 @@ export function createLangSmithTraceExporter(
   factory?: LangSmithRunFactory
 ): TraceExporter {
   if (!isEnabled(env)) {
-    return { startScenario: () => noopScenarioSpan, flush: async () => undefined };
+    return { startScenario: () => noopScenarioSpan, flush: async () => ({ traceUrls: {} }) };
   }
   return createEnabledExporter(env, factory ?? createRunFactory(env));
 }

@@ -137,6 +137,7 @@ export async function runAll(
   writeFileSync(resolvedConfigPath, `${stringifyYaml(config)}\n`, 'utf8');
   const trace = new TraceWriter(tracePath);
   const traceExporter = options.traceExporter ?? createLangSmithTraceExporter();
+  let traceExporterFlushed = false;
   trace.write({
     type: 'trace_meta',
     trace_version: 3,
@@ -431,6 +432,8 @@ export async function runAll(
       });
     }
 
+    const traceExport = await traceExporter.flush();
+    traceExporterFlushed = true;
     const results = aggregateResults({
       runId,
       timestamp: new Date().toISOString(),
@@ -438,6 +441,7 @@ export async function runAll(
       gitCommit: options.gitCommit,
       configHash: options.configHash,
       cliVersion: options.cliVersion,
+      langsmithTraceUrls: traceExport.traceUrls,
       mcpServerVersions,
       scenarioRuns
     });
@@ -452,7 +456,7 @@ export async function runAll(
     return { runDir, results };
   } finally {
     await mcp.disconnectAll();
-    await traceExporter.flush();
+    if (!traceExporterFlushed) await traceExporter.flush();
   }
 }
 

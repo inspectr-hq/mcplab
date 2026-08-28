@@ -110,6 +110,7 @@ export interface EvalConfig {
   id: string;
   name: string;
   configName?: string;
+  langsmithTraceUrls?: Record<string, string>;
   description?: string;
   sourcePath?: string;
   configHash?: string;

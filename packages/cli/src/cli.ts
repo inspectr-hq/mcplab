@@ -887,6 +887,9 @@ async function executeSingleConfigRun(params: {
   writeFileSync(reportPath, renderReport(results), 'utf8');
   writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
   console.log(kleur.green(`✅ Run complete. Results: ${runDir}`));
+  for (const url of Object.values(results.metadata.langsmith_trace_urls ?? {})) {
+    console.log(kleur.cyan(`LangSmith trace: ${url}`));
+  }
 
   const failedRuns = results.scenarios.reduce(
     (sum, scenario) => sum + scenario.runs.filter((run) => !run.pass).length,

@@ -171,6 +171,37 @@ describe('Results', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the LangSmith trace link in the run actions menu', async () => {
+    const run = makeRun('run-with-trace', 1200);
+    run.langsmithTraceUrls = {
+      'request-1': 'https://eu.smith.langchain.com/public/trace-1'
+    };
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-with-trace');
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+
+    const menuItems = screen.getAllByRole('menuitem');
+    expect(menuItems.map((item) => item.textContent?.trim())).toEqual([
+      'View',
+      'LangSmith trace',
+      'Export JSON',
+      'Delete'
+    ]);
+    expect(screen.getByRole('menuitem', { name: 'LangSmith trace' })).toHaveAttribute(
+      'href',
+      'https://eu.smith.langchain.com/public/trace-1'
+    );
+  });
+
   it('reloads the overview when an evaluation completes', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
     const renderResults = () =>

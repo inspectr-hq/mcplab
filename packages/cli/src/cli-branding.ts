@@ -22,6 +22,20 @@ export function printCliBanner(): void {
   console.log(formatCliBanner());
 }
 
+export function formatLangSmithStatus(
+  env: Record<string, string | undefined> = process.env
+): string {
+  const enabled =
+    env.LANGSMITH_TRACING?.trim().toLowerCase() === 'true' && Boolean(env.LANGSMITH_API_KEY);
+  if (!enabled) {
+    return 'disabled · set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable';
+  }
+
+  const project = env.LANGSMITH_PROJECT?.trim() || 'default';
+  const endpoint = env.LANGSMITH_ENDPOINT?.trim() || 'https://api.smith.langchain.com';
+  return `enabled · project: ${project} · endpoint: ${endpoint}`;
+}
+
 function supportsTrueColor(): boolean {
   const colorTerm = process.env.COLORTERM?.toLowerCase();
   const term = process.env.TERM?.toLowerCase() ?? '';

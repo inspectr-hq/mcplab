@@ -62,6 +62,7 @@ export interface WorkspaceRunSummary {
   configHash: string;
   configPath?: string;
   configName?: string;
+  langsmithTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];

@@ -78,6 +78,9 @@ describe('createLangSmithTraceExporter', () => {
     expect(runs[2]?.config).toMatchObject({ name: 'MCP tool: server-1/tool-1', run_type: 'tool' });
     expect(runs.every((run) => run.end)).toBe(true);
     expect(runs.every((run) => run.postRun)).toBe(true);
+    expect(runs[0]?.postRun).toHaveBeenCalledWith();
+    expect(runs[1]?.postRun).toHaveBeenCalledWith();
+    expect(runs[2]?.postRun).toHaveBeenCalledWith();
   });
 
   it('swallows SDK failures and reports a warning', async () => {
@@ -96,5 +99,33 @@ describe('createLangSmithTraceExporter', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('LangSmith tracing'));
     warn.mockRestore();
+  });
+
+  it('returns a direct trace URL after flushing the root run', async () => {
+    const projectUrl = vi.fn(async () => 'https://smith.langchain.com/o/org/projects/p/project');
+    const root = {
+      id: 'root-run-id',
+      trace_id: 'root-run-id',
+      project_name: 'mcplab-tests',
+      client: { getProjectUrl: projectUrl },
+      end: vi.fn(async () => undefined),
+      postRun: vi.fn(async () => undefined),
+      createChild: vi.fn(() => {
+        throw new Error('not needed');
+      })
+    };
+    const exporter = createLangSmithTraceExporter(
+      { LANGSMITH_TRACING: 'true', LANGSMITH_API_KEY: 'test-key' },
+      () => root as any
+    );
+
+    const scenario = exporter.startScenario({ requestId: 'request-1', scenarioId: 'scenario-1' });
+    await scenario.end({ outputs: { pass: true } });
+    const result = await exporter.flush();
+
+    expect(result.traceUrls).toEqual({
+      'request-1': 'https://smith.langchain.com/o/org/projects/p/project/r/root-run-id?poll=true'
+    });
+    expect(projectUrl).toHaveBeenCalledWith({ projectName: 'mcplab-tests' });
   });
 });

@@ -18,7 +18,8 @@ import {
   BarChart3,
   Sparkles,
   CalendarRange,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -1114,6 +1115,20 @@ const Results = () => {
                                 Note: {item.run.runNote}
                               </div>
                             ) : null}
+                            {Object.entries(item.run.langsmithTraceUrls ?? {}).map(
+                              ([requestId, url]) => (
+                                <a
+                                  key={requestId}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-cyan-700 hover:underline dark:text-cyan-400"
+                                >
+                                  LangSmith trace
+                                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                                </a>
+                              )
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-[11px] text-muted-foreground">
@@ -1213,6 +1228,16 @@ const Results = () => {
                                     View
                                   </Link>
                                 </DropdownMenuItem>
+                                {Object.entries(item.run.langsmithTraceUrls ?? {}).map(
+                                  ([requestId, url]) => (
+                                    <DropdownMenuItem key={requestId} asChild>
+                                      <a href={url} target="_blank" rel="noreferrer">
+                                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                                        LangSmith trace
+                                      </a>
+                                    </DropdownMenuItem>
+                                  )
+                                )}
                                 <DropdownMenuItem>
                                   <Download className="mr-2 h-3.5 w-3.5" />
                                   Export JSON
