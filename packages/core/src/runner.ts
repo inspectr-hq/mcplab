@@ -250,7 +250,8 @@ export async function runAll(
           model: agent.model,
           configHash: options.configHash,
           gitCommit: options.gitCommit,
-          cliVersion: options.cliVersion
+          cliVersion: options.cliVersion,
+          messages: [{ role: 'user', content: scenario.prompt }]
         });
         try {
           const runResult = await runAgentScenario({
@@ -347,6 +348,7 @@ export async function runAll(
             outputs: {
               finalText: runResult.finalText,
               pass: evalResult.pass,
+              messages: runResult.traceMessages,
               traceMessages: runResult.traceMessages,
               metrics: traceRecord.metrics
             }

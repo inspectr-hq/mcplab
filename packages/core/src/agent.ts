@@ -224,7 +224,17 @@ export async function runAgentScenario(params: {
     });
     const llmSpan = params.trace?.startLlm({
       turn,
-      inputs: { messages, tools }
+      inputs: {
+        messages: messages.map((message) => ({
+          ...message,
+          ...(message.tool_calls ? { tool_calls: [...message.tool_calls] } : {})
+        })),
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema
+        }))
+      }
     });
     let response: LlmResponse;
     try {
@@ -235,7 +245,18 @@ export async function runAgentScenario(params: {
         system: agent.system,
         signal: params.signal
       });
-      await llmSpan?.end({ outputs: { response } });
+      const assistantMessage = {
+        role: 'assistant',
+        content: response.content ?? '',
+        ...(response.tool_calls?.length ? { tool_calls: response.tool_calls } : {})
+      };
+      await llmSpan?.end({
+        outputs: {
+          response,
+          messages: [assistantMessage],
+          generations: [[{ text: response.content ?? '', message: assistantMessage }]]
+        }
+      });
     } catch (error) {
       await llmSpan?.end({ error: String((error as any)?.message ?? error) });
       throw error;
@@ -304,7 +325,7 @@ export async function runAgentScenario(params: {
         const toolSpan = params.trace?.startTool({
           server: resolved.server,
           tool: toolCall.name,
-          inputs: { arguments: toolCall.arguments }
+          inputs: { input: toolCall.arguments, arguments: toolCall.arguments }
         });
         await emitProgress({
           type: 'tool_call_started',
@@ -369,7 +390,7 @@ export async function runAgentScenario(params: {
           durationMs
         });
         await toolSpan?.end({
-          outputs: { result, ok, durationMs },
+          outputs: { output: result, result, ok, durationMs },
           ...(ok ? {} : { error: String(result?.error ?? 'MCP tool call failed') })
         });
 
