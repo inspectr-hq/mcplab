@@ -14,6 +14,7 @@ import type {
 } from './types.js';
 import type { McpClientManager } from './mcp.js';
 import { isAbortError, throwIfAborted } from './abort.js';
+import type { ScenarioTraceSpan } from './langsmith-tracing.js';
 
 export interface AgentRunResult {
   finalText: string;
@@ -161,6 +162,7 @@ export async function runAgentScenario(params: {
   maxTurns?: number;
   signal?: AbortSignal;
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
+  trace?: ScenarioTraceSpan;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
   const serverRequestHeaders =
@@ -220,13 +222,24 @@ export async function runAgentScenario(params: {
       model: agent.model,
       turn
     });
-    const response = await adapter.chat(messages, tools, {
-      model: agent.model,
-      temperature: agent.temperature,
-      max_tokens: agent.max_tokens,
-      system: agent.system,
-      signal: params.signal
+    const llmSpan = params.trace?.startLlm({
+      turn,
+      inputs: { messages, tools }
     });
+    let response: LlmResponse;
+    try {
+      response = await adapter.chat(messages, tools, {
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system,
+        signal: params.signal
+      });
+      await llmSpan?.end({ outputs: { response } });
+    } catch (error) {
+      await llmSpan?.end({ error: String((error as any)?.message ?? error) });
+      throw error;
+    }
 
     const responseText = truncate((response.content ?? '').trim(), 4000);
     const toolCallNames = response.tool_calls?.map((call) => call.name) ?? [];
@@ -288,6 +301,11 @@ export async function runAgentScenario(params: {
         }
       }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
+        const toolSpan = params.trace?.startTool({
+          server: resolved.server,
+          tool: toolCall.name,
+          inputs: { arguments: toolCall.arguments }
+        });
         await emitProgress({
           type: 'tool_call_started',
           scenarioId: scenario.id,
@@ -349,6 +367,10 @@ export async function runAgentScenario(params: {
           turn,
           ok,
           durationMs
+        });
+        await toolSpan?.end({
+          outputs: { result, ok, durationMs },
+          ...(ok ? {} : { error: String(result?.error ?? 'MCP tool call failed') })
         });
 
         toolSequence.push(toolCall.name);

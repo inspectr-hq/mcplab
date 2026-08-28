@@ -1,0 +1,100 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  createLangSmithTraceExporter,
+  type LangSmithRunFactory,
+  type TraceExporter
+} from './langsmith-tracing.js';
+
+function makeFactory() {
+  const runs: Array<{
+    config: Record<string, unknown>;
+    end: ReturnType<typeof vi.fn>;
+    postRun: ReturnType<typeof vi.fn>;
+    createChild: ReturnType<typeof vi.fn>;
+  }> = [];
+  const factory: LangSmithRunFactory = (config) => {
+    const run = {
+      config,
+      end: vi.fn(),
+      postRun: vi.fn(async () => undefined),
+      createChild: vi.fn((childConfig: Record<string, unknown>) => factory({
+        ...childConfig,
+        parent_run: run
+      }))
+    };
+    runs.push(run);
+    return run as any;
+  };
+  return { factory, runs };
+}
+
+describe('createLangSmithTraceExporter', () => {
+  it('is a no-op unless tracing and an API key are configured', async () => {
+    const { factory, runs } = makeFactory();
+    const exporter = createLangSmithTraceExporter({}, factory);
+
+    const parent = exporter.startScenario({ scenarioId: 'scenario-1' });
+    await parent.end({ outputs: { pass: true } });
+    await exporter.flush();
+
+    expect(runs).toHaveLength(0);
+  });
+
+  it('creates a scenario parent and nested llm/tool spans', async () => {
+    const { factory, runs } = makeFactory();
+    const exporter = createLangSmithTraceExporter(
+      {
+        LANGSMITH_TRACING: 'true',
+        LANGSMITH_API_KEY: 'test-key',
+        LANGSMITH_PROJECT: 'mcplab-tests'
+      },
+      factory
+    );
+
+    const parent = exporter.startScenario({
+      runId: 'run-1',
+      requestId: 'request-1',
+      scenarioId: 'scenario-1',
+      agent: 'agent-1',
+      provider: 'openai',
+      model: 'gpt-test',
+      configHash: 'hash-1',
+      cliVersion: '1.0.0'
+    });
+    const llm = parent.startLlm({ turn: 0, inputs: { prompt: 'hello' } });
+    await llm.end({ outputs: { text: 'hi' } });
+    const tool = parent.startTool({ server: 'server-1', tool: 'tool-1', inputs: { x: 1 } });
+    await tool.end({ outputs: { ok: true } });
+    await parent.end({ outputs: { finalText: 'hi', pass: true } });
+    await exporter.flush();
+
+    expect(runs).toHaveLength(3);
+    expect(runs[0]?.config).toMatchObject({
+      name: 'MCPLab scenario: scenario-1',
+      run_type: 'chain',
+      project_name: 'mcplab-tests'
+    });
+    expect(runs[1]?.config).toMatchObject({ name: 'LLM turn 0', run_type: 'llm' });
+    expect(runs[2]?.config).toMatchObject({ name: 'MCP tool: server-1/tool-1', run_type: 'tool' });
+    expect(runs.every((run) => run.end)).toBe(true);
+    expect(runs.every((run) => run.postRun)).toBe(true);
+  });
+
+  it('swallows SDK failures and reports a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const factory: LangSmithRunFactory = () => {
+      throw new Error('sdk unavailable');
+    };
+    const exporter = createLangSmithTraceExporter(
+      { LANGSMITH_TRACING: 'true', LANGSMITH_API_KEY: 'test-key' },
+      factory
+    );
+
+    const parent = exporter.startScenario({ scenarioId: 'scenario-1' });
+    await parent.end({ outputs: { pass: false } });
+    await exporter.flush();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('LangSmith tracing'));
+    warn.mockRestore();
+  });
+});

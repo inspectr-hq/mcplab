@@ -27,6 +27,10 @@ import {
 } from './eval.js';
 import { aggregateResults, renderSummaryMarkdown } from './results.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
+import {
+  createLangSmithTraceExporter,
+  type TraceExporter
+} from './langsmith-tracing.js';
 
 export interface RunOptions {
   runsPerScenario: number;
@@ -49,6 +53,7 @@ export interface RunOptions {
   };
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
+  traceExporter?: TraceExporter;
 }
 
 export type RunProgressEvent =
@@ -131,6 +136,7 @@ export async function runAll(
   const resolvedConfigPath = join(runDir, 'resolved-config.yaml');
   writeFileSync(resolvedConfigPath, `${stringifyYaml(config)}\n`, 'utf8');
   const trace = new TraceWriter(tracePath);
+  const traceExporter = options.traceExporter ?? createLangSmithTraceExporter();
   trace.write({
     type: 'trace_meta',
     trace_version: 3,
@@ -234,6 +240,17 @@ export async function runAll(
           runsPerScenario: options.runsPerScenario
         });
         const tsStart = new Date().toISOString();
+        const scenarioTrace = traceExporter.startScenario({
+          runId,
+          requestId,
+          scenarioId: scenario.id,
+          agent: scenario.agent,
+          provider: agent.provider,
+          model: agent.model,
+          configHash: options.configHash,
+          gitCommit: options.gitCommit,
+          cliVersion: options.cliVersion
+        });
         try {
           const runResult = await runAgentScenario({
             scenario,
@@ -245,6 +262,7 @@ export async function runAll(
               Promise.resolve({}),
             maxTurns: agent.max_turns,
             signal: options.signal,
+            trace: scenarioTrace,
             onProgress: async (event) => {
               await emitProgress({
                 type: 'agent_progress',
@@ -324,6 +342,14 @@ export async function runAll(
             }
           };
           trace.write(traceRecord);
+          await scenarioTrace.end({
+            outputs: {
+              finalText: runResult.finalText,
+              pass: evalResult.pass,
+              traceMessages: runResult.traceMessages,
+              metrics: traceRecord.metrics
+            }
+          });
           await emitProgress({
             type: 'scenario_run_finished',
             scenarioId: scenario.id,
@@ -337,6 +363,10 @@ export async function runAll(
           });
         } catch (scenarioErr: any) {
           if (options.signal?.aborted || isAbortError(scenarioErr)) {
+            await scenarioTrace.end({
+              error: String(scenarioErr?.message ?? scenarioErr),
+              outputs: { pass: false }
+            });
             throw scenarioErr;
           }
           const errorMessage = scenarioErr?.message ?? String(scenarioErr);
@@ -375,6 +405,7 @@ export async function runAll(
             messages: []
           };
           trace.write(errorTrace);
+          await scenarioTrace.end({ error: errorMessage, outputs: { pass: false } });
           await emitProgress({
             type: 'scenario_run_finished',
             scenarioId: scenario.id,
@@ -421,6 +452,7 @@ export async function runAll(
     return { runDir, results };
   } finally {
     await mcp.disconnectAll();
+    await traceExporter.flush();
   }
 }
 
