@@ -111,7 +111,8 @@ function createEnabledExporter(env: Environment, factory: LangSmithRunFactory): 
                 name: tool,
                 run_type: 'tool',
                 inputs,
-                metadata: { server, tool },
+                metadata: { tool },
+                tags: [`mcp-server:${server}`],
                 serialized: { name: 'mcplab-mcp-tool' }
               });
               runsByRoot.get(root)?.push(child);

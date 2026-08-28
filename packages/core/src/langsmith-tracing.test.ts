@@ -78,8 +78,12 @@ describe('createLangSmithTraceExporter', () => {
     expect(runs[2]?.config).toMatchObject({
       name: 'tool-1',
       run_type: 'tool',
-      metadata: { server: 'server-1', tool: 'tool-1' }
+      inputs: { x: 1 },
+      metadata: { tool: 'tool-1' },
+      tags: ['mcp-server:server-1']
     });
+    expect(runs[2]?.config.inputs).not.toHaveProperty('server');
+    expect(runs[2]?.config.metadata).not.toHaveProperty('server');
     expect(runs.every((run) => run.end)).toBe(true);
     expect(runs.every((run) => run.postRun)).toBe(true);
     expect(runs[0]?.postRun).toHaveBeenCalledWith();
