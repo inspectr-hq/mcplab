@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import type { EvalConfig, ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
 import { ensureInsideRoot } from './store-utils.js';
 
@@ -78,20 +79,10 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         });
         if (!matchesScenario) continue;
       }
-      const checkCounts = scenarioItems.reduce(
-        (counts, scenario) => {
-          for (const run of scenario.runs ?? []) {
-            for (const check of run.check_results ?? []) {
-              if (check.status === 'passed') counts.passed += 1;
-              else if (check.status === 'failed') counts.failed += 1;
-              else if (check.status === 'not_evaluated') counts.not_evaluated += 1;
-              else continue;
-              counts.total += 1;
-            }
-          }
-          return counts;
-        },
-        { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+      const checkCounts = tallyCheckCounts(
+        scenarioItems.flatMap((scenario) =>
+          (scenario.runs ?? []).flatMap((run) => run.check_results ?? [])
+        )
       );
       summaries.push({
         runId: results.metadata.run_id,

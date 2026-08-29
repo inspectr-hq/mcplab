@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import {
   ArrowLeft,
   Activity,
@@ -519,17 +520,10 @@ const ResultDetail = () => {
     { name: 'Pass', value: passCount, color: 'hsl(152, 69%, 40%)' },
     { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
   ];
-  const checkCounts = filteredScenarios.reduce(
-    (counts, scenario) => {
-      for (const run of scenario.runs) {
-        for (const check of run.checkResults ?? []) {
-          if (check.status === 'passed') counts.passed += 1;
-          if (check.status === 'failed') counts.failed += 1;
-        }
-      }
-      return counts;
-    },
-    { passed: 0, failed: 0 }
+  const checkCounts = tallyCheckCounts(
+    filteredScenarios.flatMap((scenario) =>
+      scenario.runs.flatMap((run) => run.checkResults ?? [])
+    )
   );
   const checkPieData = [
     { name: 'Pass', value: checkCounts.passed, color: 'hsl(152, 69%, 40%)' },
@@ -1132,15 +1126,8 @@ const ResultDetail = () => {
                   {filteredScenarios.map((sc) => {
                     const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                     const scenarioLabel = sc.scenarioName || sc.scenarioId;
-                    const checkCounts = sc.runs.reduce(
-                      (counts, run) => {
-                        for (const check of run.checkResults ?? []) {
-                          if (check.status === 'passed') counts.passed += 1;
-                          if (check.status === 'failed') counts.failed += 1;
-                        }
-                        return counts;
-                      },
-                      { passed: 0, failed: 0 }
+                    const checkCounts = tallyCheckCounts(
+                      sc.runs.flatMap((run) => run.checkResults ?? [])
                     );
                     const hasCheckResults = sc.runs.some(
                       (run) => (run.checkResults?.length ?? 0) > 0
@@ -1207,12 +1194,18 @@ const ResultDetail = () => {
                               <TableCell className="font-mono text-sm">
                                 {hasCheckResults ? (
                                   <span
-                                    title={`${checkCounts.passed} passed · ${checkCounts.failed} failed`}
-                                    aria-label={`${checkCounts.passed} checks passed, ${checkCounts.failed} checks failed`}
+                                    title={`${checkCounts.passed} passed · ${checkCounts.failed} failed${checkCounts.not_evaluated ? ` · ${checkCounts.not_evaluated} not evaluated` : ''}`}
+                                    aria-label={`${checkCounts.passed} checks passed, ${checkCounts.failed} checks failed${checkCounts.not_evaluated ? `, ${checkCounts.not_evaluated} not evaluated` : ''}`}
                                   >
                                     <span className="text-success">{checkCounts.passed} ✓</span>
                                     <span className="text-muted-foreground"> </span>
                                     <span className="text-destructive">{checkCounts.failed} ✕</span>
+                                    {checkCounts.not_evaluated > 0 && (
+                                      <>
+                                        <span className="text-muted-foreground"> </span>
+                                        <span>{checkCounts.not_evaluated} ?</span>
+                                      </>
+                                    )}
                                   </span>
                                 ) : (
                                   '—'

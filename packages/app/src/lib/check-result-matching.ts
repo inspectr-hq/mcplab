@@ -29,7 +29,6 @@ export function matchStructuredCheckResult(
     };
     return (
       candidates.find(matchesFields) ??
-      (candidates.length === 1 ? candidates[0] : undefined) ??
       checkResults.find((result) => result.type === rule.type && result.label === formatLabel(rule))
     );
   }

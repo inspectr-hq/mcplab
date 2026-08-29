@@ -36,6 +36,7 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
+import { tallyCheckCounts } from '@inspectr/mcplab-core';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
@@ -1308,19 +1309,7 @@ function deriveRunDurationMs(run: CoreScenarioRun, record?: ScenarioRunTraceReco
 }
 
 function countChecks(runs: ScenarioRun[]): CheckCounts {
-  return runs.reduce(
-    (counts, run) => {
-      for (const check of run.checkResults ?? []) {
-        if (check.status === 'passed') counts.passed += 1;
-        else if (check.status === 'failed') counts.failed += 1;
-        else if (check.status === 'not_evaluated') counts.not_evaluated += 1;
-        else continue;
-        counts.total += 1;
-      }
-      return counts;
-    },
-    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
-  );
+  return tallyCheckCounts(runs.flatMap((run) => run.checkResults ?? []));
 }
 
 export function fromCoreResultsJson(

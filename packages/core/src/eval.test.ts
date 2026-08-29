@@ -408,6 +408,23 @@ describe('evaluateScenario — tool_input_assertions', () => {
       'Tool input assertion failed: invalid regex [invalid('
     ]);
   });
+
+  it('continues checking repeated calls after one input cannot be inspected', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      {
+        tool_input_assertions: [{ type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }]
+      },
+      [
+        { name: 'search', arguments: null as unknown as Record<string, unknown> },
+        { name: 'search', arguments: { query: 'Paris' } }
+      ]
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({ status: 'passed', metadata: { matched_call_count: 1 } });
+  });
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {

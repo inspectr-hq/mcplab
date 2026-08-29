@@ -122,6 +122,14 @@ function isToolInputRuleType(type: EvalRule['type']): boolean {
   return type.startsWith('tool_input_');
 }
 
+function parseEqualsValue(text: string): string | number | boolean | undefined {
+  const value = text.trim();
+  if (!value) return undefined;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return Number.isNaN(Number(value)) ? value : Number(value);
+}
+
 export function ScenarioForm({
   scenarios,
   scenarioOrigins,
@@ -361,17 +369,7 @@ function ScenarioCard({
       if (newRuleType === 'tool_input_jsonpath') {
         const path = newRulePath.trim();
         if (!path) return;
-        const equalsText = newRuleEquals.trim();
-        const equals =
-          equalsText === ''
-            ? undefined
-            : equalsText === 'true'
-            ? true
-            : equalsText === 'false'
-            ? false
-            : Number.isNaN(Number(equalsText))
-            ? equalsText
-            : Number(equalsText);
+        const equals = parseEqualsValue(newRuleEquals);
         nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
       } else {
         const value = newRuleValue.trim();
@@ -400,14 +398,7 @@ function ScenarioCard({
       const path = newRulePath.trim();
       if (!path) return;
       if (newRuleType === 'response_jsonpath') {
-        const equalsText = newRuleEquals.trim();
-        let equals: string | number | boolean | undefined = undefined;
-        if (equalsText.length > 0) {
-          if (equalsText === 'true') equals = true;
-          else if (equalsText === 'false') equals = false;
-          else if (!Number.isNaN(Number(equalsText))) equals = Number(equalsText);
-          else equals = equalsText;
-        }
+        const equals = parseEqualsValue(newRuleEquals);
         onUpdate({
           evalRules: [
             ...scenario.evalRules,

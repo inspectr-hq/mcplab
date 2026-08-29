@@ -191,7 +191,7 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
     'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order. Do not put the sequence in value.',
     'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
-    'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and pattern to the regex.',
+    'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.',
     'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
     'Use agent_check when the validation is semantic, fuzzy, or intent-based and deterministic checks would be brittle. agent_check requires label and prompt.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
@@ -297,6 +297,7 @@ function normalizeEvalRuleToolNames(
         rule.type === 'tool_input_jsonpath') &&
       rule.tool
     ) {
+      rule.tool = rule.tool.trim();
       const mapping = toolPublicMap.get(rule.tool);
       if (mapping) {
         rule.tool = mapping.tool;

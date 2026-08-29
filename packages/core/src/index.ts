@@ -1,4 +1,5 @@
 export * from './types.js';
+export { tallyCheckCounts, type CheckCounts } from './check-counts.js';
 export {
   loadConfig,
   hashConfig,

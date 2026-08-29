@@ -312,16 +312,30 @@ function evaluateToolInputAssertions(
     const matchingCalls = toolCalls.filter((call) => call.name === assertion.tool);
     let reason: string | undefined;
     let matchedCallCount = 0;
+    let inputError = false;
+
+    if (assertion.type === 'regex') {
+      try {
+        new RegExp(assertion.pattern);
+      } catch {
+        reason = `Tool input assertion failed: invalid regex ${assertion.pattern}`;
+      }
+    }
+
     try {
       if (!reason) {
-        matchedCallCount = matchingCalls.filter((call) =>
-          matchesToolInputAssertion(
-            assertion,
-            assertion.type === 'contains' || assertion.type === 'regex'
-              ? [JSON.stringify(call.arguments)]
-              : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[])
-          )
-        ).length;
+        for (const call of matchingCalls) {
+          try {
+            const values =
+              assertion.type === 'contains' || assertion.type === 'regex'
+                ? [JSON.stringify(call.arguments)]
+                : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
+            if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
+          } catch {
+            inputError = true;
+            continue;
+          }
+        }
       }
     } catch {
       reason =
@@ -335,6 +349,10 @@ function evaluateToolInputAssertions(
       reason =
         matchingCalls.length === 0
           ? `Tool input assertion failed: tool not used: ${assertion.tool}`
+          : inputError && assertion.type === 'jsonpath'
+          ? `Tool input assertion failed: invalid JSONPath ${assertion.path}`
+          : inputError && assertion.type === 'contains'
+          ? `Tool input assertion failed: could not serialize tool input for ${assertion.tool}`
           : `Tool input assertion failed: ${assertion.tool} input did not match`;
     }
     if (reason) failures.push(reason);

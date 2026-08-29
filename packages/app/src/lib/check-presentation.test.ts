@@ -104,7 +104,7 @@ describe('buildCheckItems', () => {
     expect(result[0]).toMatchObject({ rule, status: 'passed' });
   });
 
-  it('matches legacy tool-input results without relying on the label separator', () => {
+  it('does not match legacy tool-input results without assertion metadata', () => {
     const rule: EvalRule = { type: 'tool_input_contains', tool: 'stats', value: 'MEAN' };
     const result = buildCheckItems({
       evalRules: [rule],
@@ -119,7 +119,7 @@ describe('buildCheckItems', () => {
       ]
     });
 
-    expect(result[0]).toMatchObject({ rule, status: 'passed' });
+    expect(result[0]).toMatchObject({ rule, status: 'not_evaluated' });
   });
 
   it('marks all checks not evaluated when run fails before evaluation', () => {
