@@ -88,9 +88,6 @@ function RuleTypeSelect({
         <SelectItem value="required_tool">Required Tool</SelectItem>
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
         {!hideToolSequence && <SelectItem value="tool_sequence">Tool Sequence</SelectItem>}
-        <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
-        <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
-        <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
         <SelectItem value="response_not_contains">Text does not contain</SelectItem>
@@ -98,6 +95,8 @@ function RuleTypeSelect({
         <SelectItem value="response_ends_with">Text ends with</SelectItem>
         <SelectItem value="response_equals">Text equals</SelectItem>
         <SelectItem value="response_regex">Text matches regex</SelectItem>
+        <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
+        <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
         <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
         <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
         <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
