@@ -1158,8 +1158,19 @@ const Results = () => {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex flex-col items-end gap-1">
+                          <div className="flex flex-col items-center gap-1">
                             <PassRateBadge rate={item.run.overallPassRate} />
+                            {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
+                              <span
+                                className="font-mono text-[11px] leading-none"
+                                aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed`}
+                                title={`${item.run.checkCounts.passed} passed · ${item.run.checkCounts.failed} failed${item.run.checkCounts.not_evaluated > 0 ? ` · ${item.run.checkCounts.not_evaluated} not evaluated` : ''}`}
+                              >
+                                <span className="text-success">{item.run.checkCounts.passed} ✓</span>
+                                <span className="text-muted-foreground"> · </span>
+                                <span className="text-destructive">{item.run.checkCounts.failed} ✕</span>
+                              </span>
+                            ) : null}
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
