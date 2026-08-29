@@ -11,6 +11,31 @@ export function matchStructuredCheckResult(
     return checkResults.find((result) => result.type === 'agent_check' && result.label === label);
   }
 
+  if (
+    rule.type === 'tool_input_contains' ||
+    rule.type === 'tool_input_regex' ||
+    rule.type === 'tool_input_jsonpath'
+  ) {
+    const candidates = checkResults.filter(
+      (result) => result.type === rule.type && result.metadata?.tool === rule.tool
+    );
+    const matchesFields = (result: CheckResult) => {
+      if (rule.type === 'tool_input_contains') return result.metadata?.value === rule.value;
+      if (rule.type === 'tool_input_regex') return result.metadata?.pattern === rule.value;
+      return (
+        result.metadata?.path === rule.path &&
+        (rule.equals === undefined || result.metadata?.equals === rule.equals)
+      );
+    };
+    return (
+      candidates.find(matchesFields) ??
+      (candidates.length === 1 ? candidates[0] : undefined) ??
+      checkResults.find(
+        (result) => result.type === rule.type && result.label === formatLabel(rule)
+      )
+    );
+  }
+
   const expectedLabel = formatLabel(rule);
   return checkResults.find((result) => result.type === rule.type && result.label === expectedLabel);
 }

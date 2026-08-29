@@ -1152,10 +1152,13 @@ const ResultDetail = () => {
                               </TableCell>
                               <TableCell className="font-mono text-sm">
                                 {hasCheckResults ? (
-                                  <span title={`${checkCounts.passed} passed · ${checkCounts.failed} failed`}>
-                                    <span className="text-success">{checkCounts.passed} passed</span>
-                                    <span className="text-muted-foreground"> · </span>
-                                    <span className="text-destructive">{checkCounts.failed} failed</span>
+                                  <span
+                                    title={`${checkCounts.passed} passed · ${checkCounts.failed} failed`}
+                                    aria-label={`${checkCounts.passed} checks passed, ${checkCounts.failed} checks failed`}
+                                  >
+                                    <span className="text-success">{checkCounts.passed} ✓</span>
+                                    <span className="text-muted-foreground"> </span>
+                                    <span className="text-destructive">{checkCounts.failed} ✕</span>
                                   </span>
                                 ) : (
                                   '—'
@@ -1189,6 +1192,9 @@ const ResultDetail = () => {
                                       <p className="text-[11px] text-muted-foreground">
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {hasCheckResults
+                                          ? `${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}
                                         {formatDurationMs(getScenarioTotalDurationMs(sc), {

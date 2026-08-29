@@ -93,6 +93,24 @@ describe('buildCheckItems', () => {
     expect(result[0]).toMatchObject({ rule, status: 'passed' });
   });
 
+  it('matches legacy tool-input results without relying on the label separator', () => {
+    const rule: EvalRule = { type: 'tool_input_contains', tool: 'stats', value: 'MEAN' };
+    const result = buildCheckItems({
+      evalRules: [rule],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'tool_input_contains',
+          label: 'Tool input · stats · contains MEAN',
+          status: 'passed',
+          metadata: { tool: 'stats' }
+        }
+      ]
+    });
+
+    expect(result[0]).toMatchObject({ rule, status: 'passed' });
+  });
+
   it('marks all checks not evaluated when run fails before evaluation', () => {
     const result = buildCheckItems({
       evalRules,

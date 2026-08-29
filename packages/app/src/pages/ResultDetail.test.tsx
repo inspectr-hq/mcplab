@@ -212,6 +212,10 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
     expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+    expect(screen.getByText('2 ✓')).toBeInTheDocument();
+    expect(screen.getByText('1 ✕')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Scenario 1'));
+    expect(screen.getByText(/2 ✓ · 1 ✕/)).toBeInTheDocument();
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
