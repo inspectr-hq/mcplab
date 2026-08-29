@@ -2,6 +2,7 @@ import type {
   AgentContext,
   ConversationItem,
   AgentEntry,
+  CheckCounts,
   EvalConfig,
   EvalResult,
   EvalRule,
@@ -1301,6 +1302,19 @@ function deriveRunDurationMs(run: CoreScenarioRun, record?: ScenarioRunTraceReco
   return run.tool_durations_ms.reduce((sum, value) => sum + value, 0);
 }
 
+function countChecks(runs: ScenarioRun[]): CheckCounts {
+  return runs.reduce(
+    (counts, run) => {
+      for (const check of run.checkResults ?? []) {
+        counts[check.status] += 1;
+        counts.total += 1;
+      }
+      return counts;
+    },
+    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+  );
+}
+
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceRecords: ScenarioRunTraceRecord[] = []
@@ -1381,6 +1395,7 @@ export function fromCoreResultsJson(
       passRate: scenario.pass_rate,
       avgToolCalls,
       avgDuration,
+      checkCounts: countChecks(runs),
       assistantTokenUsage: toTokenUsage(scenarioAssistantUsageAcc),
       toolTokenUsage: toTokenUsage(scenarioToolUsageAcc),
       toolTokenUsageByTool: scenarioPerToolUsage
@@ -1393,6 +1408,17 @@ export function fromCoreResultsJson(
     addTokenUsage(runAssistantUsageAcc, scenario.assistantTokenUsage);
     addTokenUsage(runToolUsageAcc, scenario.toolTokenUsage);
   }
+
+  const checkCounts = scenarios.reduce(
+    (counts, scenario) => {
+      counts.passed += scenario.checkCounts?.passed ?? 0;
+      counts.failed += scenario.checkCounts?.failed ?? 0;
+      counts.not_evaluated += scenario.checkCounts?.not_evaluated ?? 0;
+      counts.total += scenario.checkCounts?.total ?? 0;
+      return counts;
+    },
+    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+  );
 
   return {
     id: results.metadata.run_id,
@@ -1416,6 +1442,7 @@ export function fromCoreResultsJson(
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
+    checkCounts,
     totalToolDurationMs:
       typeof (results.metadata as { total_tool_duration_ms?: unknown }).total_tool_duration_ms ===
       'number'

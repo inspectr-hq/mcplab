@@ -178,6 +178,13 @@ export interface ScenarioRun {
   checkResults?: CheckResult[];
 }
 
+export interface CheckCounts {
+  passed: number;
+  failed: number;
+  not_evaluated: number;
+  total: number;
+}
+
 export interface ScenarioResult {
   scenarioId: string;
   scenarioName: string;
@@ -189,6 +196,7 @@ export interface ScenarioResult {
   passRate: number;
   avgToolCalls: number;
   avgDuration: number;
+  checkCounts?: CheckCounts;
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
   toolTokenUsageByTool?: Record<string, TokenUsage>;
@@ -219,12 +227,7 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  checkCounts?: {
-    passed: number;
-    failed: number;
-    not_evaluated: number;
-    total: number;
-  };
+  checkCounts?: CheckCounts;
 }
 
 // App state

@@ -671,6 +671,29 @@ describe('fromCoreResultsJson conversation mapping', () => {
   });
 });
 
+describe('fromCoreResultsJson check counts', () => {
+  it('derives run and scenario check totals from persisted check results', () => {
+    const results = baseResults();
+    results.scenarios[0]!.runs[0]!.check_results = [
+      { type: 'required_tool', label: 'search_tags', status: 'passed' },
+      { type: 'response_regex', label: 'date', status: 'failed' }
+    ];
+    results.scenarios[0]!.runs[1]!.check_results = [
+      { type: 'agent_check', label: 'answer', status: 'not_evaluated' }
+    ];
+
+    const mapped = fromCoreResultsJson(results);
+
+    expect(mapped.checkCounts).toEqual({ passed: 1, failed: 1, not_evaluated: 1, total: 3 });
+    expect(mapped.scenarios[0]?.checkCounts).toEqual({
+      passed: 1,
+      failed: 1,
+      not_evaluated: 1,
+      total: 3
+    });
+  });
+});
+
 describe('config adapters round-trip', () => {
   it('preserves an omitted agent temperature when loading and saving config YAML', () => {
     const sourceRecord: WorkspaceConfigRecord = {
