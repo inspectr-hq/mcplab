@@ -1164,11 +1164,21 @@ const Results = () => {
                               <span
                                 className="font-mono text-[11px] leading-none"
                                 aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed`}
-                                title={`${item.run.checkCounts.passed} passed · ${item.run.checkCounts.failed} failed${item.run.checkCounts.not_evaluated > 0 ? ` · ${item.run.checkCounts.not_evaluated} not evaluated` : ''}`}
+                                title={`${item.run.checkCounts.passed} passed · ${
+                                  item.run.checkCounts.failed
+                                } failed${
+                                  item.run.checkCounts.not_evaluated > 0
+                                    ? ` · ${item.run.checkCounts.not_evaluated} not evaluated`
+                                    : ''
+                                }`}
                               >
-                                <span className="text-success">{item.run.checkCounts.passed} ✓</span>
+                                <span className="text-success">
+                                  {item.run.checkCounts.passed} ✓
+                                </span>
                                 <span className="text-muted-foreground"> · </span>
-                                <span className="text-destructive">{item.run.checkCounts.failed} ✕</span>
+                                <span className="text-destructive">
+                                  {item.run.checkCounts.failed} ✕
+                                </span>
                               </span>
                             ) : null}
                             <RunFailureSignalBadge run={item.run} />

@@ -485,7 +485,12 @@ describe('ScenarioForm checks editor', () => {
 
     render(
       <ScenarioForm
-        scenarios={[{ ...baseScenario(), evalRules: [{ type: 'agent_check', label: 'Check', prompt: 'Verify.' }] }]}
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'agent_check', label: 'Check', prompt: 'Verify.' }]
+          }
+        ]}
         agents={[] as AgentConfig[]}
         servers={[] as ServerConfig[]}
         onChange={onChange}

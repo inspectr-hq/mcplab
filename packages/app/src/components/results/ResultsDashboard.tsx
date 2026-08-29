@@ -21,15 +21,7 @@ function formatNumber(value: number, fractionDigits = 0): string {
   });
 }
 
-function OutcomeCard({
-  title,
-  passed,
-  failed
-}: {
-  title: string;
-  passed: number;
-  failed: number;
-}) {
+function OutcomeCard({ title, passed, failed }: { title: string; passed: number; failed: number }) {
   const data = [
     { name: 'Passed', value: passed, color: PASS_COLOR },
     { name: 'Failed', value: failed, color: FAIL_COLOR }
@@ -46,7 +38,14 @@ function OutcomeCard({
         <div className="h-[82px] w-[82px] shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="78%" paddingAngle={3}>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                innerRadius="55%"
+                outerRadius="78%"
+                paddingAngle={3}
+              >
                 {data.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
@@ -108,7 +107,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
       avgLatency: weighted((run) => run.avgLatency),
       totalTokens,
       totalDurationMs,
-      totalToolDurationMs,
+      totalToolDurationMs
     };
   }, [runs]);
 
@@ -135,7 +134,11 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
   return (
     <div className="space-y-2" data-testid="results-dashboard">
       <div className="grid gap-3 lg:grid-cols-4">
-        <OutcomeCard title="Runs Pass / Fail" passed={summary.passedRuns} failed={summary.failedRuns} />
+        <OutcomeCard
+          title="Runs Pass / Fail"
+          passed={summary.passedRuns}
+          failed={summary.failedRuns}
+        />
         <OutcomeCard
           title="Checks Pass / Fail"
           passed={summary.checkCounts.passed}

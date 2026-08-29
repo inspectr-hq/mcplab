@@ -1937,7 +1937,8 @@ function ScenarioCard({
                         Include tool inputs
                       </Label>
                       <p className="text-[11px] text-muted-foreground">
-                        Sends the called MCP tools and their arguments so the judge can verify how the tools were used.
+                        Sends the called MCP tools and their arguments so the judge can verify how
+                        the tools were used.
                       </p>
                     </div>
                   </div>

@@ -345,7 +345,10 @@ function evaluateToolInputAssertions(
         ...(assertion.type === 'contains' ? { value: assertion.value } : {}),
         ...(assertion.type === 'regex' ? { pattern: assertion.pattern } : {}),
         ...(assertion.type === 'jsonpath'
-          ? { path: assertion.path, ...(assertion.equals !== undefined ? { equals: assertion.equals } : {}) }
+          ? {
+              path: assertion.path,
+              ...(assertion.equals !== undefined ? { equals: assertion.equals } : {})
+            }
           : {}),
         matched_call_count: matchedCallCount,
         observed_call_count: matchingCalls.length

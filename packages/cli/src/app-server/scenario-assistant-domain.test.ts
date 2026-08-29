@@ -248,7 +248,12 @@ describe('continueAssistantTurn normalization integration', () => {
           replacement: [
             { type: 'tool_input_contains', tool: 'srv__refund_tool', value: 'Paris' },
             { type: 'tool_input_regex', tool: 'srv__refund_tool', value: 'Par.s' },
-            { type: 'tool_input_jsonpath', tool: 'srv__refund_tool', path: '$.city', equals: 'Paris' }
+            {
+              type: 'tool_input_jsonpath',
+              tool: 'srv__refund_tool',
+              path: '$.city',
+              equals: 'Paris'
+            }
           ]
         }
       }

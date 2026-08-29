@@ -341,9 +341,9 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.tool ?? ''}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${
-    rule.path ?? ''
-  }::${rule.equals === undefined ? '' : String(rule.equals)}`;
+  return `${rule.type}::${rule.tool ?? ''}::${rule.value ?? ''}::${(rule.sequence ?? []).join(
+    '|'
+  )}::${rule.path ?? ''}::${rule.equals === undefined ? '' : String(rule.equals)}`;
 }
 
 function hasEquivalentLiteralRule(
@@ -379,7 +379,8 @@ function collapseOffByOneCountGuards(
 
   for (let i = 0; i < rules.length; i += 1) {
     const rule = rules[i];
-    if (rule.type !== 'response_contains' || typeof rule.value !== 'string' || !rule.value) continue;
+    if (rule.type !== 'response_contains' || typeof rule.value !== 'string' || !rule.value)
+      continue;
 
     const explicitPositive = parseCountWithSuffix(rule.value);
     const numericOnly = !explicitPositive && rule.value.trim().match(/^\d+$/);
@@ -397,7 +398,8 @@ function collapseOffByOneCountGuards(
         candidate.type !== 'response_not_contains' ||
         typeof candidate.value !== 'string' ||
         !candidate.value
-      ) continue;
+      )
+        continue;
       const parsed = parseCountWithSuffix(candidate.value);
       if (!parsed) continue;
       if (preferredSuffix && parsed.suffix !== preferredSuffix) continue;
