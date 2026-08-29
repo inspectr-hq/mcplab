@@ -324,9 +324,12 @@ function evaluateToolInputAssertions(
         ).length;
       }
     } catch {
-      reason = `Tool input assertion failed: invalid JSONPath ${
-        assertion.type === 'jsonpath' ? assertion.path : '(unknown)'
-      }`;
+      reason =
+        assertion.type === 'regex'
+          ? `Tool input assertion failed: invalid regex ${assertion.pattern}`
+          : assertion.type === 'jsonpath'
+          ? `Tool input assertion failed: invalid JSONPath ${assertion.path}`
+          : `Tool input assertion failed: could not serialize tool input for ${assertion.tool}`;
     }
     if (matchedCallCount === 0 && !reason) {
       reason =

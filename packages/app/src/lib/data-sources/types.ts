@@ -21,6 +21,9 @@ import type {
   RunQueueEvent
 } from '@inspectr/mcplab-core';
 
+export type { ToolInputAssertion as CoreToolInputAssertion } from '@inspectr/mcplab-core';
+export { formatToolInputAssertionLabel, formatToolSequenceLabel } from '@inspectr/mcplab-core';
+
 export type {
   CoreServerAuthBearer,
   CoreServerAuthOauth,

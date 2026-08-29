@@ -865,7 +865,7 @@ describe('config adapters round-trip', () => {
       name: 'scn-malformed',
       prompt: 'Check malformed scenario names'
     });
-    expect((roundTripped.scenarios[0] as AnyRecord).name).toBe('scn-malformed');
+    expect((roundTripped.scenarios[0] as unknown as AnyRecord).name).toBe('scn-malformed');
   });
 
   it('preserves explicit empty mcp_servers overrides on referenced scenarios', () => {

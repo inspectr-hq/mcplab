@@ -12,6 +12,7 @@ import type {
   TokenUsage,
   ToolCall
 } from '@/types/eval';
+import type { CoreToolInputAssertion } from './types';
 import {
   addTokenUsage,
   createTokenAccumulator,
@@ -97,7 +98,7 @@ function toUiEvalRule(assertion: {
 function toUiToolInputRule(assertion: {
   type: 'contains' | 'regex' | 'jsonpath';
   tool: string;
-  path: string;
+  path?: string;
   equals?: string | number | boolean;
   value?: string | number | boolean;
   pattern?: string;
@@ -105,7 +106,7 @@ function toUiToolInputRule(assertion: {
   return {
     type: `tool_input_${assertion.type}` as EvalRule['type'],
     tool: assertion.tool,
-    path: assertion.path,
+    ...(assertion.path ? { path: assertion.path } : {}),
     ...(assertion.equals !== undefined ? { equals: assertion.equals } : {}),
     ...(assertion.value !== undefined ? { value: assertion.value } : {}),
     ...(assertion.pattern !== undefined ? { value: assertion.pattern } : {})
@@ -133,23 +134,24 @@ function toCoreResponseAssertion(
     rule.type === 'agent_check'
   )
     return null;
+  const value = typeof rule.value === 'string' ? rule.value : undefined;
   if (rule.type === 'response_contains') {
-    return rule.value ? { type: 'contains', value: rule.value } : null;
+    return value ? { type: 'contains', value } : null;
   }
   if (rule.type === 'response_not_contains') {
-    return rule.value ? { type: 'not_contains', value: rule.value } : null;
+    return value ? { type: 'not_contains', value } : null;
   }
   if (rule.type === 'response_starts_with') {
-    return rule.value ? { type: 'starts_with', value: rule.value } : null;
+    return value ? { type: 'starts_with', value } : null;
   }
   if (rule.type === 'response_ends_with') {
-    return rule.value ? { type: 'ends_with', value: rule.value } : null;
+    return value ? { type: 'ends_with', value } : null;
   }
   if (rule.type === 'response_equals') {
-    return rule.value ? { type: 'equals', value: rule.value } : null;
+    return value ? { type: 'equals', value } : null;
   }
   if (rule.type === 'response_regex') {
-    return rule.value ? { type: 'regex', pattern: rule.value } : null;
+    return value ? { type: 'regex', pattern: value } : null;
   }
   if (rule.type === 'response_jsonpath') {
     if (!rule.path?.trim()) return null;
@@ -213,7 +215,7 @@ function buildCoreEvalBlock(
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
   const tool_input_assertions = evalRules
     .filter((rule) => rule.type.startsWith('tool_input_'))
-    .flatMap((rule) => {
+    .flatMap((rule): CoreToolInputAssertion[] => {
       if (!rule.tool) return [];
       if (rule.type === 'tool_input_contains' && typeof rule.value === 'string')
         return [{ type: 'contains' as const, tool: rule.tool, value: rule.value }];
@@ -1309,7 +1311,10 @@ function countChecks(runs: ScenarioRun[]): CheckCounts {
   return runs.reduce(
     (counts, run) => {
       for (const check of run.checkResults ?? []) {
-        counts[check.status] += 1;
+        if (check.status === 'passed') counts.passed += 1;
+        else if (check.status === 'failed') counts.failed += 1;
+        else if (check.status === 'not_evaluated') counts.not_evaluated += 1;
+        else continue;
         counts.total += 1;
       }
       return counts;

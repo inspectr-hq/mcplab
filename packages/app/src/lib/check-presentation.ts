@@ -1,6 +1,7 @@
 import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import type { CheckResult, EvalRule } from '@/types/eval';
-import { formatToolSequenceLabel } from '../../../core/src/eval';
+import { formatToolInputAssertionLabel, formatToolSequenceLabel } from '@/lib/data-sources/types';
+import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
@@ -49,13 +50,26 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
-    return `Tool input · ${rule.tool} contains ${String(rule.value)}`;
+    return formatToolInputAssertionLabel({
+      type: 'contains',
+      tool: String(rule.tool ?? ''),
+      value: String(rule.value ?? '')
+    });
   if (rule.type === 'tool_input_regex')
-    return `Tool input · ${rule.tool} matches regex ${String(rule.value)}`;
-  if (rule.type === 'tool_input_jsonpath')
-    return rule.equals !== undefined
-      ? `Tool input · ${rule.tool} · ${rule.path} == ${String(rule.equals)}`
-      : `Tool input · ${rule.tool} · ${rule.path} exists`;
+    return formatToolInputAssertionLabel({
+      type: 'regex',
+      tool: String(rule.tool ?? ''),
+      pattern: String(rule.value ?? '')
+    });
+  if (rule.type === 'tool_input_jsonpath') {
+    const assertion: CoreToolInputAssertion = {
+      type: 'jsonpath',
+      tool: String(rule.tool ?? ''),
+      path: String(rule.path ?? ''),
+      ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+    };
+    return formatToolInputAssertionLabel(assertion);
+  }
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;
@@ -117,8 +131,9 @@ export function matchFailureReasonForRule(
   if (exact) return exact;
 
   if (rule.type === 'response_regex') {
+    const value = typeof rule.value === 'string' ? rule.value : '';
     return failureReasons.find(
-      (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(rule.value ?? '')
+      (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(value)
     );
   }
 

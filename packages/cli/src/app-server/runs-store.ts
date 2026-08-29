@@ -69,18 +69,6 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         continue;
       }
       const scenarioItems = Array.isArray(results.scenarios) ? results.scenarios : [];
-      const checkCounts = scenarioItems.reduce(
-        (counts, scenario) => {
-          for (const run of scenario.runs ?? []) {
-            for (const check of run.check_results ?? []) {
-              counts[check.status] += 1;
-              counts.total += 1;
-            }
-          }
-          return counts;
-        },
-        { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
-      );
       if (filter?.scenario?.trim()) {
         const needle = filter.scenario.trim();
         const matchesScenario = scenarioItems.some((scenario) => {
@@ -90,6 +78,21 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         });
         if (!matchesScenario) continue;
       }
+      const checkCounts = scenarioItems.reduce(
+        (counts, scenario) => {
+          for (const run of scenario.runs ?? []) {
+            for (const check of run.check_results ?? []) {
+              if (check.status === 'passed') counts.passed += 1;
+              else if (check.status === 'failed') counts.failed += 1;
+              else if (check.status === 'not_evaluated') counts.not_evaluated += 1;
+              else continue;
+              counts.total += 1;
+            }
+          }
+          return counts;
+        },
+        { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+      );
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,
