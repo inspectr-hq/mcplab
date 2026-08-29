@@ -50,6 +50,8 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
   if (rule.type === 'tool_input_contains')
     return `Tool input · ${rule.tool} contains ${String(rule.value)}`;
+  if (rule.type === 'tool_input_regex')
+    return `Tool input · ${rule.tool} matches regex ${String(rule.value)}`;
   if (rule.type === 'tool_input_jsonpath')
     return rule.equals !== undefined
       ? `Tool input · ${rule.tool} · ${rule.path} == ${String(rule.equals)}`

@@ -186,11 +186,12 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
     'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order. Do not put the sequence in value.',
     'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
+    'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and pattern to the regex.',
     'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
     'Use agent_check when the validation is semantic, fuzzy, or intent-based and deterministic checks would be brittle. agent_check requires label and prompt.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
@@ -291,7 +292,9 @@ function normalizeEvalRuleToolNames(
         });
     }
     if (
-      (rule.type === 'tool_input_contains' || rule.type === 'tool_input_jsonpath') &&
+      (rule.type === 'tool_input_contains' ||
+        rule.type === 'tool_input_regex' ||
+        rule.type === 'tool_input_jsonpath') &&
       rule.tool
     ) {
       const mapping = toolPublicMap.get(rule.tool);

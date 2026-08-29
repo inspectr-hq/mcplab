@@ -378,6 +378,23 @@ describe('evaluateScenario — tool_input_assertions', () => {
 
     expect(result.pass).toBe(true);
   });
+
+  it('matches a regular expression against serialized tool input', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: '\\*TM5-BP2\\*' }]
+      },
+      [{ name: 'search', arguments: { name: '*TM5-BP2*' } }]
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      type: 'tool_input_regex',
+      status: 'passed'
+    });
+  });
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {

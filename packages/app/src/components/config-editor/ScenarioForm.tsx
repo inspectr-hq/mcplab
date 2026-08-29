@@ -89,6 +89,7 @@ function RuleTypeSelect({
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
         {!hideToolSequence && <SelectItem value="tool_sequence">Tool Sequence</SelectItem>}
         <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
+        <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
         <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
@@ -569,6 +570,7 @@ function ScenarioCard({
     'response_equals',
     'response_regex',
     'tool_input_contains',
+    'tool_input_regex',
     'tool_input_jsonpath'
   ];
 
@@ -600,6 +602,7 @@ function ScenarioCard({
     forbidden_tool: 'Forbidden',
     tool_sequence: 'Sequence',
     tool_input_contains: 'Input Contains',
+    tool_input_regex: 'Input Regex',
     tool_input_jsonpath: 'Input JSONPath',
     response_contains: 'Contains',
     response_not_contains: 'Not Contains',
@@ -618,6 +621,7 @@ function ScenarioCard({
     forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
     tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
     tool_input_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
+    tool_input_regex: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     tool_input_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
     response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
@@ -1358,6 +1362,8 @@ function ScenarioCard({
                                   <span className="font-mono break-all">
                                     {rule.type === 'tool_input_contains'
                                       ? `${rule.tool} contains ${String(rule.value)}`
+                                      : rule.type === 'tool_input_regex'
+                                      ? `${rule.tool} matches ${String(rule.value)}`
                                       : `${rule.tool} · ${rule.path} · ${
                                           rule.equals !== undefined
                                             ? `== ${String(rule.equals)}`
@@ -1524,7 +1530,11 @@ function ScenarioCard({
                                   <Input
                                     value={newRuleValue}
                                     onChange={(e) => setNewRuleValue(e.target.value)}
-                                    placeholder="Text present in input"
+                                    placeholder={
+                                      newRuleType === 'tool_input_regex'
+                                        ? 'Regex pattern'
+                                        : 'Text present in input'
+                                    }
                                     className="h-8 w-[10rem] text-xs font-mono"
                                   />
                                 )}

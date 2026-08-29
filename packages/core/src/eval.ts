@@ -287,6 +287,8 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
   const operator =
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
+      : assertion.type === 'regex'
+      ? `matches regex ${assertion.pattern}`
       : assertion.equals !== undefined
       ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
       : `JSONPath ${assertion.path} exists`;
@@ -307,7 +309,7 @@ function evaluateToolInputAssertions(
         matchedCallCount = matchingCalls.filter((call) =>
           matchesToolInputAssertion(
             assertion,
-            assertion.type === 'contains'
+            assertion.type === 'contains' || assertion.type === 'regex'
               ? [JSON.stringify(call.arguments)]
               : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[])
           )
@@ -348,6 +350,9 @@ function matchesToolInputAssertion(assertion: ToolInputAssertion, values: unknow
         .toLowerCase()
         .includes(assertion.value.toLowerCase())
     );
+  }
+  if (assertion.type === 'regex') {
+    return new RegExp(assertion.pattern).test(String(values[0] ?? ''));
   }
   return assertion.equals === undefined
     ? values.length > 0

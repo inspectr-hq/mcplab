@@ -145,13 +145,21 @@ export interface ToolInputAssertionContains extends ToolInputAssertionBase {
   value: string;
 }
 
+export interface ToolInputAssertionRegex extends ToolInputAssertionBase {
+  type: 'regex';
+  pattern: string;
+}
+
 export interface ToolInputAssertionJsonPath extends ToolInputAssertionBase {
   type: 'jsonpath';
   path: string;
   equals?: string | number | boolean;
 }
 
-export type ToolInputAssertion = ToolInputAssertionContains | ToolInputAssertionJsonPath;
+export type ToolInputAssertion =
+  | ToolInputAssertionContains
+  | ToolInputAssertionRegex
+  | ToolInputAssertionJsonPath;
 
 // Must stay structurally identical to AgentContext in packages/app/src/types/eval.ts
 export interface AgentContext {

@@ -94,7 +94,7 @@ function toUiEvalRule(assertion: {
 }
 
 function toUiToolInputRule(assertion: {
-  type: 'contains' | 'jsonpath';
+  type: 'contains' | 'regex' | 'jsonpath';
   tool: string;
   path: string;
   equals?: string | number | boolean;
@@ -188,6 +188,7 @@ function buildCoreEvalBlock(
       >;
       tool_input_assertions?: Array<
         | { type: 'contains'; tool: string; value: string }
+        | { type: 'regex'; tool: string; pattern: string }
         | { type: 'jsonpath'; tool: string; path: string; equals?: string | number | boolean }
       >;
       agent_assertions?: Array<{ label: string; prompt: string }>;
@@ -215,6 +216,8 @@ function buildCoreEvalBlock(
       if (!rule.tool) return [];
       if (rule.type === 'tool_input_contains' && typeof rule.value === 'string')
         return [{ type: 'contains' as const, tool: rule.tool, value: rule.value }];
+      if (rule.type === 'tool_input_regex' && typeof rule.value === 'string')
+        return [{ type: 'regex' as const, tool: rule.tool, pattern: rule.value }];
       if (rule.type === 'tool_input_jsonpath' && rule.path)
         return [
           {

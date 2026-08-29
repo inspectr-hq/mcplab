@@ -50,6 +50,7 @@ export interface EvalRule {
     | 'forbidden_tool'
     | 'tool_sequence'
     | 'tool_input_contains'
+    | 'tool_input_regex'
     | 'tool_input_jsonpath'
     | 'response_contains'
     | 'response_not_contains'
