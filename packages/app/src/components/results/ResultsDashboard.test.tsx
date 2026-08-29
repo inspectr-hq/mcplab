@@ -37,9 +37,9 @@ describe('ResultsDashboard', () => {
 
     expect(screen.getByText('Pass Rate')).toBeInTheDocument();
     expect(screen.getByText('87.5%')).toBeInTheDocument();
-    expect(screen.getByText('6 ✓ · 2 ✕')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument();
     expect(screen.getByText('Avg Tool Calls')).toBeInTheDocument();
-    expect(screen.getByText('Pass / Fail')).toBeInTheDocument();
+    expect(screen.getByText('Runs Pass / Fail')).toBeInTheDocument();
+    expect(screen.getByText('Checks Pass / Fail')).toBeInTheDocument();
   });
 });

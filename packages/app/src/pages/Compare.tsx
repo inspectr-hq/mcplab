@@ -147,6 +147,14 @@ function formatLocalDayLabel(value: string) {
   });
 }
 
+function formatChecksPassRate(run: EvalResult): string {
+  const counts = run.checkCounts;
+  if (!counts || counts.total === 0) return '—';
+  const evaluated = counts.passed + counts.failed;
+  if (evaluated === 0) return '—';
+  return `${counts.passed}/${evaluated} · ${Math.round((counts.passed / evaluated) * 100)}%`;
+}
+
 function isTimeFilterMode(value: string | null): value is TimeFilterMode {
   return value === 'all' || value === 'last' || value === 'custom';
 }
@@ -1375,6 +1383,14 @@ const Compare = () => {
                     {selectedRuns.map((r) => (
                       <TableCell key={r.id}>
                         <PassRateBadge rate={r.overallPassRate} />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Checks Pass Rate</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {formatChecksPassRate(r)}
                       </TableCell>
                     ))}
                   </TableRow>

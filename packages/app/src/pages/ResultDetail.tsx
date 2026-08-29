@@ -519,6 +519,22 @@ const ResultDetail = () => {
     { name: 'Pass', value: passCount, color: 'hsl(152, 69%, 40%)' },
     { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
   ];
+  const checkCounts = filteredScenarios.reduce(
+    (counts, scenario) => {
+      for (const run of scenario.runs) {
+        for (const check of run.checkResults ?? []) {
+          if (check.status === 'passed') counts.passed += 1;
+          if (check.status === 'failed') counts.failed += 1;
+        }
+      }
+      return counts;
+    },
+    { passed: 0, failed: 0 }
+  );
+  const checkPieData = [
+    { name: 'Pass', value: checkCounts.passed, color: 'hsl(152, 69%, 40%)' },
+    { name: 'Fail', value: checkCounts.failed, color: 'hsl(0, 72%, 51%)' }
+  ];
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -988,18 +1004,20 @@ const ResultDetail = () => {
             />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-4">
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Pass / Fail</CardTitle>
+              <CardHeader className="p-2.5 pb-0">
+                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Runs Pass / Fail
+                </CardTitle>
               </CardHeader>
-              <CardContent className="flex items-center justify-center">
-                <PieChart width={180} height={180}>
+              <CardContent className="flex h-[120px] items-center justify-center gap-2 p-0">
+                <PieChart width={110} height={110}>
                   <Pie
                     data={pieData}
                     dataKey="value"
-                    innerRadius={50}
-                    outerRadius={75}
+                    innerRadius={30}
+                    outerRadius={46}
                     paddingAngle={3}
                   >
                     {pieData.map((d, i) => (
@@ -1008,13 +1026,13 @@ const ResultDetail = () => {
                   </Pie>
                   <Tooltip />
                 </PieChart>
-                <div className="ml-4 space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="h-3 w-3 rounded-full bg-success" />
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
                     {passCount} passed
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="h-3 w-3 rounded-full bg-destructive" />
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-destructive" />
                     {failCount} failed
                   </div>
                 </div>
@@ -1022,11 +1040,47 @@ const ResultDetail = () => {
             </Card>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Tool Usage</CardTitle>
+              <CardHeader className="p-2.5 pb-0">
+                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Checks Pass / Fail
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex h-[120px] items-center justify-center gap-2 p-0">
+                <PieChart width={110} height={110}>
+                  <Pie
+                    data={checkPieData}
+                    dataKey="value"
+                    innerRadius={30}
+                    outerRadius={46}
+                    paddingAngle={3}
+                  >
+                    {checkPieData.map((d, i) => (
+                      <Cell key={i} fill={d.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+                <div className="space-y-0.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
+                    {checkCounts.passed} passed
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-destructive" />
+                    {checkCounts.failed} failed
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader className="p-2.5 pb-0">
+                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Tool Usage
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={120}>
                   <BarChart data={toolData} layout="vertical">
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
@@ -1193,7 +1247,7 @@ const ResultDetail = () => {
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
                                         {hasCheckResults
-                                          ? `${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
                                           : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}

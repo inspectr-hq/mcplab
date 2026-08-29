@@ -21,6 +21,55 @@ function formatNumber(value: number, fractionDigits = 0): string {
   });
 }
 
+function OutcomeCard({
+  title,
+  passed,
+  failed
+}: {
+  title: string;
+  passed: number;
+  failed: number;
+}) {
+  const data = [
+    { name: 'Passed', value: passed, color: PASS_COLOR },
+    { name: 'Failed', value: failed, color: FAIL_COLOR }
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="p-2.5 pb-0">
+        <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex h-[92px] items-center justify-center gap-2 p-0">
+        <div className="h-[82px] w-[82px] shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="78%" paddingAngle={3}>
+                {data.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="space-y-0.5 text-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PASS_COLOR }} />
+            {formatNumber(passed)} passed
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: FAIL_COLOR }} />
+            {formatNumber(failed)} failed
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ResultsDashboard({ runs, loading }: ResultsDashboardProps) {
   const summary = useMemo(() => {
     const totalRuns = runs.reduce((sum, run) => sum + Math.max(0, run.totalRuns), 0);
@@ -60,10 +109,6 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
       totalTokens,
       totalDurationMs,
       totalToolDurationMs,
-      outcomeData: [
-        { name: 'Passed', value: passedRuns, color: PASS_COLOR },
-        { name: 'Failed', value: failedRuns, color: FAIL_COLOR }
-      ]
     };
   }, [runs]);
 
@@ -89,45 +134,13 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
 
   return (
     <div className="space-y-2" data-testid="results-dashboard">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="p-2.5 pb-0">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Pass / Fail
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex h-[108px] items-center justify-center gap-2 p-0">
-            <div className="h-[108px] w-[108px] shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={summary.outcomeData}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius="55%"
-                    outerRadius="78%"
-                    paddingAngle={3}
-                  >
-                    {summary.outcomeData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm">
-                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: PASS_COLOR }} />
-                {formatNumber(summary.passedRuns)} passed
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: FAIL_COLOR }} />
-                {formatNumber(summary.failedRuns)} failed
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 lg:grid-cols-4">
+        <OutcomeCard title="Runs Pass / Fail" passed={summary.passedRuns} failed={summary.failedRuns} />
+        <OutcomeCard
+          title="Checks Pass / Fail"
+          passed={summary.checkCounts.passed}
+          failed={summary.checkCounts.failed}
+        />
 
         <div className="grid self-start content-start gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-4">
           <StatCard
@@ -147,17 +160,6 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
             title="Pass Rate"
             value={`${formatNumber(summary.passRate * 100, 1)}%`}
             icon={BarChart3}
-          />
-          <StatCard
-            compact
-            title="Checks"
-            value={`${formatNumber(summary.checkCounts.passed)} ✓ · ${formatNumber(summary.checkCounts.failed)} ✕`}
-            subtitle={
-              summary.checkCounts.not_evaluated > 0
-                ? `${formatNumber(summary.checkCounts.not_evaluated)} not evaluated`
-                : undefined
-            }
-            icon={CheckCircle2}
           />
           <StatCard
             compact

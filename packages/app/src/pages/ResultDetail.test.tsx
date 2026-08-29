@@ -215,7 +215,7 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText('2 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Scenario 1'));
-    expect(screen.getByText(/2 ✓ · 1 ✕/)).toBeInTheDocument();
+    expect(screen.getByText(/Checks 2 ✓ · 1 ✕/)).toBeInTheDocument();
   });
 
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
