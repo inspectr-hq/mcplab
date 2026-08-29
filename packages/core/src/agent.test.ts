@@ -94,7 +94,7 @@ describe('runAgentScenario', () => {
           inputSchema: { type: 'object', properties: { name: { type: 'string' } } }
         }
       ]),
-      callTool: vi.fn().mockResolvedValue({ matches: ['TM5'] })
+      callTool: vi.fn().mockResolvedValue({ matches: ['TM5'], ok: 'server-ok', durationMs: 42 })
     };
 
     const result = await runAgentScenario({
@@ -145,7 +145,7 @@ describe('runAgentScenario', () => {
             role: 'tool',
             tool_call_id: 'call-1',
             name: 'search_tags',
-            content: [{ type: 'text', text: '{"matches":["TM5"]}' }]
+            content: [{ type: 'text', text: '{"matches":["TM5"],"ok":"server-ok","durationMs":42}' }]
           }
         ],
         tools: [{
@@ -161,7 +161,12 @@ describe('runAgentScenario', () => {
       inputs: { name: 'TM5' }
     });
     expect(toolEnd).toHaveBeenCalledWith(expect.objectContaining({
-      outputs: expect.objectContaining({ matches: ['TM5'], ok: true })
+      outputs: {
+        matches: ['TM5'],
+        ok: 'server-ok',
+        durationMs: 42,
+        _mcplab: { ok: true, durationMs: expect.any(Number) }
+      }
     }));
     expect(llmEnds[1]).toHaveBeenCalledWith({
       outputs: {

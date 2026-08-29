@@ -350,7 +350,6 @@ export async function runAll(
               finalText: runResult.finalText,
               pass: evalResult.pass,
               messages: toLangSmithMessages(runResult.traceMessages),
-              traceMessages: runResult.traceMessages,
               metrics: traceRecord.metrics
             }
           });

@@ -435,8 +435,8 @@ export async function runAgentScenario(params: {
         });
         const toolOutputs =
           result && typeof result === 'object' && !Array.isArray(result)
-            ? { ...(result as Record<string, unknown>), ok, durationMs }
-            : { value: result, ok, durationMs };
+            ? { ...(result as Record<string, unknown>), _mcplab: { ok, durationMs } }
+            : { value: result, _mcplab: { ok, durationMs } };
         await toolSpan?.end({
           outputs: toolOutputs,
           ...(ok ? {} : { error: String(result?.error ?? 'MCP tool call failed') })
