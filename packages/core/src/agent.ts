@@ -85,26 +85,34 @@ interface AdapterOptions {
   responseFormat?: JsonSchemaResponseFormat;
 }
 
-function toLangSmithToolCall(toolCall: ToolCall) {
-  return {
-    ...(toolCall.id ? { id: toolCall.id } : {}),
-    type: 'function',
-    function: {
-      name: toolCall.name,
-      arguments: stringifySafe(toolCall.arguments)
-    }
-  };
-}
-
 function toLangSmithMessage(message: LlmMessage) {
+  const content: Array<Record<string, unknown>> = [];
+  if (message.content) {
+    content.push({ type: 'text', text: message.content });
+  }
+  for (const attachment of message.attachments ?? []) {
+    content.push({
+      type: attachment.type === 'image' ? 'image' : 'file',
+      source_type: 'base64',
+      data: attachment.data,
+      mime_type: attachment.media_type,
+      ...(attachment.name ? { name: attachment.name } : {})
+    });
+  }
+  for (const [index, toolCall] of (message.tool_calls ?? []).entries()) {
+    content.push({
+      type: 'tool_call',
+      id: toolCall.id ?? `tool_call_${index}`,
+      name: toolCall.name,
+      args: toolCall.arguments
+    });
+  }
+
   return {
     role: message.role,
-    content: message.content,
+    content,
     ...(message.tool_call_id ? { tool_call_id: message.tool_call_id } : {}),
-    ...(message.name ? { name: message.name } : {}),
-    ...(message.tool_calls?.length
-      ? { tool_calls: message.tool_calls.map(toLangSmithToolCall) }
-      : {})
+    ...(message.name ? { name: message.name } : {})
   };
 }
 

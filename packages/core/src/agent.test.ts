@@ -112,7 +112,15 @@ describe('runAgentScenario', () => {
     });
 
     expect(startLlm).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      metadata: { ls_provider: 'openai', ls_model_name: 'gpt-test' }
+      metadata: { ls_provider: 'openai', ls_model_name: 'gpt-test' },
+      inputs: {
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'Find the tag profile.' }] }],
+        tools: [{
+          name: 'search_tags',
+          description: 'Search tags',
+          parameters: { type: 'object', properties: { name: { type: 'string' } } }
+        }]
+      }
     }));
     expect(llmEnds[0]).toHaveBeenCalledWith({
       outputs: {
@@ -125,6 +133,28 @@ describe('runAgentScenario', () => {
         usage_metadata: { input_tokens: 11, output_tokens: 7, total_tokens: 18 }
       }
     });
+    expect(startLlm).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inputs: {
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'Find the tag profile.' }] },
+          {
+            role: 'assistant',
+            content: [{ type: 'tool_call', id: 'call-1', name: 'search_tags', args: { name: 'TM5' } }]
+          },
+          {
+            role: 'tool',
+            tool_call_id: 'call-1',
+            name: 'search_tags',
+            content: [{ type: 'text', text: '{"matches":["TM5"]}' }]
+          }
+        ],
+        tools: [{
+          name: 'search_tags',
+          description: 'Search tags',
+          parameters: { type: 'object', properties: { name: { type: 'string' } } }
+        }]
+      }
+    }));
     expect(startTool).toHaveBeenCalledWith({
       server: 'server-1',
       tool: 'search_tags',
