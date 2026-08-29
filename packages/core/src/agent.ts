@@ -366,7 +366,10 @@ export async function runAgentScenario(params: {
         const toolSpan = params.trace?.startTool({
           server: resolved.server,
           tool: toolCall.name,
-          inputs: { input: toolCall.arguments, arguments: toolCall.arguments }
+          inputs:
+            toolCall.arguments && typeof toolCall.arguments === 'object'
+              ? (toolCall.arguments as Record<string, unknown>)
+              : { value: toolCall.arguments }
         });
         await emitProgress({
           type: 'tool_call_started',
@@ -430,8 +433,12 @@ export async function runAgentScenario(params: {
           ok,
           durationMs
         });
+        const toolOutputs =
+          result && typeof result === 'object' && !Array.isArray(result)
+            ? { ...(result as Record<string, unknown>), ok, durationMs }
+            : { value: result, ok, durationMs };
         await toolSpan?.end({
-          outputs: { output: result, result, ok, durationMs },
+          outputs: toolOutputs,
           ...(ok ? {} : { error: String(result?.error ?? 'MCP tool call failed') })
         });
 

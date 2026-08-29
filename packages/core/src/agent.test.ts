@@ -158,10 +158,10 @@ describe('runAgentScenario', () => {
     expect(startTool).toHaveBeenCalledWith({
       server: 'server-1',
       tool: 'search_tags',
-      inputs: { input: { name: 'TM5' }, arguments: { name: 'TM5' } }
+      inputs: { name: 'TM5' }
     });
     expect(toolEnd).toHaveBeenCalledWith(expect.objectContaining({
-      outputs: expect.objectContaining({ ok: true })
+      outputs: expect.objectContaining({ matches: ['TM5'], ok: true })
     }));
     expect(llmEnds[1]).toHaveBeenCalledWith({
       outputs: {
