@@ -88,6 +88,19 @@ function makeRecord(
 }
 
 describe('fromCoreResultsJson conversation mapping', () => {
+  it('preserves LangSmith trace URLs when loading a detailed run', () => {
+    const results = baseResults();
+    results.metadata.langsmith_trace_urls = {
+      'request-1': 'https://smith.langchain.com/r/trace-1'
+    };
+
+    const mapped = fromCoreResultsJson(results, []);
+
+    expect(mapped.langsmithTraceUrls).toEqual({
+      'request-1': 'https://smith.langchain.com/r/trace-1'
+    });
+  });
+
   it('maps trace records and partitions conversations by run', () => {
     const run0Record = makeRecord(0, [
       {

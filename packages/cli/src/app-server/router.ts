@@ -102,6 +102,7 @@ import { OAuthSessionManager } from './oauth-session-manager.js';
 import { resolveRunSelectedAgents } from './run-agent-selection.js';
 import { resolveAppDist } from './app-dist.js';
 import { startBrowser } from './browser-launch.js';
+import { formatLangSmithStatus } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
 
@@ -504,6 +505,7 @@ export async function startAppServer(options: AppServerOptions) {
   logPath('runs:', settings.runsDir);
   logPath('analysis:', settings.toolAnalysisResultsDir);
   logPath('libs:', settings.librariesDir);
+  logPath('langsmith:', formatLangSmithStatus());
   if (devMcp) {
     logPath('mcp:', `${url}${devMcp.path} -> ${devMcp.targetBaseUrl}${devMcp.path}`);
   }

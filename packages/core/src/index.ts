@@ -19,4 +19,12 @@ export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
 export { applyRuntimeServerOverrides, type RuntimeServerOverrides } from './runtime-overrides.js';
+export {
+  createLangSmithTraceExporter,
+  type LangSmithRun,
+  type LangSmithRunFactory,
+  type ScenarioTraceSpan,
+  type TraceExporter,
+  type TraceSpan
+} from './langsmith-tracing.js';
 export * from './queue-contract.js';

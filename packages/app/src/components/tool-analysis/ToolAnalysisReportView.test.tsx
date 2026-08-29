@@ -109,8 +109,14 @@ describe('ToolAnalysisReportView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy input schema JSON' }));
     fireEvent.click(screen.getByRole('button', { name: 'Copy output schema JSON' }));
 
-    expect(writeText).toHaveBeenNthCalledWith(1, JSON.stringify(report.servers[0].tools[0].inputSchema, null, 2));
-    expect(writeText).toHaveBeenNthCalledWith(2, JSON.stringify(report.servers[0].tools[0].outputSchema, null, 2));
+    expect(writeText).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify(report.servers[0].tools[0].inputSchema, null, 2)
+    );
+    expect(writeText).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify(report.servers[0].tools[0].outputSchema, null, 2)
+    );
   });
 
   it('supports Explorer and JSON schema modes', () => {

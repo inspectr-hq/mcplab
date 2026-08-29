@@ -196,6 +196,7 @@ export interface EvalResult {
   configHash: string;
   configPath?: string;
   configName?: string;
+  langsmithTraceUrls?: Record<string, string>;
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];

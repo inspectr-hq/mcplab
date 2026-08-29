@@ -379,6 +379,21 @@ AZURE_OPENAI_API_VERSION="2025-04-01-preview"
 OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
+**LangSmith evaluation traces (optional):**
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+LANGSMITH_PROJECT=mcplab
+# Optional for regional or self-hosted deployments
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+# Optional when the API key is linked to multiple workspaces
+LANGSMITH_WORKSPACE_ID=
+```
+
+When enabled, MCPLab sends each evaluation scenario to LangSmith as a parent trace with nested LLM and MCP tool spans. Prompts, model messages, tool inputs, and tool results are included. LangSmith delivery is best-effort; local `trace.jsonl` and `results.json` remain authoritative. Set `LANGSMITH_ENDPOINT` to the endpoint for your regional or self-hosted LangSmith instance when needed.
+
+After a run completes, MCPLab prints direct LangSmith trace links in the CLI, includes them in `summary.md` and `results.json`, and exposes them from the Results page.
+
 ---
 
 ## 💡 Usage Examples

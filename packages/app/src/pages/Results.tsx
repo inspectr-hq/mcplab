@@ -18,7 +18,8 @@ import {
   BarChart3,
   Sparkles,
   CalendarRange,
-  X
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -1213,6 +1214,16 @@ const Results = () => {
                                     View
                                   </Link>
                                 </DropdownMenuItem>
+                                {Object.entries(item.run.langsmithTraceUrls ?? {}).map(
+                                  ([requestId, url]) => (
+                                    <DropdownMenuItem key={requestId} asChild>
+                                      <a href={url} target="_blank" rel="noreferrer">
+                                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                                        LangSmith trace
+                                      </a>
+                                    </DropdownMenuItem>
+                                  )
+                                )}
                                 <DropdownMenuItem>
                                   <Download className="mr-2 h-3.5 w-3.5" />
                                   Export JSON

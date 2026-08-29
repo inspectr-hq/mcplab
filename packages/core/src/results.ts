@@ -7,6 +7,7 @@ export function aggregateResults(params: {
   gitCommit?: string;
   configHash: string;
   cliVersion: string;
+  langsmithTraceUrls?: Record<string, string>;
   mcpServerVersions?: Record<string, string | null>;
   scenarioRuns: Array<{
     scenario_id: string;
@@ -132,6 +133,7 @@ export function aggregateResults(params: {
       run_note: params.runNote,
       git_commit: params.gitCommit,
       config_hash: params.configHash,
+      langsmith_trace_urls: params.langsmithTraceUrls,
       total_duration_ms: totalDurationMs,
       total_tool_duration_ms: totalToolDurationMs,
       cli_version: params.cliVersion,
@@ -162,6 +164,13 @@ export function renderSummaryMarkdown(results: ResultsJson): string {
   }
   lines.push(`Config hash: ${results.metadata.config_hash}`);
   lines.push(`CLI version: ${results.metadata.cli_version}`);
+  const langsmithTraceUrls = Object.entries(results.metadata.langsmith_trace_urls ?? {});
+  if (langsmithTraceUrls.length > 0) {
+    lines.push('LangSmith traces:');
+    for (const [requestId, url] of langsmithTraceUrls) {
+      lines.push(`- [${requestId}](${url})`);
+    }
+  }
   const mcpServerVersionEntries = Object.entries(results.metadata.mcp_server_versions ?? {});
   if (mcpServerVersionEntries.length > 0) {
     lines.push(`MCP server versions:`);

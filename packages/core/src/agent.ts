@@ -14,6 +14,7 @@ import type {
 } from './types.js';
 import type { McpClientManager } from './mcp.js';
 import { isAbortError, throwIfAborted } from './abort.js';
+import type { ScenarioTraceSpan } from './langsmith-tracing.js';
 
 export interface AgentRunResult {
   finalText: string;
@@ -82,6 +83,52 @@ interface AdapterOptions {
   system?: string;
   signal?: AbortSignal;
   responseFormat?: JsonSchemaResponseFormat;
+}
+
+function toLangSmithMessage(message: LlmMessage) {
+  const content: Array<Record<string, unknown>> = [];
+  if (message.content) {
+    content.push({ type: 'text', text: message.content });
+  }
+  for (const attachment of message.attachments ?? []) {
+    content.push({
+      type: attachment.type === 'image' ? 'image' : 'file',
+      source_type: 'base64',
+      data: attachment.data,
+      mime_type: attachment.media_type,
+      ...(attachment.name ? { name: attachment.name } : {})
+    });
+  }
+  for (const [index, toolCall] of (message.tool_calls ?? []).entries()) {
+    content.push({
+      type: 'tool_call',
+      id: toolCall.id ?? `tool_call_${index}`,
+      name: toolCall.name,
+      args: toolCall.arguments
+    });
+  }
+
+  return {
+    role: message.role,
+    content,
+    ...(message.tool_call_id ? { tool_call_id: message.tool_call_id } : {}),
+    ...(message.name ? { name: message.name } : {})
+  };
+}
+
+function toLangSmithResponseMessage(response: LlmResponse) {
+  return {
+    role: 'assistant',
+    content: [
+      ...(response.content ? [{ type: 'text', text: response.content }] : []),
+      ...(response.tool_calls ?? []).map((toolCall, index) => ({
+        type: 'tool_call',
+        id: toolCall.id ?? `tool_call_${index}`,
+        name: toolCall.name,
+        args: toolCall.arguments
+      }))
+    ]
+  };
 }
 
 export interface JsonSchemaResponseFormat {
@@ -161,6 +208,7 @@ export async function runAgentScenario(params: {
   maxTurns?: number;
   signal?: AbortSignal;
   onProgress?: (event: AgentRunProgressEvent) => void | Promise<void>;
+  trace?: ScenarioTraceSpan;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
   const serverRequestHeaders =
@@ -220,13 +268,40 @@ export async function runAgentScenario(params: {
       model: agent.model,
       turn
     });
-    const response = await adapter.chat(messages, tools, {
-      model: agent.model,
-      temperature: agent.temperature,
-      max_tokens: agent.max_tokens,
-      system: agent.system,
-      signal: params.signal
+    const llmSpan = params.trace?.startLlm({
+      turn,
+      metadata: {
+        ls_provider: agent.provider,
+        ls_model_name: agent.model
+      },
+      inputs: {
+        messages: messages.map(toLangSmithMessage),
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema
+        }))
+      }
     });
+    let response: LlmResponse;
+    try {
+      response = await adapter.chat(messages, tools, {
+        model: agent.model,
+        temperature: agent.temperature,
+        max_tokens: agent.max_tokens,
+        system: agent.system,
+        signal: params.signal
+      });
+      await llmSpan?.end({
+        outputs: {
+          messages: [toLangSmithResponseMessage(response)],
+          ...(response.usage ? { usage_metadata: response.usage } : {})
+        }
+      });
+    } catch (error) {
+      await llmSpan?.end({ error: String((error as any)?.message ?? error) });
+      throw error;
+    }
 
     const responseText = truncate((response.content ?? '').trim(), 4000);
     const toolCallNames = response.tool_calls?.map((call) => call.name) ?? [];
@@ -288,6 +363,14 @@ export async function runAgentScenario(params: {
         }
       }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
+        const toolSpan = params.trace?.startTool({
+          server: resolved.server,
+          tool: toolCall.name,
+          inputs:
+            toolCall.arguments && typeof toolCall.arguments === 'object'
+              ? (toolCall.arguments as Record<string, unknown>)
+              : { value: toolCall.arguments }
+        });
         await emitProgress({
           type: 'tool_call_started',
           scenarioId: scenario.id,
@@ -349,6 +432,14 @@ export async function runAgentScenario(params: {
           turn,
           ok,
           durationMs
+        });
+        const toolOutputs =
+          result && typeof result === 'object' && !Array.isArray(result)
+            ? { ...(result as Record<string, unknown>), _mcplab: { ok, durationMs } }
+            : { value: result, _mcplab: { ok, durationMs } };
+        await toolSpan?.end({
+          outputs: toolOutputs,
+          ...(ok ? {} : { error: String(result?.error ?? 'MCP tool call failed') })
         });
 
         toolSequence.push(toolCall.name);

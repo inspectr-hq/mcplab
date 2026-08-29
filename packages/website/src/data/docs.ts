@@ -1304,6 +1304,108 @@ const appRunning: DocPage = {
   ]
 };
 
+const appLangSmith: DocPage = {
+  slug: 'app-langsmith',
+  label: 'LangSmith Integration',
+  href: '/docs/app/langsmith/',
+  description: 'Export evaluation traces to LangSmith for rich model and tool-call debugging.',
+  keywords: ['langsmith', 'tracing', 'traces', 'observability', 'debugging', 'llm'],
+  seoTitle: 'App — LangSmith Integration',
+  track: 'app',
+  sections: [
+    {
+      id: 'why-langsmith',
+      title: 'Why Pair MCPLab with LangSmith?',
+      paragraphs: [
+        'MCPLab answers whether an MCP-powered agent succeeded. LangSmith helps you understand how it got there. Together, you can keep deterministic evaluation results locally while exploring the full model and tool-call journey in a trace viewer.',
+        'This is especially useful when a scenario fails intermittently, the agent selects the wrong tool, a tool returns unexpected data, or two models achieve the same pass rate through different trajectories.'
+      ],
+      bullets: [
+        'Keep local trace.jsonl and results.json as the authoritative evaluation artifacts.',
+        'Inspect prompts, assistant responses, MCP tool calls, tool inputs, tool results, and final answers in one trace.',
+        'Compare providers and models using the same scenarios and trace structure.',
+        'Use LangSmith’s filtering, token, latency, and cost views to investigate regressions.'
+      ]
+    },
+    {
+      id: 'configure',
+      title: 'Configure the Integration',
+      paragraphs: [
+        'LangSmith export is opt-in. MCPLab exports traces only when LANGSMITH_TRACING is true and LANGSMITH_API_KEY is set. Put these values in your local .env file or shell environment, and never commit the API key.'
+      ],
+      codeBlocks: [
+        {
+          title: '.env',
+          language: 'bash',
+          code: `LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_...
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_PROJECT="my-mcplab-evaluations"
+
+# Optional for workspace-specific deployments
+LANGSMITH_WORKSPACE_ID=your-workspace-id`
+        }
+      ],
+      bullets: [
+        'LANGSMITH_ENDPOINT is optional; use it for a regional or self-hosted LangSmith endpoint.',
+        'LANGSMITH_PROJECT selects the destination LangSmith project. MCPLab does not create a project per evaluation.',
+        'LANGSMITH_WORKSPACE_ID is optional and can identify the target workspace when your account requires it.'
+      ]
+    },
+    {
+      id: 'run',
+      title: 'Run an Evaluation',
+      paragraphs: [
+        'Run MCPLab normally from the CLI or App. The exporter is asynchronous and best-effort, so a LangSmith outage or export error does not change the evaluation result or prevent local artifacts from being written.'
+      ],
+      codeBlocks: [
+        {
+          title: 'CLI',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab run -c evals/eval.yaml'
+        },
+        {
+          title: 'App',
+          language: 'text',
+          code: 'Start mcplab app, open Run Evaluation, and launch a run as usual.'
+        }
+      ]
+    },
+    {
+      id: 'trace-structure',
+      title: 'What MCPLab Sends',
+      paragraphs: [
+        'Each executable scenario run is exported as a parent chain trace with nested LLM and MCP tool spans. LLM spans use LangChain-style messages so tool calls, tool results, and multimodal content can be rendered as a conversation.'
+      ],
+      bullets: [
+        'Scenario chain: scenario ID, run ID, request ID, agent, provider, model, configuration hash, git commit, CLI version, pass/fail, final answer, and metrics.',
+        'LLM spans: accumulated messages, assistant text, tool calls, usage metadata, provider, and model name.',
+        'MCP tool spans: tool name, server identity in metadata, direct tool arguments, direct MCP results, status, and duration.',
+        'Errors close their spans and are reported as trace errors without changing MCPLab’s local pass/fail semantics.'
+      ]
+    },
+    {
+      id: 'open-traces',
+      title: 'Open a Trace from MCPLab',
+      paragraphs: [
+        'After a run is exported, MCPLab adds a LangSmith trace link to the run actions menu on the Results page and to the Result Detail page. Select LangSmith trace to open the corresponding trace in a new tab.'
+      ],
+      bullets: [
+        'The link appears only when LangSmith returned a trace URL for that run.',
+        'Trace URLs are associated with the scenario request ID, so multi-scenario evaluations can link each scenario run separately.',
+        'Traces created before export was enabled cannot be linked retroactively.'
+      ]
+    },
+    {
+      id: 'privacy',
+      title: 'Privacy and Data Handling',
+      paragraphs: [
+        'MCPLab exports full prompts, model messages, MCP tool inputs, and MCP tool results when tracing is enabled. Review your data-handling requirements before enabling it for sensitive evaluations. Disable the integration by setting LANGSMITH_TRACING=false or removing LANGSMITH_API_KEY.'
+      ]
+    }
+  ]
+};
+
 const appConfigurations: DocPage = {
   slug: 'app-configurations',
   label: 'Configurations',
@@ -2149,6 +2251,7 @@ const pageIndex: DocPage[] = [
   appGettingStarted,
   appConfigurations,
   appRunning,
+  appLangSmith,
   appResults,
   appAssistants,
   appMcplabAssistantSkill,
@@ -2186,6 +2289,7 @@ export const docsNavSections = [
       appGettingStarted,
       appConfigurations,
       appRunning,
+      appLangSmith,
       appResults,
       appAssistants,
       appMcplabAssistantSkill,

@@ -130,7 +130,11 @@ export const workspaceSource: EvalDataSource = {
     await workspaceApiClient.deleteMarkdownReport(relativePath);
   },
   async startRun(params) {
-    return workspaceApiClient.startRun(params);
+    const result = await workspaceApiClient.startRun(params);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('mcplab:run-queue-changed'));
+    }
+    return result;
   },
   async runScenarioPreview(params) {
     const response = await workspaceApiClient.runScenarioPreview(params);

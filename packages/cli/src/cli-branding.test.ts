@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import kleur from 'kleur';
-import { CLI_BANNER, formatCliBanner } from './cli-branding.js';
+import { CLI_BANNER, formatCliBanner, formatLangSmithStatus } from './cli-branding.js';
 
 describe('CLI branding', () => {
   it('provides a compact ASCII MCPLAB banner', () => {
@@ -38,5 +38,24 @@ describe('CLI branding', () => {
       kleur.enabled = previousEnabled;
       process.env.COLORTERM = previousColorTerm;
     }
+  });
+
+  it('reports configured LangSmith project and endpoint without exposing the API key', () => {
+    expect(
+      formatLangSmithStatus({
+        LANGSMITH_TRACING: 'true',
+        LANGSMITH_API_KEY: 'secret-key',
+        LANGSMITH_PROJECT: 'TrendMiner MCP | mcplab',
+        LANGSMITH_ENDPOINT: 'https://eu.api.smith.langchain.com'
+      })
+    ).toBe(
+      'enabled · project: TrendMiner MCP | mcplab · endpoint: https://eu.api.smith.langchain.com'
+    );
+  });
+
+  it('reports disabled LangSmith tracing with an enablement hint', () => {
+    expect(formatLangSmithStatus({})).toBe(
+      'disabled · set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable'
+    );
   });
 });

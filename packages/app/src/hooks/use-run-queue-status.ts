@@ -46,6 +46,32 @@ export function useRunQueueStatus() {
     let reconnectAttempts = 0;
     let reconnectTimer: number | null = null;
     let unsubscribeCurrent: (() => void) | null = null;
+    let connectionGeneration = 0;
+
+    const hydrateQueueState = (expectedGeneration: number) => {
+      const snapshotRevision = revisionRef.current;
+      void source
+        .getRunQueue()
+        .then((queueSnapshot) => {
+          if (
+            disposed ||
+            expectedGeneration !== connectionGeneration ||
+            snapshotRevision !== revisionRef.current
+          ) {
+            return;
+          }
+          const nextQueueState = normalizeQueueState(queueSnapshot);
+          inFlightJobIdsRef.current = new Set(
+            [...nextQueueState.active_jobs, ...nextQueueState.admitting_jobs].map(
+              (job) => job.jobId
+            )
+          );
+          setQueueState(nextQueueState);
+        })
+        .catch(() => {
+          // SSE remains authoritative when the best-effort snapshot request fails.
+        });
+    };
 
     const clearReconnectTimer = () => {
       if (reconnectTimer !== null) {
@@ -57,6 +83,7 @@ export function useRunQueueStatus() {
     const connectStream = () => {
       if (disposed) return;
       clearReconnectTimer();
+      const currentConnectionGeneration = ++connectionGeneration;
       setStreamStatus('connecting');
       streamStatusRef.current = 'connecting';
       unsubscribeCurrent?.();
@@ -111,8 +138,13 @@ export function useRunQueueStatus() {
           }, delay);
         }
       });
+
+      hydrateQueueState(currentConnectionGeneration);
     };
     connectStream();
+
+    const onQueueChanged = () => hydrateQueueState(connectionGeneration);
+    window.addEventListener('mcplab:run-queue-changed', onQueueChanged);
 
     const onFocus = () => {
       if (streamStatusRef.current !== 'connected') {
@@ -127,6 +159,7 @@ export function useRunQueueStatus() {
       unsubscribeCurrent?.();
       clearReconnectTimer();
       window.removeEventListener('focus', onFocus);
+      window.removeEventListener('mcplab:run-queue-changed', onQueueChanged);
     };
   }, [source, reconnectNonce]);
 
