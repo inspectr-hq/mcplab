@@ -395,6 +395,19 @@ describe('evaluateScenario — tool_input_assertions', () => {
       status: 'passed'
     });
   });
+
+  it('reports invalid tool-input regexes as regex errors', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      { tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: '[invalid(' }] },
+      [{ name: 'search', arguments: { query: 'Paris' } }]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: invalid regex [invalid('
+    ]);
+  });
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {

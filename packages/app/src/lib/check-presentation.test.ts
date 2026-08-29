@@ -31,6 +31,17 @@ describe('formatEvalRuleLabel', () => {
       })
     ).toBe('Tool input · stats contains MEAN');
   });
+
+  it('uses core formatting for tool input JSONPath assertions', () => {
+    expect(
+      formatEvalRuleLabel({
+        type: 'tool_input_jsonpath',
+        tool: 'stats',
+        path: '$.city',
+        equals: 'Paris'
+      })
+    ).toBe('Tool input · stats JSONPath $.city == Paris');
+  });
 });
 
 describe('buildCheckItems', () => {
