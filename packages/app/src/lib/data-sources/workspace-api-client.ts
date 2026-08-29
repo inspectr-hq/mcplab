@@ -370,10 +370,11 @@ export const workspaceApiClient = {
       attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: string;
-        value?: string;
+        value?: string | number | boolean;
         sequence?: string[];
         path?: string;
         equals?: string | number | boolean;
+        tool?: string;
         label?: string;
         prompt?: string;
       }>;

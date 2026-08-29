@@ -22,6 +22,10 @@ export function printCliBanner(): void {
   console.log(formatCliBanner());
 }
 
+export function formatCliStartupLine(label: string, value: string): string {
+  return `[mcplab-app]  ${label.padEnd(10)} ${value}`;
+}
+
 export function formatLangSmithStatus(
   env: Record<string, string | undefined> = process.env
 ): string {

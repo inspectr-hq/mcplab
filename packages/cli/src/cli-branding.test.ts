@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import kleur from 'kleur';
-import { CLI_BANNER, formatCliBanner, formatLangSmithStatus } from './cli-branding.js';
+import {
+  CLI_BANNER,
+  formatCliBanner,
+  formatCliStartupLine,
+  formatLangSmithStatus
+} from './cli-branding.js';
 
 describe('CLI branding', () => {
   it('provides a compact ASCII MCPLAB banner', () => {
@@ -56,6 +61,15 @@ describe('CLI branding', () => {
   it('reports disabled LangSmith tracing with an enablement hint', () => {
     expect(formatLangSmithStatus({})).toBe(
       'disabled · set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable'
+    );
+  });
+
+  it('aligns app startup labels without terminal tab expansion', () => {
+    expect(formatCliStartupLine('evals:', '/tmp/evals')).toBe(
+      '[mcplab-app]  evals:     /tmp/evals'
+    );
+    expect(formatCliStartupLine('langsmith:', 'enabled · project: demo')).toBe(
+      '[mcplab-app]  langsmith: enabled · project: demo'
     );
   });
 });

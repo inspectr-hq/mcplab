@@ -168,10 +168,11 @@ export interface ScenarioAssistantSuggestionBundle {
   evalRules?: {
     replacement: Array<{
       type: EvalRule['type'];
-      value?: string;
+      value?: string | number | boolean;
       sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
+      tool?: string;
       label?: string;
       prompt?: string;
     }>;
@@ -787,10 +788,11 @@ export interface EvalDataSource {
           serverNames: string[];
           evalRules: Array<{
             type: EvalRule['type'];
-            value?: string;
+            value?: string | number | boolean;
             sequence?: string[];
             path?: string;
             equals?: string | number | boolean;
+            tool?: string;
             label?: string;
             prompt?: string;
           }>;
@@ -836,10 +838,11 @@ export interface EvalDataSource {
       attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: EvalRule['type'];
-        value?: string;
+        value?: string | number | boolean;
         sequence?: string[];
         path?: string;
         equals?: string | number | boolean;
+        tool?: string;
         label?: string;
         prompt?: string;
       }>;

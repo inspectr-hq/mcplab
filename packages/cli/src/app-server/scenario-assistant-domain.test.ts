@@ -239,6 +239,29 @@ describe('continueAssistantTurn normalization integration', () => {
     ]);
   });
 
+  it('normalizes public tool names in tool-input suggestions', async () => {
+    chatWithJsonRetryMock.mockResolvedValue({
+      type: 'assistant_message',
+      text: 'Updated checks',
+      suggestions: {
+        evalRules: {
+          replacement: [
+            { type: 'tool_input_contains', tool: 'srv__refund_tool', value: 'Paris' },
+            { type: 'tool_input_jsonpath', tool: 'srv__refund_tool', path: '$.city', equals: 'Paris' }
+          ]
+        }
+      }
+    });
+
+    const session = baseSession();
+    const output = await continueAssistantTurn(session);
+
+    expect(output.response.suggestions?.evalRules?.replacement).toEqual([
+      { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
+      { type: 'tool_input_jsonpath', tool: 'refund_tool', path: '$.city', equals: 'Paris' }
+    ]);
+  });
+
   it('keeps complex regex suggestions when no literal equivalent exists', async () => {
     chatWithJsonRetryMock.mockResolvedValue({
       type: 'assistant_message',

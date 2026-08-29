@@ -51,6 +51,7 @@ const SCENARIO_ASSISTANT_SNIPPETS = [
       'Required shape:',
       '{"type":"assistant_message","text":"short rationale","suggestions":{"evalRules":{"replacement":[...]}, "extractRules":{"replacement":[...]}}}',
       'If tool usage is clear, include at least one required_tool check.',
+      'For argument validation, use tool_input_contains with tool and value, or tool_input_jsonpath with tool and path plus optional equals.',
       'Prefer deterministic checks and concise capture patterns.'
     ].join('\n')
   },
