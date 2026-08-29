@@ -664,6 +664,31 @@ describe('evaluateScenarioWithAgentChecks', () => {
     });
   });
 
+  it('includes tool inputs in context when include_tool_inputs is true', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      ['search_tags'],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_tool_inputs: true }
+      },
+      {
+        judgeAgentAssertions,
+        toolCalls: [
+          { name: 'search_tags', arguments: { query: 'TM5-BP2' }, duration: 1, timestamp: 'now' }
+        ]
+      }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
+      tool_inputs: [{ tool: 'search_tags', arguments: { query: 'TM5-BP2' } }]
+    });
+  });
+
   it('includes both context fields when both flags are true', async () => {
     const judgeAgentAssertions = vi
       .fn()

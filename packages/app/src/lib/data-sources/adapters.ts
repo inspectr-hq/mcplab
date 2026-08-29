@@ -248,7 +248,8 @@ function buildCoreEvalBlock(
 
   const agent_context = {
     ...(agentContext?.include_prompt ? { include_prompt: true } : {}),
-    ...(agentContext?.include_tool_sequence ? { include_tool_sequence: true } : {})
+    ...(agentContext?.include_tool_sequence ? { include_tool_sequence: true } : {}),
+    ...(agentContext?.include_tool_inputs ? { include_tool_inputs: true } : {})
   };
   const hasAgentContext = Object.keys(agent_context).length > 0;
 
@@ -529,10 +530,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const mappedAgentContext: AgentContext | undefined =
       scenario.eval?.agent_context &&
       (scenario.eval.agent_context.include_prompt ||
-        scenario.eval.agent_context.include_tool_sequence)
+        scenario.eval.agent_context.include_tool_sequence ||
+        scenario.eval.agent_context.include_tool_inputs)
         ? {
             include_prompt: scenario.eval.agent_context.include_prompt,
-            include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
+            include_tool_sequence: scenario.eval.agent_context.include_tool_sequence,
+            include_tool_inputs: scenario.eval.agent_context.include_tool_inputs
           }
         : undefined;
     const mappedScenario: EvalConfig['scenarios'][number] = {

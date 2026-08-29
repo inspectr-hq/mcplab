@@ -480,6 +480,25 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('enables tool inputs in judge context', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[{ ...baseScenario(), evalRules: [{ type: 'agent_check', label: 'Check', prompt: 'Verify.' }] }]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('Include tool inputs'));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.agentContext).toEqual({ include_tool_inputs: true });
+  });
+
   it('ensures OAuth before running prompt preview', async () => {
     render(
       <ScenarioForm

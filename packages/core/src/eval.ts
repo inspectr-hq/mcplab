@@ -148,7 +148,15 @@ export async function evaluateScenarioWithAgentChecks(
           ...(cfg.include_prompt && options.scenarioPrompt != null && options.scenarioPrompt !== ''
             ? { scenario_prompt: options.scenarioPrompt }
             : {}),
-          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
+          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {}),
+          ...(cfg.include_tool_inputs
+            ? {
+                tool_inputs: (options.toolCalls ?? []).map(({ name, arguments: args }) => ({
+                  tool: name,
+                  arguments: args as Record<string, unknown>
+                }))
+              }
+            : {})
         }
       : {};
     const context: AgentJudgeContext | undefined =

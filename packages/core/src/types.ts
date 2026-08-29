@@ -165,11 +165,13 @@ export type ToolInputAssertion =
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;
+  include_tool_inputs?: boolean;
 }
 
 export interface AgentJudgeContext {
   scenario_prompt?: string;
   tool_sequence?: string[];
+  tool_inputs?: Array<{ tool: string; arguments: unknown }>;
 }
 
 export type ResponseAssertion =

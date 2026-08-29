@@ -88,6 +88,7 @@ export interface ExtractRule {
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;
+  include_tool_inputs?: boolean;
 }
 
 export interface Scenario {

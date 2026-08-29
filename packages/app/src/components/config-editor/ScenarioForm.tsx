@@ -1915,6 +1915,33 @@ function ScenarioCard({
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id={`judge-ctx-inputs-${scenario.id}`}
+                      checked={scenario.agentContext?.include_tool_inputs ?? false}
+                      disabled={readOnly}
+                      className="mt-0.5"
+                      onCheckedChange={(checked) => {
+                        onUpdate({
+                          agentContext: {
+                            ...scenario.agentContext,
+                            include_tool_inputs: checked === true
+                          }
+                        });
+                      }}
+                    />
+                    <div>
+                      <Label
+                        htmlFor={`judge-ctx-inputs-${scenario.id}`}
+                        className="cursor-pointer text-xs font-medium"
+                      >
+                        Include tool inputs
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sends the called MCP tools and their arguments so the judge can verify how the tools were used.
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             )}
