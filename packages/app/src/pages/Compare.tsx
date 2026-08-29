@@ -1501,7 +1501,7 @@ const Compare = () => {
                         return (
                           <TableCell key={r.id}>
                             {sc ? (
-                              <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center justify-start gap-2">
                                 <PassRateBadge rate={sc.passRate} />
                                 {sc.checkCounts?.total ? (
                                   <span className="font-mono text-[11px] leading-none">

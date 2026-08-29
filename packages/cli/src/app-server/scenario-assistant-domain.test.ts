@@ -247,6 +247,7 @@ describe('continueAssistantTurn normalization integration', () => {
         evalRules: {
           replacement: [
             { type: 'tool_input_contains', tool: 'srv__refund_tool', value: 'Paris' },
+            { type: 'tool_input_regex', tool: 'srv__refund_tool', value: 'Par.s' },
             { type: 'tool_input_jsonpath', tool: 'srv__refund_tool', path: '$.city', equals: 'Paris' }
           ]
         }
@@ -258,6 +259,7 @@ describe('continueAssistantTurn normalization integration', () => {
 
     expect(output.response.suggestions?.evalRules?.replacement).toEqual([
       { type: 'tool_input_contains', tool: 'refund_tool', value: 'Paris' },
+      { type: 'tool_input_regex', tool: 'refund_tool', value: 'Par.s' },
       { type: 'tool_input_jsonpath', tool: 'refund_tool', path: '$.city', equals: 'Paris' }
     ]);
   });

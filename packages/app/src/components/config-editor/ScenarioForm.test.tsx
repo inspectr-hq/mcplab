@@ -156,6 +156,39 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('adds tool input regex checks', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input regex'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search_tags' }
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('Regex pattern')[0]!, {
+      target: { value: 'TM5-BP2-\\d+' }
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'tool_input_regex',
+        tool: 'search_tags',
+        value: 'TM5-BP2-\\d+'
+      }
+    ]);
+  });
+
   it('edits response_contains checks in place', async () => {
     const onChange = vi.fn();
 
