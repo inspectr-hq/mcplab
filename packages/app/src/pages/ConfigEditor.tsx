@@ -1221,7 +1221,8 @@ const ConfigEditor = () => {
                                     kind: 'inline',
                                     agent: {
                                       ...entry.agent,
-                                      temperature: Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
+                                      temperature:
+                                        Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
                                     }
                                   };
                                   setAgentEntries(nextEntries);

@@ -23,17 +23,12 @@ import type {
 } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import {
-  CircleHelp,
-  Copy,
-  Download,
-  Loader2,
-  RefreshCw,
-  Search,
-  Microscope
-} from 'lucide-react';
+import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
-import { ToolSchemaPreview, type SchemaViewMode } from '@/components/tool-analysis/ToolSchemaPreview';
+import {
+  ToolSchemaPreview,
+  type SchemaViewMode
+} from '@/components/tool-analysis/ToolSchemaPreview';
 
 type ProgressEvent = { payload?: { message?: unknown } };
 

@@ -48,7 +48,9 @@ describe('CLI branding', () => {
         LANGSMITH_PROJECT: 'TrendMiner MCP | mcplab',
         LANGSMITH_ENDPOINT: 'https://eu.api.smith.langchain.com'
       })
-    ).toBe('enabled · project: TrendMiner MCP | mcplab · endpoint: https://eu.api.smith.langchain.com');
+    ).toBe(
+      'enabled · project: TrendMiner MCP | mcplab · endpoint: https://eu.api.smith.langchain.com'
+    );
   });
 
   it('reports disabled LangSmith tracing with an enablement hint', () => {

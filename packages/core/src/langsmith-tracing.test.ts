@@ -19,10 +19,12 @@ function makeFactory() {
       config,
       end: vi.fn(),
       postRun: vi.fn(async () => undefined),
-      createChild: vi.fn((childConfig: Record<string, unknown>) => factory({
-        ...childConfig,
-        parent_run: run
-      }))
+      createChild: vi.fn((childConfig: Record<string, unknown>) =>
+        factory({
+          ...childConfig,
+          parent_run: run
+        })
+      )
     };
     runs.push(run);
     return run as any;

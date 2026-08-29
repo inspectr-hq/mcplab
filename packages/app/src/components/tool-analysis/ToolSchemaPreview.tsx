@@ -32,11 +32,16 @@ function countSchemaProperties(schema: unknown, seen = new Set<object>()): numbe
       )
     : 0;
   const itemCount = countSchemaProperties(record.items, nextSeen);
-  const variantCount = [...(Array.isArray(record.oneOf) ? record.oneOf : []), ...(Array.isArray(record.anyOf) ? record.anyOf : [])].reduce(
-    (total, variant) => total + countSchemaProperties(variant, nextSeen),
-    0
+  const variantCount = [
+    ...(Array.isArray(record.oneOf) ? record.oneOf : []),
+    ...(Array.isArray(record.anyOf) ? record.anyOf : [])
+  ].reduce((total, variant) => total + countSchemaProperties(variant, nextSeen), 0);
+  return (
+    (properties ? Object.keys(properties).length : 0) +
+    nestedPropertyCount +
+    itemCount +
+    variantCount
   );
-  return (properties ? Object.keys(properties).length : 0) + nestedPropertyCount + itemCount + variantCount;
 }
 
 function ExplorerNode({
@@ -75,10 +80,15 @@ function ExplorerNode({
       ? (record.properties as Record<string, unknown>)
       : undefined;
   const requiredProperties = new Set(
-    Array.isArray(record.required) ? record.required.filter((value) => typeof value === 'string') : []
+    Array.isArray(record.required)
+      ? record.required.filter((value) => typeof value === 'string')
+      : []
   );
   const items = record.items && typeof record.items === 'object' ? record.items : undefined;
-  const variants = [...(Array.isArray(record.oneOf) ? record.oneOf : []), ...(Array.isArray(record.anyOf) ? record.anyOf : [])];
+  const variants = [
+    ...(Array.isArray(record.oneOf) ? record.oneOf : []),
+    ...(Array.isArray(record.anyOf) ? record.anyOf : [])
+  ];
   const hasChildren =
     (properties && Object.keys(properties).length > 0) || Boolean(items) || variants.length > 0;
 
@@ -93,7 +103,11 @@ function ExplorerNode({
             aria-expanded={expanded}
             onClick={() => setExpanded((value) => !value)}
           >
-            {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+            {expanded ? (
+              <ChevronDown className="h-3 w-3 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3 w-3 shrink-0" />
+            )}
             <span className="break-words">{name}</span>
           </button>
         ) : (
@@ -105,7 +119,9 @@ function ExplorerNode({
         {required && <span className="text-[10px] text-rose-600">required</span>}
       </div>
       {typeof record.description === 'string' && (
-        <div className="max-w-full break-words text-[11px] text-muted-foreground">{record.description}</div>
+        <div className="max-w-full break-words text-[11px] text-muted-foreground">
+          {record.description}
+        </div>
       )}
       {Array.isArray(record.enum) && (
         <div className="max-w-full break-words text-[11px] text-muted-foreground">
@@ -283,7 +299,11 @@ export function ToolSchemaPreview({
           )}
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          <span className="inline-flex rounded-md border bg-muted p-0.5" role="tablist" aria-label="Schema view mode">
+          <span
+            className="inline-flex rounded-md border bg-muted p-0.5"
+            role="tablist"
+            aria-label="Schema view mode"
+          >
             {(['json', 'explorer'] as const).map((nextMode) => (
               <button
                 key={nextMode}
@@ -308,22 +328,22 @@ export function ToolSchemaPreview({
       <div className="mt-2">
         {mode === 'json' && (
           <div className="mt-2 space-y-2">
-          {inputSchema !== undefined && (
-            <div className="space-y-1">
-              <SchemaHeading title="Input schema" schema={inputSchema} />
-              <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
-                {safeJsonStringify(inputSchema)}
-              </pre>
-            </div>
-          )}
-          {outputSchema !== undefined && (
-            <div className="space-y-1">
-              <SchemaHeading title="Output schema" schema={outputSchema} />
-              <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
-                {safeJsonStringify(outputSchema)}
-              </pre>
-            </div>
-          )}
+            {inputSchema !== undefined && (
+              <div className="space-y-1">
+                <SchemaHeading title="Input schema" schema={inputSchema} />
+                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
+                  {safeJsonStringify(inputSchema)}
+                </pre>
+              </div>
+            )}
+            {outputSchema !== undefined && (
+              <div className="space-y-1">
+                <SchemaHeading title="Output schema" schema={outputSchema} />
+                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded border bg-muted/20 p-2 text-[11px]">
+                  {safeJsonStringify(outputSchema)}
+                </pre>
+              </div>
+            )}
           </div>
         )}
         {mode === 'explorer' && (
@@ -357,7 +377,11 @@ export function ToolSchemaPreview({
                     />
                   }
                 />
-                <ExplorerNode name="root" schema={outputSchema} expandAll={outputExplorerExpanded} />
+                <ExplorerNode
+                  name="root"
+                  schema={outputSchema}
+                  expandAll={outputExplorerExpanded}
+                />
               </div>
             )}
           </div>

@@ -8,7 +8,9 @@ export interface LangSmithRun {
   id?: string;
   trace_id?: string;
   project_name?: string;
-  client?: { getProjectUrl(options: { projectName?: string; projectId?: string }): Promise<string> };
+  client?: {
+    getProjectUrl(options: { projectName?: string; projectId?: string }): Promise<string>;
+  };
   end(outputs?: Values, error?: string): Promise<void>;
   postRun(excludeChildRuns?: boolean): Promise<void>;
   createChild(config: RunTreeConfig): LangSmithRun;
@@ -75,8 +77,9 @@ export function toLangSmithMessages(traceMessages: TraceMessage[]): LangSmithMes
   return traceMessages.flatMap((message): LangSmithMessage[] => {
     if (message.role === 'tool') {
       return message.content
-        .filter((block): block is Extract<TraceMessageContentBlock, { type: 'tool_result' }> =>
-          block.type === 'tool_result'
+        .filter(
+          (block): block is Extract<TraceMessageContentBlock, { type: 'tool_result' }> =>
+            block.type === 'tool_result'
         )
         .map((block) => ({
           role: 'tool',
@@ -109,7 +112,9 @@ function isEnabled(env: Environment): boolean {
 }
 
 function warn(error: unknown): void {
-  console.warn(`LangSmith tracing warning: ${error instanceof Error ? error.message : String(error)}`);
+  console.warn(
+    `LangSmith tracing warning: ${error instanceof Error ? error.message : String(error)}`
+  );
 }
 
 function safeEnd(run: LangSmithRun, values: { outputs?: Values; error?: string }): Promise<void> {
