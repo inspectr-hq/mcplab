@@ -26,6 +26,12 @@ export interface RunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts: {
+    passed: number;
+    failed: number;
+    not_evaluated: number;
+    total: number;
+  };
 }
 
 export interface ListRunsFilter {
@@ -63,6 +69,18 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         continue;
       }
       const scenarioItems = Array.isArray(results.scenarios) ? results.scenarios : [];
+      const checkCounts = scenarioItems.reduce(
+        (counts, scenario) => {
+          for (const run of scenario.runs ?? []) {
+            for (const check of run.check_results ?? []) {
+              counts[check.status] += 1;
+              counts.total += 1;
+            }
+          }
+          return counts;
+        },
+        { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+      );
       if (filter?.scenario?.trim()) {
         const needle = filter.scenario.trim();
         const matchesScenario = scenarioItems.some((scenario) => {
@@ -117,7 +135,8 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
                 0,
                 (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0
               )
-            : undefined
+            : undefined,
+        checkCounts
       });
     } catch {
       // Ignore malformed runs.

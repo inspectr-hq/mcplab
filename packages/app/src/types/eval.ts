@@ -219,6 +219,12 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts?: {
+    passed: number;
+    failed: number;
+    not_evaluated: number;
+    total: number;
+  };
 }
 
 // App state

@@ -78,6 +78,12 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts?: {
+    passed: number;
+    failed: number;
+    not_evaluated: number;
+    total: number;
+  };
 }
 
 export interface ListEnvelope<T> {

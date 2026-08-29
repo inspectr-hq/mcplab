@@ -16,6 +16,7 @@ function makeRun(overrides: Partial<EvalResult> = {}): EvalResult {
     totalRuns: 4,
     avgToolCalls: 3.5,
     avgLatency: 1200,
+    checkCounts: { passed: 3, failed: 1, not_evaluated: 0, total: 4 },
     toolTokenUsage: {
       inputTokens: 100,
       outputTokens: 50,
@@ -36,6 +37,7 @@ describe('ResultsDashboard', () => {
 
     expect(screen.getByText('Pass Rate')).toBeInTheDocument();
     expect(screen.getByText('87.5%')).toBeInTheDocument();
+    expect(screen.getByText('6 ✓ · 2 ✕')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument();
     expect(screen.getByText('Avg Tool Calls')).toBeInTheDocument();
     expect(screen.getByText('Pass / Fail')).toBeInTheDocument();

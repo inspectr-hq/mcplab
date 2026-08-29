@@ -30,6 +30,16 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
     );
     const failedRuns = Math.max(0, totalRuns - passedRuns);
     const totalScenarios = runs.reduce((sum, run) => sum + Math.max(0, run.totalScenarios), 0);
+    const checkCounts = runs.reduce(
+      (counts, run) => {
+        counts.passed += run.checkCounts?.passed ?? 0;
+        counts.failed += run.checkCounts?.failed ?? 0;
+        counts.not_evaluated += run.checkCounts?.not_evaluated ?? 0;
+        counts.total += run.checkCounts?.total ?? 0;
+        return counts;
+      },
+      { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+    );
     const weighted = (selector: (run: EvalResult) => number) =>
       totalRuns === 0
         ? 0
@@ -42,6 +52,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
       totalRuns,
       passedRuns,
       failedRuns,
+      checkCounts,
       totalScenarios,
       passRate: totalRuns === 0 ? 0 : passedRuns / totalRuns,
       avgToolCalls: weighted((run) => run.avgToolCalls),
@@ -136,6 +147,17 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
             title="Pass Rate"
             value={`${formatNumber(summary.passRate * 100, 1)}%`}
             icon={BarChart3}
+          />
+          <StatCard
+            compact
+            title="Checks"
+            value={`${formatNumber(summary.checkCounts.passed)} ✓ · ${formatNumber(summary.checkCounts.failed)} ✕`}
+            subtitle={
+              summary.checkCounts.not_evaluated > 0
+                ? `${formatNumber(summary.checkCounts.not_evaluated)} not evaluated`
+                : undefined
+            }
+            icon={CheckCircle2}
           />
           <StatCard
             compact
