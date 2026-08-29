@@ -37,7 +37,8 @@ export function formatLangSmithStatus(
 
   const project = env.LANGSMITH_PROJECT?.trim() || 'default';
   const endpoint = env.LANGSMITH_ENDPOINT?.trim() || 'https://api.smith.langchain.com';
-  return `enabled · project: ${project} · endpoint: ${endpoint}`;
+  const check = kleur.enabled ? kleur.green('✓') : '✓';
+  return `${check} enabled · project: ${project} · endpoint: ${endpoint}`;
 }
 
 function supportsTrueColor(): boolean {

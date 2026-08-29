@@ -1067,6 +1067,7 @@ const ResultDetail = () => {
                     <TableHead>Agent</TableHead>
                     <TableHead>Runs</TableHead>
                     <TableHead>Pass Rate</TableHead>
+                    <TableHead>Checks</TableHead>
                     <TableHead>Total Time</TableHead>
                     <TableHead>Tool Calls</TableHead>
                     <TableHead>Tool Tokens</TableHead>
@@ -1077,6 +1078,19 @@ const ResultDetail = () => {
                   {filteredScenarios.map((sc) => {
                     const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                     const scenarioLabel = sc.scenarioName || sc.scenarioId;
+                    const checkCounts = sc.runs.reduce(
+                      (counts, run) => {
+                        for (const check of run.checkResults ?? []) {
+                          if (check.status === 'passed') counts.passed += 1;
+                          if (check.status === 'failed') counts.failed += 1;
+                        }
+                        return counts;
+                      },
+                      { passed: 0, failed: 0 }
+                    );
+                    const hasCheckResults = sc.runs.some(
+                      (run) => (run.checkResults?.length ?? 0) > 0
+                    );
                     const scenarioConfigId = activeConfig?.id || result?.configId?.trim();
                     const scenarioEditHref = scenarioConfigId
                       ? `/mcp-evaluations/${encodeURIComponent(scenarioConfigId)}/scenarios`
@@ -1137,6 +1151,17 @@ const ResultDetail = () => {
                                 <PassRateBadge rate={sc.passRate} />
                               </TableCell>
                               <TableCell className="font-mono text-sm">
+                                {hasCheckResults ? (
+                                  <span title={`${checkCounts.passed} passed · ${checkCounts.failed} failed`}>
+                                    <span className="text-success">{checkCounts.passed} passed</span>
+                                    <span className="text-muted-foreground"> · </span>
+                                    <span className="text-destructive">{checkCounts.failed} failed</span>
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
                                 {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
@@ -1156,7 +1181,7 @@ const ResultDetail = () => {
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={9} className="p-0">
+                              <td colSpan={10} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">

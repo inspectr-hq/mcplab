@@ -192,6 +192,28 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByRole('button', { name: 'Add note' })).toBeInTheDocument();
   });
 
+  it('shows passed and failed check counts in the scenario table', async () => {
+    const result = makeResult();
+    result.scenarios[0].runs[0].checkResults = [
+      { type: 'required_tool', label: 'Required tool · search_tags', status: 'passed' },
+      { type: 'response_contains', label: 'Text contains · ready', status: 'passed' },
+      { type: 'agent_check', label: 'Accuracy', status: 'failed', reason: 'Incorrect' }
+    ];
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByRole('columnheader', { name: 'Checks' })).toBeInTheDocument();
+    expect(screen.getByTitle('2 passed · 1 failed')).toBeInTheDocument();
+  });
+
   it('shows a LangSmith trace link for runs exported to LangSmith', async () => {
     const result = makeResult();
     result.langsmithTraceUrls = {

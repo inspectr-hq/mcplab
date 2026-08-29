@@ -292,7 +292,7 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
       : assertion.equals !== undefined
       ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
       : `JSONPath ${assertion.path} exists`;
-  return `Tool input · ${assertion.tool} · ${operator}`;
+  return `Tool input · ${assertion.tool} ${operator}`;
 }
 
 function evaluateToolInputAssertions(
