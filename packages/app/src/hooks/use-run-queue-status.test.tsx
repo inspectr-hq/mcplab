@@ -220,4 +220,43 @@ describe('useRunQueueStatus', () => {
       expect(result.current.queuedCount).toBe(1);
     });
   });
+
+  it('refreshes queue state when a run is started elsewhere in the app', async () => {
+    let queued = false;
+    sourceRef.current = {
+      getRunQueue: async () => ({
+        active: null,
+        active_jobs: [],
+        admitting_jobs: [],
+        queued: queued
+          ? [
+              {
+                jobId: 'rerun-2',
+                status: 'queued',
+                runParams: {
+                  configPath: '/tmp/eval.yaml',
+                  runsPerScenario: 1,
+                  scenarioIds: null,
+                  agents: null,
+                  runNote: null,
+                  serverOverrideAll: null,
+                  scenarioServerOverrides: null
+                }
+              }
+            ]
+          : []
+      }),
+      subscribeRunQueue: () => () => undefined
+    };
+
+    const { result } = renderHook(() => useRunQueueStatus());
+    await waitFor(() => expect(result.current.queuedCount).toBe(0));
+
+    queued = true;
+    act(() => {
+      window.dispatchEvent(new Event('mcplab:run-queue-changed'));
+    });
+
+    await waitFor(() => expect(result.current.queuedCount).toBe(1));
+  });
 });
