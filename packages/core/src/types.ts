@@ -136,6 +136,23 @@ export interface AgentAssertion {
   prompt: string;
 }
 
+export interface ToolInputAssertionBase {
+  tool: string;
+}
+
+export interface ToolInputAssertionContains extends ToolInputAssertionBase {
+  type: 'contains';
+  value: string;
+}
+
+export interface ToolInputAssertionJsonPath extends ToolInputAssertionBase {
+  type: 'jsonpath';
+  path: string;
+  equals?: string | number | boolean;
+}
+
+export type ToolInputAssertion = ToolInputAssertionContains | ToolInputAssertionJsonPath;
+
 // Must stay structurally identical to AgentContext in packages/app/src/types/eval.ts
 export interface AgentContext {
   include_prompt?: boolean;
@@ -161,6 +178,7 @@ export type ResponseAssertion =
 export interface EvalRules {
   tool_constraints?: ToolConstraints;
   tool_sequence?: string[];
+  tool_input_assertions?: ToolInputAssertion[];
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
   agent_context?: AgentContext;

@@ -123,6 +123,39 @@ describe('ScenarioForm checks editor', () => {
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
   });
 
+  it('adds tool input contains checks', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input contains'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search_tags' }
+    });
+    fireEvent.change(screen.getByPlaceholderText('Text present in input'), {
+      target: { value: 'TM5-BP2-CONC.1' }
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'tool_input_contains',
+        tool: 'search_tags',
+        value: 'TM5-BP2-CONC.1'
+      }
+    ]);
+  });
+
   it('edits response_contains checks in place', async () => {
     const onChange = vi.fn();
 

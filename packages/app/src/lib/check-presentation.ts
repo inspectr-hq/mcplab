@@ -48,6 +48,12 @@ export function formatEvalRuleLabel(rule: EvalRule): string {
   if (rule.type === 'required_tool') return `Required tool · ${rule.value}`;
   if (rule.type === 'forbidden_tool') return `Forbidden tool · ${rule.value}`;
   if (rule.type === 'tool_sequence') return formatToolSequenceLabel(rule.sequence ?? []);
+  if (rule.type === 'tool_input_contains')
+    return `Tool input · ${rule.tool} contains ${String(rule.value)}`;
+  if (rule.type === 'tool_input_jsonpath')
+    return rule.equals !== undefined
+      ? `Tool input · ${rule.tool} · ${rule.path} == ${String(rule.equals)}`
+      : `Tool input · ${rule.tool} · ${rule.path} exists`;
   if (rule.type === 'response_contains') return `Text contains · ${rule.value}`;
   if (rule.type === 'response_not_contains') return `Text does not contain · ${rule.value}`;
   if (rule.type === 'response_starts_with') return `Text starts with · ${rule.value}`;

@@ -11,7 +11,7 @@ export {
 } from './config.js';
 export { runAll, type RunProgressEvent } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';
-export { formatToolSequenceLabel } from './eval.js';
+export { formatToolInputAssertionLabel, formatToolSequenceLabel } from './eval.js';
 export { McpClientManager } from './mcp.js';
 export { chatWithAgent } from './agent.js';
 export { formatAssistantToolName } from './assistant-tools.js';

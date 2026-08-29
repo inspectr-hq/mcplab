@@ -49,6 +49,8 @@ export interface EvalRule {
     | 'required_tool'
     | 'forbidden_tool'
     | 'tool_sequence'
+    | 'tool_input_contains'
+    | 'tool_input_jsonpath'
     | 'response_contains'
     | 'response_not_contains'
     | 'response_starts_with'
@@ -59,10 +61,11 @@ export interface EvalRule {
     | 'response_jsonpath_exists'
     | 'response_jsonpath_not_exists'
     | 'agent_check';
-  value?: string;
+  value?: string | number | boolean;
   sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
+  tool?: string;
   label?: string;
   prompt?: string;
 }

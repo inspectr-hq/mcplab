@@ -205,7 +205,12 @@
                             {
                               "type": "object",
                               "additionalProperties": false,
-                              "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                              "required": [
+                                "type",
+                                "token_url",
+                                "client_id_env",
+                                "client_secret_env"
+                              ],
                               "properties": {
                                 "type": { "const": "oauth_client_credentials" },
                                 "token_url": { "type": "string", "format": "uri" },
@@ -316,7 +321,12 @@
                             {
                               "type": "object",
                               "additionalProperties": false,
-                              "required": ["type", "token_url", "client_id_env", "client_secret_env"],
+                              "required": [
+                                "type",
+                                "token_url",
+                                "client_id_env",
+                                "client_secret_env"
+                              ],
                               "properties": {
                                 "type": { "const": "oauth_client_credentials" },
                                 "token_url": { "type": "string", "format": "uri" },
@@ -371,6 +381,40 @@
                   "tool_sequence": {
                     "type": "array",
                     "items": { "type": "string", "minLength": 1 }
+                  },
+                  "tool_input_assertions": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["type", "tool", "value"],
+                          "properties": {
+                            "type": { "const": "contains" },
+                            "tool": { "type": "string", "minLength": 1 },
+                            "value": { "type": "string", "minLength": 1 }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["type", "tool", "path"],
+                          "properties": {
+                            "type": { "const": "jsonpath" },
+                            "tool": { "type": "string", "minLength": 1 },
+                            "path": { "type": "string", "minLength": 1 },
+                            "equals": {
+                              "oneOf": [
+                                { "type": "string" },
+                                { "type": "number" },
+                                { "type": "boolean" }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
                   },
                   "response_assertions": {
                     "type": "array",

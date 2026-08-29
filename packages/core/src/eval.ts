@@ -6,7 +6,9 @@ import type {
   CheckResult,
   EvalRules,
   ResponseAssertion,
-  ToolConstraints
+  ToolConstraints,
+  ToolCall,
+  ToolInputAssertion
 } from './types.js';
 
 export interface EvalResult {
@@ -28,6 +30,7 @@ export interface JudgeAgentAssertionsInput {
 }
 
 export interface EvaluateScenarioWithAgentChecksOptions {
+  toolCalls?: ToolCall[];
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
   scenarioPrompt?: string;
 }
@@ -57,6 +60,17 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
   )) {
     results.push({ ...rule, status: 'not_evaluated', reason: undefined });
   }
+  for (const rule of evalRules.tool_input_assertions ?? []) {
+    results.push({
+      type: toolInputAssertionType(rule),
+      label: formatToolInputAssertionLabel(rule),
+      status: 'not_evaluated',
+      metadata: {
+        tool: rule.tool,
+        ...(rule.type === 'jsonpath' ? { path: rule.path } : {})
+      }
+    });
+  }
   for (const assertion of evalRules.agent_assertions ?? []) {
     results.push({
       type: 'agent_check',
@@ -70,7 +84,8 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
 export function evaluateScenario(
   finalText: string,
   toolSequence: string[],
-  evalRules?: EvalRules
+  evalRules?: EvalRules,
+  toolCalls: ToolCall[] = []
 ): EvalResult {
   const failures: string[] = [];
   const check_results: CheckResult[] = [];
@@ -81,6 +96,11 @@ export function evaluateScenario(
   }
   if (evalRules?.tool_sequence?.length) {
     const results = evaluateToolSequence(toolSequence, evalRules.tool_sequence);
+    failures.push(...results.failures);
+    check_results.push(...results.check_results);
+  }
+  if (evalRules?.tool_input_assertions?.length) {
+    const results = evaluateToolInputAssertions(toolCalls, evalRules.tool_input_assertions);
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
@@ -98,7 +118,7 @@ export async function evaluateScenarioWithAgentChecks(
   evalRules?: EvalRules,
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
-  const base = evaluateScenario(finalText, toolSequence, evalRules);
+  const base = evaluateScenario(finalText, toolSequence, evalRules, options?.toolCalls ?? []);
   const failures = [...base.failures];
   const check_results = [...base.check_results];
 
@@ -257,6 +277,81 @@ function evaluateToolSequence(
       }
     ]
   };
+}
+
+function toolInputAssertionType(assertion: ToolInputAssertion): string {
+  return `tool_input_${assertion.type}`;
+}
+
+export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): string {
+  const operator =
+    assertion.type === 'contains'
+      ? `contains ${assertion.value}`
+      : assertion.equals !== undefined
+      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+      : `JSONPath ${assertion.path} exists`;
+  return `Tool input · ${assertion.tool} · ${operator}`;
+}
+
+function evaluateToolInputAssertions(
+  toolCalls: ToolCall[],
+  assertions: ToolInputAssertion[]
+): Pick<EvalResult, 'failures' | 'check_results'> {
+  const failures: string[] = [];
+  const check_results: CheckResult[] = assertions.map((assertion) => {
+    const matchingCalls = toolCalls.filter((call) => call.name === assertion.tool);
+    let reason: string | undefined;
+    let matchedCallCount = 0;
+    try {
+      if (!reason) {
+        matchedCallCount = matchingCalls.filter((call) =>
+          matchesToolInputAssertion(
+            assertion,
+            assertion.type === 'contains'
+              ? [JSON.stringify(call.arguments)]
+              : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[])
+          )
+        ).length;
+      }
+    } catch {
+      reason = `Tool input assertion failed: invalid JSONPath ${
+        assertion.type === 'jsonpath' ? assertion.path : '(unknown)'
+      }`;
+    }
+    if (matchedCallCount === 0 && !reason) {
+      reason =
+        matchingCalls.length === 0
+          ? `Tool input assertion failed: tool not used: ${assertion.tool}`
+          : `Tool input assertion failed: ${assertion.tool} input did not match`;
+    }
+    if (reason) failures.push(reason);
+    return {
+      type: toolInputAssertionType(assertion),
+      label: formatToolInputAssertionLabel(assertion),
+      status: reason ? 'failed' : 'passed',
+      reason,
+      metadata: {
+        tool: assertion.tool,
+        ...(assertion.type === 'jsonpath' ? { path: assertion.path } : {}),
+        matched_call_count: matchedCallCount,
+        observed_call_count: matchingCalls.length
+      }
+    };
+  });
+  return { failures, check_results };
+}
+
+function matchesToolInputAssertion(assertion: ToolInputAssertion, values: unknown[]): boolean {
+  if (assertion.type === 'contains') {
+    return values.some((value) =>
+      String(value ?? '')
+        .toLowerCase()
+        .includes(assertion.value.toLowerCase())
+    );
+  }
+  return assertion.equals === undefined
+    ? values.length > 0
+    : values.some((value) => value === assertion.equals);
 }
 
 function evaluateResponseAssertions(

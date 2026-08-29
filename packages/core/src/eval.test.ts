@@ -6,6 +6,7 @@ import {
   evaluateScenarioWithAgentChecks,
   extractValues
 } from './eval.js';
+import type { ToolCall } from './types.js';
 
 describe('evaluateScenario — no rules', () => {
   it('passes when there are no eval rules', () => {
@@ -295,6 +296,87 @@ describe('evaluateScenario — response_assertions mixed stack', () => {
     });
     expect(result.pass).toBe(false);
     expect(result.failures).toHaveLength(3);
+  });
+});
+
+describe('evaluateScenario — tool_input_assertions', () => {
+  const calls: ToolCall[] = [
+    { name: 'search', arguments: { query: 'weather in Paris' } },
+    {
+      name: 'stats',
+      arguments: {
+        statistics: ['MIN', 'MAX', 'MEAN'],
+        periods: [{ start: '2024-01-01', end: '2024-02-01' }]
+      }
+    }
+  ];
+
+  it('supports simple contains and JSONPath checks', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'stats'],
+      {
+        tool_input_assertions: [
+          { type: 'contains', tool: 'search', value: 'weather in Paris' },
+          { type: 'jsonpath', tool: 'stats', path: '$.periods[0].end' },
+          { type: 'jsonpath', tool: 'stats', path: '$.statistics[*]', equals: 'MEAN' },
+          { type: 'jsonpath', tool: 'stats', path: '$.periods[*].start', equals: '2024-01-01' }
+        ]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results).toHaveLength(4);
+  });
+
+  it('passes when any repeated call matches', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      {
+        tool_input_assertions: [{ type: 'contains', tool: 'search', value: 'Paris' }]
+      },
+      [
+        { name: 'search', arguments: { query: 'weather in London' } },
+        { name: 'search', arguments: { query: 'weather in Paris' } }
+      ]
+    );
+
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails when the tool is missing or the input does not match', () => {
+    const result = evaluateScenario(
+      'ok',
+      [],
+      {
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'missing', path: '$.value' },
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'wrong' }
+        ]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: tool not used: missing',
+      'Tool input assertion failed: search input did not match'
+    ]);
+  });
+
+  it('matches text anywhere in structured input', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [{ type: 'contains', tool: 'search', value: 'PARIS' }]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(true);
   });
 });
 

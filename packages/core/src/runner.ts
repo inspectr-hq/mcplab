@@ -280,6 +280,7 @@ export async function runAll(
             runResult.toolSequence,
             scenario.eval,
             {
+              toolCalls: runResult.toolCalls,
               scenarioPrompt: scenario.prompt,
               judgeAgentAssertions: options.evaluationJudge
                 ? async (input) => {

@@ -21,6 +21,16 @@ describe('formatEvalRuleLabel', () => {
       })
     ).toBe('Tool sequence · search -> fetch');
   });
+
+  it('formats tool input assertions consistently', () => {
+    expect(
+      formatEvalRuleLabel({
+        type: 'tool_input_contains',
+        tool: 'stats',
+        value: 'MEAN'
+      })
+    ).toBe('Tool input · stats contains MEAN');
+  });
 });
 
 describe('buildCheckItems', () => {

@@ -88,6 +88,8 @@ function RuleTypeSelect({
         <SelectItem value="required_tool">Required Tool</SelectItem>
         <SelectItem value="forbidden_tool">Forbidden Tool</SelectItem>
         {!hideToolSequence && <SelectItem value="tool_sequence">Tool Sequence</SelectItem>}
+        <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
+        <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
         <SelectItem value="agent_check">Judge Agent</SelectItem>
         <SelectItem value="response_contains">Text contains</SelectItem>
         <SelectItem value="response_not_contains">Text does not contain</SelectItem>
@@ -114,6 +116,10 @@ const emptyScenario = (): Scenario => ({
 
 function formatToolSequenceText(sequence: string[]): string {
   return formatToolSequenceLabel(sequence).replace(/^Tool sequence · /, '');
+}
+
+function isToolInputRuleType(type: EvalRule['type']): boolean {
+  return type.startsWith('tool_input_');
 }
 
 export function ScenarioForm({
@@ -239,6 +245,7 @@ function ScenarioCard({
   const { source } = useDataSource();
   const [newRuleType, setNewRuleType] = useState<EvalRule['type']>('required_tool');
   const [newRuleValue, setNewRuleValue] = useState('');
+  const [newRuleTool, setNewRuleTool] = useState('');
   const [newRulePath, setNewRulePath] = useState('');
   const [newRuleEquals, setNewRuleEquals] = useState('');
   const [newRuleLabel, setNewRuleLabel] = useState('');
@@ -347,6 +354,44 @@ function ScenarioCard({
   };
 
   const addRule = () => {
+    if (isToolInputRuleType(newRuleType)) {
+      const tool = newRuleTool.trim();
+      if (!tool) return;
+      let nextRule: EvalRule;
+      if (newRuleType === 'tool_input_jsonpath') {
+        const path = newRulePath.trim();
+        if (!path) return;
+        const equalsText = newRuleEquals.trim();
+        const equals =
+          equalsText === ''
+            ? undefined
+            : equalsText === 'true'
+            ? true
+            : equalsText === 'false'
+            ? false
+            : Number.isNaN(Number(equalsText))
+            ? equalsText
+            : Number(equalsText);
+        nextRule = { type: newRuleType, tool, path, ...(equals !== undefined ? { equals } : {}) };
+      } else {
+        const value = newRuleValue.trim();
+        if (!value) return;
+        nextRule = { type: newRuleType, tool, value };
+      }
+      const nextRules = [...scenario.evalRules];
+      const editingIndex = findRuleIndex(valueRuleEditingRule);
+      if (editingIndex >= 0) nextRules[editingIndex] = nextRule;
+      else nextRules.push(nextRule);
+      onUpdate({ evalRules: nextRules });
+      setNewRuleTool('');
+      setNewRulePath('');
+      setNewRuleValue('');
+      setNewRuleEquals('');
+      setValueRuleEditingRule(null);
+      setNewRuleType('required_tool');
+      return;
+    }
+
     if (
       newRuleType === 'response_jsonpath' ||
       newRuleType === 'response_jsonpath_exists' ||
@@ -522,7 +567,9 @@ function ScenarioCard({
     'response_starts_with',
     'response_ends_with',
     'response_equals',
-    'response_regex'
+    'response_regex',
+    'tool_input_contains',
+    'tool_input_jsonpath'
   ];
 
   const addExtract = () => {
@@ -552,6 +599,8 @@ function ScenarioCard({
     required_tool: 'Required',
     forbidden_tool: 'Forbidden',
     tool_sequence: 'Sequence',
+    tool_input_contains: 'Input Contains',
+    tool_input_jsonpath: 'Input JSONPath',
     response_contains: 'Contains',
     response_not_contains: 'Not Contains',
     response_starts_with: 'Starts With',
@@ -568,6 +617,8 @@ function ScenarioCard({
     required_tool: 'border-sky-300/60 bg-sky-500/10 text-sky-700',
     forbidden_tool: 'border-rose-300/60 bg-rose-500/10 text-rose-700',
     tool_sequence: 'border-teal-300/60 bg-teal-500/10 text-teal-700',
+    tool_input_contains: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
+    tool_input_jsonpath: 'border-blue-300/60 bg-blue-500/10 text-blue-700',
     response_contains: 'border-violet-300/60 bg-violet-500/10 text-violet-700',
     response_not_contains: 'border-amber-300/60 bg-amber-500/10 text-amber-700',
     response_starts_with: 'border-cyan-300/60 bg-cyan-500/10 text-cyan-700',
@@ -580,6 +631,7 @@ function ScenarioCard({
     agent_check: 'border-teal-300/60 bg-teal-500/10 text-teal-700'
   };
   const isToolRule = newRuleType === 'required_tool' || newRuleType === 'forbidden_tool';
+  const isToolInputRule = isToolInputRuleType(newRuleType);
   const isJsonPathRule =
     newRuleType === 'response_jsonpath' ||
     newRuleType === 'response_jsonpath_exists' ||
@@ -1302,6 +1354,16 @@ function ScenarioCard({
                                   <span className="font-mono break-all">
                                     {formatToolSequenceText(rule.sequence ?? [])}
                                   </span>
+                                ) : isToolInputRuleType(rule.type) ? (
+                                  <span className="font-mono break-all">
+                                    {rule.type === 'tool_input_contains'
+                                      ? `${rule.tool} contains ${String(rule.value)}`
+                                      : `${rule.tool} · ${rule.path} · ${
+                                          rule.equals !== undefined
+                                            ? `== ${String(rule.equals)}`
+                                            : 'exists'
+                                        }`}
+                                  </span>
                                 ) : (
                                   <span className="font-mono break-all">
                                     {rule.path
@@ -1341,7 +1403,12 @@ function ScenarioCard({
                                       }
                                       setNewRuleType(rule.type);
                                       setValueRuleEditingRule(rule);
-                                      setNewRuleValue(rule.value ?? '');
+                                      setNewRuleValue(String(rule.value ?? ''));
+                                      setNewRuleTool(rule.tool ?? '');
+                                      setNewRulePath(rule.path ?? '');
+                                      setNewRuleEquals(
+                                        rule.equals !== undefined ? String(rule.equals) : ''
+                                      );
                                     }}
                                     aria-label={`Edit check ${ri + 1}`}
                                   >
@@ -1427,6 +1494,38 @@ function ScenarioCard({
                                     onKeyDown={(e) =>
                                       e.key === 'Enter' && (e.preventDefault(), addRule())
                                     }
+                                  />
+                                )}
+                              </>
+                            ) : isToolInputRule ? (
+                              <>
+                                <Input
+                                  value={newRuleTool}
+                                  onChange={(e) => setNewRuleTool(e.target.value)}
+                                  placeholder="Tool name"
+                                  className="h-8 text-xs font-mono"
+                                />
+                                {newRuleType === 'tool_input_jsonpath' && (
+                                  <Input
+                                    value={newRulePath}
+                                    onChange={(e) => setNewRulePath(e.target.value)}
+                                    placeholder="JSONPath (e.g. $.query)"
+                                    className="h-8 text-xs font-mono"
+                                  />
+                                )}
+                                {newRuleType === 'tool_input_jsonpath' ? (
+                                  <Input
+                                    value={newRuleEquals}
+                                    onChange={(e) => setNewRuleEquals(e.target.value)}
+                                    placeholder="Equals (optional)"
+                                    className="h-8 w-[10rem] text-xs font-mono"
+                                  />
+                                ) : (
+                                  <Input
+                                    value={newRuleValue}
+                                    onChange={(e) => setNewRuleValue(e.target.value)}
+                                    placeholder="Text present in input"
+                                    className="h-8 w-[10rem] text-xs font-mono"
                                   />
                                 )}
                               </>
