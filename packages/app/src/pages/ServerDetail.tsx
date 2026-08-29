@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Loader2, Wifi, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -579,7 +580,7 @@ const ServerDetail = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Value</Label>
-                  <Input
+                  <PasswordInput
                     value={form.authValue || ''}
                     onChange={(e) => setForm((f) => ({ ...f, authValue: e.target.value }))}
                     placeholder="${MY_API_KEY}"
@@ -641,8 +642,7 @@ const ServerDetail = () => {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Client Secret (optional)</Label>
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={form.oauthClientSecret || ''}
                       onChange={(e) =>
                         setForm((f) => ({ ...f, oauthClientSecret: e.target.value }))

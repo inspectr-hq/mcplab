@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -252,7 +253,7 @@ export function ServerForm({
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Value</Label>
-                    <Input
+                    <PasswordInput
                       value={srv.authValue || ''}
                       onChange={(e) => update(i, { authValue: e.target.value })}
                       disabled={readOnly}
@@ -316,8 +317,7 @@ export function ServerForm({
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Client Secret (optional)</Label>
-                      <Input
-                        type="password"
+                      <PasswordInput
                         value={srv.oauthClientSecret || ''}
                         onChange={(e) => update(i, { oauthClientSecret: e.target.value })}
                         disabled={readOnly}

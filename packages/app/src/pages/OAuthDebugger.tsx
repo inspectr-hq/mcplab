@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -787,10 +788,9 @@ export default function OAuthDebuggerPage() {
                       client_secret
                       <InfoTip text="Leave empty for public clients (e.g. SPAs or mobile apps). Required for confidential clients that authenticate with the token endpoint." />
                     </Label>
-                    <Input
+                    <PasswordInput
                       value={clientSecret}
                       onChange={(e) => setClientSecret(e.target.value)}
-                      type="password"
                       placeholder="optional"
                     />
                   </div>
