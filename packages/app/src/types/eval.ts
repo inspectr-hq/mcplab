@@ -1,6 +1,5 @@
 // Core mcp-lab types
-import type { ScenarioAttachment } from '@/lib/data-sources/types';
-import type { CheckCounts as CoreCheckCounts } from '@inspectr/mcplab-core';
+import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';

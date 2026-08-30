@@ -1964,20 +1964,21 @@ export function renderEvalRulePreview(rule: EvalRule): string {
   if (rule.type === 'tool_sequence') {
     return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
   }
-  if (rule.type.startsWith('tool_input_')) {
-    const value = rule.path
-      ? rule.equals !== undefined
-        ? `${rule.path} == ${String(rule.equals)}`
-        : rule.path
-      : String(rule.value ?? '');
-    return `${rule.type}: ${rule.tool ?? ''}: ${value}`;
+  if (isToolInputRuleType(rule.type)) {
+    return `${rule.type}: ${rule.tool ?? ''}: ${renderEvalRuleValue(rule)}`;
   }
   if (rule.path) {
-    return rule.equals !== undefined
-      ? `${rule.type}: ${rule.path} == ${String(rule.equals)}`
-      : `${rule.type}: ${rule.path}`;
+    return `${rule.type}: ${renderEvalRuleValue(rule)}`;
   }
   return `${rule.type}: ${rule.value ?? ''}`;
+}
+
+function renderEvalRuleValue(rule: EvalRule): string {
+  return rule.path
+    ? rule.equals !== undefined
+      ? `${rule.path} == ${String(rule.equals)}`
+      : rule.path
+    : String(rule.value ?? '');
 }
 
 const formatPreviewEvalRuleLabel = formatEvalRuleLabel;

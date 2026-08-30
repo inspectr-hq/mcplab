@@ -102,13 +102,20 @@ export function matchFailureReasonForRule(
     const tool = String(rule.tool ?? '');
     const value = String(rule.value ?? '');
     const path = String(rule.path ?? '');
+    const expectation =
+      rule.type === 'tool_input_contains'
+        ? `contains ${value}`
+        : rule.type === 'tool_input_regex'
+        ? `regex ${value}`
+        : rule.equals !== undefined
+        ? `JSONPath ${path} == ${String(rule.equals)}`
+        : `JSONPath ${path} exists`;
     return failureReasons.find((reason) => {
       if (!reason.startsWith('Tool input assertion failed:')) return false;
       return (
-        reason.includes(`: ${tool} `) ||
-        reason.includes(`for ${tool}`) ||
-        (rule.type === 'tool_input_regex' && reason.includes(value)) ||
-        (rule.type === 'tool_input_jsonpath' && reason.includes(path))
+        reason.includes(`tool not used: ${tool}`) ||
+        reason.includes(`(expected: ${expectation})`) ||
+        (rule.type === 'tool_input_regex' && reason.includes(`invalid regex ${value}`))
       );
     });
   }

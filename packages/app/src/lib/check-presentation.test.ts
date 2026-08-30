@@ -143,13 +143,35 @@ describe('buildCheckItems', () => {
     const rule: EvalRule = { tool: 'search', ...input };
     const result = buildCheckItems({
       evalRules: [rule],
-      failureReasons: ['Tool input assertion failed: search input did not match']
+      failureReasons: [
+        `Tool input assertion failed: search input did not match (expected: ${
+          input.type === 'tool_input_contains'
+            ? `contains ${input.value}`
+            : input.type === 'tool_input_regex'
+            ? `regex ${input.value}`
+            : `JSONPath ${input.path} == ${String(input.equals)}`
+        })`
+      ]
     });
 
     expect(result[0]).toMatchObject({
       rule,
       status: 'failed',
-      failureReason: 'Tool input assertion failed: search input did not match'
+      failureReason: expect.stringContaining('Tool input assertion failed: search input did not match')
     });
+  });
+
+  it('attributes same-tool fallback failures to the matching contains value', () => {
+    const result = buildCheckItems({
+      evalRules: [
+        { type: 'tool_input_contains', tool: 'search', value: 'Paris' },
+        { type: 'tool_input_contains', tool: 'search', value: 'London' }
+      ],
+      failureReasons: [
+        'Tool input assertion failed: search input did not match (expected: contains London)'
+      ]
+    });
+
+    expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
   });
 });

@@ -362,7 +362,7 @@ describe('evaluateScenario — tool_input_assertions', () => {
     expect(result.pass).toBe(false);
     expect(result.failures).toEqual([
       'Tool input assertion failed: tool not used: missing',
-      'Tool input assertion failed: search input did not match'
+      'Tool input assertion failed: search input did not match (expected: JSONPath $.query == wrong)'
     ]);
   });
 
@@ -405,6 +405,24 @@ describe('evaluateScenario — tool_input_assertions', () => {
     );
 
     expect(result.failures).toEqual(['Tool input assertion failed: invalid regex [invalid(']);
+  });
+
+  it('includes assertion details when repeated tool-input checks fail', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [
+          { type: 'contains', tool: 'search', value: 'London' },
+          { type: 'contains', tool: 'search', value: 'Paris' }
+        ]
+      },
+      [{ name: 'search', arguments: { query: 'Paris' } }]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: search input did not match (expected: contains London)'
+    ]);
   });
 
   it('continues checking repeated calls after one input cannot be inspected', () => {

@@ -337,14 +337,22 @@ function evaluateToolInputAssertions(
       }
     }
     if (matchedCallCount === 0 && !reason) {
+      const expectation =
+        assertion.type === 'contains'
+          ? `contains ${assertion.value}`
+          : assertion.type === 'regex'
+          ? `regex ${assertion.pattern}`
+          : assertion.equals !== undefined
+          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath ${assertion.path} exists`;
       reason =
         matchingCalls.length === 0
           ? `Tool input assertion failed: tool not used: ${assertion.tool}`
           : inputError && assertion.type === 'jsonpath'
-          ? `Tool input assertion failed: invalid JSONPath ${assertion.path}`
+          ? `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`
           : inputError && assertion.type === 'contains'
-          ? `Tool input assertion failed: could not serialize tool input for ${assertion.tool}`
-          : `Tool input assertion failed: ${assertion.tool} input did not match`;
+          ? `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`
+          : `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
     }
     if (reason) failures.push(reason);
     return {
