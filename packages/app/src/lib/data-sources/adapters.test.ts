@@ -1641,6 +1641,33 @@ describe('config adapters round-trip', () => {
     ]);
   });
 
+  it('omits null response and tool-input values instead of creating null checks', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-null-values',
+      name: 'null-values',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-null-values',
+          name: 'Null values',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'response_contains', value: null as never },
+            { type: 'tool_input_contains', tool: 'search', value: null as never },
+            { type: 'tool_input_regex', tool: 'search', value: null as never }
+          ],
+          extractRules: []
+        }
+      ]
+    });
+
+    expect((roundTripped.scenarios as unknown as AnyRecord[])[0]?.['eval']).toBeUndefined();
+  });
+
   it('omits empty eval and extract blocks in lean serialization', () => {
     const roundTripped = toCoreConfigYaml({
       id: 'cfg-lean-empty',

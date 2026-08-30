@@ -337,6 +337,12 @@ export function formatToolInputAssertionFailureReason(
   return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
 }
 
+function usesSerializedToolInput(
+  assertion: ToolInputAssertion
+): assertion is Extract<ToolInputAssertion, { type: 'contains' | 'regex' }> {
+  return assertion.type === 'contains' || assertion.type === 'regex';
+}
+
 function evaluateToolInputAssertions(
   toolCalls: ToolCall[],
   assertions: ToolInputAssertion[]
@@ -359,10 +365,9 @@ function evaluateToolInputAssertions(
     if (!reason) {
       for (const call of matchingCalls) {
         try {
-          const values =
-            assertion.type === 'contains' || assertion.type === 'regex'
-              ? [JSON.stringify(call.arguments)]
-              : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
+          const values = usesSerializedToolInput(assertion)
+            ? [JSON.stringify(call.arguments)]
+            : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
           if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
         } catch {
           inputErrorCount += 1;

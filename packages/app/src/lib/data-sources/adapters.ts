@@ -37,6 +37,7 @@ import type {
   LibraryBundle
 } from './types';
 import { tallyCheckCounts } from '@inspectr/mcplab-core';
+import { toComparableString } from '../value-normalization';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
@@ -135,7 +136,7 @@ function toCoreResponseAssertion(
     rule.type === 'agent_check'
   )
     return null;
-  const value = rule.value === undefined ? undefined : String(rule.value);
+  const value = toComparableString(rule.value);
   if (rule.type === 'response_contains') {
     return value ? { type: 'contains', value } : null;
   }
@@ -218,10 +219,11 @@ function buildCoreEvalBlock(
     .filter((rule) => rule.type.startsWith('tool_input_'))
     .flatMap((rule): CoreToolInputAssertion[] => {
       if (!rule.tool) return [];
-      if (rule.type === 'tool_input_contains' && rule.value !== undefined)
-        return [{ type: 'contains' as const, tool: rule.tool, value: String(rule.value) }];
-      if (rule.type === 'tool_input_regex' && rule.value !== undefined)
-        return [{ type: 'regex' as const, tool: rule.tool, pattern: String(rule.value) }];
+      const value = toComparableString(rule.value);
+      if (rule.type === 'tool_input_contains' && value !== undefined)
+        return [{ type: 'contains' as const, tool: rule.tool, value }];
+      if (rule.type === 'tool_input_regex' && value !== undefined)
+        return [{ type: 'regex' as const, tool: rule.tool, pattern: value }];
       if (rule.type === 'tool_input_jsonpath' && rule.path)
         return [
           {

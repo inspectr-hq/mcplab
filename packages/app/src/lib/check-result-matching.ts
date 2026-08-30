@@ -1,4 +1,5 @@
 import type { EvalRule, CheckResult } from '@/types/eval';
+import { toComparableString } from './value-normalization';
 
 export function matchStructuredCheckResult(
   rule: EvalRule,
@@ -21,9 +22,15 @@ export function matchStructuredCheckResult(
     );
     const matchesFields = (result: CheckResult) => {
       if (rule.type === 'tool_input_contains')
-        return String(result.metadata?.value ?? '') === String(rule.value ?? '');
+        return (
+          toComparableString(rule.value) !== undefined &&
+          toComparableString(result.metadata?.value) === toComparableString(rule.value)
+        );
       if (rule.type === 'tool_input_regex')
-        return String(result.metadata?.pattern ?? '') === String(rule.value ?? '');
+        return (
+          toComparableString(rule.value) !== undefined &&
+          toComparableString(result.metadata?.pattern) === toComparableString(rule.value)
+        );
       return (
         result.metadata?.path === rule.path &&
         (rule.equals === undefined) === (result.metadata?.equals === undefined) &&

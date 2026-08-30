@@ -6,6 +6,7 @@ import {
   formatToolSequenceLabel
 } from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
+import { toComparableString } from './value-normalization';
 
 export interface CheckPresentationInput {
   evalRules: EvalRule[];
@@ -134,18 +135,31 @@ export function matchFailureReasonForRule(
     );
   }
 
+  const comparableValue = toComparableString(rule.value);
+  if (
+    (rule.type === 'response_contains' ||
+      rule.type === 'response_not_contains' ||
+      rule.type === 'response_starts_with' ||
+      rule.type === 'response_ends_with' ||
+      rule.type === 'response_equals' ||
+      rule.type === 'response_regex') &&
+    comparableValue === undefined
+  ) {
+    return undefined;
+  }
+
   const expectedPrefix = (() => {
     if (rule.type === 'required_tool') return `Required tool not used: ${rule.value}`;
     if (rule.type === 'forbidden_tool') return `Forbidden tool used: ${rule.value}`;
     if (rule.type === 'tool_sequence')
       return `Tool sequence order was not satisfied: ${(rule.sequence ?? []).join(' -> ')}`;
-    if (rule.type === 'response_contains') return `Contains assertion failed: ${rule.value}`;
+    if (rule.type === 'response_contains') return `Contains assertion failed: ${comparableValue}`;
     if (rule.type === 'response_not_contains')
-      return `Not-contains assertion failed: ${rule.value}`;
-    if (rule.type === 'response_starts_with') return `Starts-with assertion failed: ${rule.value}`;
-    if (rule.type === 'response_ends_with') return `Ends-with assertion failed: ${rule.value}`;
-    if (rule.type === 'response_equals') return `Equals assertion failed: ${rule.value}`;
-    if (rule.type === 'response_regex') return `Regex assertion failed: ${rule.value}`;
+      return `Not-contains assertion failed: ${comparableValue}`;
+    if (rule.type === 'response_starts_with') return `Starts-with assertion failed: ${comparableValue}`;
+    if (rule.type === 'response_ends_with') return `Ends-with assertion failed: ${comparableValue}`;
+    if (rule.type === 'response_equals') return `Equals assertion failed: ${comparableValue}`;
+    if (rule.type === 'response_regex') return `Regex assertion failed: ${comparableValue}`;
     if (rule.type === 'response_jsonpath')
       return rule.equals !== undefined
         ? `JSONPath equals assertion failed: ${rule.path}`
@@ -161,7 +175,7 @@ export function matchFailureReasonForRule(
   if (exact) return exact;
 
   if (rule.type === 'response_regex') {
-    const value = rule.value === undefined ? '' : String(rule.value);
+    const value = comparableValue ?? '';
     if (!value) return undefined;
     return failureReasons.find(
       (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(value)

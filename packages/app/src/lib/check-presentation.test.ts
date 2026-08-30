@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCheckItems, formatEvalRuleLabel } from './check-presentation';
+import { buildCheckItems, formatEvalRuleLabel, matchFailureReasonForRule } from './check-presentation';
 import type { EvalRule } from '@/types/eval';
 
 describe('formatEvalRuleLabel', () => {
@@ -41,6 +41,17 @@ describe('formatEvalRuleLabel', () => {
         equals: 'Paris'
       })
     ).toBe('Tool input · stats JSONPath $.city == Paris');
+  });
+});
+
+describe('matchFailureReasonForRule', () => {
+  it('does not match a response regex failure for a null value', () => {
+    expect(
+      matchFailureReasonForRule(
+        { type: 'response_regex', value: null as never },
+        ['Regex assertion failed: null']
+      )
+    ).toBeUndefined();
   });
 });
 
