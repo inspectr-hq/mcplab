@@ -1496,12 +1496,30 @@ function ScenarioCard({
                               </>
                             ) : isToolInputRule ? (
                               <>
-                                <Input
-                                  value={newRuleTool}
-                                  onChange={(e) => setNewRuleTool(e.target.value)}
-                                  placeholder="Tool name"
-                                  className="h-8 text-xs font-mono"
-                                />
+                                {availableToolNames && availableToolNames.length > 0 ? (
+                                  <Select
+                                    value={newRuleTool}
+                                    onValueChange={setNewRuleTool}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs font-mono">
+                                      <SelectValue placeholder="Select tool" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableToolNames.map((toolName) => (
+                                        <SelectItem key={toolName} value={toolName}>
+                                          {toolName}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input
+                                    value={newRuleTool}
+                                    onChange={(e) => setNewRuleTool(e.target.value)}
+                                    placeholder="Tool name"
+                                    className="h-8 text-xs font-mono"
+                                  />
+                                )}
                                 {newRuleType === 'tool_input_jsonpath' && (
                                   <Input
                                     value={newRulePath}

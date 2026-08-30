@@ -1,2 +1,7 @@
-export { tallyCheckCounts, type CheckCounts } from './check-counts.js';
-export { formatToolInputAssertionLabel, formatToolSequenceLabel } from './eval.js';
+export { tallyCheckCounts } from './check-counts.js';
+export {
+  formatToolInputAssertionFailureReason,
+  formatToolInputAssertionLabel,
+  formatToolSequenceLabel,
+  type ToolInputAssertionFailureKind
+} from './eval.js';

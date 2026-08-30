@@ -1,6 +1,10 @@
 import { matchStructuredCheckResult } from '@/lib/check-result-matching';
 import type { CheckResult, EvalRule } from '@/types/eval';
-import { formatToolInputAssertionLabel, formatToolSequenceLabel } from '@/lib/data-sources/types';
+import {
+  formatToolInputAssertionFailureReason,
+  formatToolInputAssertionLabel,
+  formatToolSequenceLabel
+} from '@/lib/data-sources/types';
 import type { CoreToolInputAssertion } from '@/lib/data-sources/types';
 
 export interface CheckPresentationInput {
@@ -99,25 +103,25 @@ export function matchFailureReasonForRule(
     rule.type === 'tool_input_regex' ||
     rule.type === 'tool_input_jsonpath'
   ) {
-    const tool = String(rule.tool ?? '');
-    const value = String(rule.value ?? '');
-    const path = String(rule.path ?? '');
-    const expectation =
+    const assertion: CoreToolInputAssertion =
       rule.type === 'tool_input_contains'
-        ? `contains ${value}`
+        ? { type: 'contains', tool: String(rule.tool ?? ''), value: String(rule.value ?? '') }
         : rule.type === 'tool_input_regex'
-        ? `regex ${value}`
-        : rule.equals !== undefined
-        ? `JSONPath ${path} == ${String(rule.equals)}`
-        : `JSONPath ${path} exists`;
-    return failureReasons.find((reason) => {
-      if (!reason.startsWith('Tool input assertion failed:')) return false;
-      return (
-        reason.includes(`tool not used: ${tool}`) ||
-        reason.includes(`(expected: ${expectation})`) ||
-        (rule.type === 'tool_input_regex' && reason.includes(`invalid regex ${value}`))
-      );
-    });
+        ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
+        : {
+            type: 'jsonpath',
+            tool: String(rule.tool ?? ''),
+            path: String(rule.path ?? ''),
+            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+          };
+    const expectedReasons = [
+      formatToolInputAssertionFailureReason(assertion, 'tool_not_used'),
+      formatToolInputAssertionFailureReason(assertion, 'input_mismatch'),
+      formatToolInputAssertionFailureReason(assertion, 'invalid_regex'),
+      formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath'),
+      formatToolInputAssertionFailureReason(assertion, 'serialization')
+    ];
+    return failureReasons.find((reason) => expectedReasons.includes(reason));
   }
 
   if (rule.type === 'response_jsonpath_exists') {

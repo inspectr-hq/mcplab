@@ -24,6 +24,7 @@ export function matchStructuredCheckResult(
       if (rule.type === 'tool_input_regex') return result.metadata?.pattern === rule.value;
       return (
         result.metadata?.path === rule.path &&
+        (rule.equals === undefined) === (result.metadata?.equals === undefined) &&
         (rule.equals === undefined || result.metadata?.equals === rule.equals)
       );
     };

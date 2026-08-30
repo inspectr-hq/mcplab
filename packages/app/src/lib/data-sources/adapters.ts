@@ -218,10 +218,10 @@ function buildCoreEvalBlock(
     .filter((rule) => rule.type.startsWith('tool_input_'))
     .flatMap((rule): CoreToolInputAssertion[] => {
       if (!rule.tool) return [];
-      if (rule.type === 'tool_input_contains' && typeof rule.value === 'string')
-        return [{ type: 'contains' as const, tool: rule.tool, value: rule.value }];
-      if (rule.type === 'tool_input_regex' && typeof rule.value === 'string')
-        return [{ type: 'regex' as const, tool: rule.tool, pattern: rule.value }];
+      if (rule.type === 'tool_input_contains' && rule.value !== undefined)
+        return [{ type: 'contains' as const, tool: rule.tool, value: String(rule.value) }];
+      if (rule.type === 'tool_input_regex' && rule.value !== undefined)
+        return [{ type: 'regex' as const, tool: rule.tool, pattern: String(rule.value) }];
       if (rule.type === 'tool_input_jsonpath' && rule.path)
         return [
           {

@@ -16,4 +16,22 @@ describe('matchStructuredCheckResult', () => {
       matchStructuredCheckResult(rule, [staleResult], () => String(rule.value ?? ''))
     ).toBeUndefined();
   });
+
+  it('keeps JSONPath exists and equals results distinct', () => {
+    const existsRule: EvalRule = {
+      type: 'tool_input_jsonpath',
+      tool: 'search',
+      path: '$.query'
+    };
+    const equalsResult: CheckResult = {
+      type: 'tool_input_jsonpath',
+      label: 'Tool input · search JSONPath $.query == Paris',
+      status: 'passed',
+      metadata: { tool: 'search', path: '$.query', equals: 'Paris' }
+    };
+
+    expect(
+      matchStructuredCheckResult(existsRule, [equalsResult], () => 'different label')
+    ).toBeUndefined();
+  });
 });

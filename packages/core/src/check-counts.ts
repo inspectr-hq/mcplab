@@ -1,9 +1,4 @@
-export interface CheckCounts {
-  passed: number;
-  failed: number;
-  not_evaluated: number;
-  total: number;
-}
+import type { CheckCounts } from './types.js';
 
 export function tallyCheckCounts(checks: Iterable<{ status: string }>): CheckCounts {
   const counts: CheckCounts = { passed: 0, failed: 0, not_evaluated: 0, total: 0 };

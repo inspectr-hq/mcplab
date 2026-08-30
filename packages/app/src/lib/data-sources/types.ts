@@ -21,9 +21,17 @@ import type {
   RunQueueEvent
 } from '@inspectr/mcplab-core';
 
-export type { ToolInputAssertion as CoreToolInputAssertion } from '@inspectr/mcplab-core';
-export type { CheckCounts as CoreCheckCounts } from '@inspectr/mcplab-core';
-export { formatToolInputAssertionLabel, formatToolSequenceLabel } from '@inspectr/mcplab-core';
+import type {
+  CheckCounts as CoreCheckCounts,
+  ToolInputAssertion as CoreToolInputAssertion
+} from '@inspectr/mcplab-core';
+
+export type { CoreCheckCounts, CoreToolInputAssertion };
+export {
+  formatToolInputAssertionFailureReason,
+  formatToolInputAssertionLabel,
+  formatToolSequenceLabel
+} from '@inspectr/mcplab-core';
 
 export type {
   CoreServerAuthBearer,
@@ -82,12 +90,7 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  checkCounts?: {
-    passed: number;
-    failed: number;
-    not_evaluated: number;
-    total: number;
-  };
+  checkCounts?: CoreCheckCounts;
 }
 
 export interface ListEnvelope<T> {

@@ -303,6 +303,40 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
   return `Tool input · ${assertion.tool} ${operator}`;
 }
 
+export type ToolInputAssertionFailureKind =
+  | 'tool_not_used'
+  | 'input_mismatch'
+  | 'invalid_regex'
+  | 'invalid_jsonpath'
+  | 'serialization';
+
+export function formatToolInputAssertionFailureReason(
+  assertion: ToolInputAssertion,
+  kind: ToolInputAssertionFailureKind
+): string {
+  if (kind === 'tool_not_used') {
+    return `Tool input assertion failed: tool not used: ${assertion.tool}`;
+  }
+  if (kind === 'invalid_regex' && assertion.type === 'regex') {
+    return `Tool input assertion failed: invalid regex ${assertion.pattern}`;
+  }
+  const expectation =
+    assertion.type === 'contains'
+      ? `contains ${assertion.value}`
+      : assertion.type === 'regex'
+      ? `regex ${assertion.pattern}`
+      : assertion.equals !== undefined
+      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+      : `JSONPath ${assertion.path} exists`;
+  if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
+    return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
+  }
+  if (kind === 'serialization' && assertion.type === 'contains') {
+    return `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`;
+  }
+  return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
+}
+
 function evaluateToolInputAssertions(
   toolCalls: ToolCall[],
   assertions: ToolInputAssertion[]
@@ -318,7 +352,7 @@ function evaluateToolInputAssertions(
       try {
         new RegExp(assertion.pattern);
       } catch {
-        reason = `Tool input assertion failed: invalid regex ${assertion.pattern}`;
+        reason = formatToolInputAssertionFailureReason(assertion, 'invalid_regex');
       }
     }
 
@@ -337,22 +371,14 @@ function evaluateToolInputAssertions(
       }
     }
     if (matchedCallCount === 0 && !reason) {
-      const expectation =
-        assertion.type === 'contains'
-          ? `contains ${assertion.value}`
-          : assertion.type === 'regex'
-          ? `regex ${assertion.pattern}`
-          : assertion.equals !== undefined
-          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
-          : `JSONPath ${assertion.path} exists`;
       reason =
         matchingCalls.length === 0
-          ? `Tool input assertion failed: tool not used: ${assertion.tool}`
+          ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
           : inputError && assertion.type === 'jsonpath'
-          ? `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`
+          ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
           : inputError && assertion.type === 'contains'
-          ? `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`
-          : `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
+          ? formatToolInputAssertionFailureReason(assertion, 'serialization')
+          : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
     }
     if (reason) failures.push(reason);
     return {

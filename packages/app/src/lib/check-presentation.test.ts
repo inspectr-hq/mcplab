@@ -174,4 +174,16 @@ describe('buildCheckItems', () => {
 
     expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
   });
+
+  it('matches tool-not-used failures without tool-name substring collisions', () => {
+    const result = buildCheckItems({
+      evalRules: [
+        { type: 'tool_input_contains', tool: 'search', value: 'Paris' },
+        { type: 'tool_input_contains', tool: 'search_extended', value: 'Paris' }
+      ],
+      failureReasons: ['Tool input assertion failed: tool not used: search_extended']
+    });
+
+    expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
+  });
 });

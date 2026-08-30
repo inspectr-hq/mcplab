@@ -204,6 +204,13 @@ export interface CheckResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface CheckCounts {
+  passed: number;
+  failed: number;
+  not_evaluated: number;
+  total: number;
+}
+
 export interface ExtractRule {
   name: string;
   from: 'final_text';

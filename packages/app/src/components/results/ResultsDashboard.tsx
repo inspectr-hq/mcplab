@@ -13,6 +13,7 @@ type ResultsDashboardProps = {
 
 const PASS_COLOR = 'hsl(152, 69%, 40%)';
 const FAIL_COLOR = 'hsl(0, 72%, 51%)';
+const NOT_EVALUATED_COLOR = 'hsl(215, 16%, 47%)';
 
 function formatNumber(value: number, fractionDigits = 0): string {
   return value.toLocaleString(undefined, {
@@ -21,10 +22,23 @@ function formatNumber(value: number, fractionDigits = 0): string {
   });
 }
 
-function OutcomeCard({ title, passed, failed }: { title: string; passed: number; failed: number }) {
+function OutcomeCard({
+  title,
+  passed,
+  failed,
+  notEvaluated = 0
+}: {
+  title: string;
+  passed: number;
+  failed: number;
+  notEvaluated?: number;
+}) {
   const data = [
     { name: 'Passed', value: passed, color: PASS_COLOR },
-    { name: 'Failed', value: failed, color: FAIL_COLOR }
+    { name: 'Failed', value: failed, color: FAIL_COLOR },
+    ...(notEvaluated > 0
+      ? [{ name: 'Not evaluated', value: notEvaluated, color: NOT_EVALUATED_COLOR }]
+      : [])
   ];
 
   return (
@@ -63,6 +77,15 @@ function OutcomeCard({ title, passed, failed }: { title: string; passed: number;
             <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: FAIL_COLOR }} />
             {formatNumber(failed)} failed
           </div>
+          {notEvaluated > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: NOT_EVALUATED_COLOR }}
+              />
+              {formatNumber(notEvaluated)} not evaluated
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -143,6 +166,7 @@ export default function ResultsDashboard({ runs, loading }: ResultsDashboardProp
           title="Checks Pass / Fail"
           passed={summary.checkCounts.passed}
           failed={summary.checkCounts.failed}
+          notEvaluated={summary.checkCounts.not_evaluated}
         />
 
         <div className="grid self-start content-start gap-3 sm:grid-cols-2 lg:col-span-2 lg:grid-cols-4">

@@ -1,5 +1,5 @@
 export * from './types.js';
-export { tallyCheckCounts, type CheckCounts } from './check-counts.js';
+export { tallyCheckCounts } from './check-counts.js';
 export {
   loadConfig,
   hashConfig,
@@ -12,7 +12,12 @@ export {
 } from './config.js';
 export { runAll, type RunProgressEvent } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';
-export { formatToolInputAssertionLabel, formatToolSequenceLabel } from './eval.js';
+export {
+  formatToolInputAssertionFailureReason,
+  formatToolInputAssertionLabel,
+  formatToolSequenceLabel,
+  type ToolInputAssertionFailureKind
+} from './eval.js';
 export { McpClientManager } from './mcp.js';
 export { chatWithAgent } from './agent.js';
 export { formatAssistantToolName } from './assistant-tools.js';

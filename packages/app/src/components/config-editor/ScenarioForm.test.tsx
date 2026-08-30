@@ -209,6 +209,28 @@ describe('ScenarioForm checks editor', () => {
     ]);
   });
 
+  it('uses discovered tools for tool input rule selection', async () => {
+    mockSource.discoverToolsForAnalysis.mockResolvedValue({
+      servers: [{ tools: [{ name: 'search_tags' }] }]
+    });
+    const onChange = vi.fn();
+    render(
+      <ScenarioForm
+        scenarios={[{ ...baseScenario(), serverIds: ['server-1'] }]}
+        agents={[] as AgentConfig[]}
+        servers={[{ id: 'server-1', name: 'Server', transport: 'streamable-http' }] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load tools' }));
+    await waitFor(() => expect(screen.getByText('Refresh tools')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input contains'));
+    fireEvent.click(screen.getByText('Select tool'));
+    expect(screen.getByText('search_tags')).toBeInTheDocument();
+  });
+
   it('edits response_contains checks in place', async () => {
     const onChange = vi.fn();
 

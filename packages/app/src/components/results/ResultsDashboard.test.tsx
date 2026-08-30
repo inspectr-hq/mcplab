@@ -42,4 +42,15 @@ describe('ResultsDashboard', () => {
     expect(screen.getByText('Runs Pass / Fail')).toBeInTheDocument();
     expect(screen.getByText('Checks Pass / Fail')).toBeInTheDocument();
   });
+
+  it('shows not-evaluated checks in the checks card', () => {
+    render(
+      <ResultsDashboard
+        runs={[makeRun({ checkCounts: { passed: 1, failed: 0, not_evaluated: 2, total: 3 } })]}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByText('2 not evaluated')).toBeInTheDocument();
+  });
 });
