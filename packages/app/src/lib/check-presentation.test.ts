@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCheckItems, formatEvalRuleLabel, matchFailureReasonForRule } from './check-presentation';
+import {
+  buildCheckItems,
+  formatEvalRuleLabel,
+  matchFailureReasonForRule
+} from './check-presentation';
 import type { EvalRule } from '@/types/eval';
 
 describe('formatEvalRuleLabel', () => {
@@ -47,10 +51,9 @@ describe('formatEvalRuleLabel', () => {
 describe('matchFailureReasonForRule', () => {
   it('does not match a response regex failure for a null value', () => {
     expect(
-      matchFailureReasonForRule(
-        { type: 'response_regex', value: null as never },
-        ['Regex assertion failed: null']
-      )
+      matchFailureReasonForRule({ type: 'response_regex', value: null as never }, [
+        'Regex assertion failed: null'
+      ])
     ).toBeUndefined();
   });
 });
@@ -168,7 +171,9 @@ describe('buildCheckItems', () => {
     expect(result[0]).toMatchObject({
       rule,
       status: 'failed',
-      failureReason: expect.stringContaining('Tool input assertion failed: search input did not match')
+      failureReason: expect.stringContaining(
+        'Tool input assertion failed: search input did not match'
+      )
     });
   });
 

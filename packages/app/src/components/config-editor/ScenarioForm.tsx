@@ -1497,10 +1497,7 @@ function ScenarioCard({
                             ) : isToolInputRule ? (
                               <>
                                 {availableToolNames && availableToolNames.length > 0 ? (
-                                  <Select
-                                    value={newRuleTool}
-                                    onValueChange={setNewRuleTool}
-                                  >
+                                  <Select value={newRuleTool} onValueChange={setNewRuleTool}>
                                     <SelectTrigger className="h-8 text-xs font-mono">
                                       <SelectValue placeholder="Select tool" />
                                     </SelectTrigger>

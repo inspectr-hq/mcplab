@@ -451,7 +451,11 @@ describe('evaluateScenario — tool_input_assertions', () => {
     const result = evaluateScenario(
       'ok',
       ['search', 'search'],
-      { tool_input_assertions: [{ type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }] },
+      {
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }
+        ]
+      },
       [
         { name: 'search', arguments: null as unknown as Record<string, unknown> },
         { name: 'search', arguments: { query: 'London' } }

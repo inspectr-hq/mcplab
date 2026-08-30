@@ -218,7 +218,9 @@ describe('ScenarioForm checks editor', () => {
       <ScenarioForm
         scenarios={[{ ...baseScenario(), serverIds: ['server-1'] }]}
         agents={[] as AgentConfig[]}
-        servers={[{ id: 'server-1', name: 'Server', transport: 'streamable-http' }] as ServerConfig[]}
+        servers={
+          [{ id: 'server-1', name: 'Server', transport: 'streamable-http' }] as ServerConfig[]
+        }
         onChange={onChange}
       />
     );

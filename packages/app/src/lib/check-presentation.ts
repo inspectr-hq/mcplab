@@ -156,7 +156,8 @@ export function matchFailureReasonForRule(
     if (rule.type === 'response_contains') return `Contains assertion failed: ${comparableValue}`;
     if (rule.type === 'response_not_contains')
       return `Not-contains assertion failed: ${comparableValue}`;
-    if (rule.type === 'response_starts_with') return `Starts-with assertion failed: ${comparableValue}`;
+    if (rule.type === 'response_starts_with')
+      return `Starts-with assertion failed: ${comparableValue}`;
     if (rule.type === 'response_ends_with') return `Ends-with assertion failed: ${comparableValue}`;
     if (rule.type === 'response_equals') return `Equals assertion failed: ${comparableValue}`;
     if (rule.type === 'response_regex') return `Regex assertion failed: ${comparableValue}`;

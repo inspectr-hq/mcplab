@@ -73,14 +73,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateHtmlReport } from '@/lib/generate-html-report';
 import { sumTokenUsages } from '@/lib/token-usage';
 import { formatTokenCount } from '@/lib/format-duration';
