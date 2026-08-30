@@ -322,28 +322,19 @@ function evaluateToolInputAssertions(
       }
     }
 
-    try {
-      if (!reason) {
-        for (const call of matchingCalls) {
-          try {
-            const values =
-              assertion.type === 'contains' || assertion.type === 'regex'
-                ? [JSON.stringify(call.arguments)]
-                : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
-            if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
-          } catch {
-            inputError = true;
-            continue;
-          }
+    if (!reason) {
+      for (const call of matchingCalls) {
+        try {
+          const values =
+            assertion.type === 'contains' || assertion.type === 'regex'
+              ? [JSON.stringify(call.arguments)]
+              : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
+          if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
+        } catch {
+          inputError = true;
+          continue;
         }
       }
-    } catch {
-      reason =
-        assertion.type === 'regex'
-          ? `Tool input assertion failed: invalid regex ${assertion.pattern}`
-          : assertion.type === 'jsonpath'
-          ? `Tool input assertion failed: invalid JSONPath ${assertion.path}`
-          : `Tool input assertion failed: could not serialize tool input for ${assertion.tool}`;
     }
     if (matchedCallCount === 0 && !reason) {
       reason =

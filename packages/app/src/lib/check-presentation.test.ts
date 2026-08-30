@@ -134,4 +134,22 @@ describe('buildCheckItems', () => {
       { rule: evalRules[1], status: 'not_evaluated', failureReason: undefined }
     ]);
   });
+
+  it.each([
+    { type: 'tool_input_contains' as const, value: 'Paris' },
+    { type: 'tool_input_regex' as const, value: 'Par.*' },
+    { type: 'tool_input_jsonpath' as const, path: '$.city', equals: 'Paris' }
+  ])('maps $type tool-input failures when structured results are absent', (input) => {
+    const rule: EvalRule = { tool: 'search', ...input };
+    const result = buildCheckItems({
+      evalRules: [rule],
+      failureReasons: ['Tool input assertion failed: search input did not match']
+    });
+
+    expect(result[0]).toMatchObject({
+      rule,
+      status: 'failed',
+      failureReason: 'Tool input assertion failed: search input did not match'
+    });
+  });
 });

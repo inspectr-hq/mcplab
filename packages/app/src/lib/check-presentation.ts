@@ -94,6 +94,25 @@ export function matchFailureReasonForRule(
   rule: EvalRule,
   failureReasons: string[]
 ): string | undefined {
+  if (
+    rule.type === 'tool_input_contains' ||
+    rule.type === 'tool_input_regex' ||
+    rule.type === 'tool_input_jsonpath'
+  ) {
+    const tool = String(rule.tool ?? '');
+    const value = String(rule.value ?? '');
+    const path = String(rule.path ?? '');
+    return failureReasons.find((reason) => {
+      if (!reason.startsWith('Tool input assertion failed:')) return false;
+      return (
+        reason.includes(`: ${tool} `) ||
+        reason.includes(`for ${tool}`) ||
+        (rule.type === 'tool_input_regex' && reason.includes(value)) ||
+        (rule.type === 'tool_input_jsonpath' && reason.includes(path))
+      );
+    });
+  }
+
   if (rule.type === 'response_jsonpath_exists') {
     const path = String(rule.path ?? '').trim();
     if (!path) return undefined;

@@ -97,6 +97,7 @@ function RuleTypeSelect({
         <SelectItem value="response_regex">Text matches regex</SelectItem>
         <SelectItem value="tool_input_contains">Tool input contains</SelectItem>
         <SelectItem value="tool_input_regex">Tool input regex</SelectItem>
+        <SelectItem value="tool_input_jsonpath">Tool input JSONPath</SelectItem>
         <SelectItem value="response_jsonpath">JSONPath (optional equals)</SelectItem>
         <SelectItem value="response_jsonpath_exists">JSONPath exists</SelectItem>
         <SelectItem value="response_jsonpath_not_exists">JSONPath not exists</SelectItem>
@@ -1956,12 +1957,20 @@ function buildPreviewCheckItems(
   return buildCheckItems({ evalRules, failureReasons, checkResults });
 }
 
-function renderEvalRulePreview(rule: EvalRule): string {
+export function renderEvalRulePreview(rule: EvalRule): string {
   if (rule.type === 'agent_check') {
     return `${rule.type}: ${rule.label ?? ''} — ${rule.prompt ?? ''}`;
   }
   if (rule.type === 'tool_sequence') {
     return `${rule.type}: ${formatToolSequenceText(rule.sequence ?? [])}`;
+  }
+  if (rule.type.startsWith('tool_input_')) {
+    const value = rule.path
+      ? rule.equals !== undefined
+        ? `${rule.path} == ${String(rule.equals)}`
+        : rule.path
+      : String(rule.value ?? '');
+    return `${rule.type}: ${rule.tool ?? ''}: ${value}`;
   }
   if (rule.path) {
     return rule.equals !== undefined

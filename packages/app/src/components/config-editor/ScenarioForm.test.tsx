@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ScenarioForm } from './ScenarioForm';
+import { renderEvalRulePreview, ScenarioForm } from './ScenarioForm';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
 
 const mockSource = {
@@ -121,6 +121,26 @@ describe('ScenarioForm checks editor', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
+  });
+
+  it('lists tool input JSONPath checks in the rule type dropdown', () => {
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    expect(screen.getByText('Tool input JSONPath')).toBeInTheDocument();
+  });
+
+  it('includes the tool name in tool input previews', () => {
+    expect(
+      renderEvalRulePreview({ type: 'tool_input_contains', tool: 'search_tags', value: 'Paris' })
+    ).toBe('tool_input_contains: search_tags: Paris');
   });
 
   it('adds tool input contains checks', async () => {

@@ -1,5 +1,7 @@
 // Core mcp-lab types
 import type { ScenarioAttachment } from '@/lib/data-sources/types';
+import type { CheckCounts as CoreCheckCounts } from '@inspectr/mcplab-core';
+export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';
 
@@ -177,13 +179,6 @@ export interface ScenarioRun {
   extractedValues: Record<string, string>;
   failureReasons: string[];
   checkResults?: CheckResult[];
-}
-
-export interface CheckCounts {
-  passed: number;
-  failed: number;
-  not_evaluated: number;
-  total: number;
 }
 
 export interface ScenarioResult {
