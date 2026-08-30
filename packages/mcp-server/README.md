@@ -78,6 +78,8 @@ Default pre-registered client:
 
 ## Useful Tools
 
+- `mcplab_create_test_case` — persist a reviewed Test Case YAML file under `mcplab/test-cases/`
+- `mcplab_create_evaluation_config` — persist a normalized evaluation YAML file under `mcplab/evals/`
 - `mcplab_generate_scenario_entry`
 - `mcplab_validate_config`
 - `mcplab_list_library`

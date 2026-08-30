@@ -14,7 +14,7 @@ Stay in operator scope only. Do not include repository build/setup instructions.
 
 1. When MCP tools are available, execute scenarios with `mcplab_run_eval` first.
 2. Use CLI commands (`mcplab run`) as fallback when MCP tool execution is unavailable.
-3. Keep config authoring and validation in MCP flow when possible (`mcplab_generate_*`, `mcplab_validate_config`).
+3. Keep config authoring and validation in MCP flow when possible (`mcplab_generate_*`, `mcplab_create_*`, `mcplab_validate_config`).
 
 ## Workflow Router
 
@@ -110,6 +110,10 @@ When the request is about analyzing results, the assistant must:
 These context fields are shared across all Judge checks and sent in the batched Judge request.
 11. Validate references and shape against `config-schema.json`; also verify `agent_assertions` and `agent_context` against the current core types and website reference because older schema copies may not list these newer fields.
 12. Prefer minimal deterministic edits over large rewrites.
+
+13. For new Test Cases, draft YAML with `mcplab_generate_scenario_entry` first, then persist only after confirmation with `mcplab_create_test_case`. Use `as_library_file=true` when creating a reusable file under `mcplab/test-cases/`.
+14. For evaluation configs, pass the complete config object to the confirmation-required `mcplab_create_evaluation_config`; it writes under `mcplab/evals/` and normalizes collisions automatically.
+15. Verify persistence by checking the returned `path`/`relative_path` and then validate the created config with `mcplab_validate_config` when a config path is available.
 
 ## CLI Workflow
 

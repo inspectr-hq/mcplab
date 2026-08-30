@@ -32,6 +32,9 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  createEvaluationConfigFile,
+  createTestCaseFile,
+  type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -1133,6 +1136,57 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+
+  registerTool(
+    'mcplab_create_test_case',
+    {
+      description: 'Create one reviewed MCPLab Test Case in mcplab/test-cases/. This is a scoped YAML write and refuses duplicate IDs.',
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
+      inputSchema: {
+        id: z.string().min(1),
+        name: z.string().optional(),
+        servers: z.array(z.string()).min(1),
+        prompt: z.string().min(1).max(4000),
+        required_tools: z.array(z.string()).optional(),
+        response_regex_patterns: z.array(z.string()).optional()
+      }
+    },
+    async ({ id, name, servers, prompt, required_tools, response_regex_patterns }) => withToolHandling(async () => {
+      const bundleRoot = resolveBundleRoot();
+      const library = readLibrary(bundleRoot, false);
+      const created = createTestCaseFile({
+        librariesDir: bundleRoot,
+        knownServerIds: library.servers.map((item) => item.id),
+        testCase: { id, name, servers, prompt, requiredTools: required_tools, responseRegexPatterns: response_regex_patterns }
+      });
+      return ok(`Created Test Case '${created.id}'`, { id: created.id, path: created.path, test_case: created.testCase });
+    })
+  );
+
+  registerTool(
+    'mcplab_create_evaluation_config',
+    {
+      description: 'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling.',
+      outputSchema: { file_name: z.string(), path: z.string(), relative_path: z.string(), config: GenericObjectSchema },
+      inputSchema: {
+        file_name: z.string().min(1),
+        config: GenericObjectSchema.describe('Complete MCPLab evaluation configuration.')
+      }
+    },
+    async ({ file_name, config }) => withToolHandling(async () => {
+      const created = createEvaluationConfigFile({
+        evalsDir: join(resolveBundleRoot(), 'evals'),
+        fileName: file_name,
+        config: config as unknown as SourceEvalConfig
+      });
+      return ok(`Created evaluation configuration '${created.fileName}'`, {
+        file_name: created.fileName,
+        path: created.path,
+        relative_path: created.relativePath,
+        config: created.config as unknown as Record<string, unknown>
+      });
+    })
   );
 
   registerTool(
@@ -2371,9 +2425,16 @@ export function registerPrompts(server: McpServer): void {
 const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_delete_tool_analysis_result',
   'mcplab_write_markdown_report',
-  'mcplab_run_eval'
+  'mcplab_run_eval',
+  'mcplab_create_test_case',
+  'mcplab_create_evaluation_config'
 ]);
-const MUTATING_TOOLS = new Set<string>(['mcplab_write_markdown_report', 'mcplab_run_eval']);
+const MUTATING_TOOLS = new Set<string>([
+  'mcplab_write_markdown_report',
+  'mcplab_run_eval',
+  'mcplab_create_test_case',
+  'mcplab_create_evaluation_config'
+]);
 const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
