@@ -303,6 +303,12 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
   return `Tool input · ${assertion.tool} ${operator}`;
 }
 
+function usesSerializedToolInput(
+  assertion: ToolInputAssertion
+): assertion is Extract<ToolInputAssertion, { type: 'contains' | 'regex' }> {
+  return assertion.type === 'contains' || assertion.type === 'regex';
+}
+
 export type ToolInputAssertionFailureKind =
   | 'tool_not_used'
   | 'input_mismatch'
@@ -331,16 +337,10 @@ export function formatToolInputAssertionFailureReason(
   if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
     return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
   }
-  if (kind === 'serialization' && (assertion.type === 'contains' || assertion.type === 'regex')) {
+  if (kind === 'serialization' && usesSerializedToolInput(assertion)) {
     return `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`;
   }
   return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
-}
-
-function usesSerializedToolInput(
-  assertion: ToolInputAssertion
-): assertion is Extract<ToolInputAssertion, { type: 'contains' | 'regex' }> {
-  return assertion.type === 'contains' || assertion.type === 'regex';
 }
 
 function evaluateToolInputAssertions(
@@ -381,8 +381,7 @@ function evaluateToolInputAssertions(
           ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
           : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
           ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
-          : inputErrorCount === matchingCalls.length &&
-            (assertion.type === 'contains' || assertion.type === 'regex')
+          : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
           ? formatToolInputAssertionFailureReason(assertion, 'serialization')
           : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
     }
