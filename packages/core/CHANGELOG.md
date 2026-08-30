@@ -1,5 +1,15 @@
 # @inspectr/mcplab-core
 
+## 1.21.0
+
+### Minor Changes
+
+- feat: add MCP tool input assertions
+- feat: add tool input regex assertions
+- feat: show check pass fail counts
+- feat: pass tool inputs to judge checks
+- feat: add LangSmith trace integration
+
 ## 1.20.0
 
 ### Minor Changes

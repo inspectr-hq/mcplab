@@ -1,5 +1,28 @@
 # @inspectr/mcplab
 
+## 1.27.0
+
+### Minor Changes
+
+- feat: add MCP tool input assertions
+- feat: add tool input regex assertions
+- feat: show check pass fail counts
+- feat: pass tool inputs to judge checks
+- feat: add LangSmith trace integration
+- feat: show LangSmith links on result details
+- feat: add show hide toggles for secret fields
+- fix: restore run queue status after reruns
+- doc: Added LangSmith integration
+- docs: document tool input assertions
+- skill: update mcplab assistant skill guidance
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.21.0
+  - @inspectr/mcplab-mcp-server@1.7.2
+  - @inspectr/mcplab-reporting@1.2.1
+
 ## 1.26.0
 
 ### Minor Changes
