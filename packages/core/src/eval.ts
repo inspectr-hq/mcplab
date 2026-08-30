@@ -331,7 +331,7 @@ export function formatToolInputAssertionFailureReason(
   if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
     return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
   }
-  if (kind === 'serialization' && assertion.type === 'contains') {
+  if (kind === 'serialization' && (assertion.type === 'contains' || assertion.type === 'regex')) {
     return `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`;
   }
   return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
@@ -346,7 +346,7 @@ function evaluateToolInputAssertions(
     const matchingCalls = toolCalls.filter((call) => call.name === assertion.tool);
     let reason: string | undefined;
     let matchedCallCount = 0;
-    let inputError = false;
+    let inputErrorCount = 0;
 
     if (assertion.type === 'regex') {
       try {
@@ -365,7 +365,7 @@ function evaluateToolInputAssertions(
               : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
           if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
         } catch {
-          inputError = true;
+          inputErrorCount += 1;
           continue;
         }
       }
@@ -374,9 +374,10 @@ function evaluateToolInputAssertions(
       reason =
         matchingCalls.length === 0
           ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
-          : inputError && assertion.type === 'jsonpath'
+          : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
           ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
-          : inputError && assertion.type === 'contains'
+          : inputErrorCount === matchingCalls.length &&
+            (assertion.type === 'contains' || assertion.type === 'regex')
           ? formatToolInputAssertionFailureReason(assertion, 'serialization')
           : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
     }

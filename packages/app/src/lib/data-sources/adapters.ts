@@ -135,7 +135,7 @@ function toCoreResponseAssertion(
     rule.type === 'agent_check'
   )
     return null;
-  const value = typeof rule.value === 'string' ? rule.value : undefined;
+  const value = rule.value === undefined ? undefined : String(rule.value);
   if (rule.type === 'response_contains') {
     return value ? { type: 'contains', value } : null;
   }

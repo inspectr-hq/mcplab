@@ -1603,6 +1603,44 @@ describe('config adapters round-trip', () => {
     ]);
   });
 
+  it('preserves primitive response assertion values by stringifying them', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-primitive-responses',
+      name: 'primitive-responses',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-primitive-responses',
+          name: 'Primitive responses',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'response_contains', value: 42 },
+            { type: 'response_not_contains', value: false },
+            { type: 'response_starts_with', value: 7 },
+            { type: 'response_ends_with', value: true },
+            { type: 'response_equals', value: 99 },
+            { type: 'response_regex', value: 123 }
+          ],
+          extractRules: []
+        }
+      ]
+    });
+
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[])[0];
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['response_assertions']).toEqual([
+      { type: 'contains', value: '42' },
+      { type: 'not_contains', value: 'false' },
+      { type: 'starts_with', value: '7' },
+      { type: 'ends_with', value: 'true' },
+      { type: 'equals', value: '99' },
+      { type: 'regex', pattern: '123' }
+    ]);
+  });
+
   it('omits empty eval and extract blocks in lean serialization', () => {
     const roundTripped = toCoreConfigYaml({
       id: 'cfg-lean-empty',

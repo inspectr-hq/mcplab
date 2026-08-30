@@ -1,5 +1,6 @@
 // Core mcp-lab types
 import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
+export { tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';

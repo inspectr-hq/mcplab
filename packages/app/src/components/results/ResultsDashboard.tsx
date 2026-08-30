@@ -22,7 +22,7 @@ function formatNumber(value: number, fractionDigits = 0): string {
   });
 }
 
-function OutcomeCard({
+export function OutcomeCard({
   title,
   passed,
   failed,

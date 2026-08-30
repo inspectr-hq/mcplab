@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import {
   ArrowLeft,
   Activity,
@@ -55,6 +54,7 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -74,9 +74,6 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip';
 import {
-  PieChart,
-  Pie,
-  Cell,
   BarChart,
   Bar,
   XAxis,
@@ -94,6 +91,7 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import {
@@ -514,19 +512,9 @@ const ResultDetail = () => {
   const mcpVersionSummary = mcpServerVersionEntries
     .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
     .join(', ');
-  const passCount = filteredPassCount;
-  const failCount = Math.max(0, filteredTotalRuns - passCount);
-  const pieData = [
-    { name: 'Pass', value: passCount, color: 'hsl(152, 69%, 40%)' },
-    { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
-  ];
   const checkCounts = tallyCheckCounts(
     filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
-  const checkPieData = [
-    { name: 'Pass', value: checkCounts.passed, color: 'hsl(152, 69%, 40%)' },
-    { name: 'Fail', value: checkCounts.failed, color: 'hsl(0, 72%, 51%)' }
-  ];
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -997,73 +985,17 @@ const ResultDetail = () => {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="p-2.5 pb-0">
-                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Runs Pass / Fail
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex h-[120px] items-center justify-center gap-2 p-0">
-                <PieChart width={110} height={110}>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    innerRadius={30}
-                    outerRadius={46}
-                    paddingAngle={3}
-                  >
-                    {pieData.map((d, i) => (
-                      <Cell key={i} fill={d.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
-                    {passCount} passed
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-destructive" />
-                    {failCount} failed
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="p-2.5 pb-0">
-                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Checks Pass / Fail
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex h-[120px] items-center justify-center gap-2 p-0">
-                <PieChart width={110} height={110}>
-                  <Pie
-                    data={checkPieData}
-                    dataKey="value"
-                    innerRadius={30}
-                    outerRadius={46}
-                    paddingAngle={3}
-                  >
-                    {checkPieData.map((d, i) => (
-                      <Cell key={i} fill={d.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-                <div className="space-y-0.5 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
-                    {checkCounts.passed} passed
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-destructive" />
-                    {checkCounts.failed} failed
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <OutcomeCard
+              title="Runs Pass / Fail"
+              passed={filteredPassCount}
+              failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
+            />
+            <OutcomeCard
+              title="Checks Pass / Fail"
+              passed={checkCounts.passed}
+              failed={checkCounts.failed}
+              notEvaluated={checkCounts.not_evaluated}
+            />
 
             <Card className="lg:col-span-2">
               <CardHeader className="p-2.5 pb-0">

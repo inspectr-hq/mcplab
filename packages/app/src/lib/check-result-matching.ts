@@ -20,8 +20,10 @@ export function matchStructuredCheckResult(
       (result) => result.type === rule.type && result.metadata?.tool === rule.tool
     );
     const matchesFields = (result: CheckResult) => {
-      if (rule.type === 'tool_input_contains') return result.metadata?.value === rule.value;
-      if (rule.type === 'tool_input_regex') return result.metadata?.pattern === rule.value;
+      if (rule.type === 'tool_input_contains')
+        return String(result.metadata?.value ?? '') === String(rule.value ?? '');
+      if (rule.type === 'tool_input_regex')
+        return String(result.metadata?.pattern ?? '') === String(rule.value ?? '');
       return (
         result.metadata?.path === rule.path &&
         (rule.equals === undefined) === (result.metadata?.equals === undefined) &&

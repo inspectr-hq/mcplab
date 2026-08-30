@@ -520,6 +520,27 @@
                         }
                       ]
                     }
+                  },
+                  "agent_assertions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["label", "prompt"],
+                      "properties": {
+                        "label": { "type": "string", "minLength": 1 },
+                        "prompt": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  },
+                  "agent_context": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "include_prompt": { "type": "boolean" },
+                      "include_tool_sequence": { "type": "boolean" },
+                      "include_tool_inputs": { "type": "boolean" }
+                    }
                   }
                 }
               },

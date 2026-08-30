@@ -161,7 +161,8 @@ export function matchFailureReasonForRule(
   if (exact) return exact;
 
   if (rule.type === 'response_regex') {
-    const value = typeof rule.value === 'string' ? rule.value : '';
+    const value = rule.value === undefined ? '' : String(rule.value);
+    if (!value) return undefined;
     return failureReasons.find(
       (reason) => reason.startsWith('Regex assertion failed:') && reason.includes(value)
     );

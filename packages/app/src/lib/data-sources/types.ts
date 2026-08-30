@@ -30,7 +30,8 @@ export type { CoreCheckCounts, CoreToolInputAssertion };
 export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
-  formatToolSequenceLabel
+  formatToolSequenceLabel,
+  tallyCheckCounts
 } from '@inspectr/mcplab-core';
 
 export type {

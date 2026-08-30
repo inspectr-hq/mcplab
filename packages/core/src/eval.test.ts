@@ -446,6 +446,37 @@ describe('evaluateScenario — tool_input_assertions', () => {
       metadata: { matched_call_count: 1 }
     });
   });
+
+  it('does not report an input error when another repeated call was inspected normally', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      { tool_input_assertions: [{ type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }] },
+      [
+        { name: 'search', arguments: null as unknown as Record<string, unknown> },
+        { name: 'search', arguments: { query: 'London' } }
+      ]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: search input did not match (expected: JSONPath $.query == Paris)'
+    ]);
+  });
+
+  it('reports regex serialization errors when every repeated input is unserializable', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      { tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: 'Paris' }] },
+      [{ name: 'search', arguments: cyclic }]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: could not serialize tool input for search (expected: regex Paris)'
+    ]);
+  });
 });
 
 describe('evaluateScenarioWithAgentChecks', () => {
