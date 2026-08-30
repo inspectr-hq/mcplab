@@ -2157,7 +2157,7 @@ const refToolAndResponseAssertions: DocPage = {
   tool_input_assertions:
     - type: regex
       tool: search_tags
-      value: "TM5-BP2-[A-Z0-9.-]+"`
+      pattern: "TM5-BP2-[A-Z0-9.-]+"`
         },
         {
           title: 'JSONPath exists or equals',
