@@ -20,7 +20,10 @@ Map user goals to reliable starting points.
   Use `mcplab run -c <directory>/` to run all `.yaml`/`.yml` files recursively. Add `--bail` to stop on first failure. See `references/cli-recipes.md` Batch Runs section.
 
 - "I need examples for assertions."
-  Use `references/config-recipes.md` section `eval` and provide copy-ready snippets for tool constraints, tool sequences, and all response assertion types.
+  Use `references/config-recipes.md` section `eval` and provide copy-ready snippets for tool constraints, tool sequences, tool-input contains/regex/JSONPath assertions, response assertions, and Judge checks with optional context.
+
+- "I need to verify how an MCP tool was called."
+  Prefer `tool_input_contains`, `tool_input_regex`, or `tool_input_jsonpath` for deterministic requirements. Use `agent_check` with `agent_context.include_tool_inputs: true` when interpreting the arguments is semantic.
 
 ## Selection Heuristic
 

@@ -54,6 +54,10 @@ Source of truth: `config-schema.json`.
 - `tool_constraints.required_tools`: string[]
 - `tool_constraints.forbidden_tools`: string[]
 - `tool_sequence`: string[]
+- `tool_input_assertions`:
+  - contains assertion: `{ type: "contains", tool: string, value: string }`
+  - regex assertion: `{ type: "regex", tool: string, pattern: string }`
+  - jsonpath assertion: `{ type: "jsonpath", tool: string, path: string, equals?: string|number|boolean }`
 - `response_assertions`:
   - contains assertion: `{ type: "contains", value: string }`
   - not_contains assertion: `{ type: "not_contains", value: string }`
@@ -66,6 +70,10 @@ Source of truth: `config-schema.json`.
   - jsonpath_not_exists assertion: `{ type: "jsonpath_not_exists", path: string }`
 - String assertions (`contains`, `not_contains`, `starts_with`, `ends_with`, `equals`) are literal and case-insensitive.
 - `tool_sequence` checks ordered appearance only; extra tools may occur between listed tools.
+- Tool-input assertions target raw MCP tool names and pass when any matching call satisfies the rule.
+- `contains` and `regex` inspect the serialized tool arguments; `contains` is case-insensitive.
+- `jsonpath` checks a path in structured arguments; omit `equals` for existence.
+- `agent_assertions` use `{ label, prompt }` for Judge checks. `agent_context` can include `include_prompt`, `include_tool_sequence`, and `include_tool_inputs`; context is shared across the scenario's Judge checks.
 
 ### `extract`
 
@@ -120,6 +128,14 @@ scenarios:
       tool_sequence:
         - search_items
         - summarize_items
+      tool_input_assertions:
+        - type: contains
+          tool: search_items
+          value: item-123
+        - type: jsonpath
+          tool: search_items
+          path: $.limit
+          equals: 10
       response_assertions:
         - type: contains
           value: Found
@@ -140,6 +156,13 @@ scenarios:
           path: $.summary.items
         - type: jsonpath_not_exists
           path: $.error
+      agent_context:
+        include_prompt: true
+        include_tool_sequence: true
+        include_tool_inputs: true
+      agent_assertions:
+        - label: Complete answer
+          prompt: Confirm that the final answer addresses the request and uses the requested item.
     extract:
       - name: item_count
         from: final_text
