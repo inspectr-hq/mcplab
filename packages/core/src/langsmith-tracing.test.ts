@@ -7,9 +7,11 @@ import {
 } from './langsmith-tracing.js';
 import type { TraceMessage } from './types.js';
 
+type LangSmithRunConfig = Parameters<LangSmithRunFactory>[0];
+
 function makeFactory() {
   const runs: Array<{
-    config: Record<string, unknown>;
+    config: LangSmithRunConfig;
     end: ReturnType<typeof vi.fn>;
     postRun: ReturnType<typeof vi.fn>;
     createChild: ReturnType<typeof vi.fn>;
@@ -19,10 +21,10 @@ function makeFactory() {
       config,
       end: vi.fn(),
       postRun: vi.fn(async () => undefined),
-      createChild: vi.fn((childConfig: Record<string, unknown>) =>
+      createChild: vi.fn((childConfig: LangSmithRunConfig) =>
         factory({
           ...childConfig,
-          parent_run: run
+          parent_run: run as any
         })
       )
     };
