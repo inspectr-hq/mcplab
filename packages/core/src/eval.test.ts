@@ -6,6 +6,7 @@ import {
   evaluateScenarioWithAgentChecks,
   extractValues
 } from './eval.js';
+import type { ToolCall } from './types.js';
 
 describe('evaluateScenario — no rules', () => {
   it('passes when there are no eval rules', () => {
@@ -298,6 +299,190 @@ describe('evaluateScenario — response_assertions mixed stack', () => {
   });
 });
 
+describe('evaluateScenario — tool_input_assertions', () => {
+  const calls: ToolCall[] = [
+    { name: 'search', arguments: { query: 'weather in Paris' } },
+    {
+      name: 'stats',
+      arguments: {
+        statistics: ['MIN', 'MAX', 'MEAN'],
+        periods: [{ start: '2024-01-01', end: '2024-02-01' }]
+      }
+    }
+  ];
+
+  it('supports simple contains and JSONPath checks', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'stats'],
+      {
+        tool_input_assertions: [
+          { type: 'contains', tool: 'search', value: 'weather in Paris' },
+          { type: 'jsonpath', tool: 'stats', path: '$.periods[0].end' },
+          { type: 'jsonpath', tool: 'stats', path: '$.statistics[*]', equals: 'MEAN' },
+          { type: 'jsonpath', tool: 'stats', path: '$.periods[*].start', equals: '2024-01-01' }
+        ]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results).toHaveLength(4);
+  });
+
+  it('passes when any repeated call matches', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      {
+        tool_input_assertions: [{ type: 'contains', tool: 'search', value: 'Paris' }]
+      },
+      [
+        { name: 'search', arguments: { query: 'weather in London' } },
+        { name: 'search', arguments: { query: 'weather in Paris' } }
+      ]
+    );
+
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails when the tool is missing or the input does not match', () => {
+    const result = evaluateScenario(
+      'ok',
+      [],
+      {
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'missing', path: '$.value' },
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'wrong' }
+        ]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: tool not used: missing',
+      'Tool input assertion failed: search input did not match (expected: JSONPath $.query == wrong)'
+    ]);
+  });
+
+  it('matches text anywhere in structured input', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [{ type: 'contains', tool: 'search', value: 'PARIS' }]
+      },
+      calls
+    );
+
+    expect(result.pass).toBe(true);
+  });
+
+  it('matches a regular expression against serialized tool input', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: '\\*TM5-BP2\\*' }]
+      },
+      [{ name: 'search', arguments: { name: '*TM5-BP2*' } }]
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      type: 'tool_input_regex',
+      status: 'passed'
+    });
+  });
+
+  it('reports invalid tool-input regexes as regex errors', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      { tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: '[invalid(' }] },
+      [{ name: 'search', arguments: { query: 'Paris' } }]
+    );
+
+    expect(result.failures).toEqual(['Tool input assertion failed: invalid regex [invalid(']);
+  });
+
+  it('includes assertion details when repeated tool-input checks fail', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      {
+        tool_input_assertions: [
+          { type: 'contains', tool: 'search', value: 'London' },
+          { type: 'contains', tool: 'search', value: 'Paris' }
+        ]
+      },
+      [{ name: 'search', arguments: { query: 'Paris' } }]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: search input did not match (expected: contains London)'
+    ]);
+  });
+
+  it('continues checking repeated calls after one input cannot be inspected', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      {
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }
+        ]
+      },
+      [
+        { name: 'search', arguments: null as unknown as Record<string, unknown> },
+        { name: 'search', arguments: { query: 'Paris' } }
+      ]
+    );
+
+    expect(result.pass).toBe(true);
+    expect(result.check_results[0]).toMatchObject({
+      status: 'passed',
+      metadata: { matched_call_count: 1 }
+    });
+  });
+
+  it('does not report an input error when another repeated call was inspected normally', () => {
+    const result = evaluateScenario(
+      'ok',
+      ['search', 'search'],
+      {
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }
+        ]
+      },
+      [
+        { name: 'search', arguments: null as unknown as Record<string, unknown> },
+        { name: 'search', arguments: { query: 'London' } }
+      ]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: search input did not match (expected: JSONPath $.query == Paris)'
+    ]);
+  });
+
+  it('reports regex serialization errors when every repeated input is unserializable', () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    const result = evaluateScenario(
+      'ok',
+      ['search'],
+      { tool_input_assertions: [{ type: 'regex', tool: 'search', pattern: 'Paris' }] },
+      [{ name: 'search', arguments: cyclic }]
+    );
+
+    expect(result.failures).toEqual([
+      'Tool input assertion failed: could not serialize tool input for search (expected: regex Paris)'
+    ]);
+  });
+});
+
 describe('evaluateScenarioWithAgentChecks', () => {
   it('passes when the batched judge returns pass=true for a single check', async () => {
     const result = await evaluateScenarioWithAgentChecks(
@@ -562,6 +747,31 @@ describe('evaluateScenarioWithAgentChecks', () => {
 
     expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
       tool_sequence: ['get_tag_profile', 'search_tags']
+    });
+  });
+
+  it('includes tool inputs in context when include_tool_inputs is true', async () => {
+    const judgeAgentAssertions = vi
+      .fn()
+      .mockResolvedValue([{ label: 'Check', pass: true, reason: 'ok' }]);
+
+    await evaluateScenarioWithAgentChecks(
+      'answer',
+      ['search_tags'],
+      {
+        agent_assertions: [{ label: 'Check', prompt: 'Verify.' }],
+        agent_context: { include_tool_inputs: true }
+      },
+      {
+        judgeAgentAssertions,
+        toolCalls: [
+          { name: 'search_tags', arguments: { query: 'TM5-BP2' }, duration: 1, timestamp: 'now' }
+        ]
+      }
+    );
+
+    expect(judgeAgentAssertions.mock.calls[0][0].context).toEqual({
+      tool_inputs: [{ tool: 'search_tags', arguments: { query: 'TM5-BP2' } }]
     });
   });
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCheckItems, formatEvalRuleLabel } from './check-presentation';
+import {
+  buildCheckItems,
+  formatEvalRuleLabel,
+  matchFailureReasonForRule
+} from './check-presentation';
 import type { EvalRule } from '@/types/eval';
 
 describe('formatEvalRuleLabel', () => {
@@ -20,6 +24,37 @@ describe('formatEvalRuleLabel', () => {
         sequence: ['search', 'fetch']
       })
     ).toBe('Tool sequence · search -> fetch');
+  });
+
+  it('formats tool input assertions consistently', () => {
+    expect(
+      formatEvalRuleLabel({
+        type: 'tool_input_contains',
+        tool: 'stats',
+        value: 'MEAN'
+      })
+    ).toBe('Tool input · stats contains MEAN');
+  });
+
+  it('uses core formatting for tool input JSONPath assertions', () => {
+    expect(
+      formatEvalRuleLabel({
+        type: 'tool_input_jsonpath',
+        tool: 'stats',
+        path: '$.city',
+        equals: 'Paris'
+      })
+    ).toBe('Tool input · stats JSONPath $.city == Paris');
+  });
+});
+
+describe('matchFailureReasonForRule', () => {
+  it('does not match a response regex failure for a null value', () => {
+    expect(
+      matchFailureReasonForRule({ type: 'response_regex', value: null as never }, [
+        'Regex assertion failed: null'
+      ])
+    ).toBeUndefined();
   });
 });
 
@@ -66,6 +101,41 @@ describe('buildCheckItems', () => {
     ]);
   });
 
+  it('matches core tool-input result labels', () => {
+    const rule: EvalRule = { type: 'tool_input_contains', tool: 'stats', value: 'MEAN' };
+    const result = buildCheckItems({
+      evalRules: [rule],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'tool_input_contains',
+          label: 'Tool input · stats contains MEAN',
+          status: 'passed'
+        }
+      ]
+    });
+
+    expect(result[0]).toMatchObject({ rule, status: 'passed' });
+  });
+
+  it('does not match legacy tool-input results without assertion metadata', () => {
+    const rule: EvalRule = { type: 'tool_input_contains', tool: 'stats', value: 'MEAN' };
+    const result = buildCheckItems({
+      evalRules: [rule],
+      failureReasons: [],
+      checkResults: [
+        {
+          type: 'tool_input_contains',
+          label: 'Tool input · stats · contains MEAN',
+          status: 'passed',
+          metadata: { tool: 'stats' }
+        }
+      ]
+    });
+
+    expect(result[0]).toMatchObject({ rule, status: 'not_evaluated' });
+  });
+
   it('marks all checks not evaluated when run fails before evaluation', () => {
     const result = buildCheckItems({
       evalRules,
@@ -77,5 +147,59 @@ describe('buildCheckItems', () => {
       { rule: evalRules[0], status: 'not_evaluated', failureReason: undefined },
       { rule: evalRules[1], status: 'not_evaluated', failureReason: undefined }
     ]);
+  });
+
+  it.each([
+    { type: 'tool_input_contains' as const, value: 'Paris' },
+    { type: 'tool_input_regex' as const, value: 'Par.*' },
+    { type: 'tool_input_jsonpath' as const, path: '$.city', equals: 'Paris' }
+  ])('maps $type tool-input failures when structured results are absent', (input) => {
+    const rule: EvalRule = { tool: 'search', ...input };
+    const result = buildCheckItems({
+      evalRules: [rule],
+      failureReasons: [
+        `Tool input assertion failed: search input did not match (expected: ${
+          input.type === 'tool_input_contains'
+            ? `contains ${input.value}`
+            : input.type === 'tool_input_regex'
+            ? `regex ${input.value}`
+            : `JSONPath ${input.path} == ${String(input.equals)}`
+        })`
+      ]
+    });
+
+    expect(result[0]).toMatchObject({
+      rule,
+      status: 'failed',
+      failureReason: expect.stringContaining(
+        'Tool input assertion failed: search input did not match'
+      )
+    });
+  });
+
+  it('attributes same-tool fallback failures to the matching contains value', () => {
+    const result = buildCheckItems({
+      evalRules: [
+        { type: 'tool_input_contains', tool: 'search', value: 'Paris' },
+        { type: 'tool_input_contains', tool: 'search', value: 'London' }
+      ],
+      failureReasons: [
+        'Tool input assertion failed: search input did not match (expected: contains London)'
+      ]
+    });
+
+    expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
+  });
+
+  it('matches tool-not-used failures without tool-name substring collisions', () => {
+    const result = buildCheckItems({
+      evalRules: [
+        { type: 'tool_input_contains', tool: 'search', value: 'Paris' },
+        { type: 'tool_input_contains', tool: 'search_extended', value: 'Paris' }
+      ],
+      failureReasons: ['Tool input assertion failed: tool not used: search_extended']
+    });
+
+    expect(result.map((item) => item.status)).toEqual(['passed', 'failed']);
   });
 });

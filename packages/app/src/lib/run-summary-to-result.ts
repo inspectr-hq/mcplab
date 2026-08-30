@@ -49,6 +49,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     totalToolDurationMs:
       typeof summary.totalToolDurationMs === 'number'
         ? Math.max(0, summary.totalToolDurationMs)
-        : undefined
+        : undefined,
+    checkCounts: summary.checkCounts
   };
 }

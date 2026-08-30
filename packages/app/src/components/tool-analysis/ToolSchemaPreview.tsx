@@ -26,7 +26,7 @@ function countSchemaProperties(schema: unknown, seen = new Set<object>()): numbe
       ? (record.properties as Record<string, unknown>)
       : undefined;
   const nestedPropertyCount = properties
-    ? Object.values(properties).reduce(
+    ? Object.values(properties).reduce<number>(
         (total, propertySchema) => total + countSchemaProperties(propertySchema, nextSeen),
         0
       )
@@ -35,7 +35,7 @@ function countSchemaProperties(schema: unknown, seen = new Set<object>()): numbe
   const variantCount = [
     ...(Array.isArray(record.oneOf) ? record.oneOf : []),
     ...(Array.isArray(record.anyOf) ? record.anyOf : [])
-  ].reduce((total, variant) => total + countSchemaProperties(variant, nextSeen), 0);
+  ].reduce<number>((total, variant) => total + countSchemaProperties(variant, nextSeen), 0);
   return (
     (properties ? Object.keys(properties).length : 0) +
     nestedPropertyCount +

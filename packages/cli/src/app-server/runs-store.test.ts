@@ -25,7 +25,16 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
       scenarios: [
         {
           scenario_id: 'scn-default',
-          scenario_name: 'Default Scenario'
+          scenario_name: 'Default Scenario',
+          runs: [
+            {
+              check_results: [
+                { type: 'required_tool', label: 'Required', status: 'passed' },
+                { type: 'response_regex', label: 'Response', status: 'failed' },
+                { type: 'agent_check', label: 'Judge', status: 'not_evaluated' }
+              ]
+            }
+          ]
         }
       ]
     }),
@@ -34,6 +43,21 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
 }
 
 describe('listRuns filters', () => {
+  it('aggregates check counts for dashboard summaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-checks', '2026-03-10T10:00:00.000Z');
+
+    expect(listRuns(runsDir)[0]?.checkCounts).toEqual({
+      passed: 1,
+      failed: 1,
+      not_evaluated: 1,
+      total: 3
+    });
+  });
+
   it('filters runs by lastDays', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');

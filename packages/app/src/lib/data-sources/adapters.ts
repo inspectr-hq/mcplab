@@ -2,6 +2,7 @@ import type {
   AgentContext,
   ConversationItem,
   AgentEntry,
+  CheckCounts,
   EvalConfig,
   EvalResult,
   EvalRule,
@@ -11,6 +12,7 @@ import type {
   TokenUsage,
   ToolCall
 } from '@/types/eval';
+import type { CoreToolInputAssertion } from './types';
 import {
   addTokenUsage,
   createTokenAccumulator,
@@ -34,6 +36,8 @@ import type {
   CoreLibraryBundle,
   LibraryBundle
 } from './types';
+import { tallyCheckCounts } from '@inspectr/mcplab-core';
+import { toComparableString } from '../value-normalization';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
@@ -93,6 +97,24 @@ function toUiEvalRule(assertion: {
   }
 }
 
+function toUiToolInputRule(assertion: {
+  type: 'contains' | 'regex' | 'jsonpath';
+  tool: string;
+  path?: string;
+  equals?: string | number | boolean;
+  value?: string | number | boolean;
+  pattern?: string;
+}): EvalRule {
+  return {
+    type: `tool_input_${assertion.type}` as EvalRule['type'],
+    tool: assertion.tool,
+    ...(assertion.path ? { path: assertion.path } : {}),
+    ...(assertion.equals !== undefined ? { equals: assertion.equals } : {}),
+    ...(assertion.value !== undefined ? { value: assertion.value } : {}),
+    ...(assertion.pattern !== undefined ? { value: assertion.pattern } : {})
+  };
+}
+
 function toCoreResponseAssertion(
   rule: EvalRule
 ):
@@ -110,26 +132,28 @@ function toCoreResponseAssertion(
     rule.type === 'required_tool' ||
     rule.type === 'forbidden_tool' ||
     rule.type === 'tool_sequence' ||
+    rule.type.startsWith('tool_input_') ||
     rule.type === 'agent_check'
   )
     return null;
+  const value = toComparableString(rule.value);
   if (rule.type === 'response_contains') {
-    return rule.value ? { type: 'contains', value: rule.value } : null;
+    return value ? { type: 'contains', value } : null;
   }
   if (rule.type === 'response_not_contains') {
-    return rule.value ? { type: 'not_contains', value: rule.value } : null;
+    return value ? { type: 'not_contains', value } : null;
   }
   if (rule.type === 'response_starts_with') {
-    return rule.value ? { type: 'starts_with', value: rule.value } : null;
+    return value ? { type: 'starts_with', value } : null;
   }
   if (rule.type === 'response_ends_with') {
-    return rule.value ? { type: 'ends_with', value: rule.value } : null;
+    return value ? { type: 'ends_with', value } : null;
   }
   if (rule.type === 'response_equals') {
-    return rule.value ? { type: 'equals', value: rule.value } : null;
+    return value ? { type: 'equals', value } : null;
   }
   if (rule.type === 'response_regex') {
-    return rule.value ? { type: 'regex', pattern: rule.value } : null;
+    return value ? { type: 'regex', pattern: value } : null;
   }
   if (rule.type === 'response_jsonpath') {
     if (!rule.path?.trim()) return null;
@@ -167,6 +191,11 @@ function buildCoreEvalBlock(
         | { type: 'jsonpath_exists'; path: string }
         | { type: 'jsonpath_not_exists'; path: string }
       >;
+      tool_input_assertions?: Array<
+        | { type: 'contains'; tool: string; value: string }
+        | { type: 'regex'; tool: string; pattern: string }
+        | { type: 'jsonpath'; tool: string; path: string; equals?: string | number | boolean }
+      >;
       agent_assertions?: Array<{ label: string; prompt: string }>;
       agent_context?: AgentContext;
     }
@@ -186,6 +215,26 @@ function buildCoreEvalBlock(
   const response_assertions = evalRules
     .map((rule) => toCoreResponseAssertion(rule))
     .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
+  const tool_input_assertions = evalRules
+    .filter((rule) => rule.type.startsWith('tool_input_'))
+    .flatMap((rule): CoreToolInputAssertion[] => {
+      if (!rule.tool) return [];
+      const value = toComparableString(rule.value);
+      if (rule.type === 'tool_input_contains' && value !== undefined)
+        return [{ type: 'contains' as const, tool: rule.tool, value }];
+      if (rule.type === 'tool_input_regex' && value !== undefined)
+        return [{ type: 'regex' as const, tool: rule.tool, pattern: value }];
+      if (rule.type === 'tool_input_jsonpath' && rule.path)
+        return [
+          {
+            type: 'jsonpath' as const,
+            tool: rule.tool,
+            path: rule.path,
+            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+          }
+        ];
+      return [];
+    });
   const agent_assertions = evalRules
     .filter((rule) => rule.type === 'agent_check')
     .flatMap((rule) =>
@@ -204,13 +253,15 @@ function buildCoreEvalBlock(
 
   const agent_context = {
     ...(agentContext?.include_prompt ? { include_prompt: true } : {}),
-    ...(agentContext?.include_tool_sequence ? { include_tool_sequence: true } : {})
+    ...(agentContext?.include_tool_sequence ? { include_tool_sequence: true } : {}),
+    ...(agentContext?.include_tool_inputs ? { include_tool_inputs: true } : {})
   };
   const hasAgentContext = Object.keys(agent_context).length > 0;
 
   if (
     !tool_constraints &&
     !tool_sequence?.length &&
+    tool_input_assertions.length === 0 &&
     response_assertions.length === 0 &&
     agent_assertions.length === 0 &&
     !hasAgentContext
@@ -220,6 +271,7 @@ function buildCoreEvalBlock(
   return {
     ...(tool_constraints ? { tool_constraints } : {}),
     ...(tool_sequence && tool_sequence.length > 0 ? { tool_sequence } : {}),
+    ...(tool_input_assertions.length > 0 ? { tool_input_assertions } : {}),
     ...(response_assertions.length > 0 ? { response_assertions } : {}),
     ...(agent_assertions.length > 0 ? { agent_assertions } : {}),
     ...(hasAgentContext ? { agent_context } : {})
@@ -469,6 +521,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     for (const assertion of scenario.eval?.response_assertions ?? []) {
       evalRules.push(toUiEvalRule(assertion));
     }
+    for (const assertion of scenario.eval?.tool_input_assertions ?? []) {
+      evalRules.push(toUiToolInputRule(assertion));
+    }
     for (const assertion of scenario.eval?.agent_assertions ?? []) {
       evalRules.push({
         type: 'agent_check',
@@ -480,10 +535,12 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const mappedAgentContext: AgentContext | undefined =
       scenario.eval?.agent_context &&
       (scenario.eval.agent_context.include_prompt ||
-        scenario.eval.agent_context.include_tool_sequence)
+        scenario.eval.agent_context.include_tool_sequence ||
+        scenario.eval.agent_context.include_tool_inputs)
         ? {
             include_prompt: scenario.eval.agent_context.include_prompt,
-            include_tool_sequence: scenario.eval.agent_context.include_tool_sequence
+            include_tool_sequence: scenario.eval.agent_context.include_tool_sequence,
+            include_tool_inputs: scenario.eval.agent_context.include_tool_inputs
           }
         : undefined;
     const mappedScenario: EvalConfig['scenarios'][number] = {
@@ -1253,6 +1310,10 @@ function deriveRunDurationMs(run: CoreScenarioRun, record?: ScenarioRunTraceReco
   return run.tool_durations_ms.reduce((sum, value) => sum + value, 0);
 }
 
+function countChecks(runs: ScenarioRun[]): CheckCounts {
+  return tallyCheckCounts(runs.flatMap((run) => run.checkResults ?? []));
+}
+
 export function fromCoreResultsJson(
   results: CoreResultsJson,
   traceRecords: ScenarioRunTraceRecord[] = []
@@ -1333,6 +1394,7 @@ export function fromCoreResultsJson(
       passRate: scenario.pass_rate,
       avgToolCalls,
       avgDuration,
+      checkCounts: countChecks(runs),
       assistantTokenUsage: toTokenUsage(scenarioAssistantUsageAcc),
       toolTokenUsage: toTokenUsage(scenarioToolUsageAcc),
       toolTokenUsageByTool: scenarioPerToolUsage
@@ -1345,6 +1407,17 @@ export function fromCoreResultsJson(
     addTokenUsage(runAssistantUsageAcc, scenario.assistantTokenUsage);
     addTokenUsage(runToolUsageAcc, scenario.toolTokenUsage);
   }
+
+  const checkCounts = scenarios.reduce(
+    (counts, scenario) => {
+      counts.passed += scenario.checkCounts?.passed ?? 0;
+      counts.failed += scenario.checkCounts?.failed ?? 0;
+      counts.not_evaluated += scenario.checkCounts?.not_evaluated ?? 0;
+      counts.total += scenario.checkCounts?.total ?? 0;
+      return counts;
+    },
+    { passed: 0, failed: 0, not_evaluated: 0, total: 0 }
+  );
 
   return {
     id: results.metadata.run_id,
@@ -1368,6 +1441,7 @@ export function fromCoreResultsJson(
     totalRuns: results.summary.total_runs,
     avgToolCalls: results.summary.avg_tool_calls_per_run,
     avgLatency: Math.round(results.summary.avg_tool_latency_ms ?? 0),
+    checkCounts,
     totalToolDurationMs:
       typeof (results.metadata as { total_tool_duration_ms?: unknown }).total_tool_duration_ms ===
       'number'

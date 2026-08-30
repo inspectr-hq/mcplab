@@ -21,6 +21,19 @@ import type {
   RunQueueEvent
 } from '@inspectr/mcplab-core';
 
+import type {
+  CheckCounts as CoreCheckCounts,
+  ToolInputAssertion as CoreToolInputAssertion
+} from '@inspectr/mcplab-core';
+
+export type { CoreCheckCounts, CoreToolInputAssertion };
+export {
+  formatToolInputAssertionFailureReason,
+  formatToolInputAssertionLabel,
+  formatToolSequenceLabel,
+  tallyCheckCounts
+} from '@inspectr/mcplab-core';
+
 export type {
   CoreServerAuthBearer,
   CoreServerAuthOauth,
@@ -78,6 +91,7 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts?: CoreCheckCounts;
 }
 
 export interface ListEnvelope<T> {
@@ -168,10 +182,11 @@ export interface ScenarioAssistantSuggestionBundle {
   evalRules?: {
     replacement: Array<{
       type: EvalRule['type'];
-      value?: string;
+      value?: string | number | boolean;
       sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
+      tool?: string;
       label?: string;
       prompt?: string;
     }>;
@@ -787,10 +802,11 @@ export interface EvalDataSource {
           serverNames: string[];
           evalRules: Array<{
             type: EvalRule['type'];
-            value?: string;
+            value?: string | number | boolean;
             sequence?: string[];
             path?: string;
             equals?: string | number | boolean;
+            tool?: string;
             label?: string;
             prompt?: string;
           }>;
@@ -836,10 +852,11 @@ export interface EvalDataSource {
       attachments: ScenarioAttachment[];
       evalRules: Array<{
         type: EvalRule['type'];
-        value?: string;
+        value?: string | number | boolean;
         sequence?: string[];
         path?: string;
         equals?: string | number | boolean;
+        tool?: string;
         label?: string;
         prompt?: string;
       }>;

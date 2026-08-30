@@ -280,6 +280,7 @@ export async function runAll(
             runResult.toolSequence,
             scenario.eval,
             {
+              toolCalls: runResult.toolCalls,
               scenarioPrompt: scenario.prompt,
               judgeAgentAssertions: options.evaluationJudge
                 ? async (input) => {
@@ -566,6 +567,7 @@ async function judgeAgentAssertions(params: {
     'Use final_answer as the primary answer being judged.',
     'If context.scenario_prompt is provided, use it to decide whether the final answer addresses the original request.',
     'If context.tool_sequence is provided, use it only to understand which tools were called.',
+    'If context.tool_inputs is provided, use the tool names and arguments to reason about how the tools were used.',
     'Do not require context fields that are not provided.',
     'Return JSON only.',
     'Schema: {"results":[{"id":"abc","pass":true,"reason":"text"}]}.',

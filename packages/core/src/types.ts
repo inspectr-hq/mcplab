@@ -136,15 +136,42 @@ export interface AgentAssertion {
   prompt: string;
 }
 
+export interface ToolInputAssertionBase {
+  tool: string;
+}
+
+export interface ToolInputAssertionContains extends ToolInputAssertionBase {
+  type: 'contains';
+  value: string;
+}
+
+export interface ToolInputAssertionRegex extends ToolInputAssertionBase {
+  type: 'regex';
+  pattern: string;
+}
+
+export interface ToolInputAssertionJsonPath extends ToolInputAssertionBase {
+  type: 'jsonpath';
+  path: string;
+  equals?: string | number | boolean;
+}
+
+export type ToolInputAssertion =
+  | ToolInputAssertionContains
+  | ToolInputAssertionRegex
+  | ToolInputAssertionJsonPath;
+
 // Must stay structurally identical to AgentContext in packages/app/src/types/eval.ts
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;
+  include_tool_inputs?: boolean;
 }
 
 export interface AgentJudgeContext {
   scenario_prompt?: string;
   tool_sequence?: string[];
+  tool_inputs?: Array<{ tool: string; arguments: unknown }>;
 }
 
 export type ResponseAssertion =
@@ -161,6 +188,7 @@ export type ResponseAssertion =
 export interface EvalRules {
   tool_constraints?: ToolConstraints;
   tool_sequence?: string[];
+  tool_input_assertions?: ToolInputAssertion[];
   response_assertions?: ResponseAssertion[];
   agent_assertions?: AgentAssertion[];
   agent_context?: AgentContext;
@@ -174,6 +202,13 @@ export interface CheckResult {
   status: CheckResultStatus;
   reason?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface CheckCounts {
+  passed: number;
+  failed: number;
+  not_evaluated: number;
+  total: number;
 }
 
 export interface ExtractRule {

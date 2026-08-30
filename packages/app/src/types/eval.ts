@@ -1,5 +1,7 @@
 // Core mcp-lab types
-import type { ScenarioAttachment } from '@/lib/data-sources/types';
+import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
+export { tallyCheckCounts } from '@/lib/data-sources/types';
+export type CheckCounts = CoreCheckCounts;
 
 export type { ScenarioAttachment } from '@/lib/data-sources/types';
 
@@ -49,6 +51,9 @@ export interface EvalRule {
     | 'required_tool'
     | 'forbidden_tool'
     | 'tool_sequence'
+    | 'tool_input_contains'
+    | 'tool_input_regex'
+    | 'tool_input_jsonpath'
     | 'response_contains'
     | 'response_not_contains'
     | 'response_starts_with'
@@ -59,10 +64,11 @@ export interface EvalRule {
     | 'response_jsonpath_exists'
     | 'response_jsonpath_not_exists'
     | 'agent_check';
-  value?: string;
+  value?: string | number | boolean;
   sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
+  tool?: string;
   label?: string;
   prompt?: string;
 }
@@ -84,6 +90,7 @@ export interface ExtractRule {
 export interface AgentContext {
   include_prompt?: boolean;
   include_tool_sequence?: boolean;
+  include_tool_inputs?: boolean;
 }
 
 export interface Scenario {
@@ -185,6 +192,7 @@ export interface ScenarioResult {
   passRate: number;
   avgToolCalls: number;
   avgDuration: number;
+  checkCounts?: CheckCounts;
   assistantTokenUsage?: TokenUsage | null;
   toolTokenUsage?: TokenUsage | null;
   toolTokenUsageByTool?: Record<string, TokenUsage>;
@@ -215,6 +223,7 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts?: CheckCounts;
 }
 
 // App state

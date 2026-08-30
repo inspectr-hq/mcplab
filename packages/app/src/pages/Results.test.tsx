@@ -82,7 +82,13 @@ function makeSummary(runId: string, toolTokensTotal: number): WorkspaceRunSummar
     passRate: 1,
     avgToolCalls: 1,
     avgLatencyMs: 100,
-    toolTokensTotal
+    toolTokensTotal,
+    checkCounts: {
+      passed: 3,
+      failed: 1,
+      not_evaluated: 0,
+      total: 4
+    }
   };
 }
 
@@ -248,6 +254,7 @@ describe('Results', () => {
 
     await screen.findByText('run-a');
     expect(screen.getAllByText('1,200').length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('3 checks passed, 1 checks failed')).toBeInTheDocument();
 
     sourceMock.listRunSummaries.mockResolvedValue([makeSummary('run-b', 900)]);
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));

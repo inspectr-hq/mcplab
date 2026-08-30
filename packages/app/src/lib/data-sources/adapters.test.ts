@@ -671,6 +671,29 @@ describe('fromCoreResultsJson conversation mapping', () => {
   });
 });
 
+describe('fromCoreResultsJson check counts', () => {
+  it('derives run and scenario check totals from persisted check results', () => {
+    const results = baseResults();
+    results.scenarios[0]!.runs[0]!.check_results = [
+      { type: 'required_tool', label: 'search_tags', status: 'passed' },
+      { type: 'response_regex', label: 'date', status: 'failed' }
+    ];
+    results.scenarios[0]!.runs[1]!.check_results = [
+      { type: 'agent_check', label: 'answer', status: 'not_evaluated' }
+    ];
+
+    const mapped = fromCoreResultsJson(results);
+
+    expect(mapped.checkCounts).toEqual({ passed: 1, failed: 1, not_evaluated: 1, total: 3 });
+    expect(mapped.scenarios[0]?.checkCounts).toEqual({
+      passed: 1,
+      failed: 1,
+      not_evaluated: 1,
+      total: 3
+    });
+  });
+});
+
 describe('config adapters round-trip', () => {
   it('preserves an omitted agent temperature when loading and saving config YAML', () => {
     const sourceRecord: WorkspaceConfigRecord = {
@@ -842,7 +865,7 @@ describe('config adapters round-trip', () => {
       name: 'scn-malformed',
       prompt: 'Check malformed scenario names'
     });
-    expect((roundTripped.scenarios[0] as AnyRecord).name).toBe('scn-malformed');
+    expect((roundTripped.scenarios[0] as unknown as AnyRecord).name).toBe('scn-malformed');
   });
 
   it('preserves explicit empty mcp_servers overrides on referenced scenarios', () => {
@@ -1578,6 +1601,71 @@ describe('config adapters round-trip', () => {
       { type: 'contains', value: 'must-have' },
       { type: 'not_contains', value: 'must-not-have' }
     ]);
+  });
+
+  it('preserves primitive response assertion values by stringifying them', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-primitive-responses',
+      name: 'primitive-responses',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-primitive-responses',
+          name: 'Primitive responses',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'response_contains', value: 42 },
+            { type: 'response_not_contains', value: false },
+            { type: 'response_starts_with', value: 7 },
+            { type: 'response_ends_with', value: true },
+            { type: 'response_equals', value: 99 },
+            { type: 'response_regex', value: 123 }
+          ],
+          extractRules: []
+        }
+      ]
+    });
+
+    const scenario = (roundTripped.scenarios as unknown as AnyRecord[])[0];
+    expect((scenario?.['eval'] as AnyRecord | undefined)?.['response_assertions']).toEqual([
+      { type: 'contains', value: '42' },
+      { type: 'not_contains', value: 'false' },
+      { type: 'starts_with', value: '7' },
+      { type: 'ends_with', value: 'true' },
+      { type: 'equals', value: '99' },
+      { type: 'regex', pattern: '123' }
+    ]);
+  });
+
+  it('omits null response and tool-input values instead of creating null checks', () => {
+    const roundTripped = toCoreConfigYaml({
+      id: 'cfg-null-values',
+      name: 'null-values',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+      servers: [],
+      agents: [],
+      scenarios: [
+        {
+          id: 'scn-null-values',
+          name: 'Null values',
+          serverIds: [],
+          prompt: 'test',
+          evalRules: [
+            { type: 'response_contains', value: null as never },
+            { type: 'tool_input_contains', tool: 'search', value: null as never },
+            { type: 'tool_input_regex', tool: 'search', value: null as never }
+          ],
+          extractRules: []
+        }
+      ]
+    });
+
+    expect((roundTripped.scenarios as unknown as AnyRecord[])[0]?.['eval']).toBeUndefined();
   });
 
   it('omits empty eval and extract blocks in lean serialization', () => {

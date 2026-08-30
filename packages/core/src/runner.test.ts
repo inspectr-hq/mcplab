@@ -222,15 +222,20 @@ describe('buildJudgeBatchPayload', () => {
     expect(payload.context).toEqual({ tool_sequence: ['get_tag_profile', 'search_tags'] });
   });
 
-  it('includes both context fields when both provided', () => {
+  it('includes all context fields when provided', () => {
     const payload = buildJudgeBatchPayload(
       'answer',
       [{ label: 'Check', prompt: 'Verify something.' }],
-      { scenario_prompt: 'What is the tag profile?', tool_sequence: ['get_tag_profile'] }
+      {
+        scenario_prompt: 'What is the tag profile?',
+        tool_sequence: ['get_tag_profile'],
+        tool_inputs: [{ tool: 'get_tag_profile', arguments: { tag: 'TM5-BP2' } }]
+      }
     );
     expect(payload.context).toEqual({
       scenario_prompt: 'What is the tag profile?',
-      tool_sequence: ['get_tag_profile']
+      tool_sequence: ['get_tag_profile'],
+      tool_inputs: [{ tool: 'get_tag_profile', arguments: { tag: 'TM5-BP2' } }]
     });
   });
 

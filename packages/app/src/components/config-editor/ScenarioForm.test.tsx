@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ScenarioForm } from './ScenarioForm';
+import { renderEvalRulePreview, ScenarioForm } from './ScenarioForm';
 import type { Scenario, AgentConfig, ServerConfig } from '@/types/eval';
 
 const mockSource = {
@@ -121,6 +121,116 @@ describe('ScenarioForm checks editor', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
     expect(updated[0]?.evalRules).toEqual([{ type: 'response_equals', value: 'success' }]);
+  });
+
+  it('lists tool input JSONPath checks in the rule type dropdown', () => {
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    expect(screen.getByText('Tool input JSONPath')).toBeInTheDocument();
+  });
+
+  it('includes the tool name in tool input previews', () => {
+    expect(
+      renderEvalRulePreview({ type: 'tool_input_contains', tool: 'search_tags', value: 'Paris' })
+    ).toBe('tool_input_contains: search_tags: Paris');
+  });
+
+  it('adds tool input contains checks', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input contains'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search_tags' }
+    });
+    fireEvent.change(screen.getByPlaceholderText('Text present in input'), {
+      target: { value: 'TM5-BP2-CONC.1' }
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'tool_input_contains',
+        tool: 'search_tags',
+        value: 'TM5-BP2-CONC.1'
+      }
+    ]);
+  });
+
+  it('adds tool input regex checks', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[baseScenario()]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input regex'));
+    fireEvent.change(screen.getByPlaceholderText('Tool name'), {
+      target: { value: 'search_tags' }
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('Regex pattern')[0]!, {
+      target: { value: 'TM5-BP2-\\d+' }
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add' })[0]);
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.evalRules).toEqual([
+      {
+        type: 'tool_input_regex',
+        tool: 'search_tags',
+        value: 'TM5-BP2-\\d+'
+      }
+    ]);
+  });
+
+  it('uses discovered tools for tool input rule selection', async () => {
+    mockSource.discoverToolsForAnalysis.mockResolvedValue({
+      servers: [{ tools: [{ name: 'search_tags' }] }]
+    });
+    const onChange = vi.fn();
+    render(
+      <ScenarioForm
+        scenarios={[{ ...baseScenario(), serverIds: ['server-1'] }]}
+        agents={[] as AgentConfig[]}
+        servers={
+          [{ id: 'server-1', name: 'Server', transport: 'streamable-http' }] as ServerConfig[]
+        }
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load tools' }));
+    await waitFor(() => expect(screen.getByText('Refresh tools')).toBeInTheDocument());
+    fireEvent.click(screen.getAllByRole('combobox')[1]);
+    fireEvent.click(screen.getByText('Tool input contains'));
+    fireEvent.click(screen.getByText('Select tool'));
+    expect(screen.getByText('search_tags')).toBeInTheDocument();
   });
 
   it('edits response_contains checks in place', async () => {
@@ -412,6 +522,30 @@ describe('ScenarioForm checks editor', () => {
         prompt: 'Confirm the answer includes a valid earliest and latest time range.'
       }
     ]);
+  });
+
+  it('enables tool inputs in judge context', async () => {
+    const onChange = vi.fn();
+
+    render(
+      <ScenarioForm
+        scenarios={[
+          {
+            ...baseScenario(),
+            evalRules: [{ type: 'agent_check', label: 'Check', prompt: 'Verify.' }]
+          }
+        ]}
+        agents={[] as AgentConfig[]}
+        servers={[] as ServerConfig[]}
+        onChange={onChange}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText('Include tool inputs'));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const updated = onChange.mock.calls.at(-1)?.[0] as Scenario[];
+    expect(updated[0]?.agentContext).toEqual({ include_tool_inputs: true });
   });
 
   it('ensures OAuth before running prompt preview', async () => {

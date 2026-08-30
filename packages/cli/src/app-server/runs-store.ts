@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { tallyCheckCounts } from '@inspectr/mcplab-core';
 import type { EvalConfig, ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
 import { ensureInsideRoot } from './store-utils.js';
 
@@ -26,6 +27,12 @@ export interface RunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  checkCounts: {
+    passed: number;
+    failed: number;
+    not_evaluated: number;
+    total: number;
+  };
 }
 
 export interface ListRunsFilter {
@@ -72,6 +79,11 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         });
         if (!matchesScenario) continue;
       }
+      const checkCounts = tallyCheckCounts(
+        scenarioItems.flatMap((scenario) =>
+          (scenario.runs ?? []).flatMap((run) => run.check_results ?? [])
+        )
+      );
       summaries.push({
         runId: results.metadata.run_id,
         path: dir,
@@ -117,7 +129,8 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
                 0,
                 (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0
               )
-            : undefined
+            : undefined,
+        checkCounts
       });
     } catch {
       // Ignore malformed runs.

@@ -54,6 +54,7 @@ import {
 } from '@/components/ui/table';
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
+import { OutcomeCard } from '@/components/results/ResultsDashboard';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -72,17 +73,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { generateHtmlReport } from '@/lib/generate-html-report';
 import { sumTokenUsages } from '@/lib/token-usage';
 import { formatTokenCount } from '@/lib/format-duration';
@@ -93,6 +84,7 @@ import { useResultAssistant } from '@/hooks/use-result-assistant';
 import { toast } from '@/hooks/use-toast';
 import { formatAssistantToolName } from '@/lib/assistant-tool-name';
 import { buildCheckItems, formatEvalRuleLabel } from '@/lib/check-presentation';
+import { tallyCheckCounts } from '@/types/eval';
 import { formatProvider } from '@/components/ProviderBadge';
 import { rerunWithSameSettings } from '@/lib/rerun-run';
 import {
@@ -513,12 +505,9 @@ const ResultDetail = () => {
   const mcpVersionSummary = mcpServerVersionEntries
     .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
     .join(', ');
-  const passCount = filteredPassCount;
-  const failCount = Math.max(0, filteredTotalRuns - passCount);
-  const pieData = [
-    { name: 'Pass', value: passCount, color: 'hsl(152, 69%, 40%)' },
-    { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
-  ];
+  const checkCounts = tallyCheckCounts(
+    filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
+  );
 
   const toggle = (rowId: string) => {
     setOpenScenarios((prev) => {
@@ -988,45 +977,27 @@ const ResultDetail = () => {
             />
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Pass / Fail</CardTitle>
-              </CardHeader>
-              <CardContent className="flex items-center justify-center">
-                <PieChart width={180} height={180}>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={3}
-                  >
-                    {pieData.map((d, i) => (
-                      <Cell key={i} fill={d.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-                <div className="ml-4 space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="h-3 w-3 rounded-full bg-success" />
-                    {passCount} passed
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <div className="h-3 w-3 rounded-full bg-destructive" />
-                    {failCount} failed
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid gap-4 lg:grid-cols-4">
+            <OutcomeCard
+              title="Runs Pass / Fail"
+              passed={filteredPassCount}
+              failed={Math.max(0, filteredTotalRuns - filteredPassCount)}
+            />
+            <OutcomeCard
+              title="Checks Pass / Fail"
+              passed={checkCounts.passed}
+              failed={checkCounts.failed}
+              notEvaluated={checkCounts.not_evaluated}
+            />
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Tool Usage</CardTitle>
+            <Card className="lg:col-span-2">
+              <CardHeader className="p-2.5 pb-0">
+                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Tool Usage
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={120}>
                   <BarChart data={toolData} layout="vertical">
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
@@ -1067,6 +1038,7 @@ const ResultDetail = () => {
                     <TableHead>Agent</TableHead>
                     <TableHead>Runs</TableHead>
                     <TableHead>Pass Rate</TableHead>
+                    <TableHead>Checks</TableHead>
                     <TableHead>Total Time</TableHead>
                     <TableHead>Tool Calls</TableHead>
                     <TableHead>Tool Tokens</TableHead>
@@ -1077,6 +1049,12 @@ const ResultDetail = () => {
                   {filteredScenarios.map((sc) => {
                     const rowKey = scenarioRowKey(sc.scenarioId, sc.agentName);
                     const scenarioLabel = sc.scenarioName || sc.scenarioId;
+                    const checkCounts = tallyCheckCounts(
+                      sc.runs.flatMap((run) => run.checkResults ?? [])
+                    );
+                    const hasCheckResults = sc.runs.some(
+                      (run) => (run.checkResults?.length ?? 0) > 0
+                    );
                     const scenarioConfigId = activeConfig?.id || result?.configId?.trim();
                     const scenarioEditHref = scenarioConfigId
                       ? `/mcp-evaluations/${encodeURIComponent(scenarioConfigId)}/scenarios`
@@ -1137,6 +1115,38 @@ const ResultDetail = () => {
                                 <PassRateBadge rate={sc.passRate} />
                               </TableCell>
                               <TableCell className="font-mono text-sm">
+                                {hasCheckResults ? (
+                                  <span
+                                    title={`${checkCounts.passed} passed · ${
+                                      checkCounts.failed
+                                    } failed${
+                                      checkCounts.not_evaluated
+                                        ? ` · ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }`}
+                                    aria-label={`${checkCounts.passed} checks passed, ${
+                                      checkCounts.failed
+                                    } checks failed${
+                                      checkCounts.not_evaluated
+                                        ? `, ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }`}
+                                  >
+                                    <span className="text-success">{checkCounts.passed} ✓</span>
+                                    <span className="text-muted-foreground"> </span>
+                                    <span className="text-destructive">{checkCounts.failed} ✕</span>
+                                    {checkCounts.not_evaluated > 0 && (
+                                      <>
+                                        <span className="text-muted-foreground"> </span>
+                                        <span>{checkCounts.not_evaluated} ?</span>
+                                      </>
+                                    )}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </TableCell>
+                              <TableCell className="font-mono text-sm">
                                 {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
@@ -1156,7 +1166,7 @@ const ResultDetail = () => {
                           </CollapsibleTrigger>
                           <CollapsibleContent asChild>
                             <tr>
-                              <td colSpan={9} className="p-0">
+                              <td colSpan={10} className="p-0">
                                 <div className="bg-muted/30 p-4 space-y-2">
                                   <div className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
                                     <div className="min-w-0">
@@ -1164,6 +1174,9 @@ const ResultDetail = () => {
                                       <p className="text-[11px] text-muted-foreground">
                                         {scenarioLabel} · {sc.agentName} ·{' '}
                                         {Math.round(sc.passRate * 100)}% pass rate ·{' '}
+                                        {hasCheckResults
+                                          ? `Checks ${checkCounts.passed} ✓ · ${checkCounts.failed} ✕ · `
+                                          : ''}
                                         {formatTokenCount(sc.toolTokenUsage?.totalTokens)} tool
                                         tokens ·{' '}
                                         {formatDurationMs(getScenarioTotalDurationMs(sc), {

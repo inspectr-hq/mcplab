@@ -19,6 +19,7 @@ import type { ScenarioTraceSpan } from './langsmith-tracing.js';
 export interface AgentRunResult {
   finalText: string;
   toolSequence: string[];
+  toolCalls: ToolCall[];
   toolDurationsMs: number[];
   traceMessages: TraceMessage[];
   traceStartedAt: string;
@@ -250,6 +251,7 @@ export async function runAgentScenario(params: {
   const traceStartedAt = new Date().toISOString();
 
   const toolSequence: string[] = [];
+  const toolCalls: ToolCall[] = [];
   const toolDurationsMs: number[] = [];
   let finalText = '';
   const maxTurns = params.maxTurns ?? 30;
@@ -363,6 +365,7 @@ export async function runAgentScenario(params: {
         }
       }
       for (const { toolCall, resolved, toolUseId } of resolvedToolCalls) {
+        toolCalls.push({ ...toolCall, server: resolved.server });
         const toolSpan = params.trace?.startTool({
           server: resolved.server,
           tool: toolCall.name,
@@ -486,6 +489,7 @@ export async function runAgentScenario(params: {
   return {
     finalText,
     toolSequence,
+    toolCalls,
     toolDurationsMs,
     traceMessages,
     traceStartedAt,

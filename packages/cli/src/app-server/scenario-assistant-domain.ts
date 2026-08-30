@@ -25,10 +25,11 @@ interface ScenarioAssistantContextInput {
     serverNames: string[];
     evalRules: Array<{
       type: string;
-      value?: string;
+      value?: string | number | boolean;
       sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
+      tool?: string;
       label?: string;
       prompt?: string;
     }>;
@@ -43,10 +44,11 @@ interface ScenarioAssistantSuggestionBundle {
   evalRules?: {
     replacement: Array<{
       type: string;
-      value?: string;
+      value?: string | number | boolean;
       sequence?: string[];
       path?: string;
       equals?: string | number | boolean;
+      tool?: string;
       label?: string;
       prompt?: string;
     }>;
@@ -61,10 +63,11 @@ interface ScenarioAssistantSuggestionBundle {
 
 interface ScenarioAssistantEvalRuleSuggestion {
   type: string;
-  value?: string;
+  value?: string | number | boolean;
   sequence?: string[];
   path?: string;
   equals?: string | number | boolean;
+  tool?: string;
   label?: string;
   prompt?: string;
 }
@@ -179,14 +182,17 @@ function assistantSystemPrompt(session: ScenarioAssistantSession): string {
     `{"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}},"suggestions":{...optional...}}`,
     'For suggestions, use keys: prompt, evalRules, extractRules, notes.',
     'prompt: { replacement: string, rationale?: string }',
-    'evalRules: { replacement: [{ type, value?, sequence?, path?, equals?, label?, prompt? }...], rationale?: string }',
+    'evalRules: { replacement: [{ type, tool?, value?, sequence?, path?, equals?, label?, prompt? }...], rationale?: string }',
     'extractRules: { replacement: [{ name, pattern }...], rationale?: string }',
     'If you propose any edits to the scenario (prompt, Checks, or Value Capture Rules), you MUST include the corresponding structured suggestions payload.',
     'Do not describe "suggested updates" in text only. Include suggestions so the UI can render Apply actions.',
-    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
+    'Keep rule types limited to: required_tool, forbidden_tool, tool_sequence, tool_input_contains, tool_input_regex, tool_input_jsonpath, response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals, response_regex, response_jsonpath, response_jsonpath_exists, response_jsonpath_not_exists, agent_check.',
     'Optional checks you may suggest when useful: tool_sequence for ordered tool-call sequences and agent_check for semantic, fuzzy, or intent-based validation.',
     'Use tool_sequence when the order of tool calls matters and you want to validate that a sequence appears in the run in order, even if other tools happen between the listed tools.',
     'For tool_sequence eval rules, set sequence to an array of raw MCP tool names in required order. Do not put the sequence in value.',
+    'Use tool_input_contains to require text anywhere in one tool call input. Set tool to the raw MCP tool name and value to the text; this is case-insensitive.',
+    'Use tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.',
+    'Use tool_input_jsonpath to inspect one tool call input. Set tool to the raw MCP tool name and path to a JSONPath expression; set equals to require a specific primitive value, or omit equals to require the path to exist.',
     'Use agent_check when the validation is semantic, fuzzy, or intent-based and deterministic checks would be brittle. agent_check requires label and prompt.',
     'Preference policy: prefer non-regex checks first (response_contains, response_not_contains, response_starts_with, response_ends_with, response_equals).',
     'Use response_regex only for genuinely variable/complex patterns (IDs, dates, currency, alternation, optional tokens, quantifiers, character classes).',
@@ -266,7 +272,11 @@ function normalizeEvalRuleToolNames(
 ): void {
   if (!suggestions?.evalRules?.replacement) return;
   for (const rule of suggestions.evalRules.replacement) {
-    if ((rule.type === 'required_tool' || rule.type === 'forbidden_tool') && rule.value) {
+    if (
+      (rule.type === 'required_tool' || rule.type === 'forbidden_tool') &&
+      typeof rule.value === 'string' &&
+      rule.value
+    ) {
       const mapping = toolPublicMap.get(rule.value);
       if (mapping) {
         rule.value = mapping.tool;
@@ -280,6 +290,18 @@ function normalizeEvalRuleToolNames(
           const mapping = toolPublicMap.get(toolName);
           return mapping ? mapping.tool : toolName;
         });
+    }
+    if (
+      (rule.type === 'tool_input_contains' ||
+        rule.type === 'tool_input_regex' ||
+        rule.type === 'tool_input_jsonpath') &&
+      rule.tool
+    ) {
+      rule.tool = rule.tool.trim();
+      const mapping = toolPublicMap.get(rule.tool);
+      if (mapping) {
+        rule.tool = mapping.tool;
+      }
     }
   }
 }
@@ -320,9 +342,9 @@ function tryParseRegexAsLiteral(pattern: string): { literal: string; anchored: b
 }
 
 function evalRuleKey(rule: ScenarioAssistantEvalRuleSuggestion): string {
-  return `${rule.type}::${rule.value ?? ''}::${(rule.sequence ?? []).join('|')}::${
-    rule.path ?? ''
-  }::${rule.equals === undefined ? '' : String(rule.equals)}`;
+  return `${rule.type}::${rule.tool ?? ''}::${rule.value ?? ''}::${(rule.sequence ?? []).join(
+    '|'
+  )}::${rule.path ?? ''}::${rule.equals === undefined ? '' : String(rule.equals)}`;
 }
 
 function hasEquivalentLiteralRule(
@@ -358,7 +380,8 @@ function collapseOffByOneCountGuards(
 
   for (let i = 0; i < rules.length; i += 1) {
     const rule = rules[i];
-    if (rule.type !== 'response_contains' || !rule.value) continue;
+    if (rule.type !== 'response_contains' || typeof rule.value !== 'string' || !rule.value)
+      continue;
 
     const explicitPositive = parseCountWithSuffix(rule.value);
     const numericOnly = !explicitPositive && rule.value.trim().match(/^\d+$/);
@@ -372,7 +395,12 @@ function collapseOffByOneCountGuards(
     const offByOneCandidates = new Map<string, { lowerIdx?: number; upperIdx?: number }>();
     for (let j = 0; j < rules.length; j += 1) {
       const candidate = rules[j];
-      if (candidate.type !== 'response_not_contains' || !candidate.value) continue;
+      if (
+        candidate.type !== 'response_not_contains' ||
+        typeof candidate.value !== 'string' ||
+        !candidate.value
+      )
+        continue;
       const parsed = parseCountWithSuffix(candidate.value);
       if (!parsed) continue;
       if (preferredSuffix && parsed.suffix !== preferredSuffix) continue;
@@ -442,6 +470,7 @@ function intentDeduplicateEvalRules(
         rule.type === 'response_starts_with' ||
         rule.type === 'response_ends_with' ||
         rule.type === 'response_equals') &&
+      typeof rule.value === 'string' &&
       rule.value
     ) {
       const intent = normalizeIntentValue(rule.value);
@@ -463,7 +492,7 @@ function intentDeduplicateEvalRules(
         let droppedAsMoreSpecific = false;
         for (const idx of containsIndices) {
           const existing = result[idx];
-          if (!existing?.value) continue;
+          if (typeof existing?.value !== 'string' || !existing.value) continue;
           const existingIntent = normalizeIntentValue(existing.value);
           if (newIntent.includes(existingIntent)) {
             droppedAsMoreSpecific = true;
@@ -501,7 +530,7 @@ function lintContradictoryEvalRules(
   const existingJsonPaths = new Set<string>();
 
   for (const rule of rules) {
-    if (rule.type === 'required_tool' && rule.value) {
+    if (rule.type === 'required_tool' && typeof rule.value === 'string' && rule.value) {
       requiredTools.add(rule.value.trim());
     }
     if (
@@ -509,6 +538,7 @@ function lintContradictoryEvalRules(
         rule.type === 'response_starts_with' ||
         rule.type === 'response_ends_with' ||
         rule.type === 'response_equals') &&
+      typeof rule.value === 'string' &&
       rule.value
     ) {
       positiveLiteralIntents.add(normalizeIntentValue(rule.value));
@@ -519,10 +549,10 @@ function lintContradictoryEvalRules(
   }
 
   return rules.filter((rule) => {
-    if (rule.type === 'forbidden_tool' && rule.value) {
+    if (rule.type === 'forbidden_tool' && typeof rule.value === 'string' && rule.value) {
       return !requiredTools.has(rule.value.trim());
     }
-    if (rule.type === 'response_not_contains' && rule.value) {
+    if (rule.type === 'response_not_contains' && typeof rule.value === 'string' && rule.value) {
       return !positiveLiteralIntents.has(normalizeIntentValue(rule.value));
     }
     if (rule.type === 'response_jsonpath_not_exists' && rule.path) {
@@ -547,7 +577,7 @@ export function normalizeScenarioAssistantEvalRules(
       ...(typeof rawRule.path === 'string' ? { path: rawRule.path.trim() } : {})
     };
 
-    if (rule.type === 'response_regex' && rule.value) {
+    if (rule.type === 'response_regex' && typeof rule.value === 'string' && rule.value) {
       const parsed = tryParseRegexAsLiteral(rule.value);
       if (parsed) {
         if (hasEquivalentLiteralRule(normalized, parsed.literal)) {
@@ -604,7 +634,10 @@ function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   }
   const parsedObj = parsed as Partial<ParsedAssistantModelOutput>;
   if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
-    throw new Error("Assistant response type must be 'assistant_message' or 'tool_call_request'");
+    const receivedType = typeof parsedObj.type === 'string' ? `"${parsedObj.type}"` : '(missing)';
+    throw new Error(
+      `Assistant response type ${receivedType} is unsupported; expected 'assistant_message' or 'tool_call_request'`
+    );
   }
   if (typeof parsedObj.text !== 'string') {
     throw new Error('Assistant response missing text');

@@ -147,6 +147,31 @@ function formatLocalDayLabel(value: string) {
   });
 }
 
+function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
+  if (!counts || counts.total === 0) return <>—</>;
+  return (
+    <>
+      <span className="text-success">{counts.passed} ✓</span>
+      <span className="text-muted-foreground"> · </span>
+      <span className="text-destructive">{counts.failed} ✕</span>
+    </>
+  );
+}
+
+function formatChecksPassRate(run: EvalResult) {
+  const counts = run.checkCounts;
+  if (!counts || counts.total === 0) return '—';
+  const evaluated = counts.passed + counts.failed;
+  if (evaluated === 0) return '—';
+  return (
+    <>
+      <CheckCountLabel counts={counts} />
+      <span className="text-muted-foreground"> · </span>
+      <span>{Math.round((counts.passed / evaluated) * 100)}%</span>
+    </>
+  );
+}
+
 function isTimeFilterMode(value: string | null): value is TimeFilterMode {
   return value === 'all' || value === 'last' || value === 'custom';
 }
@@ -1379,6 +1404,14 @@ const Compare = () => {
                     ))}
                   </TableRow>
                   <TableRow>
+                    <TableCell className="font-medium">Checks Pass Rate</TableCell>
+                    {selectedRuns.map((r) => (
+                      <TableCell key={r.id} className="font-mono">
+                        {formatChecksPassRate(r)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow>
                     <TableCell className="font-medium">Total Runs</TableCell>
                     {selectedRuns.map((r) => (
                       <TableCell key={r.id} className="font-mono">
@@ -1468,7 +1501,14 @@ const Compare = () => {
                         return (
                           <TableCell key={r.id}>
                             {sc ? (
-                              <PassRateBadge rate={sc.passRate} />
+                              <div className="flex items-center justify-start gap-2">
+                                <PassRateBadge rate={sc.passRate} />
+                                {sc.checkCounts?.total ? (
+                                  <span className="font-mono text-[11px] leading-none">
+                                    <CheckCountLabel counts={sc.checkCounts} />
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}

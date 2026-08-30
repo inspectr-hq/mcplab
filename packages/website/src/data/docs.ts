@@ -1980,7 +1980,14 @@ const refToolAndResponseAssertions: DocPage = {
     'agent judge',
     'jsonpath',
     'regex',
-    'contains'
+    'contains',
+    'tool input assertions',
+    'tool_input_assertions',
+    'tool_input_contains',
+    'tool_input_regex',
+    'tool_input_jsonpath',
+    'judge context',
+    'include_tool_inputs'
   ],
   seoTitle: 'Getting Started — Tool and Response Assertions',
   track: 'reference',
@@ -2121,11 +2128,62 @@ const refToolAndResponseAssertions: DocPage = {
       ]
     },
     {
+      id: 'tool-input-assertions',
+      title: 'Tool Input Assertions',
+      paragraphs: [
+        'Tool input assertions validate the arguments sent to a specific MCP tool. Set `tool` to the raw MCP tool name, without a server prefix. When the same tool is called more than once, an assertion passes if any matching call satisfies it.',
+        'Use `contains` for simple, case-insensitive text matching anywhere in the serialized input. Use `regex` for pattern matching. Use `jsonpath` when you need to inspect a specific structured value; omit `equals` to require that the path exists.'
+      ],
+      bullets: [
+        '`contains` uses `value` and is the simplest choice for required text such as an identifier, query term, or date.',
+        '`regex` uses `value` as a JavaScript regular expression and is useful for variable formats.',
+        '`jsonpath` uses `path` and an optional `equals` value. Equality is checked against the resolved primitive value and supports strings, numbers, and booleans.',
+        'Use deterministic tool input assertions for exact argument requirements. Use an Agent Judge with tool-input context when the input needs semantic interpretation.'
+      ],
+      codeBlocks: [
+        {
+          title: 'contains text in tool input',
+          language: 'yaml',
+          code: `eval:
+  tool_input_assertions:
+    - type: contains
+      tool: search_tags
+      value: TM5-BP2`
+        },
+        {
+          title: 'regex in tool input',
+          language: 'yaml',
+          code: `eval:
+  tool_input_assertions:
+    - type: regex
+      tool: search_tags
+      pattern: "TM5-BP2-[A-Z0-9.-]+"`
+        },
+        {
+          title: 'JSONPath exists or equals',
+          language: 'yaml',
+          code: `eval:
+  tool_input_assertions:
+    - type: jsonpath
+      tool: search_tags
+      path: $.query
+    - type: jsonpath
+      tool: search_tags
+      path: $.limit
+      equals: 20
+    - type: jsonpath
+      tool: search_tags
+      path: $.include_archived
+      equals: false`
+        }
+      ]
+    },
+    {
       id: 'agent-checks',
       title: 'Agent Checks (Agent Judge)',
       paragraphs: [
         'Agent checks (also called agent judge) use a workspace-configured judge model to evaluate the final answer against a short freeform instruction. They are useful for semantic validation such as “does this answer include a valid time range?” when deterministic string checks are too rigid.',
-        'By default the judge receives only the final answer. Use the optional agent_context block to send additional context — the original scenario prompt and/or the list of called tool names — shared once across all checks in the scenario.'
+        'By default the judge receives only the final answer. Use the optional agent_context block to send additional context — the original scenario prompt, the list of called tool names, and/or the tool names with their arguments — shared once across all checks in the scenario.'
       ],
       codeBlocks: [
         {
@@ -2143,6 +2201,7 @@ const refToolAndResponseAssertions: DocPage = {
   agent_context:
     include_prompt: true          # sends scenario prompt to the Agent Judge so that it can be included in the evaluation
     include_tool_sequence: true   # sends called tool names as Agent Judge so that it can be included in the evaluation
+    include_tool_inputs: true     # sends called tool names and arguments to the Agent Judge
 
   agent_assertions:
     - label: addresses_question
@@ -2165,7 +2224,7 @@ const refToolAndResponseAssertions: DocPage = {
         'If final response is not valid JSON, JSONPath assertions fail with an invalid JSON error.',
         'Agent checks run in a single batched judge request per scenario run and require a default evaluation judge to be configured in workspace settings.',
         'agent_context is optional and applies to all agent_assertions in the scenario. Omit it to evaluate the final answer only (default).',
-        'include_prompt sends the scenario prompt as context.scenario_prompt. include_tool_sequence sends the called tool names as context.tool_sequence.',
+        'include_prompt sends the scenario prompt as context.scenario_prompt. include_tool_sequence sends the called tool names as context.tool_sequence. include_tool_inputs sends tool names and arguments as context.tool_inputs.',
         'agent_context fields default to false; omitting the block entirely is equivalent to both fields being false.',
         'Agent checks are more flexible, but they are also less reproducible and more expensive than deterministic checks.'
       ]

@@ -1,6 +1,6 @@
 ---
 name: mcplab-assistant
-description: Operator guide for MCPLab config authoring and execution workflows. Use when users need help writing or debugging MCPLab eval YAML, running scenarios (prefer MCP tool `mcplab_run_eval` when available; CLI fallback `mcplab run/app/report/results`), troubleshooting run failures (auth, config, scenario selection, numeric flags), interpreting outputs in `mcplab/results/evaluation-runs/*` (`results.json`, `summary.md`, `trace.jsonl`, `report.html`), or comparing agent performance with `--agents`.
+description: Operator guide for MCPLab config authoring and execution workflows. Use when users need help writing or debugging MCPLab eval YAML, including response assertions, MCP tool constraints, tool-input assertions, and Judge/agent checks with optional prompt, tool-sequence, and tool-input context; running scenarios (prefer MCP tool `mcplab_run_eval` when available; CLI fallback `mcplab run/app/report/results`); troubleshooting run failures; interpreting outputs in `mcplab/results/evaluation-runs/*`; or comparing agent performance with `--agents`.
 ---
 
 # MCPLab Assistant
@@ -98,8 +98,18 @@ When the request is about analyzing results, the assistant must:
 - This keeps prompt/eval in library test-case and swaps only MCP target per eval.
 6. Add optional `eval` and `extract` blocks after baseline run succeeds.
 7. Prefer literal response assertions first (`contains`, `equals`, etc.), then `regex` only when variability requires it.
-8. Validate references and shape against `config-schema.json`.
-9. Prefer minimal deterministic edits over large rewrites.
+8. Add deterministic tool-input assertions when the requirement is structural:
+- `contains`: select one raw MCP tool name and require case-insensitive text anywhere in serialized arguments.
+- `regex`: select one raw MCP tool name and match a JavaScript regular expression against serialized arguments; use `pattern` in direct core/YAML config and `value` in app eval-rule/assistant suggestion shapes.
+- `jsonpath`: select one raw MCP tool name and inspect `path`; omit `equals` to require existence, or set a string/number/boolean primitive for equality.
+9. Add `agent_check` only for semantic, fuzzy, or intent-based validation. Give it a stable `label` and a precise `prompt`.
+10. When using `agent_check`, optionally set `agent_context` once per scenario:
+- `include_prompt`: pass the scenario prompt to the Judge.
+- `include_tool_sequence`: pass called MCP tool names.
+- `include_tool_inputs`: pass called MCP tool names and their arguments.
+These context fields are shared across all Judge checks and sent in the batched Judge request.
+11. Validate references and shape against `config-schema.json`; also verify `agent_assertions` and `agent_context` against the current core types and website reference because older schema copies may not list these newer fields.
+12. Prefer minimal deterministic edits over large rewrites.
 
 ## CLI Workflow
 
@@ -216,3 +226,45 @@ Assistant behavior:
 2. Use `mcplab_results_context` for focused scenario evidence.
 3. Use `mcplab_read_run_artifact` only when exact raw lines or full artifact slices are required.
 4. Return actionable fixes mapped scenario-by-scenario, with rerun command.
+
+### Pattern 6: Tool-Input and Judge Checks
+
+User request:
+"Verify that search_tags receives TM5-BP2 and that the answer is complete."
+
+Assistant behavior:
+1. Prefer a deterministic tool-input check for the required text:
+
+```yaml
+eval:
+  tool_input_assertions:
+    - type: contains
+      tool: search_tags
+      value: TM5-BP2
+```
+
+2. Use JSONPath for structured arguments:
+
+```yaml
+eval:
+  tool_input_assertions:
+    - type: jsonpath
+      tool: search_tags
+      path: $.query
+      equals: TM5-BP2
+```
+
+3. Use a Judge check for semantic completeness and pass relevant context explicitly:
+
+```yaml
+eval:
+  agent_context:
+    include_prompt: true
+    include_tool_sequence: true
+    include_tool_inputs: true
+  agent_assertions:
+    - label: Complete answer
+      prompt: Confirm that the answer addresses the requested tags and includes the required date range.
+```
+
+Use raw MCP tool names in all tool-input rules. Do not use server-prefixed display names.

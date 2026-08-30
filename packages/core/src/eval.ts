@@ -6,7 +6,9 @@ import type {
   CheckResult,
   EvalRules,
   ResponseAssertion,
-  ToolConstraints
+  ToolConstraints,
+  ToolCall,
+  ToolInputAssertion
 } from './types.js';
 
 export interface EvalResult {
@@ -28,6 +30,7 @@ export interface JudgeAgentAssertionsInput {
 }
 
 export interface EvaluateScenarioWithAgentChecksOptions {
+  toolCalls?: ToolCall[];
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
   scenarioPrompt?: string;
 }
@@ -57,6 +60,17 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
   )) {
     results.push({ ...rule, status: 'not_evaluated', reason: undefined });
   }
+  for (const rule of evalRules.tool_input_assertions ?? []) {
+    results.push({
+      type: toolInputAssertionType(rule),
+      label: formatToolInputAssertionLabel(rule),
+      status: 'not_evaluated',
+      metadata: {
+        tool: rule.tool,
+        ...(rule.type === 'jsonpath' ? { path: rule.path } : {})
+      }
+    });
+  }
   for (const assertion of evalRules.agent_assertions ?? []) {
     results.push({
       type: 'agent_check',
@@ -70,7 +84,8 @@ export function buildNotEvaluatedCheckResults(evalRules?: EvalRules): CheckResul
 export function evaluateScenario(
   finalText: string,
   toolSequence: string[],
-  evalRules?: EvalRules
+  evalRules?: EvalRules,
+  toolCalls: ToolCall[] = []
 ): EvalResult {
   const failures: string[] = [];
   const check_results: CheckResult[] = [];
@@ -81,6 +96,11 @@ export function evaluateScenario(
   }
   if (evalRules?.tool_sequence?.length) {
     const results = evaluateToolSequence(toolSequence, evalRules.tool_sequence);
+    failures.push(...results.failures);
+    check_results.push(...results.check_results);
+  }
+  if (evalRules?.tool_input_assertions?.length) {
+    const results = evaluateToolInputAssertions(toolCalls, evalRules.tool_input_assertions);
     failures.push(...results.failures);
     check_results.push(...results.check_results);
   }
@@ -98,7 +118,7 @@ export async function evaluateScenarioWithAgentChecks(
   evalRules?: EvalRules,
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
-  const base = evaluateScenario(finalText, toolSequence, evalRules);
+  const base = evaluateScenario(finalText, toolSequence, evalRules, options?.toolCalls ?? []);
   const failures = [...base.failures];
   const check_results = [...base.check_results];
 
@@ -128,7 +148,15 @@ export async function evaluateScenarioWithAgentChecks(
           ...(cfg.include_prompt && options.scenarioPrompt != null && options.scenarioPrompt !== ''
             ? { scenario_prompt: options.scenarioPrompt }
             : {}),
-          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {})
+          ...(cfg.include_tool_sequence ? { tool_sequence: toolSequence } : {}),
+          ...(cfg.include_tool_inputs
+            ? {
+                tool_inputs: (options.toolCalls ?? []).map(({ name, arguments: args }) => ({
+                  tool: name,
+                  arguments: args as Record<string, unknown>
+                }))
+              }
+            : {})
         }
       : {};
     const context: AgentJudgeContext | undefined =
@@ -257,6 +285,144 @@ function evaluateToolSequence(
       }
     ]
   };
+}
+
+function toolInputAssertionType(assertion: ToolInputAssertion): string {
+  return `tool_input_${assertion.type}`;
+}
+
+export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): string {
+  const operator =
+    assertion.type === 'contains'
+      ? `contains ${assertion.value}`
+      : assertion.type === 'regex'
+      ? `matches regex ${assertion.pattern}`
+      : assertion.equals !== undefined
+      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+      : `JSONPath ${assertion.path} exists`;
+  return `Tool input · ${assertion.tool} ${operator}`;
+}
+
+function usesSerializedToolInput(
+  assertion: ToolInputAssertion
+): assertion is Extract<ToolInputAssertion, { type: 'contains' | 'regex' }> {
+  return assertion.type === 'contains' || assertion.type === 'regex';
+}
+
+export type ToolInputAssertionFailureKind =
+  | 'tool_not_used'
+  | 'input_mismatch'
+  | 'invalid_regex'
+  | 'invalid_jsonpath'
+  | 'serialization';
+
+export function formatToolInputAssertionFailureReason(
+  assertion: ToolInputAssertion,
+  kind: ToolInputAssertionFailureKind
+): string {
+  if (kind === 'tool_not_used') {
+    return `Tool input assertion failed: tool not used: ${assertion.tool}`;
+  }
+  if (kind === 'invalid_regex' && assertion.type === 'regex') {
+    return `Tool input assertion failed: invalid regex ${assertion.pattern}`;
+  }
+  const expectation =
+    assertion.type === 'contains'
+      ? `contains ${assertion.value}`
+      : assertion.type === 'regex'
+      ? `regex ${assertion.pattern}`
+      : assertion.equals !== undefined
+      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+      : `JSONPath ${assertion.path} exists`;
+  if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
+    return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
+  }
+  if (kind === 'serialization' && usesSerializedToolInput(assertion)) {
+    return `Tool input assertion failed: could not serialize tool input for ${assertion.tool} (expected: ${expectation})`;
+  }
+  return `Tool input assertion failed: ${assertion.tool} input did not match (expected: ${expectation})`;
+}
+
+function evaluateToolInputAssertions(
+  toolCalls: ToolCall[],
+  assertions: ToolInputAssertion[]
+): Pick<EvalResult, 'failures' | 'check_results'> {
+  const failures: string[] = [];
+  const check_results: CheckResult[] = assertions.map((assertion) => {
+    const matchingCalls = toolCalls.filter((call) => call.name === assertion.tool);
+    let reason: string | undefined;
+    let matchedCallCount = 0;
+    let inputErrorCount = 0;
+
+    if (assertion.type === 'regex') {
+      try {
+        new RegExp(assertion.pattern);
+      } catch {
+        reason = formatToolInputAssertionFailureReason(assertion, 'invalid_regex');
+      }
+    }
+
+    if (!reason) {
+      for (const call of matchingCalls) {
+        try {
+          const values = usesSerializedToolInput(assertion)
+            ? [JSON.stringify(call.arguments)]
+            : (JSONPath({ path: assertion.path, json: call.arguments as any }) as unknown[]);
+          if (matchesToolInputAssertion(assertion, values)) matchedCallCount += 1;
+        } catch {
+          inputErrorCount += 1;
+          continue;
+        }
+      }
+    }
+    if (matchedCallCount === 0 && !reason) {
+      reason =
+        matchingCalls.length === 0
+          ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
+          : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
+          ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
+          : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
+          ? formatToolInputAssertionFailureReason(assertion, 'serialization')
+          : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
+    }
+    if (reason) failures.push(reason);
+    return {
+      type: toolInputAssertionType(assertion),
+      label: formatToolInputAssertionLabel(assertion),
+      status: reason ? 'failed' : 'passed',
+      reason,
+      metadata: {
+        tool: assertion.tool,
+        ...(assertion.type === 'contains' ? { value: assertion.value } : {}),
+        ...(assertion.type === 'regex' ? { pattern: assertion.pattern } : {}),
+        ...(assertion.type === 'jsonpath'
+          ? {
+              path: assertion.path,
+              ...(assertion.equals !== undefined ? { equals: assertion.equals } : {})
+            }
+          : {}),
+        matched_call_count: matchedCallCount,
+        observed_call_count: matchingCalls.length
+      }
+    };
+  });
+  return { failures, check_results };
+}
+
+function matchesToolInputAssertion(assertion: ToolInputAssertion, values: unknown[]): boolean {
+  if (assertion.type === 'contains') {
+    return values.some((value) =>
+      String(value ?? '')
+        .toLowerCase()
+        .includes(assertion.value.toLowerCase())
+    );
+  }
+  if (assertion.type === 'regex') {
+    return new RegExp(assertion.pattern).test(String(values[0] ?? ''));
+  }
+  return assertion.equals === undefined
+    ? values.length > 0
+    : values.some((value) => value === assertion.equals);
 }
 
 function evaluateResponseAssertions(

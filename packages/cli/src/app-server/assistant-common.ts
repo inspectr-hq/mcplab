@@ -130,7 +130,7 @@ export async function chatWithJsonRetry<T>(params: {
   signal?: AbortSignal;
 }): Promise<T | AssistantToolCallRequestEnvelope> {
   const invalidJsonRetryPrompt =
-    'Your previous response was not valid JSON. Reply ONLY with a valid JSON envelope matching the specified schema.';
+    'Your previous response did not match the required assistant envelope. Reply ONLY with one JSON object using exactly one of these types: "assistant_message" with fields {"type":"assistant_message","text":"..."}, or "tool_call_request" with fields {"type":"tool_call_request","text":"...","toolCall":{"name":"PUBLIC_TOOL_NAME","arguments":{}}}. Do not use any other type, such as "message", "assistant", or an event type.';
 
   const toToolCallRequest = (response: Awaited<ReturnType<typeof chatWithAgent>>) => {
     if (!response.tool_calls || response.tool_calls.length === 0) return null;

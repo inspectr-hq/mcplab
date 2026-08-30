@@ -53,6 +53,7 @@ import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
+import { formatCliStartupLine } from '../cli-branding.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
@@ -497,7 +498,7 @@ export async function startAppServer(options: AppServerOptions) {
   const logPrefix = '[mcplab-app]';
   const logPath = (label: string, value: string) => {
     // Keep startup paths visually aligned in terminal output.
-    console.log(`${logPrefix}  ${label.padEnd(8)}\t${value}`);
+    console.log(formatCliStartupLine(label, value));
   };
   // eslint-disable-next-line no-console
   console.log(`${logPrefix} App running at ${url}`);
