@@ -404,9 +404,7 @@ describe('evaluateScenario — tool_input_assertions', () => {
       [{ name: 'search', arguments: { query: 'Paris' } }]
     );
 
-    expect(result.failures).toEqual([
-      'Tool input assertion failed: invalid regex [invalid('
-    ]);
+    expect(result.failures).toEqual(['Tool input assertion failed: invalid regex [invalid(']);
   });
 
   it('continues checking repeated calls after one input cannot be inspected', () => {
@@ -414,7 +412,9 @@ describe('evaluateScenario — tool_input_assertions', () => {
       'ok',
       ['search', 'search'],
       {
-        tool_input_assertions: [{ type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }]
+        tool_input_assertions: [
+          { type: 'jsonpath', tool: 'search', path: '$.query', equals: 'Paris' }
+        ]
       },
       [
         { name: 'search', arguments: null as unknown as Record<string, unknown> },
@@ -423,7 +423,10 @@ describe('evaluateScenario — tool_input_assertions', () => {
     );
 
     expect(result.pass).toBe(true);
-    expect(result.check_results[0]).toMatchObject({ status: 'passed', metadata: { matched_call_count: 1 } });
+    expect(result.check_results[0]).toMatchObject({
+      status: 'passed',
+      metadata: { matched_call_count: 1 }
+    });
   });
 });
 

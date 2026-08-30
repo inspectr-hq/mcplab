@@ -195,7 +195,9 @@ describe('continueAssistantTurn normalization integration', () => {
     expect(options.system).toContain('Optional checks you may suggest when useful');
     expect(options.system).toContain('tool_sequence');
     expect(options.system).toContain('agent_check');
-    expect(options.system).toContain('tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.');
+    expect(options.system).toContain(
+      'tool_input_regex to match a regular expression anywhere in one tool call input. Set tool to the raw MCP tool name and value to the regex.'
+    );
   });
 
   it('applies tool-name normalization and regex preference cleanup before returning suggestions', async () => {

@@ -12,6 +12,8 @@ describe('matchStructuredCheckResult', () => {
       metadata: { tool: 'search', value: 'London' }
     };
 
-    expect(matchStructuredCheckResult(rule, [staleResult], () => String(rule.value ?? ''))).toBeUndefined();
+    expect(
+      matchStructuredCheckResult(rule, [staleResult], () => String(rule.value ?? ''))
+    ).toBeUndefined();
   });
 });

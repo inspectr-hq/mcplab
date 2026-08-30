@@ -634,8 +634,7 @@ function parseAssistantModelOutput(text: string): ParsedAssistantModelOutput {
   }
   const parsedObj = parsed as Partial<ParsedAssistantModelOutput>;
   if (parsedObj.type !== 'assistant_message' && parsedObj.type !== 'tool_call_request') {
-    const receivedType =
-      typeof parsedObj.type === 'string' ? `"${parsedObj.type}"` : '(missing)';
+    const receivedType = typeof parsedObj.type === 'string' ? `"${parsedObj.type}"` : '(missing)';
     throw new Error(
       `Assistant response type ${receivedType} is unsupported; expected 'assistant_message' or 'tool_call_request'`
     );

@@ -521,9 +521,7 @@ const ResultDetail = () => {
     { name: 'Fail', value: failCount, color: 'hsl(0, 72%, 51%)' }
   ];
   const checkCounts = tallyCheckCounts(
-    filteredScenarios.flatMap((scenario) =>
-      scenario.runs.flatMap((run) => run.checkResults ?? [])
-    )
+    filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
   const checkPieData = [
     { name: 'Pass', value: checkCounts.passed, color: 'hsl(152, 69%, 40%)' },
@@ -1194,8 +1192,20 @@ const ResultDetail = () => {
                               <TableCell className="font-mono text-sm">
                                 {hasCheckResults ? (
                                   <span
-                                    title={`${checkCounts.passed} passed · ${checkCounts.failed} failed${checkCounts.not_evaluated ? ` · ${checkCounts.not_evaluated} not evaluated` : ''}`}
-                                    aria-label={`${checkCounts.passed} checks passed, ${checkCounts.failed} checks failed${checkCounts.not_evaluated ? `, ${checkCounts.not_evaluated} not evaluated` : ''}`}
+                                    title={`${checkCounts.passed} passed · ${
+                                      checkCounts.failed
+                                    } failed${
+                                      checkCounts.not_evaluated
+                                        ? ` · ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }`}
+                                    aria-label={`${checkCounts.passed} checks passed, ${
+                                      checkCounts.failed
+                                    } checks failed${
+                                      checkCounts.not_evaluated
+                                        ? `, ${checkCounts.not_evaluated} not evaluated`
+                                        : ''
+                                    }`}
                                   >
                                     <span className="text-success">{checkCounts.passed} ✓</span>
                                     <span className="text-muted-foreground"> </span>
