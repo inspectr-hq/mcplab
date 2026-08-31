@@ -78,9 +78,20 @@ describe('createTestCaseFile', () => {
   it('reads and updates an existing test case in place', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);
-    createTestCaseFile({ librariesDir: root, knownServerIds: ['mcp-lab'], testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'Before' } });
-    expect(readTestCaseFile({ librariesDir: root, filePath: 'editable.yaml' }).testCase.prompt).toBe('Before');
-    const updated = updateTestCaseFile({ librariesDir: root, knownServerIds: ['mcp-lab'], filePath: 'editable.yaml', testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'After' } });
+    createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'Before' }
+    });
+    expect(
+      readTestCaseFile({ librariesDir: root, filePath: 'editable.yaml' }).testCase.prompt
+    ).toBe('Before');
+    const updated = updateTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      filePath: 'editable.yaml',
+      testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'After' }
+    });
     expect(updated.testCase.prompt).toBe('After');
   });
 

@@ -77,16 +77,20 @@ export function updateEvaluationConfigFile(params: {
   };
 }
 
-export function readEvaluationConfigFile(params: {
-  evalsDir: string;
-  filePath: string;
-}): { fileName: string; path: string; relativePath: string; config: SourceEvalConfig } {
+export function readEvaluationConfigFile(params: { evalsDir: string; filePath: string }): {
+  fileName: string;
+  path: string;
+  relativePath: string;
+  config: SourceEvalConfig;
+} {
   const evalsDir = resolve(params.evalsDir);
   const path = resolve(evalsDir, params.filePath);
   if (!path.startsWith(`${evalsDir}${sep}`) || !/\.ya?ml$/i.test(path))
     throw new Error('Evaluation config path is outside the configured evals directory.');
   if (!existsSync(path)) throw new Error(`Evaluation config not found: ${params.filePath}`);
-  const parsed = normalizeSourceConfig((parseYaml(readFileSync(path, 'utf8')) ?? {}) as SourceEvalConfig);
+  const parsed = normalizeSourceConfig(
+    (parseYaml(readFileSync(path, 'utf8')) ?? {}) as SourceEvalConfig
+  );
   return {
     fileName: path.slice(evalsDir.length + 1).replace(/\.ya?ml$/i, ''),
     path,

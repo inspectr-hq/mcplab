@@ -236,11 +236,14 @@ export function normalizeToolConstraintAliases(
           }
         }
       : {}),
-    ...(evalRules.tool_sequence
-      ? { tool_sequence: evalRules.tool_sequence.map(resolve) }
-      : {}),
+    ...(evalRules.tool_sequence ? { tool_sequence: evalRules.tool_sequence.map(resolve) } : {}),
     ...(evalRules.tool_input_assertions
-      ? { tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({ ...a, tool: resolve(a.tool) })) }
+      ? {
+          tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({
+            ...a,
+            tool: resolve(a.tool)
+          }))
+        }
       : {})
   };
 }

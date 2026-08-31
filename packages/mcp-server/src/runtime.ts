@@ -1252,7 +1252,11 @@ export function registerTools(server: McpServer): void {
         prompt: z.string().min(1).max(4000),
         required_tools: z.array(z.string()).optional(),
         forbidden_tools: z.array(z.string()).optional(),
-        tool_sequence: z.array(z.string()).min(1).optional().describe('Required tool calls in order.'),
+        tool_sequence: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Required tool calls in order.'),
         extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
         response_regex_patterns: z.array(z.string()).optional()
       }
@@ -1301,35 +1305,76 @@ export function registerTools(server: McpServer): void {
       inputSchema: { file_path: z.string().describe('Path relative to mcplab/test-cases/.') },
       outputSchema: { path: z.string(), test_case: ScenarioEntrySchema }
     },
-    async ({ file_path }) => withToolHandling(() => {
-      const result = readTestCaseFile({ librariesDir: resolveBundleRoot(), filePath: file_path });
-      return ok(`Read Test Case '${result.id}'`, { path: result.path, test_case: result.testCase });
-    })
+    async ({ file_path }) =>
+      withToolHandling(() => {
+        const result = readTestCaseFile({ librariesDir: resolveBundleRoot(), filePath: file_path });
+        return ok(`Read Test Case '${result.id}'`, {
+          path: result.path,
+          test_case: result.testCase
+        });
+      })
   );
 
   registerTool(
     'mcplab_update_test_case',
     {
-      description: 'Replace one existing MCPLab test case in place. Requires confirm=true and never creates a new file.',
+      description:
+        'Replace one existing MCPLab test case in place. Requires confirm=true and never creates a new file.',
       inputSchema: {
-        file_path: z.string().describe('Path to an existing test case relative to mcplab/test-cases/.'),
-        confirm: z.literal(true).describe('Required confirmation that the existing file should be overwritten.'),
-        id: z.string().min(1), name: z.string().optional(), servers: z.array(z.string()).min(1),
-        prompt: z.string().min(1).max(4000), required_tools: z.array(z.string()).optional(),
-        forbidden_tools: z.array(z.string()).optional(), tool_sequence: z.array(z.string()).min(1).optional(),
+        file_path: z
+          .string()
+          .describe('Path to an existing test case relative to mcplab/test-cases/.'),
+        confirm: z
+          .literal(true)
+          .describe('Required confirmation that the existing file should be overwritten.'),
+        id: z.string().min(1),
+        name: z.string().optional(),
+        servers: z.array(z.string()).min(1),
+        prompt: z.string().min(1).max(4000),
+        required_tools: z.array(z.string()).optional(),
+        forbidden_tools: z.array(z.string()).optional(),
+        tool_sequence: z.array(z.string()).min(1).optional(),
         extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
         response_regex_patterns: z.array(z.string()).optional()
       },
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
     },
-    async ({ file_path, confirm: _confirm, id, name, servers, prompt, required_tools, forbidden_tools, tool_sequence, extract_rules, response_regex_patterns }) =>
+    async ({
+      file_path,
+      confirm: _confirm,
+      id,
+      name,
+      servers,
+      prompt,
+      required_tools,
+      forbidden_tools,
+      tool_sequence,
+      extract_rules,
+      response_regex_patterns
+    }) =>
       withToolHandling(() => {
         const library = readLibrary(resolveBundleRoot(), false);
         const updated = updateTestCaseFile({
-          librariesDir: resolveBundleRoot(), knownServerIds: library.servers.map((item) => item.id), filePath: file_path,
-          testCase: { id, name, servers, prompt, requiredTools: required_tools, forbiddenTools: forbidden_tools, toolSequence: tool_sequence, extractRules: extract_rules, responseRegexPatterns: response_regex_patterns }
+          librariesDir: resolveBundleRoot(),
+          knownServerIds: library.servers.map((item) => item.id),
+          filePath: file_path,
+          testCase: {
+            id,
+            name,
+            servers,
+            prompt,
+            requiredTools: required_tools,
+            forbiddenTools: forbidden_tools,
+            toolSequence: tool_sequence,
+            extractRules: extract_rules,
+            responseRegexPatterns: response_regex_patterns
+          }
         });
-        return ok(`Updated Test Case '${updated.id}'`, { id: updated.id, path: updated.path, test_case: updated.testCase });
+        return ok(`Updated Test Case '${updated.id}'`, {
+          id: updated.id,
+          path: updated.path,
+          test_case: updated.testCase
+        });
       })
   );
 
@@ -1368,9 +1413,12 @@ export function registerTools(server: McpServer): void {
   registerTool(
     'mcplab_get_evaluation_config',
     {
-      description: 'Read one existing MCPLab evaluation config, including its full parsed YAML content.',
+      description:
+        'Read one existing MCPLab evaluation config, including its full parsed YAML content.',
       inputSchema: {
-        config_path: z.string().describe('Path to an existing eval YAML, relative to the MCPLab evals directory.')
+        config_path: z
+          .string()
+          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.')
       },
       outputSchema: z.object({
         path: z.string(),
@@ -1398,9 +1446,13 @@ export function registerTools(server: McpServer): void {
       description:
         'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file.',
       inputSchema: {
-        config_path: z.string().describe('Path to an existing eval YAML, relative to the MCPLab evals directory.'),
+        config_path: z
+          .string()
+          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.'),
         config: GenericObjectSchema.describe('Complete replacement evaluation configuration.'),
-        confirm: z.literal(true).describe('Required confirmation that the existing file should be overwritten.')
+        confirm: z
+          .literal(true)
+          .describe('Required confirmation that the existing file should be overwritten.')
       },
       outputSchema: {
         file_name: z.string(),
@@ -1772,10 +1824,23 @@ export function registerTools(server: McpServer): void {
             'Path to the eval YAML. Relative paths resolve under the APP evals directory; absolute paths must remain inside that directory. Invalid, missing, or disallowed paths return an error—the tool never silently coerces them.'
           ),
         scenario_id: z.string().optional().describe('Optional single scenario id to run.'),
-        scenario_ids: z.array(z.string()).min(1).optional().describe('Optional scenario ids to run.'),
+        scenario_ids: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Optional scenario ids to run.'),
         agents: z.array(z.string()).min(1).optional().describe('Optional agent ids to use.'),
-        runs_per_scenario: z.number().int().positive().optional().describe('Runs per scenario (default 1).'),
-        run_note: z.string().max(500).optional().describe('Optional note attached to the queued run.'),
+        runs_per_scenario: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Runs per scenario (default 1).'),
+        run_note: z
+          .string()
+          .max(500)
+          .optional()
+          .describe('Optional note attached to the queued run.'),
         server_override_all: z
           .array(z.string())
           .min(1)
@@ -1789,7 +1854,12 @@ export function registerTools(server: McpServer): void {
       outputSchema: z.object({
         jobId: z.string().describe('APP queue job identifier.'),
         queued: z.boolean().optional().describe('Whether the APP accepted the job into its queue.'),
-        position: z.number().int().nonnegative().optional().describe('Current position in the APP queue.'),
+        position: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('Current position in the APP queue.'),
         queue_url: z.string().url().describe('URL of the APP run queue page.')
       })
     },
@@ -1820,7 +1890,8 @@ export function registerTools(server: McpServer): void {
               : `APP queue request failed with HTTP ${response.status}`
           );
         }
-        if (typeof payload.jobId !== 'string') throw new Error('APP queue response did not include a jobId');
+        if (typeof payload.jobId !== 'string')
+          throw new Error('APP queue response did not include a jobId');
         return ok(`Queued MCPLab run ${payload.jobId}`, {
           ...payload,
           queue_url: new URL('/run', appBaseUrl).toString()
@@ -2904,14 +2975,16 @@ const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_run_eval',
   'mcplab_queue_run',
   'mcplab_create_test_case',
-  'mcplab_create_evaluation_config'
+  'mcplab_create_evaluation_config',
+  'mcplab_update_evaluation_config'
 ]);
 const MUTATING_TOOLS = new Set<string>([
   'mcplab_write_markdown_report',
   'mcplab_run_eval',
   'mcplab_queue_run',
   'mcplab_create_test_case',
-  'mcplab_create_evaluation_config'
+  'mcplab_create_evaluation_config',
+  'mcplab_update_evaluation_config'
 ]);
 const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval', 'mcplab_queue_run']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
@@ -3295,7 +3368,9 @@ function buildServerEntry(input: {
   };
 }
 
-function buildScenario(input: Parameters<typeof buildScenarioEntry>[0]): EvalConfig['scenarios'][number] {
+function buildScenario(
+  input: Parameters<typeof buildScenarioEntry>[0]
+): EvalConfig['scenarios'][number] {
   return buildScenarioEntry(input) as EvalConfig['scenarios'][number];
 }
 

@@ -44,10 +44,15 @@ export function createTestCaseFile(params: {
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
   const testCase = buildScenarioEntry({
-    id, name: input.name?.trim() || id, servers, prompt,
-    required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
+    id,
+    name: input.name?.trim() || id,
+    servers,
+    prompt,
+    required_tools: input.requiredTools,
+    forbidden_tools: input.forbiddenTools,
     tool_sequence: input.toolSequence,
-    response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules
+    response_regex_patterns: input.responseRegexPatterns,
+    extract_rules: input.extractRules
   });
   try {
     writeFileSync(path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8', flag: 'wx' });
@@ -84,10 +89,14 @@ export function updateTestCaseFile(params: {
   filePath: string;
   testCase: TestCaseCreateInput;
 }): UpdatedTestCaseFile {
-  const existing = readTestCaseFile({ librariesDir: params.librariesDir, filePath: params.filePath });
+  const existing = readTestCaseFile({
+    librariesDir: params.librariesDir,
+    filePath: params.filePath
+  });
   const input = params.testCase;
   const id = input.id.trim();
-  if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Test Case id must use letters, numbers, hyphens, or underscores.');
+  if (!/^[a-zA-Z0-9_-]+$/.test(id))
+    throw new Error('Test Case id must use letters, numbers, hyphens, or underscores.');
   const prompt = input.prompt.trim();
   if (!prompt) throw new Error('A Test Case needs a prompt.');
   const servers = unique(input.servers);
@@ -96,10 +105,15 @@ export function updateTestCaseFile(params: {
   const missing = servers.filter((server) => !known.has(server));
   if (missing.length) throw new Error(`Unknown MCP server(s): ${missing.join(', ')}`);
   const testCase = buildScenarioEntry({
-    id, name: input.name?.trim() || id, servers, prompt,
-    required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
+    id,
+    name: input.name?.trim() || id,
+    servers,
+    prompt,
+    required_tools: input.requiredTools,
+    forbidden_tools: input.forbiddenTools,
     tool_sequence: input.toolSequence,
-    response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules
+    response_regex_patterns: input.responseRegexPatterns,
+    extract_rules: input.extractRules
   });
   writeFileSync(existing.path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8' });
   return { id, path: existing.path, testCase };

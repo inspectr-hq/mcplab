@@ -42,7 +42,10 @@ describe('createEvaluationConfigFile', () => {
       config: { name: 'Before', agents: [], scenarios: [] }
     });
 
-    expect(readEvaluationConfigFile({ evalsDir: join(root, 'evals'), filePath: 'suite.yaml' }).config.name).toBe('Before');
+    expect(
+      readEvaluationConfigFile({ evalsDir: join(root, 'evals'), filePath: 'suite.yaml' }).config
+        .name
+    ).toBe('Before');
     const updated = updateEvaluationConfigFile({
       evalsDir: join(root, 'evals'),
       filePath: 'suite.yaml',

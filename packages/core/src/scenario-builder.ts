@@ -21,13 +21,28 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   const forbidden = unique(input.forbidden_tools);
   const sequence = unique(input.tool_sequence);
   const patterns = unique(input.response_regex_patterns);
-  const evalRules = required.length || forbidden.length || sequence.length || patterns.length
-    ? {
-        ...(required.length || forbidden.length ? { tool_constraints: { ...(required.length ? { required_tools: required } : {}), ...(forbidden.length ? { forbidden_tools: forbidden } : {}) } } : {}),
-        ...(sequence.length ? { tool_sequence: sequence } : {}),
-        ...(patterns.length ? { response_assertions: patterns.map((pattern) => ({ type: 'regex' as const, pattern })) } : {})
-      }
-    : undefined;
+  const evalRules =
+    required.length || forbidden.length || sequence.length || patterns.length
+      ? {
+          ...(required.length || forbidden.length
+            ? {
+                tool_constraints: {
+                  ...(required.length ? { required_tools: required } : {}),
+                  ...(forbidden.length ? { forbidden_tools: forbidden } : {})
+                }
+              }
+            : {}),
+          ...(sequence.length ? { tool_sequence: sequence } : {}),
+          ...(patterns.length
+            ? {
+                response_assertions: patterns.map((pattern) => ({
+                  type: 'regex' as const,
+                  pattern
+                }))
+              }
+            : {})
+        }
+      : undefined;
   return {
     id,
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
@@ -35,9 +50,25 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
     mcp_servers: unique(input.servers).map((ref) => ({ ref })),
     prompt: input.prompt.trim(),
     ...(evalRules ? { eval: evalRules } : {}),
-    ...(input.extract_rules?.length ? { extract: input.extract_rules.map((rule) => ({ name: rule.name, from: 'final_text' as const, regex: rule.regex })) } : {})
+    ...(input.extract_rules?.length
+      ? {
+          extract: input.extract_rules.map((rule) => ({
+            name: rule.name,
+            from: 'final_text' as const,
+            regex: rule.regex
+          }))
+        }
+      : {})
   } as SourceScenario;
 }
 
-function unique(values?: string[]): string[] { return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]; }
-function slugify(input: string): string { return input.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80); }
+function unique(values?: string[]): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
