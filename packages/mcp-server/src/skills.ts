@@ -26,7 +26,12 @@ export type LoadedSkill = {
 export function resolveSkillsDir(): string {
   const override = process.env.MCPLAB_SKILLS_DIR?.trim();
   if (override) return resolve(override);
-  return fileURLToPath(new URL('./skills', import.meta.url));
+  const bundled = fileURLToPath(new URL('./skills', import.meta.url));
+  if (existsSync(bundled)) return bundled;
+  // Development runs load this module from src/, while production loads the
+  // copied resources from dist/. Fall back to the repository skill source.
+  const repositorySkills = fileURLToPath(new URL('../../../skills', import.meta.url));
+  return repositorySkills;
 }
 
 function parseFrontmatterDescription(skillMdContent: string): string {

@@ -30,6 +30,12 @@ function makeFixtureSkillsDir(): string {
 }
 
 describe('loadSkills', () => {
+  it('falls back to repository skills when running from source', async () => {
+    delete process.env.MCPLAB_SKILLS_DIR;
+    const { resolveSkillsDir } = await import('./skills.js');
+    expect(resolveSkillsDir()).toMatch(/(?:^|\/)skills$/);
+  });
+
   it('loads a skill with description parsed from frontmatter and SKILL.md listed first', async () => {
     makeFixtureSkillsDir();
     const { loadSkills } = await import('./skills.js');
@@ -163,4 +169,3 @@ describe('readSkillFile', () => {
     expect(() => readSkillFile('demo-skill', 'shared/secret.txt')).toThrow(/Unknown skill file/);
   });
 });
-
