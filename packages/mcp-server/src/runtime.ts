@@ -215,6 +215,7 @@ const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
   servers: z.array(LibraryServerEntrySchema),
   agents: z.array(LibraryAgentEntrySchema),
+  test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
 });
 
@@ -1040,7 +1041,7 @@ export function registerTools(server: McpServer): void {
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
-          .enum(['all', 'servers', 'agents', 'scenarios'])
+          .enum(['all', 'servers', 'agents', 'test_cases', 'scenarios'])
           .optional()
           .describe('Which library category to list. Defaults to all.'),
         includeContent: z
@@ -1061,6 +1062,7 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
+                test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
 
@@ -1076,14 +1078,14 @@ export function registerTools(server: McpServer): void {
         'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
       outputSchema: {
         bundleRoot: z.string(),
-        kind: z.enum(['servers', 'agents', 'scenarios']),
+        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
         yaml: z.string(),
         content: GenericObjectSchema
       },
       inputSchema: {
-        kind: z.enum(['servers', 'agents', 'scenarios']).describe('Library category.'),
+        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']).describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
     },
@@ -2618,7 +2620,9 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const scenariosDir = join(bundleRoot, 'scenarios');
+  const scenariosDir = existsSync(join(bundleRoot, 'test-cases'))
+    ? join(bundleRoot, 'test-cases')
+    : join(bundleRoot, 'scenarios');
 
   const servers = existsSync(serversPath)
     ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
@@ -2660,6 +2664,7 @@ function readLibrary(
         id,
         ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
       })),
+    test_cases: scenarioEntries,
     scenarios: scenarioEntries
   };
   return out;
@@ -2667,7 +2672,7 @@ function readLibrary(
 
 function getLibraryItem(
   bundleRoot: string,
-  kind: 'servers' | 'agents' | 'scenarios',
+  kind: 'servers' | 'agents' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents') {
@@ -2690,7 +2695,9 @@ function getLibraryItem(
     };
   }
 
-  const dir = join(bundleRoot, 'scenarios');
+  const dir = existsSync(join(bundleRoot, 'test-cases'))
+    ? join(bundleRoot, 'test-cases')
+    : join(bundleRoot, 'scenarios');
   if (!existsSync(dir)) {
     throw new Error(`Scenario library directory not found: ${dir}`);
   }
