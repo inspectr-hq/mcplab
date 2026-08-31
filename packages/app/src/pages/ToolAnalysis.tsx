@@ -882,7 +882,7 @@ const ToolAnalysisPage = () => {
                                     {tokenEstimate && (
                                       <Badge
                                         variant="outline"
-                                        className="bg-background font-mono text-xs font-normal"
+                                        className="bg-background font-mono text-[10px] font-normal"
                                         title="Estimated tokens for this tool definition and its schemas"
                                       >
                                         ~{formatToolAnalysisTokenCount(tokenEstimate.total)}tok
