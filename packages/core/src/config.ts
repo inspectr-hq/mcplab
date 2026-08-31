@@ -739,7 +739,7 @@ function readScenarioLibrary(scenariosDir: string): Record<string, SourceScenari
   return out;
 }
 
-function resolveScenarioLibraryDir(bundleRoot: string): {
+export function resolveScenarioLibraryDir(bundleRoot: string): {
   path: string;
   usedLegacy: boolean;
 } {

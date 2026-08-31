@@ -8,10 +8,17 @@ export {
   normalizeSourceConfig,
   readLibraryAgentsAndServers,
   normalizeLibraryServers,
-  normalizeLibraryAgents
+  normalizeLibraryAgents,
+  resolveScenarioLibraryDir
 } from './config.js';
 export { runAll, type RunProgressEvent } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';
+export {
+  estimateToolDefinitionTokens,
+  type ToolDefinitionForTokenEstimate,
+  type ToolDefinitionTokenEstimate,
+  type ToolDefinitionTokenEstimates
+} from './tool-definition-token-estimates.js';
 export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
@@ -25,6 +32,23 @@ export { createAbortError, isAbortError, throwIfAborted } from './abort.js';
 export * from './attachments.js';
 export * from './results-query.js';
 export { applyRuntimeServerOverrides, type RuntimeServerOverrides } from './runtime-overrides.js';
+export {
+  createEvaluationConfigFile,
+  updateEvaluationConfigFile,
+  readEvaluationConfigFile,
+  safeEvaluationConfigFileName,
+  type CreatedEvaluationConfigFile,
+  type UpdatedEvaluationConfigFile
+} from './evaluation-config-store.js';
+export {
+  createTestCaseFile,
+  readTestCaseFile,
+  updateTestCaseFile,
+  type CreatedTestCaseFile,
+  type UpdatedTestCaseFile,
+  type TestCaseCreateInput
+} from './test-case-store.js';
+export { buildScenarioEntry, type ScenarioBuildInput } from './scenario-builder.js';
 export {
   createLangSmithTraceExporter,
   type LangSmithRun,

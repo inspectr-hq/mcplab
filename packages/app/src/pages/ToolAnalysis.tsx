@@ -26,6 +26,10 @@ import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
 import {
+  formatToolAnalysisTokenCount,
+  selectedToolContextTokens
+} from '@/lib/tool-analysis-token-estimates';
+import {
   ToolSchemaPreview,
   type SchemaViewMode
 } from '@/components/tool-analysis/ToolSchemaPreview';
@@ -354,6 +358,10 @@ const ToolAnalysisPage = () => {
   const totalSelectedTools = useMemo(
     () => Object.values(selectedToolsByServer).reduce((sum, list) => sum + list.length, 0),
     [selectedToolsByServer]
+  );
+  const selectedToolTokens = useMemo(
+    () => selectedToolContextTokens(discovered, selectedToolsByServer),
+    [discovered, selectedToolsByServer]
   );
   const selectedServerLabel = selectedServerNames[0] ?? '';
 
@@ -738,7 +746,18 @@ const ToolAnalysisPage = () => {
                     return (
                       <div key={server.serverName} className="rounded-md border p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="font-medium">{server.serverName}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="font-medium">{server.serverName}</div>
+                            {server.tokenEstimate && (
+                              <Badge
+                                variant="outline"
+                                className="bg-background font-mono text-xs font-normal"
+                                title="Estimated tokens for all discovered tool definitions and their schemas"
+                              >
+                                ~{formatToolAnalysisTokenCount(server.tokenEstimate.total)}tok
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
                             <Button
                               type="button"
@@ -802,6 +821,9 @@ const ToolAnalysisPage = () => {
                         )}
                         <div className="grid gap-2">
                           {server.tools.map((tool) => {
+                            const tokenEstimate = server.tokenEstimate?.tools.find(
+                              (item) => item.name === tool.name
+                            );
                             const isWriteDelete = isWriteDeleteClassification(
                               tool.classificationReason
                             );
@@ -857,6 +879,15 @@ const ToolAnalysisPage = () => {
                                         schema: output
                                       </Badge>
                                     )}
+                                    {tokenEstimate && (
+                                      <Badge
+                                        variant="outline"
+                                        className="bg-background font-mono text-[10px] font-normal"
+                                        title="Estimated tokens for this tool definition and its schemas"
+                                      >
+                                        ~{formatToolAnalysisTokenCount(tokenEstimate.total)}tok
+                                      </Badge>
+                                    )}
                                   </div>
                                   {tool.description && (
                                     <p className="text-xs text-muted-foreground line-clamp-2">
@@ -879,7 +910,13 @@ const ToolAnalysisPage = () => {
                   })
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">Selected tools: {totalSelectedTools}</p>
+              <p className="text-xs text-muted-foreground">
+                Selected tools: {totalSelectedTools}
+                {selectedToolTokens !== undefined &&
+                  ` · estimated context: ~${formatToolAnalysisTokenCount(
+                    selectedToolTokens
+                  )} tokens`}
+              </p>
             </div>
 
             <div className="space-y-3 rounded-md border p-3">

@@ -4,7 +4,8 @@ import {
   buildNotEvaluatedCheckResults,
   evaluateScenario,
   evaluateScenarioWithAgentChecks,
-  extractValues
+  extractValues,
+  normalizeToolConstraintAliases
 } from './eval.js';
 import type { ToolCall } from './types.js';
 
@@ -17,6 +18,24 @@ describe('evaluateScenario — no rules', () => {
 });
 
 describe('evaluateScenario — tool_constraints', () => {
+  it('resolves a client namespace prefix when the raw tool is exposed', () => {
+    const rules = normalizeToolConstraintAliases(
+      { tool_constraints: { required_tools: ['MCPLab:mcplab_aggregate_runs'] } },
+      ['mcplab_aggregate_runs']
+    );
+    const result = evaluateScenario('response', ['mcplab_aggregate_runs'], rules);
+    expect(result.pass).toBe(true);
+  });
+
+  it('does not resolve an unknown or ambiguous-looking prefixed tool', () => {
+    const rules = normalizeToolConstraintAliases(
+      { tool_constraints: { required_tools: ['Other:mcplab_aggregate_runs'] } },
+      ['different_tool']
+    );
+    const result = evaluateScenario('response', ['mcplab_aggregate_runs'], rules);
+    expect(result.pass).toBe(false);
+  });
+
   it('passes when required tool is used', () => {
     const result = evaluateScenario('response', ['search', 'fetch'], {
       tool_constraints: { required_tools: ['search'] }

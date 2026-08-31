@@ -119,6 +119,7 @@ export async function handleToolAnalysisRoutes(params: {
         mcpServerVersion: mcpServerVersions[entry.serverName] ?? null,
         mcpServerImplementation: mcpServerImplementations[entry.serverName] ?? null,
         warnings: entry.warnings,
+        tokenEstimate: entry.tokenEstimate,
         tools: entry.tools.map((tool) => ({
           name: tool.tool.name,
           title: tool.tool.title,

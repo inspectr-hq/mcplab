@@ -1,6 +1,10 @@
 import type { ServerResponse } from 'node:http';
 import type { AgentConfig, EvalConfig, ToolDef } from '@inspectr/mcplab-core';
-import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
+import {
+  chatWithAgent,
+  estimateToolDefinitionTokens,
+  McpClientManager
+} from '@inspectr/mcplab-core';
 import type { AppSettings } from './types.js';
 import { addJobEvent } from './jobs.js';
 import { readLibraries } from './libraries-store.js';
@@ -591,6 +595,7 @@ export async function discoverMcpToolsForServers(
     serverName: string;
     warnings: string[];
     tools: ToolAnalysisToolContext[];
+    tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
   }>;
 }> {
   const mcp = new McpClientManager();
@@ -598,10 +603,16 @@ export async function discoverMcpToolsForServers(
     serverName: string;
     warnings: string[];
     tools: ToolAnalysisToolContext[];
+    tokenEstimate: ReturnType<typeof estimateToolDefinitionTokens>;
   }> = [];
   for (const serverName of serverNames) {
     const server = serversByName[serverName];
-    const entry = { serverName, warnings: [] as string[], tools: [] as ToolAnalysisToolContext[] };
+    const entry = {
+      serverName,
+      warnings: [] as string[],
+      tools: [] as ToolAnalysisToolContext[],
+      tokenEstimate: estimateToolDefinitionTokens([], 'unknown-model')
+    };
     if (!server) {
       entry.warnings.push(`Server '${serverName}' not found.`);
       discovered.push(entry);
@@ -621,6 +632,16 @@ export async function discoverMcpToolsForServers(
           classificationReason: safety.classificationReason
         };
       });
+      entry.tokenEstimate = estimateToolDefinitionTokens(
+        tools.map((tool) => ({
+          name: tool.name,
+          title: tool.title,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          outputSchema: tool.outputSchema
+        })),
+        'unknown-model'
+      );
     } catch (error: unknown) {
       entry.warnings.push(
         `Failed to load tools: ${error instanceof Error ? error.message : String(error)}`

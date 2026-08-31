@@ -18,7 +18,8 @@ import type {
   HealthMcpConnectionInfo,
   QueueEntry,
   QueueResponse,
-  RunQueueEvent
+  RunQueueEvent,
+  ToolDefinitionTokenEstimates
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -490,6 +491,7 @@ export interface ToolAnalysisDiscoverResponse {
       }>;
     } | null;
     warnings: string[];
+    tokenEstimate?: ToolDefinitionTokenEstimates;
     tools: ToolAnalysisDiscoveredTool[];
   }>;
 }

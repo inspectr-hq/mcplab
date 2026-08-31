@@ -32,6 +32,15 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  resolveScenarioLibraryDir,
+  createEvaluationConfigFile,
+  updateEvaluationConfigFile,
+  readEvaluationConfigFile,
+  createTestCaseFile,
+  readTestCaseFile,
+  updateTestCaseFile,
+  buildScenarioEntry,
+  type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
   type ResultsJson,
@@ -45,6 +54,7 @@ import {
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
+import { loadSkills, readSkillFile, registerSkills } from './skills.js';
 import {
   buildAggregateRunsReport,
   buildCompareRunsReport,
@@ -140,12 +150,7 @@ const AggregateRowSchema = z.object({
       max: z.string()
     })
     .optional(),
-  total_runs: z.number().int().nonnegative(),
-  passed_runs: z.number().int().nonnegative(),
-  failed_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
-  avg_tool_calls_per_run: z.number(),
-  avg_tool_latency_ms: z.number().nullable()
+  summary: MetricSummarySchema
 });
 
 const CompareRowSchema = z.object({
@@ -211,7 +216,28 @@ const LibraryEntrySchema = z.object({
   bundleRoot: z.string(),
   servers: z.array(LibraryServerEntrySchema),
   agents: z.array(LibraryAgentEntrySchema),
+  test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
+});
+
+const EvaluationConfigListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  relative_path: z.string(),
+  config_path: z.string(),
+  suite_path: z.string(),
+  updated_at: z.string(),
+  scenario_count: z.number().int().nonnegative(),
+  agent_count: z.number().int().nonnegative(),
+  error: z.string().optional()
+});
+const EvaluationConfigListSchema = z.object({
+  evals_dir: z.string(),
+  total: z.number().int().nonnegative(),
+  matching: z.number().int().nonnegative(),
+  filters: GenericObjectSchema,
+  sort: z.object({ by: z.string(), direction: z.enum(['asc', 'desc']) }),
+  configs: z.array(EvaluationConfigListItemSchema)
 });
 
 const ServerAuthSchema = z.union([
@@ -242,8 +268,9 @@ const ServerEntrySchema = z.object({
 
 const ScenarioEntrySchema = z.object({
   id: z.string(),
+  name: z.string().optional(),
   agent: z.string().optional(),
-  servers: z.array(z.string()),
+  mcp_servers: z.array(z.object({ ref: z.string() })),
   prompt: z.string(),
   eval: GenericObjectSchema.optional(),
   extract: z
@@ -278,14 +305,7 @@ const ResolvedScenarioSchema = z.object({
   servers: z.array(z.string()),
   agent: z.string().optional(),
   prompt: z.string().optional(),
-  eval: z
-    .object({
-      type: z.string(),
-      assertions: z.array(z.string()).optional(),
-      rubric: GenericObjectSchema.optional()
-    })
-    .passthrough()
-    .optional(),
+  eval: GenericObjectSchema.optional(),
   extract: z
     .array(
       z
@@ -679,6 +699,7 @@ export function createConfiguredServer(): McpServer {
     websiteUrl: 'https://mcplab.inspectr.dev',
     icons: [{ src: SERVER_ICON_URL, mimeType: 'image/svg+xml' }]
   });
+  registerSkills(server);
   registerTools(server);
   registerPrompts(server);
   return server;
@@ -720,6 +741,86 @@ export function registerTools(server: McpServer): void {
       cb as never
     );
   };
+
+  registerTool(
+    'mcplab_build_app_link',
+    {
+      description: 'Build a safe deep link to a local MCPLab app view.',
+      inputSchema: {
+        view: z.enum([
+          'home',
+          'evaluations',
+          'run_evaluation',
+          'results',
+          'result_detail',
+          'compare',
+          'tool_analysis',
+          'tool_analysis_results',
+          'tool_analysis_result',
+          'library_servers',
+          'library_agents',
+          'library_test_cases',
+          'settings'
+        ]),
+        run_id: z.string().min(1).max(200).optional(),
+        tool_analysis_id: z.string().min(1).max(200).optional(),
+        config_id: z.string().min(1).max(200).optional(),
+        agent: z.string().min(1).max(200).optional(),
+        scenario: z.string().min(1).max(200).optional(),
+        time_filter: z.enum(['last', 'custom']).optional(),
+        time_preset: z.enum(['15min', '30min', '1h', '24h', '7d', '14d', '30d']).optional(),
+        time_start: z.string().datetime().optional(),
+        time_end: z.string().datetime().optional()
+      },
+      outputSchema: { url: z.string().url(), view: z.string(), path: z.string() }
+    },
+    async ({
+      view,
+      run_id,
+      tool_analysis_id,
+      config_id,
+      agent,
+      scenario,
+      time_filter,
+      time_preset,
+      time_start,
+      time_end
+    }) =>
+      withToolHandling(() => {
+        const paths: Record<string, string> = {
+          home: '/',
+          evaluations: '/evaluations',
+          run_evaluation: '/run',
+          results: '/results',
+          result_detail: '/results/detail',
+          compare: '/compare',
+          tool_analysis: '/tool-analysis',
+          tool_analysis_results: '/tool-analysis/results',
+          tool_analysis_result: '/tool-analysis/result',
+          library_servers: '/servers',
+          library_agents: '/agents',
+          library_test_cases: '/test-cases',
+          settings: '/settings'
+        };
+        const path = paths[view];
+        if (!path) throw new Error(`Unsupported app view: ${view}`);
+        const url = new URL(path, process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787');
+        if (run_id) url.searchParams.set('run', run_id);
+        if (tool_analysis_id) url.searchParams.set('tool_analysis_id', tool_analysis_id);
+        if (config_id) url.searchParams.set('config', config_id);
+        if (agent) url.searchParams.set('agent', agent);
+        if (scenario) url.searchParams.set('scenario', scenario);
+        if (time_filter) url.searchParams.set('time_filter', time_filter);
+        if (time_preset) url.searchParams.set('time_preset', time_preset);
+        if (time_start) url.searchParams.set('time_start', time_start);
+        if (time_end) url.searchParams.set('time_end', time_end);
+        if (view === 'result_detail' && !run_id)
+          throw new Error('run_id is required for result_detail');
+        if (view === 'tool_analysis_result' && !tool_analysis_id)
+          throw new Error('tool_analysis_id is required for tool_analysis_result');
+        return ok(`Built app link for ${view}`, { url: url.toString(), view, path });
+      })
+  );
 
   registerTool(
     'mcplab_write_markdown_report',
@@ -871,7 +972,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_search_markdown_reports',
     {
       description:
-        'List saved markdown reports under mcplab/reports. Supports filtering by run id substring to find reports linked to a result.',
+        'Search saved Markdown report FILES under mcplab/reports. Use this to locate report documents by filename, path, run-id substring, or report text metadata; it does not search evaluation answers, traces, or tool-analysis records.',
       outputSchema: {
         reports_dir: z.string(),
         run_id_filter: z.string().optional(),
@@ -1021,7 +1122,7 @@ export function registerTools(server: McpServer): void {
       outputSchema: LibraryEntrySchema,
       inputSchema: {
         kind: z
-          .enum(['all', 'servers', 'agents', 'scenarios'])
+          .enum(['all', 'servers', 'agents', 'test_cases', 'scenarios'])
           .optional()
           .describe('Which library category to list. Defaults to all.'),
         includeContent: z
@@ -1042,6 +1143,7 @@ export function registerTools(server: McpServer): void {
                 bundleRoot: data.bundleRoot,
                 servers: selectedKind === 'servers' ? data.servers : [],
                 agents: selectedKind === 'agents' ? data.agents : [],
+                test_cases: selectedKind === 'test_cases' ? data.test_cases : [],
                 scenarios: selectedKind === 'scenarios' ? data.scenarios : []
               };
 
@@ -1057,14 +1159,16 @@ export function registerTools(server: McpServer): void {
         'Get a specific reusable server, agent, or scenario definition from a MCPLab library bundle and return both structured data and YAML.',
       outputSchema: {
         bundleRoot: z.string(),
-        kind: z.enum(['servers', 'agents', 'scenarios']),
+        kind: z.enum(['servers', 'agents', 'test_cases', 'scenarios']),
         id: z.string(),
         file: z.string().optional(),
         yaml: z.string(),
         content: GenericObjectSchema
       },
       inputSchema: {
-        kind: z.enum(['servers', 'agents', 'scenarios']).describe('Library category.'),
+        kind: z
+          .enum(['servers', 'agents', 'test_cases', 'scenarios'])
+          .describe('Library category.'),
         id: z.string().describe('Entry id (for scenarios this is scenario.id, not filename).')
       }
     },
@@ -1136,6 +1240,246 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_create_test_case',
+    {
+      description:
+        'Create one reviewed MCPLab Test Case in mcplab/test-cases/. This is a scoped YAML write and refuses duplicate IDs.',
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
+      inputSchema: {
+        id: z.string().min(1),
+        name: z.string().optional(),
+        servers: z.array(z.string()).min(1),
+        prompt: z.string().min(1).max(4000),
+        required_tools: z.array(z.string()).optional(),
+        forbidden_tools: z.array(z.string()).optional(),
+        tool_sequence: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Required tool calls in order.'),
+        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
+        response_regex_patterns: z.array(z.string()).optional()
+      }
+    },
+    async ({
+      id,
+      name,
+      servers,
+      prompt,
+      required_tools,
+      forbidden_tools,
+      tool_sequence,
+      extract_rules,
+      response_regex_patterns
+    }) =>
+      withToolHandling(async () => {
+        const bundleRoot = resolveBundleRoot();
+        const library = readLibrary(bundleRoot, false);
+        const created = createTestCaseFile({
+          librariesDir: bundleRoot,
+          knownServerIds: library.servers.map((item) => item.id),
+          testCase: {
+            id,
+            name,
+            servers,
+            prompt,
+            requiredTools: required_tools,
+            forbiddenTools: forbidden_tools,
+            toolSequence: tool_sequence,
+            extractRules: extract_rules,
+            responseRegexPatterns: response_regex_patterns
+          }
+        });
+        return ok(`Created Test Case '${created.id}'`, {
+          id: created.id,
+          path: created.path,
+          test_case: created.testCase
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_get_test_case',
+    {
+      description: 'Read one existing MCPLab test case, including its full parsed YAML content.',
+      inputSchema: { file_path: z.string().describe('Path relative to mcplab/test-cases/.') },
+      outputSchema: { path: z.string(), test_case: ScenarioEntrySchema }
+    },
+    async ({ file_path }) =>
+      withToolHandling(() => {
+        const result = readTestCaseFile({ librariesDir: resolveBundleRoot(), filePath: file_path });
+        return ok(`Read Test Case '${result.id}'`, {
+          path: result.path,
+          test_case: result.testCase
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_update_test_case',
+    {
+      description:
+        'Replace one existing MCPLab test case in place. Requires confirm=true and never creates a new file.',
+      inputSchema: {
+        file_path: z
+          .string()
+          .describe('Path to an existing test case relative to mcplab/test-cases/.'),
+        confirm: z
+          .literal(true)
+          .describe('Required confirmation that the existing file should be overwritten.'),
+        id: z.string().min(1),
+        name: z.string().optional(),
+        servers: z.array(z.string()).min(1),
+        prompt: z.string().min(1).max(4000),
+        required_tools: z.array(z.string()).optional(),
+        forbidden_tools: z.array(z.string()).optional(),
+        tool_sequence: z.array(z.string()).min(1).optional(),
+        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
+        response_regex_patterns: z.array(z.string()).optional()
+      },
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
+    },
+    async ({
+      file_path,
+      confirm: _confirm,
+      id,
+      name,
+      servers,
+      prompt,
+      required_tools,
+      forbidden_tools,
+      tool_sequence,
+      extract_rules,
+      response_regex_patterns
+    }) =>
+      withToolHandling(() => {
+        const library = readLibrary(resolveBundleRoot(), false);
+        const updated = updateTestCaseFile({
+          librariesDir: resolveBundleRoot(),
+          knownServerIds: library.servers.map((item) => item.id),
+          filePath: file_path,
+          testCase: {
+            id,
+            name,
+            servers,
+            prompt,
+            requiredTools: required_tools,
+            forbiddenTools: forbidden_tools,
+            toolSequence: tool_sequence,
+            extractRules: extract_rules,
+            responseRegexPatterns: response_regex_patterns
+          }
+        });
+        return ok(`Updated Test Case '${updated.id}'`, {
+          id: updated.id,
+          path: updated.path,
+          test_case: updated.testCase
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_create_evaluation_config',
+    {
+      description:
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling.',
+      outputSchema: {
+        file_name: z.string(),
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema
+      },
+      inputSchema: {
+        file_name: z.string().min(1),
+        config: GenericObjectSchema.describe('Complete MCPLab evaluation configuration.')
+      }
+    },
+    async ({ file_name, config }) =>
+      withToolHandling(async () => {
+        const created = createEvaluationConfigFile({
+          evalsDir: join(resolveBundleRoot(), 'evals'),
+          fileName: file_name,
+          config: config as unknown as SourceEvalConfig
+        });
+        return ok(`Created evaluation configuration '${created.fileName}'`, {
+          file_name: created.fileName,
+          path: created.path,
+          relative_path: created.relativePath,
+          config: created.config as unknown as Record<string, unknown>
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_get_evaluation_config',
+    {
+      description:
+        'Read one existing MCPLab evaluation config, including its full parsed YAML content.',
+      inputSchema: {
+        config_path: z
+          .string()
+          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.')
+      },
+      outputSchema: z.object({
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema
+      })
+    },
+    async ({ config_path }) =>
+      withToolHandling(() => {
+        const result = readEvaluationConfigFile({
+          evalsDir: join(resolveBundleRoot(), 'evals'),
+          filePath: config_path
+        });
+        return ok(`Read evaluation config '${result.relativePath}'`, {
+          path: result.path,
+          relative_path: result.relativePath,
+          config: result.config as unknown as Record<string, unknown>
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_update_evaluation_config',
+    {
+      description:
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file.',
+      inputSchema: {
+        config_path: z
+          .string()
+          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.'),
+        config: GenericObjectSchema.describe('Complete replacement evaluation configuration.'),
+        confirm: z
+          .literal(true)
+          .describe('Required confirmation that the existing file should be overwritten.')
+      },
+      outputSchema: {
+        file_name: z.string(),
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema,
+        warnings: z.array(z.string())
+      }
+    },
+    async ({ config_path, config }) =>
+      withToolHandling(() => {
+        const updated = updateEvaluationConfigFile({
+          evalsDir: join(resolveBundleRoot(), 'evals'),
+          filePath: config_path,
+          config: config as unknown as SourceEvalConfig
+        });
+        return ok(`Updated evaluation config '${updated.relativePath}'`, {
+          file_name: updated.fileName,
+          path: updated.path,
+          relative_path: updated.relativePath,
+          config: updated.config as unknown as Record<string, unknown>,
+          warnings: updated.warnings
+        });
+      })
+  );
+
+  registerTool(
     'mcplab_generate_scenario_entry',
     {
       description:
@@ -1156,7 +1500,7 @@ export function registerTools(server: McpServer): void {
         name: z
           .string()
           .optional()
-          .describe('Optional human label used only to derive id when id is omitted.'),
+          .describe('Optional human-readable scenario label. Also used to derive id when omitted.'),
         agent: z
           .string()
           .optional()
@@ -1164,7 +1508,7 @@ export function registerTools(server: McpServer): void {
         servers: z
           .array(z.string())
           .min(1)
-          .describe('One or more server ids available to the scenario.'),
+          .describe('One or more server ids; emitted as scenario-owned mcp_servers refs.'),
         prompt: z
           .string()
           .min(1)
@@ -1172,10 +1516,11 @@ export function registerTools(server: McpServer): void {
           .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
         required_tools: z.array(z.string()).optional().describe('Tools that must be called.'),
         forbidden_tools: z.array(z.string()).optional().describe('Tools that must not be called.'),
-        allowed_tool_sequences: z
-          .array(z.array(z.string()).min(1))
+        tool_sequence: z
+          .array(z.string())
+          .min(1)
           .optional()
-          .describe('Allowed tool call sequences (exact order groups).'),
+          .describe('Required tool calls in this exact order.'),
         response_regex_patterns: z
           .array(z.string())
           .optional()
@@ -1214,6 +1559,28 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+
+  registerTool(
+    'mcplab_list_evaluation_configs',
+    {
+      description:
+        'List MCPLab evaluation configurations with nested-suite filtering and deterministic sorting.',
+      inputSchema: {
+        suite: z.string().optional(),
+        query: z.string().optional(),
+        sort_by: z.enum(['name', 'scenarios', 'agents', 'updated_at']).optional(),
+        sort_direction: z.enum(['asc', 'desc']).optional()
+      },
+      outputSchema: EvaluationConfigListSchema
+    },
+    async ({ suite, query, sort_by, sort_direction }) =>
+      withToolHandling(() =>
+        ok(
+          'Listed evaluation configurations',
+          listEvaluationConfigs({ suite, query, sortBy: sort_by, sortDirection: sort_direction })
+        )
+      )
   );
 
   registerTool(
@@ -1265,7 +1632,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_run_eval',
     {
       description:
-        'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics.',
+        'Execute a MCPLab evaluation immediately in this MCP server process using mcplab-core runAll(). Use this when the caller needs results now; use mcplab_queue_run to hand the run to the APP queue instead.',
       outputSchema: {
         run_dir: z.string(),
         total_scenarios: z.number().int().nonnegative(),
@@ -1379,6 +1746,157 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+
+  registerTool(
+    'mcplab_list_runs',
+    {
+      description: 'List MCPLab evaluation runs with optional inclusive ISO time bounds.',
+      inputSchema: {
+        since: z.string().datetime().optional(),
+        until: z.string().datetime().optional(),
+        limit: z.number().int().positive().max(200).optional()
+      },
+      outputSchema: {
+        since: z.string().optional(),
+        until: z.string().optional(),
+        total_matching: z.number(),
+        runs: z.array(
+          z.object({
+            run_id: z.string(),
+            timestamp: z.string().optional(),
+            config_hash: z.string().optional(),
+            summary: z.any().optional()
+          })
+        )
+      }
+    },
+    async ({ since, until, limit }) =>
+      withToolHandling(() => {
+        const sinceMs = since ? new Date(since).getTime() : undefined;
+        const untilMs = until ? new Date(until).getTime() : undefined;
+        if (sinceMs !== undefined && untilMs !== undefined && sinceMs > untilMs)
+          throw new Error('since must be earlier than or equal to until');
+        const matching = listRunsWithFallback(resolveRunsDir(), undefined, true).filter((entry) => {
+          const timestamp = String(
+            entry.metadata && typeof entry.metadata === 'object'
+              ? (entry.metadata as any).timestamp ?? ''
+              : ''
+          );
+          const time = new Date(timestamp).getTime();
+          if (sinceMs === undefined && untilMs === undefined) return true;
+          return (
+            !Number.isNaN(time) &&
+            (sinceMs === undefined || time >= sinceMs) &&
+            (untilMs === undefined || time <= untilMs)
+          );
+        });
+        const runs = matching.slice(0, limit ?? 50).map((entry) => ({
+          run_id: String(entry.run_id),
+          timestamp:
+            typeof (entry.metadata as any)?.timestamp === 'string'
+              ? (entry.metadata as any).timestamp
+              : undefined,
+          config_hash:
+            typeof (entry.metadata as any)?.config_hash === 'string'
+              ? (entry.metadata as any).config_hash
+              : undefined,
+          summary: entry.summary
+        }));
+        return ok(`Found ${matching.length} run(s)`, {
+          since,
+          until,
+          total_matching: matching.length,
+          runs
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_queue_run',
+    {
+      description:
+        'Add a MCPLab evaluation to the local APP queue for the APP worker to execute later; this tool does not execute the evaluation or return results. Use mcplab_run_eval when results are needed immediately. Returns the queued job id, position, and APP /run URL.',
+      inputSchema: {
+        config_path: z
+          .string()
+          .describe(
+            'Path to the eval YAML. Relative paths resolve under the APP evals directory; absolute paths must remain inside that directory. Invalid, missing, or disallowed paths return an error—the tool never silently coerces them.'
+          ),
+        scenario_id: z.string().optional().describe('Optional single scenario id to run.'),
+        scenario_ids: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Optional scenario ids to run.'),
+        agents: z.array(z.string()).min(1).optional().describe('Optional agent ids to use.'),
+        runs_per_scenario: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Runs per scenario (default 1).'),
+        run_note: z
+          .string()
+          .max(500)
+          .optional()
+          .describe('Optional note attached to the queued run.'),
+        server_override_all: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Replace MCP servers for every selected scenario for this queued run.'),
+        scenario_server_overrides: z
+          .record(z.array(z.string()))
+          .optional()
+          .describe('Map scenario ids to replacement MCP server ids for this queued run.')
+      },
+      outputSchema: z.object({
+        jobId: z.string().describe('APP queue job identifier.'),
+        queued: z.boolean().optional().describe('Whether the APP accepted the job into its queue.'),
+        position: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('Current position in the APP queue.'),
+        queue_url: z.string().url().describe('URL of the APP run queue page.')
+      })
+    },
+    async (input) =>
+      withToolHandling(async () => {
+        const appBaseUrl = process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787';
+        const response = await fetch(new URL('/api/runs', appBaseUrl), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({
+            configPath: input.config_path,
+            runsPerScenario: input.runs_per_scenario ?? 1,
+            ...(input.scenario_id ? { scenarioId: input.scenario_id } : {}),
+            ...(input.scenario_ids ? { scenarioIds: input.scenario_ids } : {}),
+            ...(input.agents ? { agents: input.agents } : {}),
+            ...(input.run_note ? { runNote: input.run_note } : {}),
+            ...(input.server_override_all ? { serverOverrideAll: input.server_override_all } : {}),
+            ...(input.scenario_server_overrides
+              ? { scenarioServerOverrides: input.scenario_server_overrides }
+              : {})
+          })
+        });
+        const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!response.ok) {
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : `APP queue request failed with HTTP ${response.status}`
+          );
+        }
+        if (typeof payload.jobId !== 'string')
+          throw new Error('APP queue response did not include a jobId');
+        return ok(`Queued MCPLab run ${payload.jobId}`, {
+          ...payload,
+          queue_url: new URL('/run', appBaseUrl).toString()
+        });
+      })
   );
 
   registerTool(
@@ -1547,7 +2065,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_search_tool_analysis_results',
     {
       description:
-        'Search saved MCP tool analysis reports from mcplab/results/tool-analysis. Use the optional query parameter to filter by report_id, server name, agent name, or summary metadata (case-insensitive substring).',
+        'Search saved MCP TOOL-ANALYSIS records under mcplab/results/tool-analysis. Use this for aggregate tool usage, latency, and tool-analysis summaries; do not use it for final answers, raw execution traces, or Markdown report files.',
       outputSchema: {
         tool_analysis_results_dir: z.string(),
         total: z.number().int().nonnegative(),
@@ -1848,7 +2366,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_get_conversation',
     {
       description:
-        'Return a structured conversation timeline (messages + tool blocks) for a specific scenario+agent in a scenario_run trace.',
+        'Return one structured conversation timeline (messages and tool blocks) for a specific scenario and agent in a run. If you do not know the scenario_id and agent, call mcplab_trace_list_conversations first.',
       outputSchema: {
         run_id: z.string(),
         scenario_id: z.string(),
@@ -1881,6 +2399,16 @@ export function registerTools(server: McpServer): void {
         const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const textMax = max_text_chars ?? 4000;
         const record = records.find((r) => r.scenario_id === scenario_id && r.agent === agent);
+        if (!record) {
+          const available = Array.from(
+            new Set(records.map((r) => `${r.scenario_id} / ${r.agent}`))
+          );
+          throw new Error(
+            `No conversation found for ${scenario_id} / ${agent}. Available conversations: ${
+              available.join(', ') || 'none'
+            }`
+          );
+        }
         const timeline = record
           ? buildConversationTimeline(record, textMax).slice(0, max_items ?? 300)
           : [];
@@ -1900,10 +2428,46 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_trace_list_conversations',
+    {
+      description:
+        'List the scenario and agent conversation targets available in one run. Use this before mcplab_trace_get_conversation when you need to discover the required scenario_id and agent values.',
+      outputSchema: {
+        run_id: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        conversations: z.array(
+          z.object({
+            scenario_id: z.string(),
+            agent: z.string(),
+            timeline_item_count: z.number().int().nonnegative()
+          })
+        )
+      },
+      inputSchema: {
+        run_id: z.string().describe("Run id directory name or 'LATEST'.")
+      }
+    },
+    async ({ run_id }) =>
+      withToolHandling(() => {
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
+        const conversations = records.map((record) => ({
+          scenario_id: record.scenario_id,
+          agent: record.agent,
+          timeline_item_count: buildConversationTimeline(record, 4000).length
+        }));
+        return ok(`Found ${conversations.length} conversation(s) in run ${runId}`, {
+          run_id: runId,
+          legacy_trace_detected: legacyDetected || undefined,
+          conversations
+        });
+      })
+  );
+
+  registerTool(
     'mcplab_trace_search',
     {
       description:
-        'Search scenario_run trace content for a text query and return matching message/block items.',
+        'Search RAW SCENARIO-RUN TRACE events and message/block content for a text query. Use this for execution-level evidence such as tool calls, arguments, ordering, or intermediate messages; use mcplab_results_search for indexed result/answer content instead.',
       outputSchema: {
         run_id: z.string(),
         query: z.string().trim().min(1),
@@ -2179,7 +2743,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_results_search',
     {
       description:
-        'Search MCPLab run results in compact LLM-first format. Auto-refreshes index when artifacts changed.',
+        'Search INDEXED MCPLab evaluation RESULTS and final-answer content in compact LLM-first format. Use this for finding passed/failed scenarios, answer text, and result metadata; use mcplab_trace_search for raw execution events, mcplab_search_tool_analysis_results for aggregate tool-analysis records, and mcplab_search_markdown_reports for report files.',
       outputSchema: {
         query: z.string(),
         runs_dir: z.string(),
@@ -2238,7 +2802,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_results_context',
     {
       description:
-        'Fetch focused context for a scenario/run from results, trace, or summary. Returns bounded excerpts only. around is trace-line context and is only valid with source=trace (or when source is omitted).',
+        'Fetch bounded evidence for one run/scenario after a search hit. Use this to inspect a focused result, summary, or trace excerpt; it is not a broad search tool. For broad final-answer/result searches use mcplab_results_search, and for raw trace discovery use mcplab_trace_search.',
       outputSchema: {
         run_id: z.string(),
         scenario_id: z.string(),
@@ -2289,6 +2853,43 @@ export function registerTools(server: McpServer): void {
         });
       });
     }
+  );
+  registerTool(
+    'mcplab_list_skills',
+    {
+      description: 'List MCPLab skills bundled with this MCP server.',
+      inputSchema: {},
+      outputSchema: {
+        skills: z.array(
+          z.object({ name: z.string(), description: z.string(), files: z.array(z.string()) })
+        )
+      }
+    },
+    async () =>
+      withToolHandling(() => {
+        const skills = loadSkills();
+        return ok(`Found ${skills.length} MCPLab skill(s)`, {
+          skills: skills.map(({ name, description, files }) => ({ name, description, files }))
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_get_skill',
+    {
+      description: 'Read one file from a bundled MCPLab skill. Defaults to SKILL.md.',
+      inputSchema: { name: z.string(), file: z.string().optional() },
+      outputSchema: { name: z.string(), file: z.string(), content: z.string() }
+    },
+    async ({ name, file }) =>
+      withToolHandling(() => {
+        const targetFile = file ?? 'SKILL.md';
+        return ok(`Read ${name}/${targetFile}`, {
+          name,
+          file: targetFile,
+          content: readSkillFile(name, targetFile)
+        });
+      })
   );
 }
 
@@ -2371,17 +2972,33 @@ export function registerPrompts(server: McpServer): void {
 const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_delete_tool_analysis_result',
   'mcplab_write_markdown_report',
-  'mcplab_run_eval'
+  'mcplab_run_eval',
+  'mcplab_queue_run',
+  'mcplab_create_test_case',
+  'mcplab_update_test_case',
+  'mcplab_create_evaluation_config',
+  'mcplab_update_evaluation_config'
 ]);
-const MUTATING_TOOLS = new Set<string>(['mcplab_write_markdown_report', 'mcplab_run_eval']);
-const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
+const MUTATING_TOOLS = new Set<string>([
+  'mcplab_write_markdown_report',
+  'mcplab_run_eval',
+  'mcplab_queue_run',
+  'mcplab_create_test_case',
+  'mcplab_update_test_case',
+  'mcplab_create_evaluation_config',
+  'mcplab_update_evaluation_config'
+]);
+const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval', 'mcplab_queue_run']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
   mcplab_search_markdown_reports: 'Search Markdown Reports',
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
-  mcplab_trace_search: 'Search Trace Events'
+  mcplab_trace_search: 'Search Raw Trace Events',
+  mcplab_results_search: 'Search Indexed Evaluation Results',
+  mcplab_results_context: 'Fetch Focused Result or Trace Context',
+  mcplab_queue_run: 'Queue MCPLab Evaluation in APP'
 };
 
 function normalizeOptionalNonEmpty(value?: string): string | undefined {
@@ -2496,7 +3113,7 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const scenariosDir = join(bundleRoot, 'scenarios');
+  const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
     ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
@@ -2538,6 +3155,7 @@ function readLibrary(
         id,
         ...(includeContent ? { entry: agents[id] as z.infer<typeof AgentEntrySchema> } : {})
       })),
+    test_cases: scenarioEntries,
     scenarios: scenarioEntries
   };
   return out;
@@ -2545,7 +3163,7 @@ function readLibrary(
 
 function getLibraryItem(
   bundleRoot: string,
-  kind: 'servers' | 'agents' | 'scenarios',
+  kind: 'servers' | 'agents' | 'test_cases' | 'scenarios',
   id: string
 ): Record<string, unknown> {
   if (kind === 'servers' || kind === 'agents') {
@@ -2568,7 +3186,7 @@ function getLibraryItem(
     };
   }
 
-  const dir = join(bundleRoot, 'scenarios');
+  const dir = resolveScenarioLibraryDir(bundleRoot).path;
   if (!existsSync(dir)) {
     throw new Error(`Scenario library directory not found: ${dir}`);
   }
@@ -2589,6 +3207,103 @@ function getLibraryItem(
     }
   }
   throw new Error(`Scenario '${id}' not found in ${dir}`);
+}
+
+function listEvaluationConfigs(params: {
+  suite?: string;
+  query?: string;
+  sortBy?: 'name' | 'scenarios' | 'agents' | 'updated_at';
+  sortDirection?: 'asc' | 'desc';
+}): z.infer<typeof EvaluationConfigListSchema> {
+  const evalsDir = join(resolveBundleRoot(), 'evals');
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) files.push(path);
+    }
+  };
+  walk(evalsDir);
+  const all = files.map((path) => {
+    const relativePath = relative(evalsDir, path).split(sep).join('/');
+    const suitePath =
+      dirname(relativePath) === '.' ? '' : dirname(relativePath).split(sep).join('/');
+    const fallbackName = basename(path, extname(path));
+    const stat = statSync(path);
+    try {
+      const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      return {
+        id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+        name:
+          typeof parsed?.name === 'string' && parsed.name.trim()
+            ? parsed.name.trim()
+            : fallbackName,
+        relative_path: relativePath,
+        config_path: path,
+        suite_path: suitePath,
+        updated_at: stat.mtime.toISOString(),
+        scenario_count: Array.isArray(parsed?.scenarios) ? parsed.scenarios.length : 0,
+        agent_count: Array.isArray(parsed?.agents) ? parsed.agents.length : 0
+      };
+    } catch (error) {
+      return {
+        id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+        name: fallbackName,
+        relative_path: relativePath,
+        config_path: path,
+        suite_path: suitePath,
+        updated_at: stat.mtime.toISOString(),
+        scenario_count: 0,
+        agent_count: 0,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
+  const suite = params.suite?.trim().replace(/^suite:/, '');
+  const query = params.query?.trim().toLowerCase();
+  const matching = all.filter(
+    (config) =>
+      (!suite || config.suite_path === suite || config.suite_path.startsWith(`${suite}/`)) &&
+      (!query ||
+        `${config.name} ${config.relative_path} ${config.error ?? ''}`
+          .toLowerCase()
+          .includes(query))
+  );
+  const sortBy = params.sortBy ?? 'name';
+  const direction = params.sortDirection ?? 'asc';
+  matching.sort((a, b) => {
+    const left =
+      sortBy === 'scenarios'
+        ? a.scenario_count
+        : sortBy === 'agents'
+        ? a.agent_count
+        : sortBy === 'updated_at'
+        ? Date.parse(a.updated_at)
+        : a.name;
+    const right =
+      sortBy === 'scenarios'
+        ? b.scenario_count
+        : sortBy === 'agents'
+        ? b.agent_count
+        : sortBy === 'updated_at'
+        ? Date.parse(b.updated_at)
+        : b.name;
+    const comparison =
+      typeof left === 'number' && typeof right === 'number'
+        ? left - right
+        : String(left).localeCompare(String(right));
+    return direction === 'asc' ? comparison : -comparison;
+  });
+  return {
+    evals_dir: evalsDir,
+    total: all.length,
+    matching: matching.length,
+    filters: removeUndefined({ suite, query }),
+    sort: { by: sortBy, direction },
+    configs: matching
+  };
 }
 
 function buildServerEntry(input: {
@@ -2655,69 +3370,10 @@ function buildServerEntry(input: {
   };
 }
 
-function buildScenario(input: {
-  id?: string;
-  name?: string;
-  agent?: string;
-  servers: string[];
-  prompt: string;
-  required_tools?: string[];
-  forbidden_tools?: string[];
-  allowed_tool_sequences?: string[][];
-  response_regex_patterns?: string[];
-  extract_rules?: Array<{ name: string; regex: string }>;
-}): EvalConfig['scenarios'][number] {
-  const id = input.id?.trim() || slugify(input.name?.trim() || input.prompt.slice(0, 40));
-  if (!id) {
-    throw new Error('Unable to derive scenario id. Provide id or name.');
-  }
-
-  const scenario: EvalConfig['scenarios'][number] = removeUndefined({
-    id,
-    agent: input.agent?.trim() || undefined,
-    servers: input.servers,
-    prompt: input.prompt,
-    eval: buildEvalRules(input),
-    extract: input.extract_rules?.map((rule) => ({
-      name: rule.name,
-      from: 'final_text',
-      regex: rule.regex
-    }))
-  }) as EvalConfig['scenarios'][number];
-
-  return scenario;
-}
-
-function buildEvalRules(input: {
-  required_tools?: string[];
-  forbidden_tools?: string[];
-  allowed_tool_sequences?: string[][];
-  response_regex_patterns?: string[];
-}): EvalConfig['scenarios'][number]['eval'] | undefined {
-  const toolConstraints =
-    input.required_tools?.length || input.forbidden_tools?.length
-      ? removeUndefined({
-          required_tools: normalizeStringArray(input.required_tools),
-          forbidden_tools: normalizeStringArray(input.forbidden_tools)
-        })
-      : undefined;
-  const toolSequence =
-    input.allowed_tool_sequences && input.allowed_tool_sequences.length > 0
-      ? { allow: input.allowed_tool_sequences }
-      : undefined;
-  const responseAssertions =
-    input.response_regex_patterns && input.response_regex_patterns.length > 0
-      ? input.response_regex_patterns.map((pattern) => ({ type: 'regex' as const, pattern }))
-      : undefined;
-  const evalRules = removeUndefined({
-    tool_constraints: toolConstraints,
-    tool_sequence: toolSequence,
-    response_assertions: responseAssertions
-  }) as EvalConfig['scenarios'][number]['eval'];
-  if (Object.keys(evalRules ?? {}).length === 0) {
-    return undefined;
-  }
-  return evalRules;
+function buildScenario(
+  input: Parameters<typeof buildScenarioEntry>[0]
+): EvalConfig['scenarios'][number] {
+  return buildScenarioEntry(input) as EvalConfig['scenarios'][number];
 }
 
 function validateScenarioHeuristics(scenario: EvalConfig['scenarios'][number]): string[] {
@@ -3522,20 +4178,6 @@ function searchableText(value: unknown): string {
   return tokens.join(' ');
 }
 
-function normalizeStringArray(values?: string[]): string[] | undefined {
-  if (!values) return undefined;
-  const out = values.map((value) => value.trim()).filter(Boolean);
-  return out.length > 0 ? out : undefined;
-}
-
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-}
-
 function indentBlock(text: string, spaces: number): string {
   const prefix = ' '.repeat(spaces);
   return text
@@ -3591,7 +4233,15 @@ async function handleHttpRequest(
       return;
     }
 
-    if (!sessionId && isInitializeRequest(body)) {
+    // Per the MCP Streamable HTTP transport, an unknown session indicates that
+    // the server was restarted or the session expired. The client must receive
+    // 404 so it can discard the stale session and initialize a new connection.
+    if (sessionId) {
+      sendPlain(res, 404, 'Not Found');
+      return;
+    }
+
+    if (isInitializeRequest(body)) {
       let runtime!: SessionRuntime;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
@@ -3626,7 +4276,11 @@ async function handleHttpRequest(
 
   if (method === 'GET' || method === 'DELETE') {
     const sessionId = getSessionId(req);
-    if (!sessionId || !sessions.has(sessionId)) {
+    if (sessionId && !sessions.has(sessionId)) {
+      sendPlain(res, 404, 'Not Found');
+      return;
+    }
+    if (!sessionId) {
       sendPlain(res, 400, 'Invalid or missing session ID');
       return;
     }

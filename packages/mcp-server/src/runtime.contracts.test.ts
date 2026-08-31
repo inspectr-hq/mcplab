@@ -1,12 +1,13 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { Readable } from 'node:stream';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { registerTools } from './runtime.js';
+import { handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
 type RegisteredTool = {
-  config: { inputSchema?: unknown; outputSchema?: unknown };
+  config: { inputSchema?: unknown; outputSchema?: unknown; annotations?: Record<string, unknown> };
   cb: (args: Record<string, unknown>) => Promise<any> | any;
 };
 
@@ -40,6 +41,170 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('returns 404 for requests using a stale session after an MCP server restart', async () => {
+    const sessions = new Map();
+    const response = {
+      statusCode: 200,
+      headers: new Map<string, string>(),
+      setHeader(name: string, value: string) {
+        this.headers.set(name, value);
+      },
+      end() {}
+    };
+    const request = Object.assign(Readable.from(['{}']), {
+      method: 'POST',
+      url: '/mcp',
+      headers: { host: 'localhost', 'mcp-session-id': 'session-from-before-restart' }
+    });
+
+    await handleMcplabMcpHttpRequest(request as any, response as any, sessions, { path: '/mcp' });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('uses distinct search descriptions for results, traces, reports, and tool analysis', () => {
+    const tools = setupTools();
+    expect((tools.get('mcplab_results_search')!.config as any).description).toContain('INDEXED');
+    expect((tools.get('mcplab_trace_search')!.config as any).description).toContain('RAW');
+    expect((tools.get('mcplab_search_markdown_reports')!.config as any).description).toContain(
+      'FILES'
+    );
+    expect((tools.get('mcplab_search_tool_analysis_results')!.config as any).description).toContain(
+      'TOOL-ANALYSIS'
+    );
+  });
+
+  it('declares scenario names in the shared output schema', () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_generate_scenario_entry');
+    const scenarioSchema = asSchema((tool!.config.outputSchema as any).scenario);
+    const parsed = scenarioSchema.safeParse({
+      id: 'named-scenario',
+      name: 'Named scenario',
+      mcp_servers: [{ ref: 'server-a' }],
+      prompt: 'Run the scenario.'
+    });
+
+    expect(parsed.success).toBe(true);
+    expect((parsed as any).data.name).toBe('Named scenario');
+  });
+
+  it('generates scenario-owned MCP server refs', async () => {
+    const tool = setupTools().get('mcplab_generate_scenario_entry');
+    const result = await tool!.cb({
+      id: 'owned-server-scenario',
+      servers: ['mcp-lab'],
+      prompt: 'Use the MCP server to inspect the library and report the result clearly.'
+    });
+
+    expect(result.structuredContent.scenario.mcp_servers).toEqual([{ ref: 'mcp-lab' }]);
+    expect(result.structuredContent.scenario.servers).toBeUndefined();
+  });
+
+  it('queues runs through the APP with agent and server overrides', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ jobId: 'job-123', queued: true, position: 2 }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const tool = setupTools().get('mcplab_queue_run');
+
+    const result = await tool!.cb({
+      config_path: 'evals/suite.yaml',
+      scenario_ids: ['one', 'two'],
+      agents: ['gpt-5'],
+      runs_per_scenario: 3,
+      server_override_all: ['mcp-lab'],
+      scenario_server_overrides: { two: ['other-server'] }
+    });
+
+    expect(result.structuredContent).toEqual({
+      jobId: 'job-123',
+      queued: true,
+      position: 2,
+      queue_url: 'http://127.0.0.1:8787/run'
+    });
+    const [url, request] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('http://127.0.0.1:8787/api/runs');
+    expect(request.method).toBe('POST');
+    expect(JSON.parse(request.body)).toEqual({
+      configPath: 'evals/suite.yaml',
+      runsPerScenario: 3,
+      scenarioIds: ['one', 'two'],
+      agents: ['gpt-5'],
+      serverOverrideAll: ['mcp-lab'],
+      scenarioServerOverrides: { two: ['other-server'] }
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('clearly distinguishes queueing from immediate evaluation', () => {
+    const tools = setupTools();
+    const runDescription = (tools.get('mcplab_run_eval')!.config as any).description;
+    const queueDescription = (tools.get('mcplab_queue_run')!.config as any).description;
+
+    expect(runDescription).toContain('immediately');
+    expect(queueDescription).toContain('APP queue');
+    expect(queueDescription).toContain('does not execute');
+  });
+
+  it('documents the trace discovery workflow', () => {
+    const tools = setupTools();
+    expect(tools.has('mcplab_trace_list_conversations')).toBe(true);
+    expect((tools.get('mcplab_trace_list_conversations')!.config as any).description).toContain(
+      'before mcplab_trace_get_conversation'
+    );
+    expect((tools.get('mcplab_trace_get_conversation')!.config as any).description).toContain(
+      'mcplab_trace_list_conversations first'
+    );
+  });
+
+  it('marks test-case updates as mutating and destructive', () => {
+    const tools = setupTools();
+    expect(tools.get('mcplab_update_test_case')!.config.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false
+    });
+  });
+
+  it('accepts the actual nested row shape from aggregate runs', () => {
+    const tool = setupTools().get('mcplab_aggregate_runs');
+    const schema = asSchema(tool!.config.outputSchema);
+    const parsed = schema.safeParse({
+      runs: [{ run_id: 'run-1', timestamp: '2026-08-31T00:00:00Z', config_hash: 'hash' }],
+      group_by: 'run',
+      summary: {
+        total_runs: 1,
+        passed_runs: 1,
+        failed_runs: 0,
+        pass_rate: 1,
+        avg_tool_calls_per_run: 1,
+        avg_tool_latency_ms: 10,
+        selected_run_count: 1
+      },
+      top_worst: [
+        {
+          key: 'run-1',
+          run_id: 'run-1',
+          run_count: 1,
+          summary: {
+            total_runs: 1,
+            passed_runs: 1,
+            failed_runs: 0,
+            pass_rate: 1,
+            avg_tool_calls_per_run: 1,
+            avg_tool_latency_ms: 10
+          }
+        }
+      ],
+      top_best: []
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');
@@ -187,7 +352,14 @@ describe('mcp tool contracts', () => {
       resolved_config: {
         servers: { s1: { transport: 'http', url: 'http://localhost:3001/mcp' } },
         agents: { a1: { provider: 'openai', model: 'gpt-5' } },
-        scenarios: [{ id: 'x', servers: ['s1'], prompt: 'p' }],
+        scenarios: [
+          {
+            id: 'x',
+            servers: ['s1'],
+            prompt: 'p',
+            eval: { response_assertions: [{ type: 'contains', value: 'ok' }] }
+          }
+        ],
         run_defaults: { selected_agents: ['a1'], timeout_ms: 1000 }
       }
     });

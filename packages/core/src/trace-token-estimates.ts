@@ -9,7 +9,7 @@ function normalizeJson(value: unknown): string {
   }
 }
 
-function estimateTokenCount(
+export function estimateTextTokens(
   text: string,
   model: string
 ): { count: number; method: EstimatedTokens['method'] } {
@@ -23,8 +23,8 @@ function estimateTokenCount(
 }
 
 function estimateForBlock(inputText: string, outputText: string, model: string): EstimatedTokens {
-  const input = estimateTokenCount(inputText, model);
-  const output = estimateTokenCount(outputText, model);
+  const input = estimateTextTokens(inputText, model);
+  const output = estimateTextTokens(outputText, model);
   return {
     input: input.count,
     output: output.count,
