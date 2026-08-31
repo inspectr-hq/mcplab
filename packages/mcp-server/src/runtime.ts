@@ -37,6 +37,8 @@ import {
   updateEvaluationConfigFile,
   readEvaluationConfigFile,
   createTestCaseFile,
+  readTestCaseFile,
+  updateTestCaseFile,
   buildScenarioEntry,
   type SourceEvalConfig,
   type EvalConfig,
@@ -1293,6 +1295,45 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_get_test_case',
+    {
+      description: 'Read one existing MCPLab test case, including its full parsed YAML content.',
+      inputSchema: { file_path: z.string().describe('Path relative to mcplab/test-cases/.') },
+      outputSchema: { path: z.string(), test_case: ScenarioEntrySchema }
+    },
+    async ({ file_path }) => withToolHandling(() => {
+      const result = readTestCaseFile({ librariesDir: resolveBundleRoot(), filePath: file_path });
+      return ok(`Read Test Case '${result.id}'`, { path: result.path, test_case: result.testCase });
+    })
+  );
+
+  registerTool(
+    'mcplab_update_test_case',
+    {
+      description: 'Replace one existing MCPLab test case in place. Requires confirm=true and never creates a new file.',
+      inputSchema: {
+        file_path: z.string().describe('Path to an existing test case relative to mcplab/test-cases/.'),
+        confirm: z.literal(true).describe('Required confirmation that the existing file should be overwritten.'),
+        id: z.string().min(1), name: z.string().optional(), servers: z.array(z.string()).min(1),
+        prompt: z.string().min(1).max(4000), required_tools: z.array(z.string()).optional(),
+        forbidden_tools: z.array(z.string()).optional(), tool_sequence: z.array(z.string()).min(1).optional(),
+        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
+        response_regex_patterns: z.array(z.string()).optional()
+      },
+      outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
+    },
+    async ({ file_path, confirm: _confirm, id, name, servers, prompt, required_tools, forbidden_tools, tool_sequence, extract_rules, response_regex_patterns }) =>
+      withToolHandling(() => {
+        const library = readLibrary(resolveBundleRoot(), false);
+        const updated = updateTestCaseFile({
+          librariesDir: resolveBundleRoot(), knownServerIds: library.servers.map((item) => item.id), filePath: file_path,
+          testCase: { id, name, servers, prompt, requiredTools: required_tools, forbiddenTools: forbidden_tools, toolSequence: tool_sequence, extractRules: extract_rules, responseRegexPatterns: response_regex_patterns }
+        });
+        return ok(`Updated Test Case '${updated.id}'`, { id: updated.id, path: updated.path, test_case: updated.testCase });
+      })
+  );
+
+  registerTool(
     'mcplab_create_evaluation_config',
     {
       description:
@@ -2254,7 +2295,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_get_conversation',
     {
       description:
-        'Return a structured conversation timeline (messages + tool blocks) for a specific scenario+agent in a scenario_run trace.',
+        'Return one structured conversation timeline (messages and tool blocks) for a specific scenario and agent in a run. If you do not know the scenario_id and agent, call mcplab_trace_list_conversations first.',
       outputSchema: {
         run_id: z.string(),
         scenario_id: z.string(),
@@ -2287,6 +2328,16 @@ export function registerTools(server: McpServer): void {
         const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
         const textMax = max_text_chars ?? 4000;
         const record = records.find((r) => r.scenario_id === scenario_id && r.agent === agent);
+        if (!record) {
+          const available = Array.from(
+            new Set(records.map((r) => `${r.scenario_id} / ${r.agent}`))
+          );
+          throw new Error(
+            `No conversation found for ${scenario_id} / ${agent}. Available conversations: ${
+              available.join(', ') || 'none'
+            }`
+          );
+        }
         const timeline = record
           ? buildConversationTimeline(record, textMax).slice(0, max_items ?? 300)
           : [];
@@ -2303,6 +2354,42 @@ export function registerTools(server: McpServer): void {
         );
       });
     }
+  );
+
+  registerTool(
+    'mcplab_trace_list_conversations',
+    {
+      description:
+        'List the scenario and agent conversation targets available in one run. Use this before mcplab_trace_get_conversation when you need to discover the required scenario_id and agent values.',
+      outputSchema: {
+        run_id: z.string(),
+        legacy_trace_detected: z.boolean().optional(),
+        conversations: z.array(
+          z.object({
+            scenario_id: z.string(),
+            agent: z.string(),
+            timeline_item_count: z.number().int().nonnegative()
+          })
+        )
+      },
+      inputSchema: {
+        run_id: z.string().describe("Run id directory name or 'LATEST'.")
+      }
+    },
+    async ({ run_id }) =>
+      withToolHandling(() => {
+        const { runId, records, legacyDetected } = readScenarioRunTraceRecordsForRun(run_id);
+        const conversations = records.map((record) => ({
+          scenario_id: record.scenario_id,
+          agent: record.agent,
+          timeline_item_count: buildConversationTimeline(record, 4000).length
+        }));
+        return ok(`Found ${conversations.length} conversation(s) in run ${runId}`, {
+          run_id: runId,
+          legacy_trace_detected: legacyDetected || undefined,
+          conversations
+        });
+      })
   );
 
   registerTool(

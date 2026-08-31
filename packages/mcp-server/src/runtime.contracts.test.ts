@@ -150,6 +150,17 @@ describe('mcp tool contracts', () => {
     expect(queueDescription).toContain('does not execute');
   });
 
+  it('documents the trace discovery workflow', () => {
+    const tools = setupTools();
+    expect(tools.has('mcplab_trace_list_conversations')).toBe(true);
+    expect((tools.get('mcplab_trace_list_conversations')!.config as any).description).toContain(
+      'before mcplab_trace_get_conversation'
+    );
+    expect((tools.get('mcplab_trace_get_conversation')!.config as any).description).toContain(
+      'mcplab_trace_list_conversations first'
+    );
+  });
+
   it('accepts the actual nested row shape from aggregate runs', () => {
     const tool = setupTools().get('mcplab_aggregate_runs');
     const schema = asSchema(tool!.config.outputSchema);

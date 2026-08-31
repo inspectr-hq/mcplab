@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createTestCaseFile } from './test-case-store.js';
+import { createTestCaseFile, readTestCaseFile, updateTestCaseFile } from './test-case-store.js';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -73,6 +73,15 @@ describe('createTestCaseFile', () => {
     });
 
     expect(created.testCase.name).toBe('whitespace-name');
+  });
+
+  it('reads and updates an existing test case in place', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    createTestCaseFile({ librariesDir: root, knownServerIds: ['mcp-lab'], testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'Before' } });
+    expect(readTestCaseFile({ librariesDir: root, filePath: 'editable.yaml' }).testCase.prompt).toBe('Before');
+    const updated = updateTestCaseFile({ librariesDir: root, knownServerIds: ['mcp-lab'], filePath: 'editable.yaml', testCase: { id: 'editable', servers: ['mcp-lab'], prompt: 'After' } });
+    expect(updated.testCase.prompt).toBe('After');
   });
 
   it('rejects unknown servers and duplicate IDs', () => {

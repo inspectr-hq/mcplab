@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { SourceScenario } from './types.js';
 import { buildScenarioEntry } from './scenario-builder.js';
 
@@ -16,6 +16,7 @@ export type TestCaseCreateInput = {
   extractRules?: Array<{ name: string; regex: string }>;
 };
 export type CreatedTestCaseFile = { id: string; path: string; testCase: SourceScenario };
+export type UpdatedTestCaseFile = CreatedTestCaseFile;
 
 export function createTestCaseFile(params: {
   librariesDir: string;
@@ -57,6 +58,51 @@ export function createTestCaseFile(params: {
     throw error;
   }
   return { id, path, testCase };
+}
+
+export function readTestCaseFile(params: {
+  librariesDir: string;
+  filePath: string;
+}): CreatedTestCaseFile {
+  const librariesDir = resolve(params.librariesDir);
+  const testCasesDir = resolve(librariesDir, 'test-cases');
+  const path = resolve(testCasesDir, params.filePath);
+  if (!path.startsWith(`${testCasesDir}${sep}`) || !/\.ya?ml$/i.test(path))
+    throw new Error('Test Case path is outside the canonical test-cases directory.');
+  if (!existsSync(path)) throw new Error(`Test Case not found: ${params.filePath}`);
+  const testCase = parseYaml(readFileSync(path, 'utf8')) as SourceScenario;
+  return {
+    id: String(testCase.id ?? '').trim(),
+    path,
+    testCase
+  };
+}
+
+export function updateTestCaseFile(params: {
+  librariesDir: string;
+  knownServerIds: Iterable<string>;
+  filePath: string;
+  testCase: TestCaseCreateInput;
+}): UpdatedTestCaseFile {
+  const existing = readTestCaseFile({ librariesDir: params.librariesDir, filePath: params.filePath });
+  const input = params.testCase;
+  const id = input.id.trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Test Case id must use letters, numbers, hyphens, or underscores.');
+  const prompt = input.prompt.trim();
+  if (!prompt) throw new Error('A Test Case needs a prompt.');
+  const servers = unique(input.servers);
+  if (!servers.length) throw new Error('A Test Case needs at least one MCP server.');
+  const known = new Set(params.knownServerIds);
+  const missing = servers.filter((server) => !known.has(server));
+  if (missing.length) throw new Error(`Unknown MCP server(s): ${missing.join(', ')}`);
+  const testCase = buildScenarioEntry({
+    id, name: input.name?.trim() || id, servers, prompt,
+    required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
+    tool_sequence: input.toolSequence,
+    response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules
+  });
+  writeFileSync(existing.path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8' });
+  return { id, path: existing.path, testCase };
 }
 
 function unique(values: string[]): string[] {

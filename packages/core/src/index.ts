@@ -36,7 +36,10 @@ export {
 } from './evaluation-config-store.js';
 export {
   createTestCaseFile,
+  readTestCaseFile,
+  updateTestCaseFile,
   type CreatedTestCaseFile,
+  type UpdatedTestCaseFile,
   type TestCaseCreateInput
 } from './test-case-store.js';
 export { buildScenarioEntry, type ScenarioBuildInput } from './scenario-builder.js';
