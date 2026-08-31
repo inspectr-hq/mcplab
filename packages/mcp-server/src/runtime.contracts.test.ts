@@ -1,9 +1,10 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { registerTools } from './runtime.js';
+import { handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
 type RegisteredTool = {
   config: { inputSchema?: unknown; outputSchema?: unknown };
@@ -40,6 +41,27 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('returns 404 for requests using a stale session after an MCP server restart', async () => {
+    const sessions = new Map();
+    const response = {
+      statusCode: 200,
+      headers: new Map<string, string>(),
+      setHeader(name: string, value: string) {
+        this.headers.set(name, value);
+      },
+      end() {}
+    };
+    const request = Object.assign(Readable.from(['{}']), {
+      method: 'POST',
+      url: '/mcp',
+      headers: { host: 'localhost', 'mcp-session-id': 'session-from-before-restart' }
+    });
+
+    await handleMcplabMcpHttpRequest(request as any, response as any, sessions, { path: '/mcp' });
+
+    expect(response.statusCode).toBe(404);
+  });
+
   it('uses distinct search descriptions for results, traces, reports, and tool analysis', () => {
     const tools = setupTools();
     expect((tools.get('mcplab_results_search')!.config as any).description).toContain('INDEXED');

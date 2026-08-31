@@ -3943,7 +3943,15 @@ async function handleHttpRequest(
       return;
     }
 
-    if (!sessionId && isInitializeRequest(body)) {
+    // Per the MCP Streamable HTTP transport, an unknown session indicates that
+    // the server was restarted or the session expired. The client must receive
+    // 404 so it can discard the stale session and initialize a new connection.
+    if (sessionId) {
+      sendPlain(res, 404, 'Not Found');
+      return;
+    }
+
+    if (isInitializeRequest(body)) {
       let runtime!: SessionRuntime;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
@@ -3978,7 +3986,11 @@ async function handleHttpRequest(
 
   if (method === 'GET' || method === 'DELETE') {
     const sessionId = getSessionId(req);
-    if (!sessionId || !sessions.has(sessionId)) {
+    if (sessionId && !sessions.has(sessionId)) {
+      sendPlain(res, 404, 'Not Found');
+      return;
+    }
+    if (!sessionId) {
       sendPlain(res, 400, 'Invalid or missing session ID');
       return;
     }
