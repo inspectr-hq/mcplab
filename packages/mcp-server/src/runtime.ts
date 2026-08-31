@@ -32,6 +32,7 @@ import {
   getContext,
   applyRuntimeServerOverrides,
   readLibraryAgentsAndServers,
+  resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   createTestCaseFile,
   type SourceEvalConfig,
@@ -217,6 +218,26 @@ const LibraryEntrySchema = z.object({
   agents: z.array(LibraryAgentEntrySchema),
   test_cases: z.array(LibraryScenarioEntrySchema),
   scenarios: z.array(LibraryScenarioEntrySchema)
+});
+
+const EvaluationConfigListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  relative_path: z.string(),
+  config_path: z.string(),
+  suite_path: z.string(),
+  updated_at: z.string(),
+  scenario_count: z.number().int().nonnegative(),
+  agent_count: z.number().int().nonnegative(),
+  error: z.string().optional()
+});
+const EvaluationConfigListSchema = z.object({
+  evals_dir: z.string(),
+  total: z.number().int().nonnegative(),
+  matching: z.number().int().nonnegative(),
+  filters: GenericObjectSchema,
+  sort: z.object({ by: z.string(), direction: z.enum(['asc', 'desc']) }),
+  configs: z.array(EvaluationConfigListItemSchema)
 });
 
 const ServerAuthSchema = z.union([
@@ -737,27 +758,40 @@ export function registerTools(server: McpServer): void {
           'evaluations',
           'run_evaluation',
           'results',
+          'result_detail',
           'compare',
           'tool_analysis',
+          'tool_analysis_results',
+          'tool_analysis_result',
           'library_servers',
           'library_agents',
           'library_test_cases',
           'settings'
         ]),
-        run_id: z.string().optional(),
-        config_id: z.string().optional()
+        run_id: z.string().min(1).max(200).optional(),
+        tool_analysis_id: z.string().min(1).max(200).optional(),
+        config_id: z.string().min(1).max(200).optional(),
+        agent: z.string().min(1).max(200).optional(),
+        scenario: z.string().min(1).max(200).optional(),
+        time_filter: z.enum(['last', 'custom']).optional(),
+        time_preset: z.enum(['15min', '30min', '1h', '24h', '7d', '14d', '30d']).optional(),
+        time_start: z.string().datetime().optional(),
+        time_end: z.string().datetime().optional()
       },
-      outputSchema: { url: z.string(), view: z.string() }
+      outputSchema: { url: z.string().url(), view: z.string(), path: z.string() }
     },
-    async ({ view, run_id, config_id }) =>
+    async ({ view, run_id, tool_analysis_id, config_id, agent, scenario, time_filter, time_preset, time_start, time_end }) =>
       withToolHandling(() => {
         const paths: Record<string, string> = {
           home: '/',
           evaluations: '/evaluations',
           run_evaluation: '/run',
           results: '/results',
+          result_detail: '/results/detail',
           compare: '/compare',
           tool_analysis: '/tool-analysis',
+          tool_analysis_results: '/tool-analysis/results',
+          tool_analysis_result: '/tool-analysis/result',
           library_servers: '/servers',
           library_agents: '/agents',
           library_test_cases: '/test-cases',
@@ -767,8 +801,17 @@ export function registerTools(server: McpServer): void {
         if (!path) throw new Error(`Unsupported app view: ${view}`);
         const url = new URL(path, process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787');
         if (run_id) url.searchParams.set('run', run_id);
+        if (tool_analysis_id) url.searchParams.set('tool_analysis_id', tool_analysis_id);
         if (config_id) url.searchParams.set('config', config_id);
-        return ok(`Built app link for ${view}`, { url: url.toString(), view });
+        if (agent) url.searchParams.set('agent', agent);
+        if (scenario) url.searchParams.set('scenario', scenario);
+        if (time_filter) url.searchParams.set('time_filter', time_filter);
+        if (time_preset) url.searchParams.set('time_preset', time_preset);
+        if (time_start) url.searchParams.set('time_start', time_start);
+        if (time_end) url.searchParams.set('time_end', time_end);
+        if (view === 'result_detail' && !run_id) throw new Error('run_id is required for result_detail');
+        if (view === 'tool_analysis_result' && !tool_analysis_id) throw new Error('tool_analysis_id is required for tool_analysis_result');
+        return ok(`Built app link for ${view}`, { url: url.toString(), view, path });
       })
   );
 
@@ -1201,10 +1244,13 @@ export function registerTools(server: McpServer): void {
         servers: z.array(z.string()).min(1),
         prompt: z.string().min(1).max(4000),
         required_tools: z.array(z.string()).optional(),
+        forbidden_tools: z.array(z.string()).optional(),
+        allowed_tool_sequences: z.array(z.array(z.string()).min(1)).optional(),
+        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
         response_regex_patterns: z.array(z.string()).optional()
       }
     },
-    async ({ id, name, servers, prompt, required_tools, response_regex_patterns }) =>
+    async ({ id, name, servers, prompt, required_tools, forbidden_tools, allowed_tool_sequences, extract_rules, response_regex_patterns }) =>
       withToolHandling(async () => {
         const bundleRoot = resolveBundleRoot();
         const library = readLibrary(bundleRoot, false);
@@ -1217,6 +1263,9 @@ export function registerTools(server: McpServer): void {
             servers,
             prompt,
             requiredTools: required_tools,
+            forbiddenTools: forbidden_tools,
+            allowedToolSequences: allowed_tool_sequences,
+            extractRules: extract_rules,
             responseRegexPatterns: response_regex_patterns
           }
         });
@@ -1345,62 +1394,19 @@ export function registerTools(server: McpServer): void {
     'mcplab_list_evaluation_configs',
     {
       description:
-        'List evaluation YAML files under mcplab/evals with optional text filtering and sorting.',
+        'List MCPLab evaluation configurations with nested-suite filtering and deterministic sorting.',
       inputSchema: {
+        suite: z.string().optional(),
         query: z.string().optional(),
+        sort_by: z.enum(['name', 'scenarios', 'agents', 'updated_at']).optional(),
         sort_direction: z.enum(['asc', 'desc']).optional(),
-        limit: z.number().int().positive().max(200).optional()
       },
-      outputSchema: {
-        total_matching: z.number(),
-        configs: z.array(
-          z.object({
-            file_name: z.string(),
-            path: z.string(),
-            name: z.string().optional(),
-            updated_at: z.string()
-          })
-        )
-      }
+      outputSchema: EvaluationConfigListSchema
     },
-    async ({ query, sort_direction, limit }) =>
-      withToolHandling(() => {
-        const root = join(resolveBundleRoot(), 'evals');
-        const files: string[] = [];
-        const walk = (dir: string) => {
-          if (!existsSync(dir)) return;
-          for (const entry of readdirSync(dir, { withFileTypes: true })) {
-            const path = join(dir, entry.name);
-            if (entry.isDirectory()) walk(path);
-            else if (/\.ya?ml$/i.test(entry.name)) files.push(path);
-          }
-        };
-        walk(root);
-        const q = query?.trim().toLowerCase();
-        const configs = files
-          .map((path) => {
-            let name: string | undefined;
-            try {
-              const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown>;
-              name = typeof parsed?.name === 'string' ? parsed.name : undefined;
-            } catch {}
-            return {
-              file_name: relative(root, path)
-                .replace(/\\/g, '/')
-                .replace(/\.ya?ml$/i, ''),
-              path,
-              name,
-              updated_at: statSync(path).mtime.toISOString()
-            };
-          })
-          .filter((item) => !q || `${item.file_name} ${item.name ?? ''}`.toLowerCase().includes(q))
-          .sort((a, b) => (a.name ?? a.file_name).localeCompare(b.name ?? b.file_name));
-        if (sort_direction === 'desc') configs.reverse();
-        return ok(`Found ${configs.length} evaluation configuration(s)`, {
-          total_matching: configs.length,
-          configs: configs.slice(0, limit ?? 50)
-        });
-      })
+    async ({ suite, query, sort_by, sort_direction }) => withToolHandling(() => ok(
+      'Listed evaluation configurations',
+      listEvaluationConfigs({ suite, query, sortBy: sort_by, sortDirection: sort_direction })
+    ))
   );
 
   registerTool(
@@ -1604,6 +1610,7 @@ export function registerTools(server: McpServer): void {
               : ''
           );
           const time = new Date(timestamp).getTime();
+          if (sinceMs === undefined && untilMs === undefined) return true;
           return (
             !Number.isNaN(time) &&
             (sinceMs === undefined || time >= sinceMs) &&
@@ -2792,9 +2799,7 @@ function readLibrary(
 ): z.infer<typeof LibraryEntrySchema> {
   const serversPath = join(bundleRoot, 'servers.yaml');
   const agentsPath = join(bundleRoot, 'agents.yaml');
-  const scenariosDir = existsSync(join(bundleRoot, 'test-cases'))
-    ? join(bundleRoot, 'test-cases')
-    : join(bundleRoot, 'scenarios');
+  const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
     ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
@@ -2867,9 +2872,7 @@ function getLibraryItem(
     };
   }
 
-  const dir = existsSync(join(bundleRoot, 'test-cases'))
-    ? join(bundleRoot, 'test-cases')
-    : join(bundleRoot, 'scenarios');
+  const dir = resolveScenarioLibraryDir(bundleRoot).path;
   if (!existsSync(dir)) {
     throw new Error(`Scenario library directory not found: ${dir}`);
   }
@@ -2890,6 +2893,58 @@ function getLibraryItem(
     }
   }
   throw new Error(`Scenario '${id}' not found in ${dir}`);
+}
+
+function listEvaluationConfigs(params: {
+  suite?: string;
+  query?: string;
+  sortBy?: 'name' | 'scenarios' | 'agents' | 'updated_at';
+  sortDirection?: 'asc' | 'desc';
+}): z.infer<typeof EvaluationConfigListSchema> {
+  const evalsDir = join(resolveBundleRoot(), 'evals');
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) files.push(path);
+    }
+  };
+  walk(evalsDir);
+  const all = files.map((path) => {
+    const relativePath = relative(evalsDir, path).split(sep).join('/');
+    const suitePath = dirname(relativePath) === '.' ? '' : dirname(relativePath).split(sep).join('/');
+    const fallbackName = basename(path, extname(path));
+    const stat = statSync(path);
+    try {
+      const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      return {
+        id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+        name: typeof parsed?.name === 'string' && parsed.name.trim() ? parsed.name.trim() : fallbackName,
+        relative_path: relativePath,
+        config_path: path,
+        suite_path: suitePath,
+        updated_at: stat.mtime.toISOString(),
+        scenario_count: Array.isArray(parsed?.scenarios) ? parsed.scenarios.length : 0,
+        agent_count: Array.isArray(parsed?.agents) ? parsed.agents.length : 0
+      };
+    } catch (error) {
+      return { id: Buffer.from(relativePath, 'utf8').toString('base64url'), name: fallbackName, relative_path: relativePath, config_path: path, suite_path: suitePath, updated_at: stat.mtime.toISOString(), scenario_count: 0, agent_count: 0, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  const suite = params.suite?.trim().replace(/^suite:/, '');
+  const query = params.query?.trim().toLowerCase();
+  const matching = all.filter((config) => (!suite || config.suite_path === suite || config.suite_path.startsWith(`${suite}/`)) && (!query || `${config.name} ${config.relative_path} ${config.error ?? ''}`.toLowerCase().includes(query)));
+  const sortBy = params.sortBy ?? 'name';
+  const direction = params.sortDirection ?? 'asc';
+  matching.sort((a, b) => {
+    const left = sortBy === 'scenarios' ? a.scenario_count : sortBy === 'agents' ? a.agent_count : sortBy === 'updated_at' ? Date.parse(a.updated_at) : a.name;
+    const right = sortBy === 'scenarios' ? b.scenario_count : sortBy === 'agents' ? b.agent_count : sortBy === 'updated_at' ? Date.parse(b.updated_at) : b.name;
+    const comparison = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right));
+    return direction === 'asc' ? comparison : -comparison;
+  });
+  return { evals_dir: evalsDir, total: all.length, matching: matching.length, filters: removeUndefined({ suite, query }), sort: { by: sortBy, direction }, configs: matching };
 }
 
 function buildServerEntry(input: {

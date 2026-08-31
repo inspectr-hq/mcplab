@@ -8,7 +8,8 @@ export {
   normalizeSourceConfig,
   readLibraryAgentsAndServers,
   normalizeLibraryServers,
-  normalizeLibraryAgents
+  normalizeLibraryAgents,
+  resolveScenarioLibraryDir
 } from './config.js';
 export { runAll, type RunProgressEvent } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';

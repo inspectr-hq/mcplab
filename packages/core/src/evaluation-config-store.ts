@@ -38,7 +38,14 @@ export function createEvaluationConfigFile(params: {
   const resolvedTarget = resolve(target);
   if (!resolvedTarget.startsWith(`${evalsDir}${sep}`))
     throw new Error('Evaluation config path is outside the configured evals directory.');
-  writeFileSync(resolvedTarget, `${stringifyYaml(config)}\n`, 'utf8');
+  try {
+    writeFileSync(resolvedTarget, `${stringifyYaml(config)}\n`, { encoding: 'utf8', flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error(`Evaluation config '${fileName}' already exists.`);
+    }
+    throw error;
+  }
   return {
     fileName: resolvedTarget.slice(evalsDir.length + 1).replace(/\.yaml$/i, ''),
     path: resolvedTarget,

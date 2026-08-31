@@ -9,7 +9,10 @@ export type TestCaseCreateInput = {
   servers: string[];
   prompt: string;
   requiredTools?: string[];
+  forbiddenTools?: string[];
+  allowedToolSequences?: string[][];
   responseRegexPatterns?: string[];
+  extractRules?: Array<{ name: string; regex: string }>;
 };
 export type CreatedTestCaseFile = { id: string; path: string; testCase: SourceScenario };
 
@@ -39,18 +42,21 @@ export function createTestCaseFile(params: {
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
   const requiredTools = unique(input.requiredTools ?? []);
+  const forbiddenTools = unique(input.forbiddenTools ?? []);
+  const allowedToolSequences = (input.allowedToolSequences ?? []).filter((sequence) => sequence.length > 0).map(unique);
   const regexes = unique(input.responseRegexPatterns ?? []);
-  const testCase: SourceScenario = {
+  const testCase = {
     id,
     name: input.name?.trim() || id,
     servers,
     prompt,
-    ...(requiredTools.length || regexes.length
+    ...(requiredTools.length || forbiddenTools.length || allowedToolSequences.length || regexes.length
       ? {
           eval: {
-            ...(requiredTools.length
-              ? { tool_constraints: { required_tools: requiredTools } }
+            ...(requiredTools.length || forbiddenTools.length
+              ? { tool_constraints: { ...(requiredTools.length ? { required_tools: requiredTools } : {}), ...(forbiddenTools.length ? { forbidden_tools: forbiddenTools } : {}) } }
               : {}),
+            ...(allowedToolSequences.length ? { tool_sequence: { allow: allowedToolSequences } } : {}),
             ...(regexes.length
               ? {
                   response_assertions: regexes.map((pattern) => ({
@@ -61,9 +67,17 @@ export function createTestCaseFile(params: {
               : {})
           }
         }
-      : {})
-  };
-  writeFileSync(path, `${stringifyYaml(testCase)}\n`, 'utf8');
+      : {}),
+    ...(input.extractRules?.length ? { extract: input.extractRules.map((rule) => ({ name: rule.name, from: 'final_text' as const, regex: rule.regex })) } : {})
+  } as SourceScenario;
+  try {
+    writeFileSync(path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8', flag: 'wx' });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new Error(`Test Case '${id}' already exists.`);
+    }
+    throw error;
+  }
   return { id, path, testCase };
 }
 
