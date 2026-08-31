@@ -1,5 +1,11 @@
 import type { ToolAnalysisDiscoverResponse } from './data-sources/types';
 
+export function formatToolAnalysisTokenCount(value: number, locale?: string): string {
+  const browserLocale =
+    locale ?? (typeof navigator !== 'undefined' ? navigator.language : undefined);
+  return value.toLocaleString(browserLocale);
+}
+
 export function selectedToolContextTokens(
   servers: ToolAnalysisDiscoverResponse['servers'],
   selectedToolsByServer: Record<string, string[]>

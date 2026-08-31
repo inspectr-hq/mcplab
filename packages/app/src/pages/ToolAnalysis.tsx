@@ -25,7 +25,10 @@ import { isWriteDeleteClassification } from '@/lib/tool-analysis-utils';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 import { CircleHelp, Copy, Download, Loader2, RefreshCw, Search, Microscope } from 'lucide-react';
 import { buildToolInfoExport, buildToolInfoFilename } from '@/lib/tool-analysis-export';
-import { selectedToolContextTokens } from '@/lib/tool-analysis-token-estimates';
+import {
+  formatToolAnalysisTokenCount,
+  selectedToolContextTokens
+} from '@/lib/tool-analysis-token-estimates';
 import {
   ToolSchemaPreview,
   type SchemaViewMode
@@ -743,7 +746,18 @@ const ToolAnalysisPage = () => {
                     return (
                       <div key={server.serverName} className="rounded-md border p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <div className="font-medium">{server.serverName}</div>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="font-medium">{server.serverName}</div>
+                            {server.tokenEstimate && (
+                              <Badge
+                                variant="outline"
+                                className="bg-background font-mono text-xs font-normal"
+                                title="Estimated tokens for all discovered tool definitions and their schemas"
+                              >
+                                ~{formatToolAnalysisTokenCount(server.tokenEstimate.total)}tok
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
                             <Button
                               type="button"
@@ -868,10 +882,10 @@ const ToolAnalysisPage = () => {
                                     {tokenEstimate && (
                                       <Badge
                                         variant="outline"
-                                        className="border-border text-[10px] text-muted-foreground"
+                                        className="bg-background font-mono text-xs font-normal"
                                         title="Estimated tokens for this tool definition and its schemas"
                                       >
-                                        ~{tokenEstimate.total} tokens
+                                        ~{formatToolAnalysisTokenCount(tokenEstimate.total)}tok
                                       </Badge>
                                     )}
                                   </div>
@@ -899,7 +913,9 @@ const ToolAnalysisPage = () => {
               <p className="text-xs text-muted-foreground">
                 Selected tools: {totalSelectedTools}
                 {selectedToolTokens !== undefined &&
-                  ` · estimated context: ~${selectedToolTokens.toLocaleString()} tokens`}
+                  ` · estimated context: ~${formatToolAnalysisTokenCount(
+                    selectedToolTokens
+                  )} tokens`}
               </p>
             </div>
 

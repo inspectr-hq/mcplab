@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { selectedToolContextTokens } from './tool-analysis-token-estimates';
+import {
+  formatToolAnalysisTokenCount,
+  selectedToolContextTokens
+} from './tool-analysis-token-estimates';
+
+describe('formatToolAnalysisTokenCount', () => {
+  it('uses the active locale for grouping', () => {
+    expect(formatToolAnalysisTokenCount(4508, 'nl-BE')).toBe('4.508');
+  });
+});
 
 describe('selectedToolContextTokens', () => {
   it('sums estimates for selected tools only', () => {
