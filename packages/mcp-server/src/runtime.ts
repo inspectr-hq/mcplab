@@ -269,6 +269,7 @@ const ServerEntrySchema = z.object({
 
 const ScenarioEntrySchema = z.object({
   id: z.string(),
+  name: z.string().optional(),
   agent: z.string().optional(),
   servers: z.array(z.string()),
   prompt: z.string(),
@@ -1347,7 +1348,7 @@ export function registerTools(server: McpServer): void {
         name: z
           .string()
           .optional()
-          .describe('Optional human label used only to derive id when id is omitted.'),
+          .describe('Optional human-readable scenario label. Also used to derive id when omitted.'),
         agent: z
           .string()
           .optional()

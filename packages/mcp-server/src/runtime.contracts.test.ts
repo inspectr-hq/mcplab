@@ -74,6 +74,21 @@ describe('mcp tool contracts', () => {
     );
   });
 
+  it('declares scenario names in the shared output schema', () => {
+    const tools = setupTools();
+    const tool = tools.get('mcplab_generate_scenario_entry');
+    const scenarioSchema = asSchema((tool!.config.outputSchema as any).scenario);
+    const parsed = scenarioSchema.safeParse({
+      id: 'named-scenario',
+      name: 'Named scenario',
+      servers: ['server-a'],
+      prompt: 'Run the scenario.'
+    });
+
+    expect(parsed.success).toBe(true);
+    expect((parsed as any).data.name).toBe('Named scenario');
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');
