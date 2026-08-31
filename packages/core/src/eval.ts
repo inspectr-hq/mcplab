@@ -31,6 +31,7 @@ export interface JudgeAgentAssertionsInput {
 
 export interface EvaluateScenarioWithAgentChecksOptions {
   toolCalls?: ToolCall[];
+  availableToolNames?: string[];
   judgeAgentAssertions?: (input: JudgeAgentAssertionsInput) => Promise<AgentAssertionJudgeResult[]>;
   scenarioPrompt?: string;
 }
@@ -118,7 +119,8 @@ export async function evaluateScenarioWithAgentChecks(
   evalRules?: EvalRules,
   options?: EvaluateScenarioWithAgentChecksOptions
 ): Promise<EvalResult> {
-  const base = evaluateScenario(finalText, toolSequence, evalRules, options?.toolCalls ?? []);
+  const normalizedRules = normalizeToolConstraintAliases(evalRules, options?.availableToolNames);
+  const base = evaluateScenario(finalText, toolSequence, normalizedRules, options?.toolCalls ?? []);
   const failures = [...base.failures];
   const check_results = [...base.check_results];
 
@@ -202,6 +204,45 @@ export async function evaluateScenarioWithAgentChecks(
   }
 
   return { pass: failures.length === 0, failures, check_results };
+}
+
+/** Resolve client display aliases such as `MCPLab:tool_name` to exposed MCP names. */
+export function normalizeToolConstraintAliases(
+  evalRules: EvalRules | undefined,
+  availableToolNames: string[] | undefined
+): EvalRules | undefined {
+  if (!evalRules || !availableToolNames?.length) return evalRules;
+  const available = new Set(availableToolNames);
+  const resolve = (name: string): string => {
+    if (available.has(name)) return name;
+    const separator = name.lastIndexOf(':');
+    if (separator < 0) return name;
+    const suffix = name.slice(separator + 1);
+    return available.has(suffix) ? suffix : name;
+  };
+  const constraints = evalRules.tool_constraints;
+  return {
+    ...evalRules,
+    ...(constraints
+      ? {
+          tool_constraints: {
+            ...constraints,
+            ...(constraints.required_tools
+              ? { required_tools: constraints.required_tools.map(resolve) }
+              : {}),
+            ...(constraints.forbidden_tools
+              ? { forbidden_tools: constraints.forbidden_tools.map(resolve) }
+              : {})
+          }
+        }
+      : {}),
+    ...(evalRules.tool_sequence
+      ? { tool_sequence: evalRules.tool_sequence.map(resolve) }
+      : {}),
+    ...(evalRules.tool_input_assertions
+      ? { tool_input_assertions: evalRules.tool_input_assertions.map((a) => ({ ...a, tool: resolve(a.tool) })) }
+      : {})
+  };
 }
 
 function evaluateToolConstraints(

@@ -23,7 +23,8 @@ import {
 import {
   buildNotEvaluatedCheckResults,
   evaluateScenarioWithAgentChecks,
-  extractValues
+  extractValues,
+  normalizeToolConstraintAliases
 } from './eval.js';
 import { aggregateResults, renderSummaryMarkdown } from './results.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
@@ -207,6 +208,7 @@ export async function runAll(
         throw new Error(`Agent not found: ${scenario.agent}`);
       }
       const runs: ScenarioRunResult[] = [];
+      let effectiveScenarioEval = scenario.eval;
 
       for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
         throwIfAborted(options.signal);
@@ -278,9 +280,13 @@ export async function runAll(
           const evalResult = await evaluateScenarioWithAgentChecks(
             runResult.finalText,
             runResult.toolSequence,
-            scenario.eval,
+            (effectiveScenarioEval = normalizeToolConstraintAliases(
+              scenario.eval,
+              runResult.availableToolNames
+            )),
             {
               toolCalls: runResult.toolCalls,
+              availableToolNames: runResult.availableToolNames,
               scenarioPrompt: scenario.prompt,
               judgeAgentAssertions: options.evaluationJudge
                 ? async (input) => {
@@ -430,7 +436,7 @@ export async function runAll(
         agent: scenario.agent,
         provider: agent.provider,
         model: agent.model,
-        eval: scenario.eval,
+        eval: effectiveScenarioEval,
         runs
       });
     }

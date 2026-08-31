@@ -1665,7 +1665,11 @@ export function registerTools(server: McpServer): void {
       description:
         'Add a MCPLab evaluation to the local APP queue for the APP worker to execute later; this tool does not execute the evaluation or return results. Use mcplab_run_eval when results are needed immediately. Returns the queued job id, position, and APP /run URL.',
       inputSchema: {
-        config_path: z.string().describe('Path to the MCPLab eval YAML config, relative to the APP evals directory or an allowed absolute path.'),
+        config_path: z
+          .string()
+          .describe(
+            'Path to the eval YAML. Relative paths resolve under the APP evals directory; absolute paths must remain inside that directory. Invalid, missing, or disallowed paths return an error—the tool never silently coerces them.'
+          ),
         scenario_id: z.string().optional().describe('Optional single scenario id to run.'),
         scenario_ids: z.array(z.string()).min(1).optional().describe('Optional scenario ids to run.'),
         agents: z.array(z.string()).min(1).optional().describe('Optional agent ids to use.'),

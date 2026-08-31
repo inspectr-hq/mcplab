@@ -19,6 +19,7 @@ import type { ScenarioTraceSpan } from './langsmith-tracing.js';
 export interface AgentRunResult {
   finalText: string;
   toolSequence: string[];
+  availableToolNames: string[];
   toolCalls: ToolCall[];
   toolDurationsMs: number[];
   traceMessages: TraceMessage[];
@@ -489,6 +490,7 @@ export async function runAgentScenario(params: {
   return {
     finalText,
     toolSequence,
+    availableToolNames: tools.map((tool) => tool.name),
     toolCalls,
     toolDurationsMs,
     traceMessages,
