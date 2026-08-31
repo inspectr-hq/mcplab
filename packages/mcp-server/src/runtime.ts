@@ -271,7 +271,7 @@ const ScenarioEntrySchema = z.object({
   id: z.string(),
   name: z.string().optional(),
   agent: z.string().optional(),
-  servers: z.array(z.string()),
+  mcp_servers: z.array(z.object({ ref: z.string() })),
   prompt: z.string(),
   eval: GenericObjectSchema.optional(),
   extract: z
@@ -1356,7 +1356,7 @@ export function registerTools(server: McpServer): void {
         servers: z
           .array(z.string())
           .min(1)
-          .describe('One or more server ids available to the scenario.'),
+          .describe('One or more server ids; emitted as scenario-owned mcp_servers refs.'),
         prompt: z
           .string()
           .min(1)

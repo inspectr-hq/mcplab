@@ -27,6 +27,7 @@ describe('createTestCaseFile', () => {
     expect(created.testCase.eval?.tool_constraints?.required_tools).toEqual([
       'mcplab_list_library'
     ]);
+    expect(created.testCase.mcp_servers).toEqual([{ ref: 'mcp-lab' }]);
     expect(existsSync(join(root, 'test-cases', 'library-check.yaml'))).toBe(true);
   });
 

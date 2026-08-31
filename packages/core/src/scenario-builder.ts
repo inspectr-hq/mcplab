@@ -32,7 +32,7 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
     id,
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     ...(input.agent?.trim() ? { agent: input.agent.trim() } : {}),
-    servers: unique(input.servers),
+    mcp_servers: unique(input.servers).map((ref) => ({ ref })),
     prompt: input.prompt.trim(),
     ...(evalRules ? { eval: evalRules } : {}),
     ...(input.extract_rules?.length ? { extract: input.extract_rules.map((rule) => ({ name: rule.name, from: 'final_text' as const, regex: rule.regex })) } : {})

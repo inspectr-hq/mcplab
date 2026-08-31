@@ -81,12 +81,24 @@ describe('mcp tool contracts', () => {
     const parsed = scenarioSchema.safeParse({
       id: 'named-scenario',
       name: 'Named scenario',
-      servers: ['server-a'],
+      mcp_servers: [{ ref: 'server-a' }],
       prompt: 'Run the scenario.'
     });
 
     expect(parsed.success).toBe(true);
     expect((parsed as any).data.name).toBe('Named scenario');
+  });
+
+  it('generates scenario-owned MCP server refs', async () => {
+    const tool = setupTools().get('mcplab_generate_scenario_entry');
+    const result = await tool!.cb({
+      id: 'owned-server-scenario',
+      servers: ['mcp-lab'],
+      prompt: 'Use the MCP server to inspect the library and report the result clearly.'
+    });
+
+    expect(result.structuredContent.scenario.mcp_servers).toEqual([{ ref: 'mcp-lab' }]);
+    expect(result.structuredContent.scenario.servers).toBeUndefined();
   });
 
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
