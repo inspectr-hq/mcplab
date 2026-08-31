@@ -11,7 +11,7 @@ export type TestCaseCreateInput = {
   prompt: string;
   requiredTools?: string[];
   forbiddenTools?: string[];
-  allowedToolSequences?: string[][];
+  toolSequence?: string[];
   responseRegexPatterns?: string[];
   extractRules?: Array<{ name: string; regex: string }>;
 };
@@ -45,7 +45,7 @@ export function createTestCaseFile(params: {
   const testCase = buildScenarioEntry({
     id, name: input.name?.trim() || id, servers, prompt,
     required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
-    allowed_tool_sequences: input.allowedToolSequences,
+    tool_sequence: input.toolSequence,
     response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules
   });
   try {

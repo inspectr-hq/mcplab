@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { normalizeSourceConfig } from './config.js';
 import type { SourceEvalConfig } from './types.js';
 
@@ -11,6 +11,7 @@ export type CreatedEvaluationConfigFile = {
   config: SourceEvalConfig;
   warnings: string[];
 };
+export type UpdatedEvaluationConfigFile = CreatedEvaluationConfigFile;
 
 export function safeEvaluationConfigFileName(name: string): string {
   return (
@@ -52,5 +53,44 @@ export function createEvaluationConfigFile(params: {
     relativePath: relative(evalsDir, resolvedTarget).split(sep).join('/'),
     config,
     warnings
+  };
+}
+
+export function updateEvaluationConfigFile(params: {
+  evalsDir: string;
+  filePath: string;
+  config: SourceEvalConfig;
+}): UpdatedEvaluationConfigFile {
+  const evalsDir = resolve(params.evalsDir);
+  const path = resolve(evalsDir, params.filePath);
+  if (!path.startsWith(`${evalsDir}${sep}`) || !/\.ya?ml$/i.test(path))
+    throw new Error('Evaluation config path is outside the configured evals directory.');
+  if (!existsSync(path)) throw new Error(`Evaluation config not found: ${params.filePath}`);
+  const { config, warnings } = normalizeSourceConfig(params.config);
+  writeFileSync(path, `${stringifyYaml(config)}\n`, { encoding: 'utf8' });
+  return {
+    fileName: path.slice(evalsDir.length + 1).replace(/\.ya?ml$/i, ''),
+    path,
+    relativePath: relative(evalsDir, path).split(sep).join('/'),
+    config,
+    warnings
+  };
+}
+
+export function readEvaluationConfigFile(params: {
+  evalsDir: string;
+  filePath: string;
+}): { fileName: string; path: string; relativePath: string; config: SourceEvalConfig } {
+  const evalsDir = resolve(params.evalsDir);
+  const path = resolve(evalsDir, params.filePath);
+  if (!path.startsWith(`${evalsDir}${sep}`) || !/\.ya?ml$/i.test(path))
+    throw new Error('Evaluation config path is outside the configured evals directory.');
+  if (!existsSync(path)) throw new Error(`Evaluation config not found: ${params.filePath}`);
+  const parsed = normalizeSourceConfig((parseYaml(readFileSync(path, 'utf8')) ?? {}) as SourceEvalConfig);
+  return {
+    fileName: path.slice(evalsDir.length + 1).replace(/\.ya?ml$/i, ''),
+    path,
+    relativePath: relative(evalsDir, path).split(sep).join('/'),
+    config: parsed.config
   };
 }

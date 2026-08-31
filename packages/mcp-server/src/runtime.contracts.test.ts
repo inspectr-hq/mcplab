@@ -150,6 +150,41 @@ describe('mcp tool contracts', () => {
     expect(queueDescription).toContain('does not execute');
   });
 
+  it('accepts the actual nested row shape from aggregate runs', () => {
+    const tool = setupTools().get('mcplab_aggregate_runs');
+    const schema = asSchema(tool!.config.outputSchema);
+    const parsed = schema.safeParse({
+      runs: [{ run_id: 'run-1', timestamp: '2026-08-31T00:00:00Z', config_hash: 'hash' }],
+      group_by: 'run',
+      summary: {
+        total_runs: 1,
+        passed_runs: 1,
+        failed_runs: 0,
+        pass_rate: 1,
+        avg_tool_calls_per_run: 1,
+        avg_tool_latency_ms: 10,
+        selected_run_count: 1
+      },
+      top_worst: [
+        {
+          key: 'run-1',
+          run_id: 'run-1',
+          run_count: 1,
+          summary: {
+            total_runs: 1,
+            passed_runs: 1,
+            failed_runs: 0,
+            pass_rate: 1,
+            avg_tool_calls_per_run: 1,
+            avg_tool_latency_ms: 10
+          }
+        }
+      ],
+      top_best: []
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');

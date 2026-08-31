@@ -34,6 +34,8 @@ import {
   readLibraryAgentsAndServers,
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
+  updateEvaluationConfigFile,
+  readEvaluationConfigFile,
   createTestCaseFile,
   buildScenarioEntry,
   type SourceEvalConfig,
@@ -146,12 +148,7 @@ const AggregateRowSchema = z.object({
       max: z.string()
     })
     .optional(),
-  total_runs: z.number().int().nonnegative(),
-  passed_runs: z.number().int().nonnegative(),
-  failed_runs: z.number().int().nonnegative(),
-  pass_rate: z.number(),
-  avg_tool_calls_per_run: z.number(),
-  avg_tool_latency_ms: z.number().nullable()
+  summary: MetricSummarySchema
 });
 
 const CompareRowSchema = z.object({
@@ -1253,7 +1250,7 @@ export function registerTools(server: McpServer): void {
         prompt: z.string().min(1).max(4000),
         required_tools: z.array(z.string()).optional(),
         forbidden_tools: z.array(z.string()).optional(),
-        allowed_tool_sequences: z.array(z.array(z.string()).min(1)).optional(),
+        tool_sequence: z.array(z.string()).min(1).optional().describe('Required tool calls in order.'),
         extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
         response_regex_patterns: z.array(z.string()).optional()
       }
@@ -1265,7 +1262,7 @@ export function registerTools(server: McpServer): void {
       prompt,
       required_tools,
       forbidden_tools,
-      allowed_tool_sequences,
+      tool_sequence,
       extract_rules,
       response_regex_patterns
     }) =>
@@ -1282,7 +1279,7 @@ export function registerTools(server: McpServer): void {
             prompt,
             requiredTools: required_tools,
             forbiddenTools: forbidden_tools,
-            allowedToolSequences: allowed_tool_sequences,
+            toolSequence: tool_sequence,
             extractRules: extract_rules,
             responseRegexPatterns: response_regex_patterns
           }
@@ -1328,6 +1325,68 @@ export function registerTools(server: McpServer): void {
   );
 
   registerTool(
+    'mcplab_get_evaluation_config',
+    {
+      description: 'Read one existing MCPLab evaluation config, including its full parsed YAML content.',
+      inputSchema: {
+        config_path: z.string().describe('Path to an existing eval YAML, relative to the MCPLab evals directory.')
+      },
+      outputSchema: z.object({
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema
+      })
+    },
+    async ({ config_path }) =>
+      withToolHandling(() => {
+        const result = readEvaluationConfigFile({
+          evalsDir: join(resolveBundleRoot(), 'evals'),
+          filePath: config_path
+        });
+        return ok(`Read evaluation config '${result.relativePath}'`, {
+          path: result.path,
+          relative_path: result.relativePath,
+          config: result.config as unknown as Record<string, unknown>
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_update_evaluation_config',
+    {
+      description:
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file.',
+      inputSchema: {
+        config_path: z.string().describe('Path to an existing eval YAML, relative to the MCPLab evals directory.'),
+        config: GenericObjectSchema.describe('Complete replacement evaluation configuration.'),
+        confirm: z.literal(true).describe('Required confirmation that the existing file should be overwritten.')
+      },
+      outputSchema: {
+        file_name: z.string(),
+        path: z.string(),
+        relative_path: z.string(),
+        config: GenericObjectSchema,
+        warnings: z.array(z.string())
+      }
+    },
+    async ({ config_path, config }) =>
+      withToolHandling(() => {
+        const updated = updateEvaluationConfigFile({
+          evalsDir: join(resolveBundleRoot(), 'evals'),
+          filePath: config_path,
+          config: config as unknown as SourceEvalConfig
+        });
+        return ok(`Updated evaluation config '${updated.relativePath}'`, {
+          file_name: updated.fileName,
+          path: updated.path,
+          relative_path: updated.relativePath,
+          config: updated.config as unknown as Record<string, unknown>,
+          warnings: updated.warnings
+        });
+      })
+  );
+
+  registerTool(
     'mcplab_generate_scenario_entry',
     {
       description:
@@ -1364,10 +1423,11 @@ export function registerTools(server: McpServer): void {
           .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
         required_tools: z.array(z.string()).optional().describe('Tools that must be called.'),
         forbidden_tools: z.array(z.string()).optional().describe('Tools that must not be called.'),
-        allowed_tool_sequences: z
-          .array(z.array(z.string()).min(1))
+        tool_sequence: z
+          .array(z.string())
+          .min(1)
           .optional()
-          .describe('Allowed tool call sequences (exact order groups).'),
+          .describe('Required tool calls in this exact order.'),
         response_regex_patterns: z
           .array(z.string())
           .optional()
@@ -3952,12 +4012,6 @@ function searchableText(value: unknown): string {
   };
   visit(value);
   return tokens.join(' ');
-}
-
-function normalizeStringArray(values?: string[]): string[] | undefined {
-  if (!values) return undefined;
-  const out = values.map((value) => value.trim()).filter(Boolean);
-  return out.length > 0 ? out : undefined;
 }
 
 function indentBlock(text: string, spaces: number): string {

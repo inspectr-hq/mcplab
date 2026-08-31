@@ -28,8 +28,11 @@ export * from './results-query.js';
 export { applyRuntimeServerOverrides, type RuntimeServerOverrides } from './runtime-overrides.js';
 export {
   createEvaluationConfigFile,
+  updateEvaluationConfigFile,
+  readEvaluationConfigFile,
   safeEvaluationConfigFileName,
-  type CreatedEvaluationConfigFile
+  type CreatedEvaluationConfigFile,
+  type UpdatedEvaluationConfigFile
 } from './evaluation-config-store.js';
 export {
   createTestCaseFile,

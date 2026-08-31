@@ -43,14 +43,14 @@ describe('createTestCaseFile', () => {
         prompt: 'Run the complete check.',
         requiredTools: ['search'],
         forbiddenTools: ['delete'],
-        allowedToolSequences: [['search', 'fetch']],
+        toolSequence: ['search', 'fetch'],
         responseRegexPatterns: ['done'],
         extractRules: [{ name: 'value', regex: 'value: (.*)' }]
       }
     });
     expect(created.testCase.eval).toMatchObject({
       tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
-      tool_sequence: { allow: [['search', 'fetch']] },
+      tool_sequence: ['search', 'fetch'],
       response_assertions: [{ type: 'regex', pattern: 'done' }]
     });
     expect(created.testCase.extract).toEqual([

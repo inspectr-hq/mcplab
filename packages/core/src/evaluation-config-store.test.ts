@@ -1,8 +1,12 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createEvaluationConfigFile } from './evaluation-config-store.js';
+import {
+  createEvaluationConfigFile,
+  readEvaluationConfigFile,
+  updateEvaluationConfigFile
+} from './evaluation-config-store.js';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -27,5 +31,25 @@ describe('createEvaluationConfigFile', () => {
     expect(second.fileName).toBe('deepseek-library-eval-1');
     expect(existsSync(first.path)).toBe(true);
     expect(existsSync(second.path)).toBe(true);
+  });
+
+  it('reads and updates an existing config without creating a new file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-eval-store-'));
+    roots.push(root);
+    const created = createEvaluationConfigFile({
+      evalsDir: join(root, 'evals'),
+      fileName: 'suite',
+      config: { name: 'Before', agents: [], scenarios: [] }
+    });
+
+    expect(readEvaluationConfigFile({ evalsDir: join(root, 'evals'), filePath: 'suite.yaml' }).config.name).toBe('Before');
+    const updated = updateEvaluationConfigFile({
+      evalsDir: join(root, 'evals'),
+      filePath: 'suite.yaml',
+      config: { name: 'After', agents: [], scenarios: [] }
+    });
+    expect(updated.config.name).toBe('After');
+    expect(readFileSync(created.path, 'utf8')).toContain('After');
+    expect(existsSync(join(root, 'evals', 'suite-1.yaml'))).toBe(false);
   });
 });

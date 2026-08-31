@@ -8,7 +8,7 @@ export type ScenarioBuildInput = {
   prompt: string;
   required_tools?: string[];
   forbidden_tools?: string[];
-  allowed_tool_sequences?: string[][];
+  tool_sequence?: string[];
   response_regex_patterns?: string[];
   extract_rules?: Array<{ name: string; regex: string }>;
 };
@@ -19,12 +19,12 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   if (!id) throw new Error('Unable to derive scenario id. Provide id or name.');
   const required = unique(input.required_tools);
   const forbidden = unique(input.forbidden_tools);
-  const sequences = (input.allowed_tool_sequences ?? []).filter((s) => s.length > 0).map(unique);
+  const sequence = unique(input.tool_sequence);
   const patterns = unique(input.response_regex_patterns);
   const evalRules = required.length || forbidden.length || sequences.length || patterns.length
     ? {
         ...(required.length || forbidden.length ? { tool_constraints: { ...(required.length ? { required_tools: required } : {}), ...(forbidden.length ? { forbidden_tools: forbidden } : {}) } } : {}),
-        ...(sequences.length ? { tool_sequence: { allow: sequences } } : {}),
+        ...(sequence.length ? { tool_sequence: sequence } : {}),
         ...(patterns.length ? { response_assertions: patterns.map((pattern) => ({ type: 'regex' as const, pattern })) } : {})
       }
     : undefined;
