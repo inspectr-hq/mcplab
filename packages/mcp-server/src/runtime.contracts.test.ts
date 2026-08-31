@@ -40,6 +40,14 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('uses distinct search descriptions for results, traces, reports, and tool analysis', () => {
+    const tools = setupTools();
+    expect((tools.get('mcplab_results_search')!.config as any).description).toContain('INDEXED');
+    expect((tools.get('mcplab_trace_search')!.config as any).description).toContain('RAW');
+    expect((tools.get('mcplab_search_markdown_reports')!.config as any).description).toContain('FILES');
+    expect((tools.get('mcplab_search_tool_analysis_results')!.config as any).description).toContain('TOOL-ANALYSIS');
+  });
+
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-lib-'));
     const bundle = join(root, 'mcplab');

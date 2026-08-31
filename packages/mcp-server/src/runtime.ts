@@ -965,7 +965,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_search_markdown_reports',
     {
       description:
-        'List saved markdown reports under mcplab/reports. Supports filtering by run id substring to find reports linked to a result.',
+        'Search saved Markdown report FILES under mcplab/reports. Use this to locate report documents by filename, path, run-id substring, or report text metadata; it does not search evaluation answers, traces, or tool-analysis records.',
       outputSchema: {
         reports_dir: z.string(),
         run_id_filter: z.string().optional(),
@@ -1806,7 +1806,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_search_tool_analysis_results',
     {
       description:
-        'Search saved MCP tool analysis reports from mcplab/results/tool-analysis. Use the optional query parameter to filter by report_id, server name, agent name, or summary metadata (case-insensitive substring).',
+        'Search saved MCP TOOL-ANALYSIS records under mcplab/results/tool-analysis. Use this for aggregate tool usage, latency, and tool-analysis summaries; do not use it for final answers, raw execution traces, or Markdown report files.',
       outputSchema: {
         tool_analysis_results_dir: z.string(),
         total: z.number().int().nonnegative(),
@@ -2162,7 +2162,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_trace_search',
     {
       description:
-        'Search scenario_run trace content for a text query and return matching message/block items.',
+        'Search RAW SCENARIO-RUN TRACE events and message/block content for a text query. Use this for execution-level evidence such as tool calls, arguments, ordering, or intermediate messages; use mcplab_results_search for indexed result/answer content instead.',
       outputSchema: {
         run_id: z.string(),
         query: z.string().trim().min(1),
@@ -2438,7 +2438,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_results_search',
     {
       description:
-        'Search MCPLab run results in compact LLM-first format. Auto-refreshes index when artifacts changed.',
+        'Search INDEXED MCPLab evaluation RESULTS and final-answer content in compact LLM-first format. Use this for finding passed/failed scenarios, answer text, and result metadata; use mcplab_trace_search for raw execution events, mcplab_search_tool_analysis_results for aggregate tool-analysis records, and mcplab_search_markdown_reports for report files.',
       outputSchema: {
         query: z.string(),
         runs_dir: z.string(),
@@ -2497,7 +2497,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_results_context',
     {
       description:
-        'Fetch focused context for a scenario/run from results, trace, or summary. Returns bounded excerpts only. around is trace-line context and is only valid with source=trace (or when source is omitted).',
+        'Fetch bounded evidence for one run/scenario after a search hit. Use this to inspect a focused result, summary, or trace excerpt; it is not a broad search tool. For broad final-answer/result searches use mcplab_results_search, and for raw trace discovery use mcplab_trace_search.',
       outputSchema: {
         run_id: z.string(),
         scenario_id: z.string(),
@@ -2684,7 +2684,9 @@ const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_list_library: 'Search Library Entries',
   mcplab_generate_agent_entry: 'Generate MCPLab agents.yaml Entry',
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
-  mcplab_trace_search: 'Search Trace Events'
+  mcplab_trace_search: 'Search Raw Trace Events',
+  mcplab_results_search: 'Search Indexed Evaluation Results',
+  mcplab_results_context: 'Fetch Focused Result or Trace Context'
 };
 
 function normalizeOptionalNonEmpty(value?: string): string | undefined {
