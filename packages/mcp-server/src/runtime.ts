@@ -1479,7 +1479,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_run_eval',
     {
       description:
-        'Run a MCPLab evaluation using mcplab-core runAll() from a config file and return the run directory plus summary metrics.',
+        'Execute a MCPLab evaluation immediately in this MCP server process using mcplab-core runAll(). Use this when the caller needs results now; use mcplab_queue_run to hand the run to the APP queue instead.',
       outputSchema: {
         run_dir: z.string(),
         total_scenarios: z.number().int().nonnegative(),
@@ -1655,6 +1655,70 @@ export function registerTools(server: McpServer): void {
           until,
           total_matching: matching.length,
           runs
+        });
+      })
+  );
+
+  registerTool(
+    'mcplab_queue_run',
+    {
+      description:
+        'Add a MCPLab evaluation to the local APP queue for the APP worker to execute later; this tool does not execute the evaluation or return results. Use mcplab_run_eval when results are needed immediately. Returns the queued job id, position, and APP /run URL.',
+      inputSchema: {
+        config_path: z.string().describe('Path to the MCPLab eval YAML config, relative to the APP evals directory or an allowed absolute path.'),
+        scenario_id: z.string().optional().describe('Optional single scenario id to run.'),
+        scenario_ids: z.array(z.string()).min(1).optional().describe('Optional scenario ids to run.'),
+        agents: z.array(z.string()).min(1).optional().describe('Optional agent ids to use.'),
+        runs_per_scenario: z.number().int().positive().optional().describe('Runs per scenario (default 1).'),
+        run_note: z.string().max(500).optional().describe('Optional note attached to the queued run.'),
+        server_override_all: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe('Replace MCP servers for every selected scenario for this queued run.'),
+        scenario_server_overrides: z
+          .record(z.array(z.string()))
+          .optional()
+          .describe('Map scenario ids to replacement MCP server ids for this queued run.')
+      },
+      outputSchema: z.object({
+        jobId: z.string().describe('APP queue job identifier.'),
+        queued: z.boolean().optional().describe('Whether the APP accepted the job into its queue.'),
+        position: z.number().int().nonnegative().optional().describe('Current position in the APP queue.'),
+        queue_url: z.string().url().describe('URL of the APP run queue page.')
+      })
+    },
+    async (input) =>
+      withToolHandling(async () => {
+        const appBaseUrl = process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787';
+        const response = await fetch(new URL('/api/runs', appBaseUrl), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({
+            configPath: input.config_path,
+            runsPerScenario: input.runs_per_scenario ?? 1,
+            ...(input.scenario_id ? { scenarioId: input.scenario_id } : {}),
+            ...(input.scenario_ids ? { scenarioIds: input.scenario_ids } : {}),
+            ...(input.agents ? { agents: input.agents } : {}),
+            ...(input.run_note ? { runNote: input.run_note } : {}),
+            ...(input.server_override_all ? { serverOverrideAll: input.server_override_all } : {}),
+            ...(input.scenario_server_overrides
+              ? { scenarioServerOverrides: input.scenario_server_overrides }
+              : {})
+          })
+        });
+        const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!response.ok) {
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : `APP queue request failed with HTTP ${response.status}`
+          );
+        }
+        if (typeof payload.jobId !== 'string') throw new Error('APP queue response did not include a jobId');
+        return ok(`Queued MCPLab run ${payload.jobId}`, {
+          ...payload,
+          queue_url: new URL('/run', appBaseUrl).toString()
         });
       })
   );
@@ -2687,16 +2751,18 @@ const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_delete_tool_analysis_result',
   'mcplab_write_markdown_report',
   'mcplab_run_eval',
+  'mcplab_queue_run',
   'mcplab_create_test_case',
   'mcplab_create_evaluation_config'
 ]);
 const MUTATING_TOOLS = new Set<string>([
   'mcplab_write_markdown_report',
   'mcplab_run_eval',
+  'mcplab_queue_run',
   'mcplab_create_test_case',
   'mcplab_create_evaluation_config'
 ]);
-const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval']);
+const OPEN_WORLD_TOOLS = new Set<string>(['mcplab_run_eval', 'mcplab_queue_run']);
 const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_write_markdown_report: 'Write Markdown Report to Disk',
   mcplab_search_markdown_reports: 'Search Markdown Reports',
@@ -2705,7 +2771,8 @@ const PREFERRED_TOOL_TITLES: Record<string, string> = {
   mcplab_search_tool_analysis_results: 'Search Tool Analysis Results',
   mcplab_trace_search: 'Search Raw Trace Events',
   mcplab_results_search: 'Search Indexed Evaluation Results',
-  mcplab_results_context: 'Fetch Focused Result or Trace Context'
+  mcplab_results_context: 'Fetch Focused Result or Trace Context',
+  mcplab_queue_run: 'Queue MCPLab Evaluation in APP'
 };
 
 function normalizeOptionalNonEmpty(value?: string): string | undefined {

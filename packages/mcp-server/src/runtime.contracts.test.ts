@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
@@ -99,6 +99,55 @@ describe('mcp tool contracts', () => {
 
     expect(result.structuredContent.scenario.mcp_servers).toEqual([{ ref: 'mcp-lab' }]);
     expect(result.structuredContent.scenario.servers).toBeUndefined();
+  });
+
+  it('queues runs through the APP with agent and server overrides', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ jobId: 'job-123', queued: true, position: 2 }), {
+        status: 202,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const tool = setupTools().get('mcplab_queue_run');
+
+    const result = await tool!.cb({
+      config_path: 'evals/suite.yaml',
+      scenario_ids: ['one', 'two'],
+      agents: ['gpt-5'],
+      runs_per_scenario: 3,
+      server_override_all: ['mcp-lab'],
+      scenario_server_overrides: { two: ['other-server'] }
+    });
+
+    expect(result.structuredContent).toEqual({
+      jobId: 'job-123',
+      queued: true,
+      position: 2,
+      queue_url: 'http://127.0.0.1:8787/run'
+    });
+    const [url, request] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('http://127.0.0.1:8787/api/runs');
+    expect(request.method).toBe('POST');
+    expect(JSON.parse(request.body)).toEqual({
+      configPath: 'evals/suite.yaml',
+      runsPerScenario: 3,
+      scenarioIds: ['one', 'two'],
+      agents: ['gpt-5'],
+      serverOverrideAll: ['mcp-lab'],
+      scenarioServerOverrides: { two: ['other-server'] }
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('clearly distinguishes queueing from immediate evaluation', () => {
+    const tools = setupTools();
+    const runDescription = (tools.get('mcplab_run_eval')!.config as any).description;
+    const queueDescription = (tools.get('mcplab_queue_run')!.config as any).description;
+
+    expect(runDescription).toContain('immediately');
+    expect(queueDescription).toContain('APP queue');
+    expect(queueDescription).toContain('does not execute');
   });
 
   it('mcplab_list_library returns canonical array shapes for servers/agents', async () => {
