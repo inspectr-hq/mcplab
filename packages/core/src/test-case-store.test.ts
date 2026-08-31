@@ -116,7 +116,7 @@ describe('createTestCaseFile', () => {
         filePath: 'first.yaml',
         testCase: { id: 'second', servers: ['mcp-lab'], prompt: 'Renamed case.' }
       })
-    ).toThrow("already used by another Test Case");
+    ).toThrow('already used by another Test Case');
   });
 
   it('rejects unknown servers and duplicate IDs', () => {

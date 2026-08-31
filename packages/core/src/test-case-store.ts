@@ -122,11 +122,7 @@ export function updateTestCaseFile(params: {
   return { id, path: existing.path, testCase };
 }
 
-function assertUniqueTestCaseId(
-  testCasesDir: string,
-  id: string,
-  excludingPath?: string
-): void {
+function assertUniqueTestCaseId(testCasesDir: string, id: string, excludingPath?: string): void {
   if (!existsSync(testCasesDir)) return;
   for (const fileName of readdirSync(testCasesDir)) {
     if (!/\.ya?ml$/i.test(fileName)) continue;
