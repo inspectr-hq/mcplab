@@ -21,7 +21,7 @@ export function buildScenarioEntry(input: ScenarioBuildInput): SourceScenario {
   const forbidden = unique(input.forbidden_tools);
   const sequence = unique(input.tool_sequence);
   const patterns = unique(input.response_regex_patterns);
-  const evalRules = required.length || forbidden.length || sequences.length || patterns.length
+  const evalRules = required.length || forbidden.length || sequence.length || patterns.length
     ? {
         ...(required.length || forbidden.length ? { tool_constraints: { ...(required.length ? { required_tools: required } : {}), ...(forbidden.length ? { forbidden_tools: forbidden } : {}) } } : {}),
         ...(sequence.length ? { tool_sequence: sequence } : {}),
