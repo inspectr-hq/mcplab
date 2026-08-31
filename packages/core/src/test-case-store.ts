@@ -43,7 +43,7 @@ export function createTestCaseFile(params: {
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
   const testCase = buildScenarioEntry({
-    id, name: input.name || id, servers, prompt,
+    id, name: input.name?.trim() || id, servers, prompt,
     required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
     allowed_tool_sequences: input.allowedToolSequences,
     response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules

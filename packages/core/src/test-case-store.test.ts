@@ -57,6 +57,23 @@ describe('createTestCaseFile', () => {
     ]);
   });
 
+  it('defaults whitespace-only names to the test case id', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    const created = createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: {
+        id: 'whitespace-name',
+        name: '   ',
+        servers: ['mcp-lab'],
+        prompt: 'Run the check.'
+      }
+    });
+
+    expect(created.testCase.name).toBe('whitespace-name');
+  });
+
   it('rejects unknown servers and duplicate IDs', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);
