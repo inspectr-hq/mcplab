@@ -1,5 +1,29 @@
 # @inspectr/mcplab
 
+## 1.28.0
+
+### Minor Changes
+
+- feat: add MCP YAML creation tools
+- feat: expose additional MCP discovery tools
+- feat: add MCP tool for queuing APP runs
+- feat: add MCP evaluation config read and update tools
+- feat: add MCP test case read and update tools
+- feat: add MCP app-link builder tool
+- feat: add MCP evaluation-config listing tool
+- feat: add MCP run-listing tool
+- feat: add MCP trace-conversation discovery tool
+- feat: expose MCP skill listing and reading tools
+- feat: show MCP tool context token estimates
+- fix: return 404 for stale MCP sessions
+
+### Patch Changes
+
+- Updated dependencies
+  - @inspectr/mcplab-core@1.22.0
+  - @inspectr/mcplab-mcp-server@1.8.0
+  - @inspectr/mcplab-reporting@1.2.2
+
 ## 1.27.0
 
 ### Minor Changes
