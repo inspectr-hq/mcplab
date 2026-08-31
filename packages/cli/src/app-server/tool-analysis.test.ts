@@ -49,6 +49,12 @@ describe('handleToolAnalysisRoutes', () => {
         {
           serverName: 'demo-server',
           warnings: [],
+          tokenEstimate: {
+            toolCount: 1,
+            total: 42,
+            tools: [{ name: 'get_user_profile', total: 42 }],
+            method: 'js_tiktoken_fallback'
+          },
           tools: [
             {
               tool: {
@@ -104,7 +110,12 @@ describe('handleToolAnalysisRoutes', () => {
                 name: 'get_user_profile',
                 outputSchema: expect.objectContaining({ type: 'object' })
               })
-            ]
+            ],
+            tokenEstimate: expect.objectContaining({
+              toolCount: 1,
+              total: 42,
+              tools: [{ name: 'get_user_profile', total: 42 }]
+            })
           })
         ]
       })

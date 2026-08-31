@@ -14,6 +14,12 @@ export {
 export { runAll, type RunProgressEvent } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';
 export {
+  estimateToolDefinitionTokens,
+  type ToolDefinitionForTokenEstimate,
+  type ToolDefinitionTokenEstimate,
+  type ToolDefinitionTokenEstimates
+} from './tool-definition-token-estimates.js';
+export {
   formatToolInputAssertionFailureReason,
   formatToolInputAssertionLabel,
   formatToolSequenceLabel,

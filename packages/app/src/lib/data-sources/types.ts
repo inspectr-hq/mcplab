@@ -490,6 +490,12 @@ export interface ToolAnalysisDiscoverResponse {
       }>;
     } | null;
     warnings: string[];
+    tokenEstimate?: {
+      toolCount: number;
+      total: number;
+      tools: Array<{ name: string; total: number }>;
+      method: 'js_tiktoken_estimate' | 'js_tiktoken_fallback';
+    };
     tools: ToolAnalysisDiscoveredTool[];
   }>;
 }
