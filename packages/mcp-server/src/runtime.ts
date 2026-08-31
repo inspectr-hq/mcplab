@@ -35,6 +35,7 @@ import {
   resolveScenarioLibraryDir,
   createEvaluationConfigFile,
   createTestCaseFile,
+  buildScenarioEntry,
   type SourceEvalConfig,
   type EvalConfig,
   type ExecutableEvalConfig,
@@ -3075,69 +3076,8 @@ function buildServerEntry(input: {
   };
 }
 
-function buildScenario(input: {
-  id?: string;
-  name?: string;
-  agent?: string;
-  servers: string[];
-  prompt: string;
-  required_tools?: string[];
-  forbidden_tools?: string[];
-  allowed_tool_sequences?: string[][];
-  response_regex_patterns?: string[];
-  extract_rules?: Array<{ name: string; regex: string }>;
-}): EvalConfig['scenarios'][number] {
-  const id = input.id?.trim() || slugify(input.name?.trim() || input.prompt.slice(0, 40));
-  if (!id) {
-    throw new Error('Unable to derive scenario id. Provide id or name.');
-  }
-
-  const scenario: EvalConfig['scenarios'][number] = removeUndefined({
-    id,
-    agent: input.agent?.trim() || undefined,
-    servers: input.servers,
-    prompt: input.prompt,
-    eval: buildEvalRules(input),
-    extract: input.extract_rules?.map((rule) => ({
-      name: rule.name,
-      from: 'final_text',
-      regex: rule.regex
-    }))
-  }) as EvalConfig['scenarios'][number];
-
-  return scenario;
-}
-
-function buildEvalRules(input: {
-  required_tools?: string[];
-  forbidden_tools?: string[];
-  allowed_tool_sequences?: string[][];
-  response_regex_patterns?: string[];
-}): EvalConfig['scenarios'][number]['eval'] | undefined {
-  const toolConstraints =
-    input.required_tools?.length || input.forbidden_tools?.length
-      ? removeUndefined({
-          required_tools: normalizeStringArray(input.required_tools),
-          forbidden_tools: normalizeStringArray(input.forbidden_tools)
-        })
-      : undefined;
-  const toolSequence =
-    input.allowed_tool_sequences && input.allowed_tool_sequences.length > 0
-      ? { allow: input.allowed_tool_sequences }
-      : undefined;
-  const responseAssertions =
-    input.response_regex_patterns && input.response_regex_patterns.length > 0
-      ? input.response_regex_patterns.map((pattern) => ({ type: 'regex' as const, pattern }))
-      : undefined;
-  const evalRules = removeUndefined({
-    tool_constraints: toolConstraints,
-    tool_sequence: toolSequence,
-    response_assertions: responseAssertions
-  }) as EvalConfig['scenarios'][number]['eval'];
-  if (Object.keys(evalRules ?? {}).length === 0) {
-    return undefined;
-  }
-  return evalRules;
+function buildScenario(input: Parameters<typeof buildScenarioEntry>[0]): EvalConfig['scenarios'][number] {
+  return buildScenarioEntry(input) as EvalConfig['scenarios'][number];
 }
 
 function validateScenarioHeuristics(scenario: EvalConfig['scenarios'][number]): string[] {
@@ -3946,14 +3886,6 @@ function normalizeStringArray(values?: string[]): string[] | undefined {
   if (!values) return undefined;
   const out = values.map((value) => value.trim()).filter(Boolean);
   return out.length > 0 ? out : undefined;
-}
-
-function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
 }
 
 function indentBlock(text: string, spaces: number): string {

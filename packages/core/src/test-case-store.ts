@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type { SourceScenario } from './types.js';
+import { buildScenarioEntry } from './scenario-builder.js';
 
 export type TestCaseCreateInput = {
   id: string;
@@ -41,55 +42,12 @@ export function createTestCaseFile(params: {
   if (!path.startsWith(`${testCasesDir}${sep}`))
     throw new Error('Test Case path is outside the canonical test-cases directory.');
   if (existsSync(path)) throw new Error(`Test Case '${id}' already exists.`);
-  const requiredTools = unique(input.requiredTools ?? []);
-  const forbiddenTools = unique(input.forbiddenTools ?? []);
-  const allowedToolSequences = (input.allowedToolSequences ?? [])
-    .filter((sequence) => sequence.length > 0)
-    .map(unique);
-  const regexes = unique(input.responseRegexPatterns ?? []);
-  const testCase = {
-    id,
-    name: input.name?.trim() || id,
-    servers,
-    prompt,
-    ...(requiredTools.length ||
-    forbiddenTools.length ||
-    allowedToolSequences.length ||
-    regexes.length
-      ? {
-          eval: {
-            ...(requiredTools.length || forbiddenTools.length
-              ? {
-                  tool_constraints: {
-                    ...(requiredTools.length ? { required_tools: requiredTools } : {}),
-                    ...(forbiddenTools.length ? { forbidden_tools: forbiddenTools } : {})
-                  }
-                }
-              : {}),
-            ...(allowedToolSequences.length
-              ? { tool_sequence: { allow: allowedToolSequences } }
-              : {}),
-            ...(regexes.length
-              ? {
-                  response_assertions: regexes.map((pattern) => ({
-                    type: 'regex' as const,
-                    pattern
-                  }))
-                }
-              : {})
-          }
-        }
-      : {}),
-    ...(input.extractRules?.length
-      ? {
-          extract: input.extractRules.map((rule) => ({
-            name: rule.name,
-            from: 'final_text' as const,
-            regex: rule.regex
-          }))
-        }
-      : {})
-  } as SourceScenario;
+  const testCase = buildScenarioEntry({
+    id, name: input.name || id, servers, prompt,
+    required_tools: input.requiredTools, forbidden_tools: input.forbiddenTools,
+    allowed_tool_sequences: input.allowedToolSequences,
+    response_regex_patterns: input.responseRegexPatterns, extract_rules: input.extractRules
+  });
   try {
     writeFileSync(path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8', flag: 'wx' });
   } catch (error) {

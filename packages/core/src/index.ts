@@ -36,6 +36,7 @@ export {
   type CreatedTestCaseFile,
   type TestCaseCreateInput
 } from './test-case-store.js';
+export { buildScenarioEntry, type ScenarioBuildInput } from './scenario-builder.js';
 export {
   createLangSmithTraceExporter,
   type LangSmithRun,
