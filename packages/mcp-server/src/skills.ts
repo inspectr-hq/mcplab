@@ -35,7 +35,9 @@ function parseFrontmatterDescription(skillMdContent: string): string {
   try {
     const frontmatter = parseYaml(match[1]);
     const description =
-      frontmatter && typeof frontmatter === 'object' ? (frontmatter as Record<string, unknown>).description : undefined;
+      frontmatter && typeof frontmatter === 'object'
+        ? (frontmatter as Record<string, unknown>).description
+        : undefined;
     return typeof description === 'string' ? description.trim() : '';
   } catch {
     return '';
@@ -64,11 +66,7 @@ function listFilesRecursive(dir: string, base: string): string[] {
 const SAFE_SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const SAFE_RELATIVE_FILE_PATH_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._/-]*$/;
 
-function loadSkill(
-  skillsRoot: string,
-  name: string,
-  logger: Pick<Console, 'error'>
-): LoadedSkill {
+function loadSkill(skillsRoot: string, name: string, logger: Pick<Console, 'error'>): LoadedSkill {
   const dir = join(skillsRoot, name);
   const relativeFiles = listFilesRecursive(dir, dir).filter((relPath) => {
     if (SAFE_RELATIVE_FILE_PATH_PATTERN.test(relPath)) return true;
@@ -141,7 +139,8 @@ export function readSkillFile(name: string, file: string): string {
   // though the lexical (pre-symlink-resolution) path above looked contained.
   const realSkillsRoot = realpathSync(skillsRoot);
   const realDir = realpathSync(dir);
-  const dirReallyWithinRoot = realDir === realSkillsRoot || realDir.startsWith(realSkillsRoot + sep);
+  const dirReallyWithinRoot =
+    realDir === realSkillsRoot || realDir.startsWith(realSkillsRoot + sep);
   if (!dirReallyWithinRoot) {
     throw new Error(`Unknown skill: ${name}`);
   }
@@ -231,4 +230,3 @@ export function registerSkills(
   }
   return skills;
 }
-

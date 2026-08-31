@@ -13,7 +13,14 @@ export type CreatedEvaluationConfigFile = {
 };
 
 export function safeEvaluationConfigFileName(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `config-${Date.now()}`;
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || `config-${Date.now()}`
+  );
 }
 
 export function createEvaluationConfigFile(params: {
@@ -29,7 +36,8 @@ export function createEvaluationConfigFile(params: {
   let suffix = 1;
   while (existsSync(target)) target = join(evalsDir, `${fileName}-${suffix++}.yaml`);
   const resolvedTarget = resolve(target);
-  if (!resolvedTarget.startsWith(`${evalsDir}${sep}`)) throw new Error('Evaluation config path is outside the configured evals directory.');
+  if (!resolvedTarget.startsWith(`${evalsDir}${sep}`))
+    throw new Error('Evaluation config path is outside the configured evals directory.');
   writeFileSync(resolvedTarget, `${stringifyYaml(config)}\n`, 'utf8');
   return {
     fileName: resolvedTarget.slice(evalsDir.length + 1).replace(/\.yaml$/i, ''),
