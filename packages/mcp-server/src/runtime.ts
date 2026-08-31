@@ -48,6 +48,7 @@ import {
 import { renderReport } from '@inspectr/mcplab-reporting';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { z } from 'zod';
+import { loadSkills, readSkillFile, registerSkills } from './skills.js';
 import {
   buildAggregateRunsReport,
   buildCompareRunsReport,
@@ -682,6 +683,7 @@ export function createConfiguredServer(): McpServer {
     websiteUrl: 'https://mcplab.inspectr.dev',
     icons: [{ src: SERVER_ICON_URL, mimeType: 'image/svg+xml' }]
   });
+  registerSkills(server);
   registerTools(server);
   registerPrompts(server);
   return server;
@@ -723,6 +725,20 @@ export function registerTools(server: McpServer): void {
       cb as never
     );
   };
+
+  registerTool('mcplab_build_app_link', {
+    description: 'Build a safe deep link to a local MCPLab app view.',
+    inputSchema: { view: z.enum(['home', 'evaluations', 'run_evaluation', 'results', 'compare', 'tool_analysis', 'library_servers', 'library_agents', 'library_test_cases', 'settings']), run_id: z.string().optional(), config_id: z.string().optional() },
+    outputSchema: { url: z.string(), view: z.string() }
+  }, async ({ view, run_id, config_id }) => withToolHandling(() => {
+    const paths: Record<string, string> = { home: '/', evaluations: '/evaluations', run_evaluation: '/run', results: '/results', compare: '/compare', tool_analysis: '/tool-analysis', library_servers: '/servers', library_agents: '/agents', library_test_cases: '/test-cases', settings: '/settings' };
+    const path = paths[view];
+    if (!path) throw new Error(`Unsupported app view: ${view}`);
+    const url = new URL(path, process.env.MCPLAB_APP_URL ?? 'http://127.0.0.1:8787');
+    if (run_id) url.searchParams.set('run', run_id);
+    if (config_id) url.searchParams.set('config', config_id);
+    return ok(`Built app link for ${view}`, { url: url.toString(), view });
+  }));
 
   registerTool(
     'mcplab_write_markdown_report',
@@ -1270,6 +1286,21 @@ export function registerTools(server: McpServer): void {
     }
   );
 
+  registerTool('mcplab_list_evaluation_configs', {
+    description: 'List evaluation YAML files under mcplab/evals with optional text filtering and sorting.',
+    inputSchema: { query: z.string().optional(), sort_direction: z.enum(['asc', 'desc']).optional(), limit: z.number().int().positive().max(200).optional() },
+    outputSchema: { total_matching: z.number(), configs: z.array(z.object({ file_name: z.string(), path: z.string(), name: z.string().optional(), updated_at: z.string() })) }
+  }, async ({ query, sort_direction, limit }) => withToolHandling(() => {
+    const root = join(resolveBundleRoot(), 'evals');
+    const files: string[] = [];
+    const walk = (dir: string) => { if (!existsSync(dir)) return; for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name); if (entry.isDirectory()) walk(path); else if (/\.ya?ml$/i.test(entry.name)) files.push(path); } };
+    walk(root);
+    const q = query?.trim().toLowerCase();
+    const configs = files.map((path) => { let name: string | undefined; try { const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown>; name = typeof parsed?.name === 'string' ? parsed.name : undefined; } catch {} return { file_name: relative(root, path).replace(/\\/g, '/').replace(/\.ya?ml$/i, ''), path, name, updated_at: statSync(path).mtime.toISOString() }; }).filter((item) => !q || `${item.file_name} ${item.name ?? ''}`.toLowerCase().includes(q)).sort((a, b) => (a.name ?? a.file_name).localeCompare(b.name ?? b.file_name));
+    if (sort_direction === 'desc') configs.reverse();
+    return ok(`Found ${configs.length} evaluation configuration(s)`, { total_matching: configs.length, configs: configs.slice(0, limit ?? 50) });
+  }));
+
   registerTool(
     'mcplab_validate_config',
     {
@@ -1434,6 +1465,19 @@ export function registerTools(server: McpServer): void {
       });
     }
   );
+
+  registerTool('mcplab_list_runs', {
+    description: 'List MCPLab evaluation runs with optional inclusive ISO time bounds.',
+    inputSchema: { since: z.string().datetime().optional(), until: z.string().datetime().optional(), limit: z.number().int().positive().max(200).optional() },
+    outputSchema: { since: z.string().optional(), until: z.string().optional(), total_matching: z.number(), runs: z.array(z.object({ run_id: z.string(), timestamp: z.string().optional(), config_hash: z.string().optional(), summary: z.any().optional() })) }
+  }, async ({ since, until, limit }) => withToolHandling(() => {
+    const sinceMs = since ? new Date(since).getTime() : undefined;
+    const untilMs = until ? new Date(until).getTime() : undefined;
+    if (sinceMs !== undefined && untilMs !== undefined && sinceMs > untilMs) throw new Error('since must be earlier than or equal to until');
+    const matching = listRunsWithFallback(resolveRunsDir(), undefined, true).filter((entry) => { const timestamp = String(entry.metadata && typeof entry.metadata === 'object' ? (entry.metadata as any).timestamp ?? '' : ''); const time = new Date(timestamp).getTime(); return !Number.isNaN(time) && (sinceMs === undefined || time >= sinceMs) && (untilMs === undefined || time <= untilMs); });
+    const runs = matching.slice(0, limit ?? 50).map((entry) => ({ run_id: String(entry.run_id), timestamp: typeof (entry.metadata as any)?.timestamp === 'string' ? (entry.metadata as any).timestamp : undefined, config_hash: typeof (entry.metadata as any)?.config_hash === 'string' ? (entry.metadata as any).config_hash : undefined, summary: entry.summary }));
+    return ok(`Found ${matching.length} run(s)`, { since, until, total_matching: matching.length, runs });
+  }));
 
   registerTool(
     'mcplab_aggregate_runs',
@@ -2344,6 +2388,23 @@ export function registerTools(server: McpServer): void {
       });
     }
   );
+  registerTool('mcplab_list_skills', {
+    description: 'List MCPLab skills bundled with this MCP server.',
+    inputSchema: {},
+    outputSchema: { skills: z.array(z.object({ name: z.string(), description: z.string(), files: z.array(z.string()) })) }
+  }, async () => withToolHandling(() => {
+    const skills = loadSkills();
+    return ok(`Found ${skills.length} MCPLab skill(s)`, { skills: skills.map(({ name, description, files }) => ({ name, description, files })) });
+  }));
+
+  registerTool('mcplab_get_skill', {
+    description: 'Read one file from a bundled MCPLab skill. Defaults to SKILL.md.',
+    inputSchema: { name: z.string(), file: z.string().optional() },
+    outputSchema: { name: z.string(), file: z.string(), content: z.string() }
+  }, async ({ name, file }) => withToolHandling(() => {
+    const targetFile = file ?? 'SKILL.md';
+    return ok(`Read ${name}/${targetFile}`, { name, file: targetFile, content: readSkillFile(name, targetFile) });
+  }));
 }
 
 export function registerPrompts(server: McpServer): void {
