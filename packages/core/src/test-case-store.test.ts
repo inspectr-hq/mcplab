@@ -31,14 +31,20 @@ describe('createTestCaseFile', () => {
   });
 
   it('preserves generated constraints, sequences, and extract rules', () => {
-    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-')); roots.push(root);
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
     const created = createTestCaseFile({
       librariesDir: root,
       knownServerIds: ['mcp-lab'],
       testCase: {
-        id: 'full-case', servers: ['mcp-lab'], prompt: 'Run the complete check.',
-        requiredTools: ['search'], forbiddenTools: ['delete'], allowedToolSequences: [['search', 'fetch']],
-        responseRegexPatterns: ['done'], extractRules: [{ name: 'value', regex: 'value: (.*)' }]
+        id: 'full-case',
+        servers: ['mcp-lab'],
+        prompt: 'Run the complete check.',
+        requiredTools: ['search'],
+        forbiddenTools: ['delete'],
+        allowedToolSequences: [['search', 'fetch']],
+        responseRegexPatterns: ['done'],
+        extractRules: [{ name: 'value', regex: 'value: (.*)' }]
       }
     });
     expect(created.testCase.eval).toMatchObject({
@@ -46,7 +52,9 @@ describe('createTestCaseFile', () => {
       tool_sequence: { allow: [['search', 'fetch']] },
       response_assertions: [{ type: 'regex', pattern: 'done' }]
     });
-    expect(created.testCase.extract).toEqual([{ name: 'value', from: 'final_text', regex: 'value: (.*)' }]);
+    expect(created.testCase.extract).toEqual([
+      { name: 'value', from: 'final_text', regex: 'value: (.*)' }
+    ]);
   });
 
   it('rejects unknown servers and duplicate IDs', () => {

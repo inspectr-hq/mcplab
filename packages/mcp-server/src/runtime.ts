@@ -304,14 +304,7 @@ const ResolvedScenarioSchema = z.object({
   servers: z.array(z.string()),
   agent: z.string().optional(),
   prompt: z.string().optional(),
-  eval: z
-    .object({
-      type: z.string(),
-      assertions: z.array(z.string()).optional(),
-      rubric: GenericObjectSchema.optional()
-    })
-    .passthrough()
-    .optional(),
+  eval: GenericObjectSchema.optional(),
   extract: z
     .array(
       z
@@ -780,7 +773,18 @@ export function registerTools(server: McpServer): void {
       },
       outputSchema: { url: z.string().url(), view: z.string(), path: z.string() }
     },
-    async ({ view, run_id, tool_analysis_id, config_id, agent, scenario, time_filter, time_preset, time_start, time_end }) =>
+    async ({
+      view,
+      run_id,
+      tool_analysis_id,
+      config_id,
+      agent,
+      scenario,
+      time_filter,
+      time_preset,
+      time_start,
+      time_end
+    }) =>
       withToolHandling(() => {
         const paths: Record<string, string> = {
           home: '/',
@@ -809,8 +813,10 @@ export function registerTools(server: McpServer): void {
         if (time_preset) url.searchParams.set('time_preset', time_preset);
         if (time_start) url.searchParams.set('time_start', time_start);
         if (time_end) url.searchParams.set('time_end', time_end);
-        if (view === 'result_detail' && !run_id) throw new Error('run_id is required for result_detail');
-        if (view === 'tool_analysis_result' && !tool_analysis_id) throw new Error('tool_analysis_id is required for tool_analysis_result');
+        if (view === 'result_detail' && !run_id)
+          throw new Error('run_id is required for result_detail');
+        if (view === 'tool_analysis_result' && !tool_analysis_id)
+          throw new Error('tool_analysis_id is required for tool_analysis_result');
         return ok(`Built app link for ${view}`, { url: url.toString(), view, path });
       })
   );
@@ -1250,7 +1256,17 @@ export function registerTools(server: McpServer): void {
         response_regex_patterns: z.array(z.string()).optional()
       }
     },
-    async ({ id, name, servers, prompt, required_tools, forbidden_tools, allowed_tool_sequences, extract_rules, response_regex_patterns }) =>
+    async ({
+      id,
+      name,
+      servers,
+      prompt,
+      required_tools,
+      forbidden_tools,
+      allowed_tool_sequences,
+      extract_rules,
+      response_regex_patterns
+    }) =>
       withToolHandling(async () => {
         const bundleRoot = resolveBundleRoot();
         const library = readLibrary(bundleRoot, false);
@@ -1399,14 +1415,17 @@ export function registerTools(server: McpServer): void {
         suite: z.string().optional(),
         query: z.string().optional(),
         sort_by: z.enum(['name', 'scenarios', 'agents', 'updated_at']).optional(),
-        sort_direction: z.enum(['asc', 'desc']).optional(),
+        sort_direction: z.enum(['asc', 'desc']).optional()
       },
       outputSchema: EvaluationConfigListSchema
     },
-    async ({ suite, query, sort_by, sort_direction }) => withToolHandling(() => ok(
-      'Listed evaluation configurations',
-      listEvaluationConfigs({ suite, query, sortBy: sort_by, sortDirection: sort_direction })
-    ))
+    async ({ suite, query, sort_by, sort_direction }) =>
+      withToolHandling(() =>
+        ok(
+          'Listed evaluation configurations',
+          listEvaluationConfigs({ suite, query, sortBy: sort_by, sortDirection: sort_direction })
+        )
+      )
   );
 
   registerTool(
@@ -1617,20 +1636,18 @@ export function registerTools(server: McpServer): void {
             (untilMs === undefined || time <= untilMs)
           );
         });
-        const runs = matching
-          .slice(0, limit ?? 50)
-          .map((entry) => ({
-            run_id: String(entry.run_id),
-            timestamp:
-              typeof (entry.metadata as any)?.timestamp === 'string'
-                ? (entry.metadata as any).timestamp
-                : undefined,
-            config_hash:
-              typeof (entry.metadata as any)?.config_hash === 'string'
-                ? (entry.metadata as any).config_hash
-                : undefined,
-            summary: entry.summary
-          }));
+        const runs = matching.slice(0, limit ?? 50).map((entry) => ({
+          run_id: String(entry.run_id),
+          timestamp:
+            typeof (entry.metadata as any)?.timestamp === 'string'
+              ? (entry.metadata as any).timestamp
+              : undefined,
+          config_hash:
+            typeof (entry.metadata as any)?.config_hash === 'string'
+              ? (entry.metadata as any).config_hash
+              : undefined,
+          summary: entry.summary
+        }));
         return ok(`Found ${matching.length} run(s)`, {
           since,
           until,
@@ -2916,14 +2933,18 @@ function listEvaluationConfigs(params: {
   walk(evalsDir);
   const all = files.map((path) => {
     const relativePath = relative(evalsDir, path).split(sep).join('/');
-    const suitePath = dirname(relativePath) === '.' ? '' : dirname(relativePath).split(sep).join('/');
+    const suitePath =
+      dirname(relativePath) === '.' ? '' : dirname(relativePath).split(sep).join('/');
     const fallbackName = basename(path, extname(path));
     const stat = statSync(path);
     try {
       const parsed = parseYaml(readFileSync(path, 'utf8')) as Record<string, unknown>;
       return {
         id: Buffer.from(relativePath, 'utf8').toString('base64url'),
-        name: typeof parsed?.name === 'string' && parsed.name.trim() ? parsed.name.trim() : fallbackName,
+        name:
+          typeof parsed?.name === 'string' && parsed.name.trim()
+            ? parsed.name.trim()
+            : fallbackName,
         relative_path: relativePath,
         config_path: path,
         suite_path: suitePath,
@@ -2932,21 +2953,62 @@ function listEvaluationConfigs(params: {
         agent_count: Array.isArray(parsed?.agents) ? parsed.agents.length : 0
       };
     } catch (error) {
-      return { id: Buffer.from(relativePath, 'utf8').toString('base64url'), name: fallbackName, relative_path: relativePath, config_path: path, suite_path: suitePath, updated_at: stat.mtime.toISOString(), scenario_count: 0, agent_count: 0, error: error instanceof Error ? error.message : String(error) };
+      return {
+        id: Buffer.from(relativePath, 'utf8').toString('base64url'),
+        name: fallbackName,
+        relative_path: relativePath,
+        config_path: path,
+        suite_path: suitePath,
+        updated_at: stat.mtime.toISOString(),
+        scenario_count: 0,
+        agent_count: 0,
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   });
   const suite = params.suite?.trim().replace(/^suite:/, '');
   const query = params.query?.trim().toLowerCase();
-  const matching = all.filter((config) => (!suite || config.suite_path === suite || config.suite_path.startsWith(`${suite}/`)) && (!query || `${config.name} ${config.relative_path} ${config.error ?? ''}`.toLowerCase().includes(query)));
+  const matching = all.filter(
+    (config) =>
+      (!suite || config.suite_path === suite || config.suite_path.startsWith(`${suite}/`)) &&
+      (!query ||
+        `${config.name} ${config.relative_path} ${config.error ?? ''}`
+          .toLowerCase()
+          .includes(query))
+  );
   const sortBy = params.sortBy ?? 'name';
   const direction = params.sortDirection ?? 'asc';
   matching.sort((a, b) => {
-    const left = sortBy === 'scenarios' ? a.scenario_count : sortBy === 'agents' ? a.agent_count : sortBy === 'updated_at' ? Date.parse(a.updated_at) : a.name;
-    const right = sortBy === 'scenarios' ? b.scenario_count : sortBy === 'agents' ? b.agent_count : sortBy === 'updated_at' ? Date.parse(b.updated_at) : b.name;
-    const comparison = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right));
+    const left =
+      sortBy === 'scenarios'
+        ? a.scenario_count
+        : sortBy === 'agents'
+        ? a.agent_count
+        : sortBy === 'updated_at'
+        ? Date.parse(a.updated_at)
+        : a.name;
+    const right =
+      sortBy === 'scenarios'
+        ? b.scenario_count
+        : sortBy === 'agents'
+        ? b.agent_count
+        : sortBy === 'updated_at'
+        ? Date.parse(b.updated_at)
+        : b.name;
+    const comparison =
+      typeof left === 'number' && typeof right === 'number'
+        ? left - right
+        : String(left).localeCompare(String(right));
     return direction === 'asc' ? comparison : -comparison;
   });
-  return { evals_dir: evalsDir, total: all.length, matching: matching.length, filters: removeUndefined({ suite, query }), sort: { by: sortBy, direction }, configs: matching };
+  return {
+    evals_dir: evalsDir,
+    total: all.length,
+    matching: matching.length,
+    filters: removeUndefined({ suite, query }),
+    sort: { by: sortBy, direction },
+    configs: matching
+  };
 }
 
 function buildServerEntry(input: {
