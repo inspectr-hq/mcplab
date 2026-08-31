@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
 type RegisteredTool = {
-  config: { inputSchema?: unknown; outputSchema?: unknown };
+  config: { inputSchema?: unknown; outputSchema?: unknown; annotations?: Record<string, unknown> };
   cb: (args: Record<string, unknown>) => Promise<any> | any;
 };
 
@@ -159,6 +159,15 @@ describe('mcp tool contracts', () => {
     expect((tools.get('mcplab_trace_get_conversation')!.config as any).description).toContain(
       'mcplab_trace_list_conversations first'
     );
+  });
+
+  it('marks test-case updates as mutating and destructive', () => {
+    const tools = setupTools();
+    expect(tools.get('mcplab_update_test_case')!.config.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false
+    });
   });
 
   it('accepts the actual nested row shape from aggregate runs', () => {

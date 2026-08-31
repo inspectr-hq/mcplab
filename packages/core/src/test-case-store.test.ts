@@ -95,6 +95,30 @@ describe('createTestCaseFile', () => {
     expect(updated.testCase.prompt).toBe('After');
   });
 
+  it('rejects updating a test case to an id already used by another file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: { id: 'first', servers: ['mcp-lab'], prompt: 'First case.' }
+    });
+    createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: { id: 'second', servers: ['mcp-lab'], prompt: 'Second case.' }
+    });
+
+    expect(() =>
+      updateTestCaseFile({
+        librariesDir: root,
+        knownServerIds: ['mcp-lab'],
+        filePath: 'first.yaml',
+        testCase: { id: 'second', servers: ['mcp-lab'], prompt: 'Renamed case.' }
+      })
+    ).toThrow("already used by another Test Case");
+  });
+
   it('rejects unknown servers and duplicate IDs', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);

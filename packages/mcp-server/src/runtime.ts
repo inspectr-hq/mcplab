@@ -2975,6 +2975,7 @@ const DESTRUCTIVE_TOOLS = new Set<string>([
   'mcplab_run_eval',
   'mcplab_queue_run',
   'mcplab_create_test_case',
+  'mcplab_update_test_case',
   'mcplab_create_evaluation_config',
   'mcplab_update_evaluation_config'
 ]);
@@ -2983,6 +2984,7 @@ const MUTATING_TOOLS = new Set<string>([
   'mcplab_run_eval',
   'mcplab_queue_run',
   'mcplab_create_test_case',
+  'mcplab_update_test_case',
   'mcplab_create_evaluation_config',
   'mcplab_update_evaluation_config'
 ]);

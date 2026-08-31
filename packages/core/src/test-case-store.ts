@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { SourceScenario } from './types.js';
@@ -115,8 +115,33 @@ export function updateTestCaseFile(params: {
     response_regex_patterns: input.responseRegexPatterns,
     extract_rules: input.extractRules
   });
+  const librariesDir = resolve(params.librariesDir);
+  const testCasesDir = resolve(librariesDir, 'test-cases');
+  assertUniqueTestCaseId(testCasesDir, id, existing.path);
   writeFileSync(existing.path, `${stringifyYaml(testCase)}\n`, { encoding: 'utf8' });
   return { id, path: existing.path, testCase };
+}
+
+function assertUniqueTestCaseId(
+  testCasesDir: string,
+  id: string,
+  excludingPath?: string
+): void {
+  if (!existsSync(testCasesDir)) return;
+  for (const fileName of readdirSync(testCasesDir)) {
+    if (!/\.ya?ml$/i.test(fileName)) continue;
+    const candidatePath = resolve(testCasesDir, fileName);
+    if (excludingPath && candidatePath === excludingPath) continue;
+    let parsed: Record<string, unknown> | null;
+    try {
+      parsed = parseYaml(readFileSync(candidatePath, 'utf8')) as Record<string, unknown> | null;
+    } catch {
+      continue;
+    }
+    if (typeof parsed?.id === 'string' && parsed.id.trim() === id) {
+      throw new Error(`Test Case id '${id}' is already used by another Test Case: ${fileName}`);
+    }
+  }
 }
 
 function unique(values: string[]): string[] {
