@@ -58,6 +58,111 @@ describe('createTestCaseFile', () => {
     ]);
   });
 
+  it('persists canonical evaluation assertion types', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    const created = createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: {
+        id: 'canonical-rules',
+        servers: ['mcp-lab'],
+        prompt: 'Run the complete canonical check.',
+        eval: {
+          tool_sequence: ['search', 'fetch'],
+          response_assertions: [
+            { type: 'contains', value: 'Paris' },
+            { type: 'not_contains', value: 'error' },
+            { type: 'starts_with', value: 'Weather' },
+            { type: 'ends_with', value: '°C' },
+            { type: 'equals', value: 'Weather: 20°C' },
+            { type: 'regex', pattern: '20°C' },
+            { type: 'jsonpath_exists', path: '$.forecast' },
+            { type: 'jsonpath_not_exists', path: '$.error' },
+            { type: 'jsonpath', path: '$.days', equals: 5 }
+          ],
+          tool_input_assertions: [
+            { type: 'contains', tool: 'search', value: 'Paris' },
+            { type: 'regex', tool: 'fetch', pattern: 'forecast' },
+            { type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }
+          ],
+          agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }],
+          agent_context: {
+            include_prompt: true,
+            include_tool_sequence: true,
+            include_tool_inputs: true
+          }
+        }
+      }
+    });
+
+    expect(created.testCase.eval).toMatchObject({
+      tool_sequence: ['search', 'fetch'],
+      response_assertions: expect.arrayContaining([
+        { type: 'contains', value: 'Paris' },
+        { type: 'jsonpath', path: '$.days', equals: 5 }
+      ]),
+      tool_input_assertions: expect.arrayContaining([
+        { type: 'contains', tool: 'search', value: 'Paris' }
+      ]),
+      agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }],
+      agent_context: {
+        include_prompt: true,
+        include_tool_sequence: true,
+        include_tool_inputs: true
+      }
+    });
+  });
+
+  it('rejects conflicting convenience and canonical response checks', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    expect(() =>
+      createTestCaseFile({
+        librariesDir: root,
+        knownServerIds: ['mcp-lab'],
+        testCase: {
+          id: 'conflicting-rules',
+          servers: ['mcp-lab'],
+          prompt: 'Run the conflicting check.',
+          responseRegexPatterns: ['Paris'],
+          eval: { response_assertions: [{ type: 'contains', value: 'Paris' }] }
+        }
+      })
+    ).toThrow(
+      'Provide response_regex_patterns either as a convenience field or in eval.response_assertions'
+    );
+  });
+
+  it('ignores empty canonical arrays when merging shorthand rules', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
+    roots.push(root);
+    const created = createTestCaseFile({
+      librariesDir: root,
+      knownServerIds: ['mcp-lab'],
+      testCase: {
+        id: 'empty-canonical-rules',
+        servers: ['mcp-lab'],
+        prompt: 'Run the check.',
+        requiredTools: ['search'],
+        forbiddenTools: ['delete'],
+        toolSequence: ['search'],
+        responseRegexPatterns: ['done'],
+        eval: {
+          tool_constraints: { required_tools: [], forbidden_tools: [] },
+          tool_sequence: [],
+          response_assertions: []
+        }
+      }
+    });
+
+    expect(created.testCase.eval).toMatchObject({
+      tool_constraints: { required_tools: ['search'], forbidden_tools: ['delete'] },
+      tool_sequence: ['search'],
+      response_assertions: [{ type: 'regex', pattern: 'done' }]
+    });
+  });
+
   it('defaults whitespace-only names to the test case id', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);

@@ -266,13 +266,149 @@ const ServerEntrySchema = z.object({
   auth: ServerAuthSchema.optional()
 });
 
+const ResponseAssertionSchema = z
+  .discriminatedUnion('type', [
+    z.object({
+      type: z.literal('regex').describe('Match the final response against a regular expression.'),
+      pattern: z.string().describe('JavaScript regex pattern; matching is case-insensitive.')
+    }),
+    z.object({
+      type: z.literal('contains').describe('Require literal text in the final response.'),
+      value: z.string().describe('Case-insensitive text that must appear.')
+    }),
+    z.object({
+      type: z
+        .literal('not_contains')
+        .describe('Require literal text to be absent from the final response.'),
+      value: z.string().describe('Case-insensitive text that must not appear.')
+    }),
+    z.object({
+      type: z
+        .literal('starts_with')
+        .describe('Require the final response to start with literal text.'),
+      value: z.string().describe('Case-insensitive prefix.')
+    }),
+    z.object({
+      type: z.literal('ends_with').describe('Require the final response to end with literal text.'),
+      value: z.string().describe('Case-insensitive suffix.')
+    }),
+    z.object({
+      type: z
+        .literal('equals')
+        .describe('Require the entire final response to equal literal text.'),
+      value: z.string().describe('Case-insensitive expected response.')
+    }),
+    z.object({
+      type: z.literal('jsonpath').describe('Inspect a value in a JSON final response.'),
+      path: z.string().describe('JSONPath expression.'),
+      equals: z
+        .union([z.string(), z.number(), z.boolean()])
+        .optional()
+        .describe('Optional primitive value that must match.')
+    }),
+    z.object({
+      type: z
+        .literal('jsonpath_exists')
+        .describe('Require a JSONPath to exist in a JSON final response.'),
+      path: z.string().describe('JSONPath expression.')
+    }),
+    z.object({
+      type: z
+        .literal('jsonpath_not_exists')
+        .describe('Require a JSONPath to be absent from a JSON final response.'),
+      path: z.string().describe('JSONPath expression.')
+    })
+  ])
+  .describe('Assertions evaluated against the final response text or JSON.');
+const ToolInputAssertionSchema = z
+  .discriminatedUnion('type', [
+    z.object({
+      type: z.literal('contains').describe('Require text in serialized tool arguments.'),
+      tool: z.string().describe('Raw MCP tool name.'),
+      value: z.string().describe('Case-insensitive text that must appear in arguments.')
+    }),
+    z.object({
+      type: z.literal('regex').describe('Match serialized tool arguments with a regex.'),
+      tool: z.string().describe('Raw MCP tool name.'),
+      pattern: z.string().describe('JavaScript regex pattern.')
+    }),
+    z.object({
+      type: z.literal('jsonpath').describe('Inspect a value in tool arguments.'),
+      tool: z.string().describe('Raw MCP tool name.'),
+      path: z.string().describe('JSONPath expression over the tool arguments.'),
+      equals: z
+        .union([z.string(), z.number(), z.boolean()])
+        .optional()
+        .describe('Optional primitive value that must match.')
+    })
+  ])
+  .describe('Assertions evaluated against calls to a named MCP tool.');
+const AgentAssertionSchema = z
+  .object({
+    label: z.string().describe('Stable name for the semantic check.'),
+    prompt: z.string().describe('Question the judge should answer about the scenario result.')
+  })
+  .describe('Semantic checks for requirements that are not reliably deterministic.');
+const AgentContextSchema = z
+  .object({
+    include_prompt: z
+      .boolean()
+      .optional()
+      .describe('Include the scenario prompt in judge context.'),
+    include_tool_sequence: z
+      .boolean()
+      .optional()
+      .describe('Include called raw MCP tool names in judge context.'),
+    include_tool_inputs: z
+      .boolean()
+      .optional()
+      .describe('Include raw MCP tool arguments in judge context.')
+  })
+  .describe('Shared context sent to every agent assertion.');
+const CanonicalEvalRulesSchema = z
+  .object({
+    tool_constraints: z
+      .object({
+        required_tools: z
+          .array(z.string())
+          .optional()
+          .describe('Raw MCP tools that must be called.'),
+        forbidden_tools: z
+          .array(z.string())
+          .optional()
+          .describe('Raw MCP tools that must not be called.')
+      })
+      .strict()
+      .describe('Deterministic MCP tool-usage constraints.')
+      .optional(),
+    tool_sequence: z
+      .array(z.string())
+      .optional()
+      .describe('Flat ordered list of raw MCP tool names that must be called.'),
+    tool_input_assertions: z
+      .array(ToolInputAssertionSchema)
+      .optional()
+      .describe('Checks over MCP tool arguments.'),
+    response_assertions: z
+      .array(ResponseAssertionSchema)
+      .optional()
+      .describe('Checks over the final response.'),
+    agent_assertions: z
+      .array(AgentAssertionSchema)
+      .optional()
+      .describe('Semantic checks judged by an evaluation agent.'),
+    agent_context: AgentContextSchema.optional()
+  })
+  .strict()
+  .describe('Canonical MCPLab evaluation rules. Prefer this object for full assertion support.');
+
 const ScenarioEntrySchema = z.object({
   id: z.string(),
   name: z.string().optional(),
   agent: z.string().optional(),
   mcp_servers: z.array(z.object({ ref: z.string() })),
   prompt: z.string(),
-  eval: GenericObjectSchema.optional(),
+  eval: CanonicalEvalRulesSchema.optional(),
   extract: z
     .array(
       z.object({
@@ -1243,22 +1379,60 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_test_case',
     {
       description:
-        'Create one reviewed MCPLab Test Case in mcplab/test-cases/. This is a scoped YAML write and refuses duplicate IDs.',
+        'Create one reviewed MCPLab Test Case in mcplab/test-cases/. Use the canonical eval object for full support of response, tool-input, and agent assertions. Convenience fields are supported for simple cases; do not provide a convenience field together with its equivalent eval field. This is a scoped YAML write and refuses duplicate IDs.',
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
       inputSchema: {
-        id: z.string().min(1),
-        name: z.string().optional(),
-        servers: z.array(z.string()).min(1),
-        prompt: z.string().min(1).max(4000),
-        required_tools: z.array(z.string()).optional(),
-        forbidden_tools: z.array(z.string()).optional(),
+        id: z
+          .string()
+          .min(1)
+          .describe('Stable Test Case id; letters, numbers, hyphens, and underscores.'),
+        name: z
+          .string()
+          .optional()
+          .describe('Human-readable Test Case label; defaults to id when blank.'),
+        servers: z.array(z.string()).min(1).describe('MCP server ids available to this Test Case.'),
+        prompt: z
+          .string()
+          .min(1)
+          .max(4000)
+          .describe('Task prompt executed by the evaluation agent.'),
+        required_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
+        forbidden_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
         tool_sequence: z
           .array(z.string())
           .min(1)
           .optional()
-          .describe('Required tool calls in order.'),
-        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
-        response_regex_patterns: z.array(z.string()).optional()
+          .describe(
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
+          ),
+        extract_rules: z
+          .array(
+            z.object({
+              name: z.string().describe('Extracted field name.'),
+              regex: z.string().describe('Regex applied to final_text.')
+            })
+          )
+          .optional()
+          .describe('Extract values from the final response for trend analysis.'),
+        response_regex_patterns: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
+          ),
+        eval: CanonicalEvalRulesSchema.optional().describe(
+          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        )
       }
     },
     async ({
@@ -1270,7 +1444,8 @@ export function registerTools(server: McpServer): void {
       forbidden_tools,
       tool_sequence,
       extract_rules,
-      response_regex_patterns
+      response_regex_patterns,
+      eval: evalRules
     }) =>
       withToolHandling(async () => {
         const bundleRoot = resolveBundleRoot();
@@ -1287,7 +1462,8 @@ export function registerTools(server: McpServer): void {
             forbiddenTools: forbidden_tools,
             toolSequence: tool_sequence,
             extractRules: extract_rules,
-            responseRegexPatterns: response_regex_patterns
+            responseRegexPatterns: response_regex_patterns,
+            eval: evalRules
           }
         });
         return ok(`Created Test Case '${created.id}'`, {
@@ -1319,7 +1495,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_test_case',
     {
       description:
-        'Replace one existing MCPLab test case in place. Requires confirm=true and never creates a new file.',
+        'Replace one existing MCPLab test case in place. Use the canonical eval object for full support of response, tool-input, and agent assertions. Convenience fields are supported for simple cases; do not provide a convenience field together with its equivalent eval field. Requires confirm=true and never creates a new file.',
       inputSchema: {
         file_path: z
           .string()
@@ -1327,15 +1503,57 @@ export function registerTools(server: McpServer): void {
         confirm: z
           .literal(true)
           .describe('Required confirmation that the existing file should be overwritten.'),
-        id: z.string().min(1),
-        name: z.string().optional(),
-        servers: z.array(z.string()).min(1),
-        prompt: z.string().min(1).max(4000),
-        required_tools: z.array(z.string()).optional(),
-        forbidden_tools: z.array(z.string()).optional(),
-        tool_sequence: z.array(z.string()).min(1).optional(),
-        extract_rules: z.array(z.object({ name: z.string(), regex: z.string() })).optional(),
-        response_regex_patterns: z.array(z.string()).optional()
+        id: z
+          .string()
+          .min(1)
+          .describe('Stable Test Case id; letters, numbers, hyphens, and underscores.'),
+        name: z
+          .string()
+          .optional()
+          .describe('Human-readable Test Case label; defaults to id when blank.'),
+        servers: z.array(z.string()).min(1).describe('MCP server ids available to this Test Case.'),
+        prompt: z
+          .string()
+          .min(1)
+          .max(4000)
+          .describe('Task prompt executed by the evaluation agent.'),
+        required_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
+        forbidden_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
+        tool_sequence: z
+          .array(z.string())
+          .min(1)
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
+          ),
+        extract_rules: z
+          .array(
+            z.object({
+              name: z.string().describe('Extracted field name.'),
+              regex: z.string().describe('Regex applied to final_text.')
+            })
+          )
+          .optional()
+          .describe('Extract values from the final response for trend analysis.'),
+        response_regex_patterns: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
+          ),
+        eval: CanonicalEvalRulesSchema.optional().describe(
+          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        )
       },
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
     },
@@ -1350,7 +1568,8 @@ export function registerTools(server: McpServer): void {
       forbidden_tools,
       tool_sequence,
       extract_rules,
-      response_regex_patterns
+      response_regex_patterns,
+      eval: evalRules
     }) =>
       withToolHandling(() => {
         const library = readLibrary(resolveBundleRoot(), false);
@@ -1367,7 +1586,8 @@ export function registerTools(server: McpServer): void {
             forbiddenTools: forbidden_tools,
             toolSequence: tool_sequence,
             extractRules: extract_rules,
-            responseRegexPatterns: response_regex_patterns
+            responseRegexPatterns: response_regex_patterns,
+            eval: evalRules
           }
         });
         return ok(`Updated Test Case '${updated.id}'`, {
@@ -1382,7 +1602,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_evaluation_config',
     {
       description:
-        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling.',
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the canonical eval rules for full assertion support: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine canonical rules with equivalent convenience fields.',
       outputSchema: {
         file_name: z.string(),
         path: z.string(),
@@ -1390,8 +1610,15 @@ export function registerTools(server: McpServer): void {
         config: GenericObjectSchema
       },
       inputSchema: {
-        file_name: z.string().min(1),
-        config: GenericObjectSchema.describe('Complete MCPLab evaluation configuration.')
+        file_name: z
+          .string()
+          .min(1)
+          .describe(
+            'Destination YAML filename under mcplab/evals/. Extension is added if omitted.'
+          ),
+        config: GenericObjectSchema.describe(
+          'Complete MCPLab evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+        )
       }
     },
     async ({ file_name, config }) =>
@@ -1414,11 +1641,13 @@ export function registerTools(server: McpServer): void {
     'mcplab_get_evaluation_config',
     {
       description:
-        'Read one existing MCPLab evaluation config, including its full parsed YAML content.',
+        'Read one existing MCPLab evaluation config, including its full parsed YAML content. Returned scenario eval blocks may use canonical tool constraints, flat tool sequences, response/tool-input assertions, agent assertions, and agent context.',
       inputSchema: {
         config_path: z
           .string()
-          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.')
+          .describe(
+            'Path to an existing eval YAML, relative to the MCPLab evals directory. Invalid, missing, or out-of-root paths return an error; the tool never silently coerces them.'
+          )
       },
       outputSchema: z.object({
         path: z.string(),
@@ -1444,12 +1673,16 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_evaluation_config',
     {
       description:
-        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file.',
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the canonical eval rules for full assertion support: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine canonical rules with equivalent convenience fields.',
       inputSchema: {
         config_path: z
           .string()
-          .describe('Path to an existing eval YAML, relative to the MCPLab evals directory.'),
-        config: GenericObjectSchema.describe('Complete replacement evaluation configuration.'),
+          .describe(
+            'Path to an existing eval YAML, relative to the MCPLab evals directory. Invalid, missing, or out-of-root paths return an error; the tool never silently coerces them.'
+          ),
+        config: GenericObjectSchema.describe(
+          'Complete replacement evaluation configuration. Scenario eval blocks support tool_constraints, a flat tool_sequence, response_assertions (contains, not_contains, starts_with, ends_with, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal response text; use regex only when pattern matching is required.'
+        ),
         confirm: z
           .literal(true)
           .describe('Required confirmation that the existing file should be overwritten.')
@@ -1483,7 +1716,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_generate_scenario_entry',
     {
       description:
-        'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Optimized for scenario authoring workflows.',
+        'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Use the canonical eval object for full assertion support; convenience fields are supported for simple cases and must not be combined with equivalent eval fields.',
       outputSchema: {
         scenario: ScenarioEntrySchema,
         yaml: z.string(),
@@ -1514,17 +1747,34 @@ export function registerTools(server: McpServer): void {
           .min(1)
           .max(4000)
           .describe('The task prompt the evaluation agent should execute (1-4000 chars).'),
-        required_tools: z.array(z.string()).optional().describe('Tools that must be called.'),
-        forbidden_tools: z.array(z.string()).optional().describe('Tools that must not be called.'),
+        required_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.required_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
+        forbidden_tools: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Simple shorthand for eval.tool_constraints.forbidden_tools. Use for basic checks only; put new or advanced rules under eval. Do not provide both.'
+          ),
         tool_sequence: z
           .array(z.string())
           .min(1)
           .optional()
-          .describe('Required tool calls in this exact order.'),
+          .describe(
+            'Simple shorthand for eval.tool_sequence: a flat ordered list of raw MCP tool names. Use eval for new or advanced rules. Do not provide both.'
+          ),
         response_regex_patterns: z
           .array(z.string())
           .optional()
-          .describe('Regex patterns that must match the final response text.'),
+          .describe(
+            'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
+          ),
+        eval: CanonicalEvalRulesSchema.optional().describe(
+          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        ),
         extract_rules: z
           .array(
             z.object({
