@@ -1,4 +1,4 @@
-import type { EvalConfig } from '@inspectr/mcplab-core';
+import { resolveConfigValue, type EvalConfig } from '@inspectr/mcplab-core';
 import type {
   OAuthDebuggerSession,
   OAuthDebuggerSessionConfigInput
@@ -163,9 +163,21 @@ export async function createOAuthRuntimeSession(params: {
         ? {
             overrides: {
               ...(serverConfig.auth.authorization_url
-                ? { authorizationEndpoint: serverConfig.auth.authorization_url }
+                ? {
+                    authorizationEndpoint: resolveConfigValue(
+                      serverConfig.auth.authorization_url,
+                      'OAuth authorization_url'
+                    )
+                  }
                 : {}),
-              ...(serverConfig.auth.token_url ? { tokenEndpoint: serverConfig.auth.token_url } : {})
+              ...(serverConfig.auth.token_url
+                ? {
+                    tokenEndpoint: resolveConfigValue(
+                      serverConfig.auth.token_url,
+                      'OAuth token_url'
+                    )
+                  }
+                : {})
             }
           }
         : {})
@@ -175,8 +187,10 @@ export async function createOAuthRuntimeSession(params: {
       ? { dcr: { metadata: {} } }
       : {
           preRegistered: {
-            clientId: serverConfig.auth.client_id!,
+            clientId: resolveConfigValue(serverConfig.auth.client_id!, 'OAuth client_id'),
             clientSecret: serverConfig.auth.client_secret
+              ? resolveConfigValue(serverConfig.auth.client_secret, 'OAuth client_secret')
+              : undefined
           }
         },
     runtime: {

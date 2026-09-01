@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ServerConfig, ToolDef } from './types.js';
 import { createAbortError, isAbortError, throwIfAborted } from './abort.js';
+import { resolveConfigValue } from './config-values.js';
 
 export interface McpToolInfo {
   name: string;
@@ -345,22 +346,12 @@ export class McpClientManager {
    * - treatPlainAsEnvVar: legacy mode where plain strings are treated as env var names
    */
   private resolveValue(value: string, label: string, treatPlainAsEnvVar = false): string {
-    const envMatch = value.match(/^\$\{(.+)\}$/);
-    if (envMatch) {
-      const resolved = process.env[envMatch[1]];
-      if (!resolved) {
-        throw new Error(`Missing env var '${envMatch[1]}' for ${label}`);
-      }
-      return resolved;
+    if (!treatPlainAsEnvVar) return resolveConfigValue(value, label);
+    const resolved = process.env[value];
+    if (!resolved) {
+      throw new Error(`Missing env var '${value}' for ${label}`);
     }
-    if (treatPlainAsEnvVar) {
-      const resolved = process.env[value];
-      if (!resolved) {
-        throw new Error(`Missing env var '${value}' for ${label}`);
-      }
-      return resolved;
-    }
-    return value;
+    return resolved;
   }
 
   private async getAuthHeaders(
