@@ -66,20 +66,20 @@ function mergeEvalRules(
   const canonicalConstraints = canonical?.tool_constraints;
   if (convenience.required.length && canonicalConstraints?.required_tools?.length) {
     throw new Error(
-      'Provide required_tools either as a convenience field or in eval.tool_constraints, not both.'
+      'Provide required_tools either as a shorthand field or in eval.tool_constraints, not both.'
     );
   }
   if (convenience.forbidden.length && canonicalConstraints?.forbidden_tools?.length) {
     throw new Error(
-      'Provide forbidden_tools either as a convenience field or in eval.tool_constraints, not both.'
+      'Provide forbidden_tools either as a shorthand field or in eval.tool_constraints, not both.'
     );
   }
   if (convenience.sequence.length && canonical?.tool_sequence?.length) {
-    throw new Error('Provide tool_sequence either as a convenience field or in eval, not both.');
+    throw new Error('Provide tool_sequence either as a shorthand field or in eval, not both.');
   }
   if (convenience.patterns.length && canonical?.response_assertions?.length) {
     throw new Error(
-      'Provide response_regex_patterns either as a convenience field or in eval.response_assertions, not both.'
+      'Provide response_regex_patterns either as a shorthand field or in eval.response_assertions, not both.'
     );
   }
 

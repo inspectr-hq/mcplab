@@ -114,7 +114,7 @@ describe('createTestCaseFile', () => {
     });
   });
 
-  it('rejects conflicting convenience and canonical response checks', () => {
+  it('rejects conflicting shorthand and eval response checks', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-test-case-store-'));
     roots.push(root);
     expect(() =>
@@ -130,7 +130,7 @@ describe('createTestCaseFile', () => {
         }
       })
     ).toThrow(
-      'Provide response_regex_patterns either as a convenience field or in eval.response_assertions'
+      'Provide response_regex_patterns either as a shorthand field or in eval.response_assertions'
     );
   });
 
