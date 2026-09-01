@@ -365,7 +365,7 @@ const AgentContextSchema = z
       .describe('Include raw MCP tool arguments in judge context.')
   })
   .describe('Shared context sent to every agent assertion.');
-const CanonicalEvalRulesSchema = z
+const EvalRulesSchema = z
   .object({
     tool_constraints: z
       .object({
@@ -400,7 +400,7 @@ const CanonicalEvalRulesSchema = z
     agent_context: AgentContextSchema.optional()
   })
   .strict()
-  .describe('Canonical MCPLab evaluation rules. Prefer this object for full assertion support.');
+  .describe('Full MCPLab evaluation rules. Use this object for all supported assertion types.');
 
 const ScenarioEntrySchema = z.object({
   id: z.string(),
@@ -408,7 +408,7 @@ const ScenarioEntrySchema = z.object({
   agent: z.string().optional(),
   mcp_servers: z.array(z.object({ ref: z.string() })),
   prompt: z.string(),
-  eval: CanonicalEvalRulesSchema.optional(),
+  eval: EvalRulesSchema.optional(),
   extract: z
     .array(
       z.object({
@@ -1379,7 +1379,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_test_case',
     {
       description:
-        'Create one reviewed MCPLab Test Case in mcplab/test-cases/. Use the canonical eval object for full support of response, tool-input, and agent assertions. Convenience fields are supported for simple cases; do not provide a convenience field together with its equivalent eval field. This is a scoped YAML write and refuses duplicate IDs.',
+        'Create one reviewed MCPLab Test Case in mcplab/test-cases/. Put evaluation checks in the eval object for full support of response, tool-input, and agent assertions. Simple shorthand fields are supported for basic cases; do not provide a shorthand field together with its equivalent eval field. This is a scoped YAML write and refuses duplicate IDs.',
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema },
       inputSchema: {
         id: z
@@ -1430,8 +1430,8 @@ export function registerTools(server: McpServer): void {
           .describe(
             'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
           ),
-        eval: CanonicalEvalRulesSchema.optional().describe(
-          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        eval: EvalRulesSchema.optional().describe(
+          'Full evaluation-rule object. Use this for new authoring or whenever you need more than one rule type; do not combine it with equivalent shorthand fields.'
         )
       }
     },
@@ -1495,7 +1495,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_test_case',
     {
       description:
-        'Replace one existing MCPLab test case in place. Use the canonical eval object for full support of response, tool-input, and agent assertions. Convenience fields are supported for simple cases; do not provide a convenience field together with its equivalent eval field. Requires confirm=true and never creates a new file.',
+        'Replace one existing MCPLab test case in place. Put evaluation checks in the eval object for full support of response, tool-input, and agent assertions. Simple shorthand fields are supported for basic cases; do not provide a shorthand field together with its equivalent eval field. Requires confirm=true and never creates a new file.',
       inputSchema: {
         file_path: z
           .string()
@@ -1551,8 +1551,8 @@ export function registerTools(server: McpServer): void {
           .describe(
             'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
           ),
-        eval: CanonicalEvalRulesSchema.optional().describe(
-          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        eval: EvalRulesSchema.optional().describe(
+          'Full evaluation-rule object. Use this for new authoring or whenever you need more than one rule type; do not combine it with equivalent shorthand fields.'
         )
       },
       outputSchema: { id: z.string(), path: z.string(), test_case: ScenarioEntrySchema }
@@ -1602,7 +1602,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_create_evaluation_config',
     {
       description:
-        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the canonical eval rules for full assertion support: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine canonical rules with equivalent convenience fields.',
+        'Create one reviewed MCPLab evaluation configuration in mcplab/evals/. This is a scoped YAML write with automatic filename normalization and collision handling. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       outputSchema: {
         file_name: z.string(),
         path: z.string(),
@@ -1641,7 +1641,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_get_evaluation_config',
     {
       description:
-        'Read one existing MCPLab evaluation config, including its full parsed YAML content. Returned scenario eval blocks may use canonical tool constraints, flat tool sequences, response/tool-input assertions, agent assertions, and agent context.',
+        'Read one existing MCPLab evaluation config, including its full parsed YAML content. Returned scenario eval blocks may use full tool constraints, flat tool sequences, response/tool-input assertions, agent assertions, and agent context.',
       inputSchema: {
         config_path: z
           .string()
@@ -1673,7 +1673,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_update_evaluation_config',
     {
       description:
-        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the canonical eval rules for full assertion support: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine canonical rules with equivalent convenience fields.',
+        'Replace one existing MCPLab evaluation config in place after normalization. Requires confirm=true; refuses missing or out-of-root paths and never creates a new file. In scenario eval blocks, use the full evaluation rules for response, tool-input, and agent checks: tool_constraints, flat tool_sequence, response_assertions (contains, equals, regex, and JSONPath variants), tool_input_assertions, agent_assertions, and agent_context. Use contains for literal text; use regex only for patterns. Do not combine eval rules with equivalent shorthand fields.',
       inputSchema: {
         config_path: z
           .string()
@@ -1716,7 +1716,7 @@ export function registerTools(server: McpServer): void {
     'mcplab_generate_scenario_entry',
     {
       description:
-        'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Use the canonical eval object for full assertion support; convenience fields are supported for simple cases and must not be combined with equivalent eval fields.',
+        'Generate a MCPLab scenario YAML snippet with prompt, server links, and optional evaluation/extract rules. Put checks in the eval object for full assertion support; simple shorthand fields are supported for basic cases and must not be combined with equivalent eval fields.',
       outputSchema: {
         scenario: ScenarioEntrySchema,
         yaml: z.string(),
@@ -1772,8 +1772,8 @@ export function registerTools(server: McpServer): void {
           .describe(
             'Simple shorthand for response regex checks. Use eval.response_assertions for new or advanced checks; choose type=contains for literal text. Do not provide both.'
           ),
-        eval: CanonicalEvalRulesSchema.optional().describe(
-          'Preferred evaluation-rule object for new authoring. Put all checks here when using more than one rule type; do not combine it with equivalent shorthand fields.'
+        eval: EvalRulesSchema.optional().describe(
+          'Full evaluation-rule object. Use this for new authoring or whenever you need more than one rule type; do not combine it with equivalent shorthand fields.'
         ),
         extract_rules: z
           .array(

@@ -89,13 +89,13 @@ describe('mcp tool contracts', () => {
     expect((parsed as any).data.name).toBe('Named scenario');
   });
 
-  it('accepts canonical evaluation rules in scenario authoring tools', async () => {
+  it('accepts full evaluation rules in scenario authoring tools', async () => {
     const tools = setupTools();
     const schema = asSchema(tools.get('mcplab_generate_scenario_entry')!.config.inputSchema);
     const parsed = schema.safeParse({
-      id: 'canonical-rules',
+      id: 'full-evaluation-rules',
       servers: ['mcp-lab'],
-      prompt: 'Run the complete canonical check.',
+      prompt: 'Run the complete evaluation check.',
       eval: {
         response_assertions: [{ type: 'contains', value: 'Paris' }],
         tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
@@ -110,12 +110,12 @@ describe('mcp tool contracts', () => {
     });
   });
 
-  it('describes canonical assertion types and exposes them in scenario output', () => {
+  it('describes evaluation assertion types and exposes them in scenario output', () => {
     const tools = setupTools();
     const generateTool = tools.get('mcplab_generate_scenario_entry')!.config as any;
-    expect(generateTool.description).toContain('canonical eval');
+    expect(generateTool.description).toContain('eval object');
     expect(generateTool.inputSchema.required_tools.description).toContain('Simple shorthand');
-    expect(generateTool.inputSchema.eval.description).toContain('Preferred evaluation-rule object');
+    expect(generateTool.inputSchema.eval.description).toContain('Full evaluation-rule object');
 
     const outputScenario = asSchema(
       (tools.get('mcplab_generate_scenario_entry')!.config.outputSchema as any).scenario
