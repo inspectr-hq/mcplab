@@ -795,7 +795,7 @@ const ConfigEditor = () => {
             <div className="rounded-md border bg-muted/20 p-3">
               <p className="text-xs font-medium mb-1">File</p>
               <p className="text-xs font-mono break-all">
-                {existing?.sourcePath || existing?.description}
+                {existing?.sourcePath || existing?.relativePath}
               </p>
             </div>
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -911,6 +911,14 @@ const ConfigEditor = () => {
               />
             </div>
           </div>
+          {!isNew && (config.sourcePath || config.relativePath) && (
+            <div className="border-t pt-3">
+              <Label className="text-xs">File location</Label>
+              <p className="mt-1 text-xs font-mono text-muted-foreground break-all">
+                {config.sourcePath || config.relativePath}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -155,5 +155,39 @@ describe('handleEvalsRoutes', () => {
     expect((captured[0]?.body as { relativePath?: string } | undefined)?.relativePath).toBe(
       'renamed.yaml'
     );
+  });
+
+  it('persists the optional description through the HTTP update route', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-evals-routes-'));
+    const evalsDir = join(root, 'mcplab', 'evals');
+    mkdirSync(evalsDir, { recursive: true });
+    const configPath = join(evalsDir, 'described.yaml');
+    writeFileSync(configPath, 'name: Before\nagents: []\nscenarios: []\n', 'utf8');
+
+    const captured: Array<{ status: number; body: unknown }> = [];
+    await handleEvalsRoutes({
+      req: {} as any,
+      res: {} as any,
+      pathname: `/api/evals/${encodeEvalId(configPath, evalsDir)}`,
+      method: 'PUT',
+      settings: { evalsDir, librariesDir: join(root, 'mcplab') } as any,
+      deps: {
+        parseBody: async () => ({
+          config: { name: 'After', description: 'Saved from API', agents: [], scenarios: [] }
+        }),
+        asJson: (_res, status, responseBody) => captured.push({ status, body: responseBody }),
+        listConfigs,
+        safeFileName,
+        ensureInsideRoot,
+        decodeEvalId,
+        readConfigRecord,
+        readConfigRecordOrInvalid
+      }
+    });
+
+    expect(captured[0]?.status).toBe(200);
+    expect(readFileSync(configPath, 'utf8')).toContain('description: Saved from API');
+    expect((captured[0]?.body as { config?: { description?: string } } | undefined)?.config?.description)
+      .toBe('Saved from API');
   });
 });

@@ -53,7 +53,8 @@ describe('ConfigEditor', () => {
       id: 'cfg-1',
       name: 'Editor Config',
       configName: '',
-      description: '',
+      description: 'Useful context',
+      sourcePath: '/workspace/mcplab/evals/editor-config.yaml',
       servers: [],
       serverEntries: [],
       agents: [],
@@ -97,6 +98,8 @@ describe('ConfigEditor', () => {
     );
 
     expect(screen.getByText('Editor Config')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Useful context')).toBeInTheDocument();
+    expect(screen.getByText('/workspace/mcplab/evals/editor-config.yaml')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 });

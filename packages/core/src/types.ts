@@ -256,6 +256,7 @@ export type ScenarioListEntry = SourceScenario | ScenarioRefEntry;
 
 export interface EvalConfig {
   name?: string;
+  description?: string;
   servers: Record<string, ServerConfig>;
   agents: Record<string, AgentConfig>;
   scenarios: Scenario[];

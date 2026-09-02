@@ -695,6 +695,31 @@ describe('fromCoreResultsJson check counts', () => {
 });
 
 describe('config adapters round-trip', () => {
+  it('maps YAML description separately from the source file path', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-described',
+      name: 'described',
+      path: '/tmp/described.yaml',
+      relativePath: 'described.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-described',
+      config: {
+        name: 'Described',
+        description: 'Useful context',
+        servers: [],
+        agents: [],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const roundTripped = toCoreConfigYaml(uiConfig);
+
+    expect(uiConfig.description).toBe('Useful context');
+    expect(uiConfig.sourcePath).toBe('/tmp/described.yaml');
+    expect(roundTripped.description).toBe('Useful context');
+  });
+
   it('preserves an omitted agent temperature when loading and saving config YAML', () => {
     const sourceRecord: WorkspaceConfigRecord = {
       id: 'cfg-no-temperature',

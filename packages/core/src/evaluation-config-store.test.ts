@@ -55,4 +55,27 @@ describe('createEvaluationConfigFile', () => {
     expect(readFileSync(created.path, 'utf8')).toContain('After');
     expect(existsSync(join(root, 'evals', 'suite-1.yaml'))).toBe(false);
   });
+
+  it('persists an optional description and omits it when cleared', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-eval-store-'));
+    roots.push(root);
+    const created = createEvaluationConfigFile({
+      evalsDir: join(root, 'evals'),
+      fileName: 'described',
+      config: { name: 'Described', description: 'Useful context', agents: [], scenarios: [] }
+    });
+
+    expect(
+      readEvaluationConfigFile({ evalsDir: join(root, 'evals'), filePath: 'described.yaml' }).config
+        .description
+    ).toBe('Useful context');
+
+    updateEvaluationConfigFile({
+      evalsDir: join(root, 'evals'),
+      filePath: 'described.yaml',
+      config: { name: 'Described', description: '   ', agents: [], scenarios: [] }
+    });
+
+    expect(readFileSync(created.path, 'utf8')).not.toContain('description:');
+  });
 });

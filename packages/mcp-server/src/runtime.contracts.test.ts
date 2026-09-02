@@ -41,6 +41,23 @@ afterEach(() => {
 });
 
 describe('mcp tool contracts', () => {
+  it('accepts descriptions in evaluation config create and update inputs', () => {
+    const tools = setupTools();
+    for (const name of ['mcplab_create_evaluation_config', 'mcplab_update_evaluation_config']) {
+      const inputSchema = asSchema(tools.get(name)!.config.inputSchema);
+      const result = inputSchema.safeParse(
+        name === 'mcplab_create_evaluation_config'
+          ? { file_name: 'described', config: { description: 'Useful context' } }
+          : {
+              config_path: 'described.yaml',
+              config: { description: 'Useful context' },
+              confirm: true
+            }
+      );
+      expect(result.success).toBe(true);
+    }
+  });
+
   it('returns 404 for requests using a stale session after an MCP server restart', async () => {
     const sessions = new Map();
     const response = {
