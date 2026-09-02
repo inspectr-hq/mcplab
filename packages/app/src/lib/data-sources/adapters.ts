@@ -590,7 +590,9 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     name: configName || record.name,
     configName,
     configHash: record.hash,
-    description: record.path,
+    ...(typeof record.config.description === 'string' && record.config.description.trim()
+      ? { description: record.config.description.trim() }
+      : {}),
     ...(record.relativePath ? { relativePath: record.relativePath } : {}),
     ...(record.suitePath !== undefined ? { suitePath: record.suitePath } : {}),
     loadError: record.error,
@@ -806,6 +808,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 
   return {
     name: config.configName?.trim() || undefined,
+    description: config.description?.trim() || undefined,
     servers,
     agents,
     scenarios,

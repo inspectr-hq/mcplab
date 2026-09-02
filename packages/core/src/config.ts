@@ -579,6 +579,10 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       typeof (sourceConfig as { name?: unknown }).name === 'string'
         ? String((sourceConfig as { name?: unknown }).name).trim() || undefined
         : undefined,
+    description:
+      typeof (sourceConfig as { description?: unknown }).description === 'string'
+        ? String((sourceConfig as { description?: unknown }).description).trim() || undefined
+        : undefined,
     servers: normalizedServers,
     agents: normalizedAgents,
     scenarios: normalizedScenarios
