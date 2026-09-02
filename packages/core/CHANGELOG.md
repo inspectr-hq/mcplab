@@ -1,5 +1,13 @@
 # @inspectr/mcplab-core
 
+## 1.22.1
+
+### Patch Changes
+
+- fix: refine MCP tool descriptions
+- fix: resolve OAuth environment placeholders in app runtime
+- fix: hide disabled LangSmith startup status
+
 ## 1.22.0
 
 ### Minor Changes
