@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   McpClientManager,
   extractHttpStatusCode,
@@ -6,6 +6,7 @@ import {
   normalizeListedTool,
   sanitizeMcpTransportErrorMessage
 } from './mcp.js';
+import type { ServerConfig } from './types.js';
 
 describe('sanitizeMcpTransportErrorMessage', () => {
   it('condenses HTML upstream failures into a short summary', () => {
@@ -140,6 +141,141 @@ describe('normalizeListedTool', () => {
       annotations: []
     });
     expect(normalized.annotations).toBeUndefined();
+  });
+});
+
+describe('McpClientManager.getRequestHeadersForServers', () => {
+  const oauthServer = {
+    transport: 'http' as const,
+    url: 'https://example.test/mcp',
+    auth: {
+      type: 'oauth_client_credentials' as const,
+      token_url: 'https://example.test/token',
+      client_id_env: 'TEST_CLIENT_ID',
+      client_secret_env: 'TEST_CLIENT_SECRET'
+    }
+  };
+
+  beforeEach(() => {
+    process.env.TEST_CLIENT_ID = 'client-id';
+    process.env.TEST_CLIENT_SECRET = 'client-secret';
+  });
+
+  afterEach(() => {
+    delete process.env.TEST_CLIENT_ID;
+    delete process.env.TEST_CLIENT_SECRET;
+    vi.unstubAllGlobals();
+  });
+
+  it('fetches a fresh token for oauth_client_credentials servers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'first-token', expires_in: 3600 })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map([['oauth-api', oauthServer]]);
+
+    const headers = await manager.getRequestHeadersForServers(['oauth-api']);
+
+    expect(headers).toEqual({ 'oauth-api': { Authorization: 'Bearer first-token' } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a cached token instead of refetching before it nears expiry', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'cached-token', expires_in: 3600 })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map([['oauth-api', oauthServer]]);
+
+    await manager.getRequestHeadersForServers(['oauth-api']);
+    const headers = await manager.getRequestHeadersForServers(['oauth-api']);
+
+    expect(headers).toEqual({ 'oauth-api': { Authorization: 'Bearer cached-token' } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refetches once the cached token is within the expiry skew', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'expiring-token', expires_in: 20 })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'renewed-token', expires_in: 3600 })
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map([['oauth-api', oauthServer]]);
+
+    await manager.getRequestHeadersForServers(['oauth-api']);
+    const headers = await manager.getRequestHeadersForServers(['oauth-api']);
+
+    expect(headers).toEqual({ 'oauth-api': { Authorization: 'Bearer renewed-token' } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts an in-flight token refresh when the run is cancelled', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        if (!init?.signal) {
+          reject(new Error('Token fetch did not receive the abort signal'));
+          return;
+        }
+        init.signal.addEventListener(
+          'abort',
+          () => reject(Object.assign(new Error('Request aborted'), { name: 'AbortError' })),
+          { once: true }
+        );
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map([['oauth-api', oauthServer]]);
+
+    const headersPromise = manager.getRequestHeadersForServers(['oauth-api'], controller.signal);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    await expect(headersPromise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('omits servers with static or no auth, and skips fetching for them', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map<string, ServerConfig>([
+      ['oauth-api', oauthServer],
+      [
+        'bearer-api',
+        { transport: 'http', url: 'https://b.test/mcp', auth: { type: 'bearer', token: 'static' } }
+      ],
+      ['open-api', { transport: 'http', url: 'https://o.test/mcp' }]
+    ]);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'token', expires_in: 3600 })
+    });
+
+    const headers = await manager.getRequestHeadersForServers([
+      'oauth-api',
+      'bearer-api',
+      'open-api'
+    ]);
+
+    expect(Object.keys(headers)).toEqual(['oauth-api']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

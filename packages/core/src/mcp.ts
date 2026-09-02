@@ -99,7 +99,7 @@ export class McpClientManager {
         const authHeaders =
           authHeadersOverride && Object.keys(authHeadersOverride).length > 0
             ? mergeRequestHeaders(authHeadersOverride)
-            : await this.getAuthHeaders(name, server);
+            : await this.getAuthHeaders(name, server, signal);
         this.authHeaders.set(name, authHeaders);
         const headers = mergeRequestHeaders(authHeaders, getStaticHeaders(server));
         const client = await this.connectClientWithRetry(
@@ -200,6 +200,28 @@ export class McpClientManager {
         formatMcpError(`Tool call failed '${tool}' on server '${serverName}'`, undefined, err)
       );
     }
+  }
+
+  /**
+   * Re-resolve request headers for servers whose credentials can expire mid-run
+   * (currently oauth_client_credentials). Call before each turn so a long-running
+   * scenario picks up a refreshed token instead of reusing the one baked in at connect time.
+   * Servers with static auth (bearer/api_key) or no auth are omitted from the result.
+   */
+  async getRequestHeadersForServers(
+    serverNames: string[],
+    signal?: AbortSignal
+  ): Promise<Record<string, Record<string, string>>> {
+    throwIfAborted(signal);
+    const headers: Record<string, Record<string, string>> = {};
+    await Promise.all(
+      Array.from(new Set(serverNames)).map(async (serverName) => {
+        const server = this.servers.get(serverName);
+        if (!server || server.auth?.type !== 'oauth_client_credentials') return;
+        headers[serverName] = await this.getAuthHeaders(serverName, server, signal);
+      })
+    );
+    return headers;
   }
 
   async disconnectAll(): Promise<void> {
@@ -356,8 +378,10 @@ export class McpClientManager {
 
   private async getAuthHeaders(
     serverName: string,
-    server: ServerConfig
+    server: ServerConfig,
+    signal?: AbortSignal
   ): Promise<Record<string, string>> {
+    throwIfAborted(signal);
     const headers: Record<string, string> = {};
     if (!server.auth) return headers;
 
@@ -392,7 +416,7 @@ export class McpClientManager {
         headers['Authorization'] = `Bearer ${cached.token}`;
         return headers;
       }
-      const token = await this.fetchOauthToken(serverName, server);
+      const token = await this.fetchOauthToken(serverName, server, signal);
       headers['Authorization'] = `Bearer ${token}`;
       return headers;
     }
@@ -406,7 +430,11 @@ export class McpClientManager {
     return headers;
   }
 
-  private async fetchOauthToken(serverName: string, server: ServerConfig): Promise<string> {
+  private async fetchOauthToken(
+    serverName: string,
+    server: ServerConfig,
+    signal?: AbortSignal
+  ): Promise<string> {
     if (!server.auth || server.auth.type !== 'oauth_client_credentials') {
       throw new Error(`OAuth auth not configured for server '${serverName}'`);
     }
@@ -433,7 +461,8 @@ export class McpClientManager {
       const response = await fetch(server.auth.token_url, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
+        body: params.toString(),
+        signal
       });
       if (!response.ok) {
         const text = await safeReadText(response);
@@ -452,6 +481,9 @@ export class McpClientManager {
       this.oauthCache.set(serverName, { token: accessToken, expiresAt: Date.now() + ttl });
       return accessToken;
     } catch (err: any) {
+      if (isAbortError(err) || signal?.aborted) {
+        throw createAbortError();
+      }
       throw new Error(
         formatMcpError(
           `Failed to fetch OAuth token for server '${serverName}'`,

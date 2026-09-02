@@ -262,9 +262,14 @@ export async function runAll(
             agent,
             mcp,
             requestId,
-            resolveServerRequestHeaders: (serverNames) =>
-              options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
-              Promise.resolve({}),
+            resolveServerRequestHeaders: async (serverNames) => {
+              const [clientCredentialsHeaders, externalHeaders] = await Promise.all([
+                mcp.getRequestHeadersForServers(serverNames, options.signal),
+                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
+                  Promise.resolve({})
+              ]);
+              return { ...clientCredentialsHeaders, ...externalHeaders };
+            },
             maxTurns: agent.max_turns,
             signal: options.signal,
             trace: scenarioTrace,
