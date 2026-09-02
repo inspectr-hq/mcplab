@@ -55,6 +55,7 @@ describe('ConfigEditor', () => {
       configName: '',
       description: 'Useful context',
       sourcePath: '/workspace/mcplab/evals/editor-config.yaml',
+      relativePath: 'mcplab/evals/editor-config.yaml',
       servers: [],
       serverEntries: [],
       agents: [],
@@ -92,14 +93,33 @@ describe('ConfigEditor', () => {
     render(
       <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/edit']}>
         <Routes>
-          <Route path="/mcp-evaluations/:id/edit" element={<ConfigEditor />} />
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
         </Routes>
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Editor Config')).toBeInTheDocument();
+    expect(screen.getByText('Editing: Editor Config')).toBeInTheDocument();
+    expect(screen.getByText('Name')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Useful context')).toBeInTheDocument();
-    expect(screen.getByText('/workspace/mcplab/evals/editor-config.yaml')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Evaluation file')).toHaveTextContent(
+      'mcplab/evals/editor-config.yaml'
+    );
+    expect(screen.queryByText('/workspace/mcplab/evals/editor-config.yaml')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  it('hides optional metadata fields in regular view mode', () => {
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Name')).toBeInTheDocument();
+    expect(screen.queryByText('Name (optional)')).not.toBeInTheDocument();
+    expect(screen.getByText('Description')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Useful context')).toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Save,
   Bot,
+  FileSpreadsheet,
   FileText,
   Play,
   ChevronUp,
@@ -711,7 +712,7 @@ const ConfigEditor = () => {
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold truncate">{title}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
             {isNew ? (
               'Create a new MCP evaluation'
             ) : loading ? (
@@ -726,6 +727,16 @@ const ConfigEditor = () => {
               )
             ) : (
               'MCP evaluation not found'
+            )}
+            {!isNew && config.relativePath && (
+              <span
+                aria-label="Evaluation file"
+                className="inline-flex min-w-0 items-center gap-1 text-xs font-mono"
+              >
+                <span aria-hidden="true">·</span>
+                <FileSpreadsheet className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{config.relativePath}</span>
+              </span>
             )}
           </p>
         </div>
@@ -795,7 +806,7 @@ const ConfigEditor = () => {
             <div className="rounded-md border bg-muted/20 p-3">
               <p className="text-xs font-medium mb-1">File</p>
               <p className="text-xs font-mono break-all">
-                {existing?.sourcePath || existing?.relativePath}
+                {existing?.relativePath || existing?.sourcePath}
               </p>
             </div>
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -893,7 +904,7 @@ const ConfigEditor = () => {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs">Name (optional)</Label>
+              <Label className="text-xs">Name</Label>
               <Input
                 value={config.configName || ''}
                 onChange={(e) => patch({ configName: e.target.value })}
@@ -911,14 +922,6 @@ const ConfigEditor = () => {
               />
             </div>
           </div>
-          {!isNew && (config.sourcePath || config.relativePath) && (
-            <div className="border-t pt-3">
-              <Label className="text-xs">File location</Label>
-              <p className="mt-1 text-xs font-mono text-muted-foreground break-all">
-                {config.sourcePath || config.relativePath}
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
