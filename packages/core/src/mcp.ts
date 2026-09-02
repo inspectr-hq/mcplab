@@ -218,7 +218,12 @@ export class McpClientManager {
       Array.from(new Set(serverNames)).map(async (serverName) => {
         const server = this.servers.get(serverName);
         if (!server || server.auth?.type !== 'oauth_client_credentials') return;
-        headers[serverName] = await this.getAuthHeaders(serverName, server, signal);
+        try {
+          headers[serverName] = await this.getAuthHeaders(serverName, server, signal);
+        } catch (err) {
+          if (isAbortError(err) || signal?.aborted) throw err;
+          // Best effort: retain the connect-time credentials for only the failed server.
+        }
       })
     );
     return headers;

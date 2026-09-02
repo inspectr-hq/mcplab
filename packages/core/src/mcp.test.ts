@@ -250,6 +250,36 @@ describe('McpClientManager.getRequestHeadersForServers', () => {
     await expect(headersPromise).rejects.toMatchObject({ name: 'AbortError' });
   });
 
+  it('keeps headers from healthy servers when another token refresh fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('failing')) {
+        throw new Error('Token endpoint unavailable');
+      }
+      return {
+        ok: true,
+        json: async () => ({ access_token: 'healthy-token', expires_in: 3600 })
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manager = new McpClientManager();
+    (manager as any).servers = new Map<string, ServerConfig>([
+      ['healthy-api', oauthServer],
+      [
+        'failing-api',
+        {
+          ...oauthServer,
+          auth: { ...oauthServer.auth, token_url: 'https://example.test/failing-token' }
+        }
+      ]
+    ]);
+
+    const headers = await manager.getRequestHeadersForServers(['healthy-api', 'failing-api']);
+
+    expect(headers).toEqual({ 'healthy-api': { Authorization: 'Bearer healthy-token' } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('omits servers with static or no auth, and skips fetching for them', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
