@@ -1536,7 +1536,7 @@ const ConfigEditor = () => {
                               scenarios={[entry.scenario]}
                               scenarioOrigins={['inline']}
                               agents={[...config.agents, ...referencedAgents]}
-                              servers={[...(config.servers ?? []), ...referencedServers]}
+                              servers={scenarioViewServers}
                               configId={config.id}
                               configPath={config.sourcePath}
                               defaultAssistantAgentName={

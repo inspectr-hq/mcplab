@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigEditor from './ConfigEditor';
 import type { EvalConfig } from '@/types/eval';
 
-const { configRef, librariesRef, reloadMock } = vi.hoisted(() => ({
+const { configRef, librariesRef, reloadMock, scenarioFormPropsRef } = vi.hoisted(() => ({
   configRef: { value: null as EvalConfig | null },
   librariesRef: {
     value: {
@@ -13,7 +13,8 @@ const { configRef, librariesRef, reloadMock } = vi.hoisted(() => ({
       scenarios: []
     }
   },
-  reloadMock: vi.fn()
+  reloadMock: vi.fn(),
+  scenarioFormPropsRef: { value: null as { servers?: Array<{ id: string }> } | null }
 }));
 
 vi.mock('@/contexts/ConfigContext', () => ({
@@ -43,7 +44,10 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 }));
 
 vi.mock('@/components/config-editor/ScenarioForm', () => ({
-  ScenarioForm: () => <div data-testid="scenario-form" />
+  ScenarioForm: (props: { servers?: Array<{ id: string }> }) => {
+    scenarioFormPropsRef.value = props;
+    return <div data-testid="scenario-form" />;
+  }
 }));
 
 describe('ConfigEditor', () => {
@@ -66,7 +70,12 @@ describe('ConfigEditor', () => {
       updatedAt: '2026-04-01T00:00:00.000Z'
     };
     librariesRef.value = {
-      servers: [],
+      servers: [{
+        id: 'library-server',
+        name: 'Library Server',
+        transport: 'stdio',
+        command: 'server'
+      }],
       agents: [],
       scenarios: [
         {
@@ -87,6 +96,7 @@ describe('ConfigEditor', () => {
         }
       ]
     };
+    scenarioFormPropsRef.value = null;
   });
 
   it('renders the edit page even when a library scenario has a malformed name', () => {
@@ -121,5 +131,38 @@ describe('ConfigEditor', () => {
     expect(screen.queryByText('Name (optional)')).not.toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Useful context')).toBeInTheDocument();
+  });
+
+  it('provides library servers to an inline evaluation scenario', () => {
+    configRef.value = {
+      ...configRef.value!,
+      scenarioEntries: [
+        {
+          kind: 'inline',
+          scenario: {
+            id: 'inline-scenario',
+            name: 'Inline Scenario',
+            serverIds: [],
+            prompt: 'Test',
+            evalRules: [],
+            extractRules: []
+          }
+        }
+      ]
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1/edit']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id/:tab?" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand scenario details' }));
+
+    expect(scenarioFormPropsRef.value?.servers).toEqual([
+      expect.objectContaining({ id: 'library-server' })
+    ]);
   });
 });
