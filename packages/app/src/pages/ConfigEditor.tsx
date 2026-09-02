@@ -35,6 +35,7 @@ import { ScenarioForm } from '@/components/config-editor/ScenarioForm';
 import { toast } from '@/hooks/use-toast';
 import { validateServerAuthConfig } from '@/lib/server-auth-validation';
 import { safeText } from '@/lib/utils';
+import { getConfigDisplayPath } from '@/lib/config-file-path';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
 import type {
   AgentConfig,
@@ -728,14 +729,14 @@ const ConfigEditor = () => {
             ) : (
               'MCP evaluation not found'
             )}
-            {!isNew && config.relativePath && (
+            {!isNew && getConfigDisplayPath(config) && (
               <span
                 aria-label="Evaluation file"
                 className="inline-flex min-w-0 items-center gap-1 text-xs font-mono"
               >
                 <span aria-hidden="true">·</span>
                 <FileSpreadsheet className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span className="truncate">{config.relativePath}</span>
+                <span className="truncate">{getConfigDisplayPath(config)}</span>
               </span>
             )}
           </p>
@@ -806,7 +807,7 @@ const ConfigEditor = () => {
             <div className="rounded-md border bg-muted/20 p-3">
               <p className="text-xs font-medium mb-1">File</p>
               <p className="text-xs font-mono break-all">
-                {existing?.relativePath || existing?.sourcePath}
+                {existing && getConfigDisplayPath(existing)}
               </p>
             </div>
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">

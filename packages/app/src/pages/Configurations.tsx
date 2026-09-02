@@ -52,6 +52,7 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 import { toast } from '@/hooks/use-toast';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
+import { getConfigDisplayPath } from '@/lib/config-file-path';
 import type { EvalConfig } from '@/types/eval';
 
 const displayConfigName = (cfg: { configName?: string; name: string }) =>
@@ -611,6 +612,7 @@ const Configurations = () => {
                     {!isCollapsed &&
                       items.map((cfg) => {
                         const resultsLink = resultsLinkForConfig(cfg);
+                        const filePath = getConfigDisplayPath(cfg);
                         return (
                           <TableRow key={cfg.id}>
                             <TableCell>
@@ -630,10 +632,10 @@ const Configurations = () => {
                                     Broken
                                   </Badge>
                                 )}
-                                {cfg.relativePath && (
+                                {filePath && (
                                   <div className="mt-0.5">
                                     <span className="text-xs text-muted-foreground font-mono">
-                                      {cfg.relativePath}
+                                      {filePath}
                                     </span>
                                   </div>
                                 )}

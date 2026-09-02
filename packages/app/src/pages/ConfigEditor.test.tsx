@@ -137,6 +137,25 @@ describe('ConfigEditor', () => {
     expect(screen.getByDisplayValue('Useful context')).toBeInTheDocument();
   });
 
+  it('shows the source path when no relative path is available', () => {
+    configRef.value = {
+      ...configRef.value!,
+      relativePath: undefined
+    };
+
+    render(
+      <MemoryRouter initialEntries={['/mcp-evaluations/cfg-1']}>
+        <Routes>
+          <Route path="/mcp-evaluations/:id" element={<ConfigEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('Evaluation file')).toHaveTextContent(
+      '/workspace/mcplab/evals/editor-config.yaml'
+    );
+  });
+
   it('provides library servers to an inline evaluation scenario', () => {
     configRef.value = {
       ...configRef.value!,
