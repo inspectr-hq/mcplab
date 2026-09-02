@@ -1,5 +1,13 @@
 # @inspectr/mcplab-core
 
+## 1.22.2
+
+### Patch Changes
+
+- feat: persist evaluation descriptions
+- fix: expose library servers in inline evaluation scenarios
+- fix: refresh client credentials tokens per turn
+
 ## 1.22.1
 
 ### Patch Changes

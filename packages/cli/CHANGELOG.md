@@ -1,5 +1,18 @@
 # @inspectr/mcplab
 
+## 1.28.2
+
+### Patch Changes
+
+- feat: persist evaluation descriptions
+- fix: expose library servers in inline evaluation scenarios
+- fix: update result after queued task is finished
+- fix: refresh client credentials tokens per turn
+- Updated dependencies
+  - @inspectr/mcplab-core@1.22.2
+  - @inspectr/mcplab-mcp-server@1.8.2
+  - @inspectr/mcplab-reporting@1.2.4
+
 ## 1.28.1
 
 ### Patch Changes
