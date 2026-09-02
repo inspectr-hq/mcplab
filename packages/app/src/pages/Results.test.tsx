@@ -265,6 +265,74 @@ describe('Results', () => {
     });
   });
 
+  it('advances the rolling "last" window on queue completion instead of reusing the value from mount', async () => {
+    const mountTime = new Date('2026-03-10T10:00:00.000Z').getTime();
+    vi.spyOn(Date, 'now').mockReturnValue(mountTime);
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([makeSummary('run-a', 1200)]);
+
+    const view = render(
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=24h']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-a');
+    const initialCall = sourceMock.listRunSummaries.mock.calls.at(-1)![0];
+    expect(initialCall.until).toBe(new Date(mountTime).toISOString());
+
+    const laterTime = mountTime + 5 * 60 * 1000;
+    vi.spyOn(Date, 'now').mockReturnValue(laterTime);
+    sourceMock.listRunSummaries.mockClear();
+    sourceMock.listRunSummaries.mockResolvedValue([makeSummary('run-b', 900)]);
+    queueMock.completionVersion = 1;
+    view.rerender(
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=24h']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(sourceMock.listRunSummaries).toHaveBeenCalled();
+    });
+    const refreshedCall = sourceMock.listRunSummaries.mock.calls.at(-1)![0];
+    expect(refreshedCall.until).toBe(new Date(laterTime).toISOString());
+    expect(refreshedCall.until).not.toBe(initialCall.until);
+  });
+
+  it('advances the rolling "last" window when manually refreshed, not just on filter changes', async () => {
+    const mountTime = new Date('2026-03-10T10:00:00.000Z').getTime();
+    vi.spyOn(Date, 'now').mockReturnValue(mountTime);
+    sourceMock.listRunSummaries = vi.fn().mockResolvedValue([makeSummary('run-a', 1200)]);
+
+    render(
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=24h']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-a');
+    const initialCall = sourceMock.listRunSummaries.mock.calls.at(-1)![0];
+
+    const laterTime = mountTime + 5 * 60 * 1000;
+    vi.spyOn(Date, 'now').mockReturnValue(laterTime);
+    sourceMock.listRunSummaries.mockClear();
+    sourceMock.listRunSummaries.mockResolvedValue([makeSummary('run-b', 900)]);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      expect(sourceMock.listRunSummaries).toHaveBeenCalled();
+    });
+    const refreshedCall = sourceMock.listRunSummaries.mock.calls.at(-1)![0];
+    expect(refreshedCall.until).toBe(new Date(laterTime).toISOString());
+    expect(refreshedCall.until).not.toBe(initialCall.until);
+  });
+
   it('toggles MCP Lab Assistant expand mode in results', async () => {
     sourceMock.listResults.mockResolvedValue([makeRun('run-a', 1200)]);
 

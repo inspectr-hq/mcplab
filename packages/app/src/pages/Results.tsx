@@ -107,6 +107,37 @@ function parseLocalDateTime(value: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/**
+ * Resolves the since/until API filter fresh, anchored to the current time for the
+ * 'last' preset. Must be called at fetch time (not memoized on a fixed render) so
+ * rolling windows like "last 24h" don't freeze at whatever moment the page mounted.
+ */
+function resolveTimeFilterRange(
+  mode: TimeFilterMode,
+  preset: TimeFilterPreset,
+  start: string,
+  end: string
+): { since?: string; until?: string } {
+  if (mode === 'all') return {};
+  if (mode === 'last') {
+    const presetConfig =
+      TIME_FILTER_PRESETS.find((item) => item.value === preset) ?? TIME_FILTER_PRESETS[0]!;
+    const now = new Date(Date.now());
+    const since = new Date(now.getTime() - presetConfig.durationMs);
+    return { since: since.toISOString(), until: now.toISOString() };
+  }
+  const startParsed = parseLocalDateTime(start);
+  const endParsed = parseLocalDateTime(end);
+  if (startParsed && endParsed) {
+    return startParsed.getTime() <= endParsed.getTime()
+      ? { since: startParsed.toISOString(), until: endParsed.toISOString() }
+      : { since: endParsed.toISOString(), until: startParsed.toISOString() };
+  }
+  if (startParsed) return { since: startParsed.toISOString() };
+  if (endParsed) return { until: endParsed.toISOString() };
+  return {};
+}
+
 function formatLocalDateTime(value: string) {
   const parsed = parseLocalDateTime(value);
   if (!parsed) return '';
@@ -265,27 +296,6 @@ const Results = () => {
   const { offset, totalCount, hasMore } = pagination;
   const [rerunningRunId, setRerunningRunId] = useState<string | null>(null);
   const apiScenarioFilter = scenarioFilter === 'all' ? undefined : scenarioFilter;
-  const apiTimeFilter = useMemo(() => {
-    if (timeFilterMode === 'all') return {};
-    if (timeFilterMode === 'last') {
-      const preset =
-        TIME_FILTER_PRESETS.find((item) => item.value === timeFilterPreset) ??
-        TIME_FILTER_PRESETS[0]!;
-      const now = new Date();
-      const since = new Date(now.getTime() - preset.durationMs);
-      return { since: since.toISOString(), until: now.toISOString() };
-    }
-    const start = parseLocalDateTime(timeFilterStart);
-    const end = parseLocalDateTime(timeFilterEnd);
-    if (start && end) {
-      return start.getTime() <= end.getTime()
-        ? { since: start.toISOString(), until: end.toISOString() }
-        : { since: end.toISOString(), until: start.toISOString() };
-    }
-    if (start) return { since: start.toISOString() };
-    if (end) return { until: end.toISOString() };
-    return {};
-  }, [timeFilterEnd, timeFilterMode, timeFilterPreset, timeFilterStart]);
   const toggleSort = (next: typeof sortBy) => {
     if (sortBy === next) {
       setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
@@ -301,7 +311,7 @@ const Results = () => {
     setDashboardLoading(true);
     try {
       const summaries = await source.listRunSummaries({
-        ...apiTimeFilter,
+        ...resolveTimeFilterRange(timeFilterMode, timeFilterPreset, timeFilterStart, timeFilterEnd),
         scenario: apiScenarioFilter
       });
       if (dashboardRequestIdRef.current === requestId) {
@@ -316,14 +326,28 @@ const Results = () => {
         setDashboardLoading(false);
       }
     }
-  }, [apiScenarioFilter, apiTimeFilter, dashboardVisible, source]);
+  }, [
+    apiScenarioFilter,
+    dashboardVisible,
+    source,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
 
   const loadResults = async () => {
     setRefreshing(true);
     try {
+      const timeFilter = resolveTimeFilterRange(
+        timeFilterMode,
+        timeFilterPreset,
+        timeFilterStart,
+        timeFilterEnd
+      );
       if (source.listRunSummariesPage) {
         const page = await source.listRunSummariesPage({
-          ...apiTimeFilter,
+          ...timeFilter,
           scenario: apiScenarioFilter,
           limit: PAGE_LIMIT,
           offset
@@ -332,7 +356,7 @@ const Results = () => {
         setResults(page.data.map(summaryToResult));
       } else if (source.listRunSummaries) {
         const summaries = await source.listRunSummaries({
-          ...apiTimeFilter,
+          ...timeFilter,
           scenario: apiScenarioFilter,
           limit: PAGE_LIMIT,
           offset
@@ -360,10 +384,16 @@ const Results = () => {
   useEffect(() => {
     let active = true;
     setRefreshing(true);
+    const timeFilter = resolveTimeFilterRange(
+      timeFilterMode,
+      timeFilterPreset,
+      timeFilterStart,
+      timeFilterEnd
+    );
     const loadPromise = source.listRunSummariesPage
       ? source
           .listRunSummariesPage({
-            ...apiTimeFilter,
+            ...timeFilter,
             scenario: apiScenarioFilter,
             limit: PAGE_LIMIT,
             offset
@@ -377,7 +407,7 @@ const Results = () => {
       : source.listRunSummaries
       ? source
           .listRunSummaries({
-            ...apiTimeFilter,
+            ...timeFilter,
             scenario: apiScenarioFilter,
             limit: PAGE_LIMIT,
             offset
@@ -408,7 +438,16 @@ const Results = () => {
     return () => {
       active = false;
     };
-  }, [apiScenarioFilter, apiTimeFilter, completionVersion, offset, source]);
+  }, [
+    apiScenarioFilter,
+    completionVersion,
+    offset,
+    source,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
 
   useEffect(() => {
     try {
@@ -593,7 +632,14 @@ const Results = () => {
 
   useEffect(() => {
     pagination.reset();
-  }, [apiScenarioFilter, apiTimeFilter, pagination.reset]);
+  }, [
+    apiScenarioFilter,
+    pagination.reset,
+    timeFilterEnd,
+    timeFilterMode,
+    timeFilterPreset,
+    timeFilterStart
+  ]);
 
   const selectedScenarioFilterLabel = useMemo(() => {
     if (scenarioFilter === 'all') return 'All scenarios';
