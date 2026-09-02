@@ -1,7 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { URL } from 'node:url';
-import type { EvalConfig } from '@inspectr/mcplab-core';
+import { resolveConfigValue, type EvalConfig } from '@inspectr/mcplab-core';
 import { addJobEvent } from './jobs.js';
 
 type SessionStatus =
@@ -1271,10 +1271,19 @@ export function createOAuthDebuggerSession(params: {
       ? {
           ...params.config.clientConfig,
           preRegistered: {
-            clientId:
+            clientId: resolveConfigValue(
               params.config.clientConfig.preRegistered?.clientId || serverOauth?.client_id || '',
+              'OAuth client_id'
+            ),
             clientSecret:
-              params.config.clientConfig.preRegistered?.clientSecret ?? serverOauth?.client_secret,
+              params.config.clientConfig.preRegistered?.clientSecret != null
+                ? resolveConfigValue(
+                    params.config.clientConfig.preRegistered.clientSecret,
+                    'OAuth client_secret'
+                  )
+                : serverOauth?.client_secret
+                ? resolveConfigValue(serverOauth.client_secret, 'OAuth client_secret')
+                : undefined,
             tokenEndpointAuthMethod:
               params.config.clientConfig.preRegistered?.tokenEndpointAuthMethod
           }

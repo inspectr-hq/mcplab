@@ -89,6 +89,46 @@ describe('mcp tool contracts', () => {
     expect((parsed as any).data.name).toBe('Named scenario');
   });
 
+  it('accepts full evaluation rules in scenario authoring tools', async () => {
+    const tools = setupTools();
+    const schema = asSchema(tools.get('mcplab_generate_scenario_entry')!.config.inputSchema);
+    const parsed = schema.safeParse({
+      id: 'full-evaluation-rules',
+      servers: ['mcp-lab'],
+      prompt: 'Run the complete evaluation check.',
+      eval: {
+        response_assertions: [{ type: 'contains', value: 'Paris' }],
+        tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+        agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
+      }
+    });
+    expect(parsed.success).toBe(true);
+    expect((parsed as any).data.eval).toEqual({
+      response_assertions: [{ type: 'contains', value: 'Paris' }],
+      tool_input_assertions: [{ type: 'jsonpath', tool: 'fetch', path: '$.days', equals: 5 }],
+      agent_assertions: [{ label: 'Complete', prompt: 'Is the answer complete?' }]
+    });
+  });
+
+  it('describes evaluation assertion types and exposes them in scenario output', () => {
+    const tools = setupTools();
+    const generateTool = tools.get('mcplab_generate_scenario_entry')!.config as any;
+    expect(generateTool.description).toContain('eval object');
+    expect(generateTool.inputSchema.required_tools.description).toContain('Simple shorthand');
+    expect(generateTool.inputSchema.eval.description).toContain('Full evaluation-rule object');
+
+    const outputScenario = asSchema(
+      (tools.get('mcplab_generate_scenario_entry')!.config.outputSchema as any).scenario
+    );
+    const parsed = outputScenario.safeParse({
+      id: 'typed-output',
+      mcp_servers: [{ ref: 'mcp-lab' }],
+      prompt: 'Run the typed output check.',
+      eval: { response_assertions: [{ type: 'contains', value: 'Paris' }] }
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('generates scenario-owned MCP server refs', async () => {
     const tool = setupTools().get('mcplab_generate_scenario_entry');
     const result = await tool!.cb({

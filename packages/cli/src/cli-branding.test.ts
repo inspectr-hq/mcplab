@@ -4,7 +4,8 @@ import {
   CLI_BANNER,
   formatCliBanner,
   formatCliStartupLine,
-  formatLangSmithStatus
+  formatLangSmithStatus,
+  isLangSmithEnabled
 } from './cli-branding.js';
 
 describe('CLI branding', () => {
@@ -61,6 +62,13 @@ describe('CLI branding', () => {
   it('reports disabled LangSmith tracing with an enablement hint', () => {
     expect(formatLangSmithStatus({})).toBe(
       'disabled · set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable'
+    );
+  });
+
+  it('detects whether LangSmith status should be shown at startup', () => {
+    expect(isLangSmithEnabled({})).toBe(false);
+    expect(isLangSmithEnabled({ LANGSMITH_TRACING: 'true', LANGSMITH_API_KEY: 'secret' })).toBe(
+      true
     );
   });
 

@@ -29,9 +29,7 @@ export function formatCliStartupLine(label: string, value: string): string {
 export function formatLangSmithStatus(
   env: Record<string, string | undefined> = process.env
 ): string {
-  const enabled =
-    env.LANGSMITH_TRACING?.trim().toLowerCase() === 'true' && Boolean(env.LANGSMITH_API_KEY);
-  if (!enabled) {
+  if (!isLangSmithEnabled(env)) {
     return 'disabled · set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable';
   }
 
@@ -39,6 +37,10 @@ export function formatLangSmithStatus(
   const endpoint = env.LANGSMITH_ENDPOINT?.trim() || 'https://api.smith.langchain.com';
   const check = kleur.enabled ? kleur.green('✓') : '✓';
   return `${check} enabled · project: ${project} · endpoint: ${endpoint}`;
+}
+
+export function isLangSmithEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.LANGSMITH_TRACING?.trim().toLowerCase() === 'true' && Boolean(env.LANGSMITH_API_KEY);
 }
 
 function supportsTrueColor(): boolean {

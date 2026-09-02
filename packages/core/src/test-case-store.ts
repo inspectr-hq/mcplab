@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { SourceScenario } from './types.js';
+import type { EvalRules, SourceScenario } from './types.js';
 import { buildScenarioEntry } from './scenario-builder.js';
 
 export type TestCaseCreateInput = {
@@ -13,6 +13,7 @@ export type TestCaseCreateInput = {
   forbiddenTools?: string[];
   toolSequence?: string[];
   responseRegexPatterns?: string[];
+  eval?: EvalRules;
   extractRules?: Array<{ name: string; regex: string }>;
 };
 export type CreatedTestCaseFile = { id: string; path: string; testCase: SourceScenario };
@@ -52,6 +53,7 @@ export function createTestCaseFile(params: {
     forbidden_tools: input.forbiddenTools,
     tool_sequence: input.toolSequence,
     response_regex_patterns: input.responseRegexPatterns,
+    eval: input.eval,
     extract_rules: input.extractRules
   });
   try {
@@ -113,6 +115,7 @@ export function updateTestCaseFile(params: {
     forbidden_tools: input.forbiddenTools,
     tool_sequence: input.toolSequence,
     response_regex_patterns: input.responseRegexPatterns,
+    eval: input.eval,
     extract_rules: input.extractRules
   });
   const librariesDir = resolve(params.librariesDir);
