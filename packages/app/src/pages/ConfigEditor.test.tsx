@@ -70,12 +70,14 @@ describe('ConfigEditor', () => {
       updatedAt: '2026-04-01T00:00:00.000Z'
     };
     librariesRef.value = {
-      servers: [{
-        id: 'library-server',
-        name: 'Library Server',
-        transport: 'stdio',
-        command: 'server'
-      }],
+      servers: [
+        {
+          id: 'library-server',
+          name: 'Library Server',
+          transport: 'stdio',
+          command: 'server'
+        }
+      ],
       agents: [],
       scenarios: [
         {
@@ -114,7 +116,9 @@ describe('ConfigEditor', () => {
     expect(screen.getByLabelText('Evaluation file')).toHaveTextContent(
       'mcplab/evals/editor-config.yaml'
     );
-    expect(screen.queryByText('/workspace/mcplab/evals/editor-config.yaml')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('/workspace/mcplab/evals/editor-config.yaml')
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
