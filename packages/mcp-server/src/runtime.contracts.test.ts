@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
+import { createConfiguredServer, handleMcplabMcpHttpRequest, registerTools } from './runtime.js';
 
 type RegisteredTool = {
   config: { inputSchema?: unknown; outputSchema?: unknown; annotations?: Record<string, unknown> };
@@ -89,6 +89,17 @@ describe('mcp tool contracts', () => {
     expect((tools.get('mcplab_search_tool_analysis_results')!.config as any).description).toContain(
       'TOOL-ANALYSIS'
     );
+  });
+
+  it('never advertises the draft-07 JSON Schema dialect for tool schemas', async () => {
+    const server = createConfiguredServer();
+    const protocol = server.server as unknown as {
+      _requestHandlers: Map<string, (request: unknown, extra: unknown) => Promise<unknown>>;
+    };
+    const listTools = protocol._requestHandlers.get('tools/list')!;
+    const result = await listTools({ method: 'tools/list' }, {});
+
+    expect(JSON.stringify(result)).not.toContain('json-schema.org/draft-07');
   });
 
   it('declares scenario names in the shared output schema', () => {
