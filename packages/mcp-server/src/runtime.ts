@@ -838,7 +838,52 @@ export function createConfiguredServer(): McpServer {
   registerSkills(server);
   registerTools(server);
   registerPrompts(server);
+  patchToolSchemaDialect(server);
   return server;
+}
+
+const DRAFT_07_DIALECT = 'http://json-schema.org/draft-07/schema#';
+const DRAFT_2020_12_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
+
+function rewriteJsonSchemaDialect(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) rewriteJsonSchemaDialect(item);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const obj = value as Record<string, unknown>;
+  if (obj.$schema === DRAFT_07_DIALECT) {
+    obj.$schema = DRAFT_2020_12_DIALECT;
+  }
+  for (const key of Object.keys(obj)) {
+    rewriteJsonSchemaDialect(obj[key]);
+  }
+}
+
+/**
+ * @modelcontextprotocol/sdk@1.30.0 always stamps tool input/output JSON Schemas
+ * converted from Zod v3 as draft-07 ($schema is hardcoded, with no way for a
+ * server author to opt into 2020-12 — see
+ * https://github.com/modelcontextprotocol/typescript-sdk/issues/2721). Clients
+ * that validate structured output strictly against 2020-12 reject every tool
+ * call outright, which is what broke every mcplab_* tool after the 1.29.0 ->
+ * 1.30.0 bump in this repo. Patch the already-installed tools/list handler to
+ * relabel the dialect after the SDK builds its response.
+ *
+ * TODO: revisit once typescript-sdk#2721 is fixed upstream and we bump past
+ * the version that carries the fix — this whole function can then be deleted.
+ */
+function patchToolSchemaDialect(server: McpServer): void {
+  const protocol = server.server as unknown as {
+    _requestHandlers: Map<string, (request: unknown, extra: unknown) => Promise<unknown>>;
+  };
+  const original = protocol._requestHandlers.get('tools/list');
+  if (!original) return;
+  protocol._requestHandlers.set('tools/list', async (request, extra) => {
+    const result = await original(request, extra);
+    rewriteJsonSchemaDialect(result);
+    return result;
+  });
 }
 
 export function registerTools(server: McpServer): void {
