@@ -1,5 +1,11 @@
 # @inspectr/mcplab-mcp-server
 
+## 1.8.3
+
+### Patch Changes
+
+- fix: patch tools/list output to avoid draft-07 JSON Schema dialect
+
 ## 1.8.2
 
 ### Patch Changes
