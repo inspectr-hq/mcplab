@@ -7,8 +7,8 @@ export type RunScopeSummary = {
   modelSummary: string;
 };
 
-export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
-  const scenarioLabels = Array.from(
+export function getScenarioLabels(run: EvalResult): string[] {
+  return Array.from(
     new Map(
       run.scenarios
         .map((scenario) => {
@@ -20,6 +20,10 @@ export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
         .filter((entry): entry is readonly [string, string] => Boolean(entry))
     ).values()
   );
+}
+
+export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
+  const scenarioLabels = getScenarioLabels(run);
   const perScenarioAgents = run.scenarios
     .map((scenario) => scenario.agentName || scenario.agentId)
     .filter(Boolean);

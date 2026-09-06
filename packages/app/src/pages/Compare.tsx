@@ -47,7 +47,11 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } f
 import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
-import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
+import {
+  buildRunScopeSummary,
+  getScenarioLabels,
+  type RunScopeSummary
+} from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
@@ -141,10 +145,8 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
 function getRunEvaluationName(run: EvalResult): string {
   const configName = run.configName?.trim();
   if (configName) return configName;
-  const scenarioNames = Array.from(
-    new Set(run.scenarios.map((scenario) => scenario.scenarioName?.trim()).filter(Boolean))
-  );
-  return scenarioNames.slice(0, 2).join(', ') || 'n/a';
+  const scenarioLabels = getScenarioLabels(run);
+  return scenarioLabels.slice(0, 2).join(', ') || 'n/a';
 }
 
 function getRunConfigPath(run: EvalResult): string | undefined {
