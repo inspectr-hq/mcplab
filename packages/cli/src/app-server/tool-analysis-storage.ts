@@ -20,12 +20,6 @@ export interface ToolAnalysisResultSummary {
   serverNames: string[];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
-  toolDefinitionTokens?: number;
-}
-
-function reportToolDefinitionTokens(report: ToolAnalysisReport): number | undefined {
-  if (!Array.isArray(report.servers)) return undefined;
-  return report.servers.reduce((total, server) => total + (server.tokenEstimate?.total ?? 0), 0);
 }
 
 function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
@@ -64,9 +58,7 @@ function parseRecord(raw: string): SavedToolAnalysisReportRecord {
   ) {
     throw new Error('Invalid tool analysis report record');
   }
-  const record = parsed as SavedToolAnalysisReportRecord;
-  addToolDefinitionTokenEstimates(record.report);
-  return record;
+  return parsed as SavedToolAnalysisReportRecord;
 }
 
 export function createToolAnalysisReportId(date = new Date()): string {
@@ -94,7 +86,9 @@ export function readToolAnalysisReportRecord(
   reportId: string
 ): SavedToolAnalysisReportRecord | null {
   try {
-    return parseRecord(readFileSync(reportFile(baseDir, reportId), 'utf8'));
+    const record = parseRecord(readFileSync(reportFile(baseDir, reportId), 'utf8'));
+    addToolDefinitionTokenEstimates(record.report);
+    return record;
   } catch {
     return null;
   }
@@ -119,8 +113,7 @@ export function listToolAnalysisReports(baseDir: string): ToolAnalysisResultSumm
         assistantAgentModel: record.report.assistantAgentModel,
         serverNames: record.serverNames,
         modes: record.report.modes,
-        summary: record.report.summary,
-        toolDefinitionTokens: reportToolDefinitionTokens(record.report)
+        summary: record.report.summary
       });
     } catch (error) {
       console.warn(`Skipping invalid tool analysis report '${reportId}':`, error);

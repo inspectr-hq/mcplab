@@ -463,7 +463,6 @@ export interface ToolAnalysisResultSummary {
   serverNames: string[];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
-  toolDefinitionTokens?: number;
 }
 
 export interface ToolAnalysisDiscoveredTool {

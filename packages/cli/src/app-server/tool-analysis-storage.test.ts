@@ -10,12 +10,12 @@ import {
 
 const tempDirs: string[] = [];
 
-describe('listToolAnalysisReports', () => {
+describe('tool analysis report storage', () => {
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('derives token totals from schemas stored in existing reports', () => {
+  it('derives token totals only when reading an existing report detail', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcplab-tool-analysis-storage-'));
     tempDirs.push(dir);
     writeToolAnalysisReportRecord(dir, {
@@ -65,6 +65,6 @@ describe('listToolAnalysisReports', () => {
     expect(
       readToolAnalysisReportRecord(dir, 'ta-existing')?.report.servers[0]?.tokenEstimate?.total
     ).toBeGreaterThan(0);
-    expect(listToolAnalysisReports(dir)[0]?.toolDefinitionTokens).toBeGreaterThan(0);
+    expect(listToolAnalysisReports(dir)[0]).not.toHaveProperty('toolDefinitionTokens');
   });
 });

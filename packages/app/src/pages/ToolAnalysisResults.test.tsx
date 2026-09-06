@@ -17,7 +17,7 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 }));
 
 describe('ToolAnalysisResultsPage', () => {
-  it('shows the estimated token badge for each saved report', async () => {
+  it('does not show token estimates in the saved report overview', async () => {
     sourceMock.listToolAnalysisServers.mockResolvedValue(['demo']);
     sourceMock.listToolAnalysisResults.mockResolvedValue([
       {
@@ -43,6 +43,7 @@ describe('ToolAnalysisResultsPage', () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('~42tok')).toBeInTheDocument();
+    expect(await screen.findByText('ta-existing')).toBeInTheDocument();
+    expect(screen.queryByText(/tok$/)).not.toBeInTheDocument();
   });
 });

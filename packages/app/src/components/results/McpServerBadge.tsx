@@ -20,7 +20,7 @@ export function McpServerBadge({ versions, className }: McpServerBadgeProps) {
           <span
             tabIndex={0}
             className={cn(
-              'inline-flex max-w-[18rem] min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground',
+              'inline-flex max-w-[18rem] min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] leading-none text-muted-foreground',
               className
             )}
           >
