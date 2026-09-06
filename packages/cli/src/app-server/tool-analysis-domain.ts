@@ -1090,6 +1090,17 @@ export async function runToolAnalysisJob(params: {
       }
       toolsSkipped += perToolSkipped.filter(Boolean).length;
 
+      const analyzedTokenEstimate = estimateToolDefinitionTokens(
+        toolReports.map((tool) => ({
+          name: tool.toolName,
+          title: tool.title,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          outputSchema: tool.outputSchema
+        })),
+        agentConfig.model
+      );
+
       serverReports.push({
         serverName: discovered.serverName,
         toolCountDiscovered: discovered.tools.length,
@@ -1102,7 +1113,7 @@ export async function runToolAnalysisJob(params: {
           ...missingRequested.map((name) => `Requested tool not found: ${name}`)
         ],
         tools: toolReports,
-        tokenEstimate: discovered.tokenEstimate
+        tokenEstimate: analyzedTokenEstimate
       });
     }
 

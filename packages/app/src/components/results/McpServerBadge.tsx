@@ -9,6 +9,7 @@ type McpServerBadgeProps = {
 
 export function McpServerBadge({ versions, showPrefix = true, className }: McpServerBadgeProps) {
   const summary = Object.entries(versions ?? {})
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([serverId, version]) => `${serverId}@${version ?? 'unknown'}`)
     .join(', ');
 
