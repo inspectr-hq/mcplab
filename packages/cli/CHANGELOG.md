@@ -1,5 +1,14 @@
 # @inspectr/mcplab
 
+## 1.28.4
+
+### Patch Changes
+ 
+- feat: show MCP servers in evaluation results
+- feat: show tokens on saved analysis results
+- feat: add extended time filters
+- style: fix results table columns width
+
 ## 1.28.3
 
 ### Patch Changes
