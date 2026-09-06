@@ -52,6 +52,12 @@ import { summaryToResult } from '@/lib/run-summary-to-result';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 import { formatTokenCount } from '@/lib/format-duration';
+import {
+  TIME_FILTER_PRESETS,
+  getTimeFilterQueryState,
+  type TimeFilterMode,
+  type TimeFilterPreset
+} from '@/lib/time-filter';
 
 const colors = [
   'hsl(38, 92%, 50%)',
@@ -62,24 +68,6 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
-type TimeFilterPreset =
-  | '15min'
-  | '30min'
-  | '1h'
-  | '2h'
-  | '4h'
-  | '8h'
-  | '24h'
-  | '7d'
-  | '14d'
-  | '30d';
-type TimeFilterMode = 'all' | 'last' | 'custom';
-type TimeFilterQueryState = {
-  mode: TimeFilterMode;
-  preset: TimeFilterPreset;
-  start: string;
-  end: string;
-};
 
 type AgentSummary = {
   agentId: string;
@@ -106,19 +94,6 @@ type CompareTableItem =
 const COMPARE_RUNS_TABLE_COLUMN_COUNT = 9;
 const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
 
-const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
-  { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
-  { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
-  { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
-  { value: '2h', label: 'Last 2 hours', durationMs: 2 * 60 * 60 * 1000 },
-  { value: '4h', label: 'Last 4 hours', durationMs: 4 * 60 * 60 * 1000 },
-  { value: '8h', label: 'Last 8 hours', durationMs: 8 * 60 * 60 * 1000 },
-  { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
-  { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
-  { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
-  { value: '30d', label: 'Last 30 days', durationMs: 30 * 24 * 60 * 60 * 1000 }
-];
-
 function parseLocalDateTime(value: string) {
   if (!value.trim()) return null;
   const parsed = new Date(value);
@@ -138,15 +113,6 @@ function getLocalDayKey(value: string) {
   const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
   const day = String(parsed.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function formatMcpServersWithVersions(mcpServerVersions: Record<string, string | null>): string {
-  const entries = Object.entries(mcpServerVersions ?? {});
-  if (entries.length === 0) return '—';
-  return entries
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([server, version]) => `${server}@${version ?? 'unknown'}`)
-    .join(', ');
 }
 
 function formatLocalDayLabel(value: string) {
@@ -208,36 +174,6 @@ function formatChecksPassRate(run: EvalResult) {
       <span>{Math.round((counts.passed / evaluated) * 100)}%</span>
     </>
   );
-}
-
-function isTimeFilterMode(value: string | null): value is TimeFilterMode {
-  return value === 'all' || value === 'last' || value === 'custom';
-}
-
-function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
-  return (
-    value === '15min' ||
-    value === '30min' ||
-    value === '1h' ||
-    value === '2h' ||
-    value === '4h' ||
-    value === '8h' ||
-    value === '24h' ||
-    value === '7d' ||
-    value === '14d' ||
-    value === '30d'
-  );
-}
-
-function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQueryState {
-  const modeParam = searchParams.get('time_filter');
-  const presetParam = searchParams.get('time_preset');
-  return {
-    mode: isTimeFilterMode(modeParam) ? modeParam : 'all',
-    preset: isTimeFilterPreset(presetParam) ? presetParam : '15min',
-    start: searchParams.get('time_start') ?? '',
-    end: searchParams.get('time_end') ?? ''
-  };
 }
 
 function isSameStringArray(a: string[], b: string[]): boolean {
@@ -1542,9 +1478,10 @@ const Compare = () => {
                           run={r}
                           className="mt-0.5 truncate text-[10px] font-normal text-muted-foreground"
                         />
-                        <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">
-                          MCP: {formatMcpServersWithVersions(r.mcpServerVersions)}
-                        </div>
+                        <McpServerBadge
+                          versions={r.mcpServerVersions}
+                          className="mt-0.5 max-w-full border-0 bg-transparent p-0 text-[10px] font-normal"
+                        />
                       </TableHead>
                     ))}
                   </TableRow>

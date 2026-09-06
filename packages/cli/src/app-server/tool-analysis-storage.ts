@@ -26,6 +26,7 @@ export interface ToolAnalysisResultSummary {
 function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
   if (!Array.isArray(report.servers)) return;
   for (const server of report.servers) {
+    if (server.tokenEstimate) continue;
     server.tokenEstimate = estimateToolDefinitionTokens(
       server.tools.map((tool) => ({
         name: tool.toolName,
@@ -34,7 +35,7 @@ function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
         inputSchema: tool.inputSchema,
         outputSchema: tool.outputSchema
       })),
-      'unknown-model'
+      report.assistantAgentModel ?? 'unknown-model'
     );
   }
 }

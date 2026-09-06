@@ -1093,11 +1093,14 @@ const ResultDetail = () => {
                                 </div>
                               </TableCell>
                               <TableCell className="text-sm">
-                                <div>
-                                  {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
-                                    .filter(Boolean)
-                                    .join(' · ') || sc.agentName}
-                                </div>
+                                <div>{sc.agentName}</div>
+                                {sc.provider || sc.model ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </div>
+                                ) : null}
                               </TableCell>
                               <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                               <TableCell>

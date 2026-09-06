@@ -590,6 +590,7 @@ export async function discoverMcpToolsForServers(
   serverNames: string[],
   options?: {
     serverAuthHeaders?: Record<string, Record<string, string>>;
+    tokenEstimateModel?: string;
   }
 ): Promise<{
   mcp: McpClientManager;
@@ -601,6 +602,7 @@ export async function discoverMcpToolsForServers(
   }>;
 }> {
   const mcp = new McpClientManager();
+  const tokenEstimateModel = options?.tokenEstimateModel ?? 'unknown-model';
   const discovered: Array<{
     serverName: string;
     warnings: string[];
@@ -613,7 +615,7 @@ export async function discoverMcpToolsForServers(
       serverName,
       warnings: [] as string[],
       tools: [] as ToolAnalysisToolContext[],
-      tokenEstimate: estimateToolDefinitionTokens([], 'unknown-model')
+      tokenEstimate: estimateToolDefinitionTokens([], tokenEstimateModel)
     };
     if (!server) {
       entry.warnings.push(`Server '${serverName}' not found.`);
@@ -642,7 +644,7 @@ export async function discoverMcpToolsForServers(
           inputSchema: tool.inputSchema,
           outputSchema: tool.outputSchema
         })),
-        'unknown-model'
+        tokenEstimateModel
       );
     } catch (error: unknown) {
       entry.warnings.push(
@@ -728,7 +730,7 @@ export async function runToolAnalysisJob(params: {
   const { mcp, servers: discoveredServers } = await discoverMcpToolsForServers(
     libraries.servers,
     serverNames,
-    { serverAuthHeaders }
+    { serverAuthHeaders, tokenEstimateModel: agentConfig.model }
   );
   const mcpServerVersions = mcp.getServerVersions();
   try {
@@ -1099,7 +1101,8 @@ export async function runToolAnalysisJob(params: {
           ...discovered.warnings,
           ...missingRequested.map((name) => `Requested tool not found: ${name}`)
         ],
-        tools: toolReports
+        tools: toolReports,
+        tokenEstimate: discovered.tokenEstimate
       });
     }
 

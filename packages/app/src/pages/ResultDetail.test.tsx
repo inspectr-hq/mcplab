@@ -348,8 +348,8 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
     expect(badge).toHaveClass('leading-none');
-    expect(screen.getByText(/api:1\.2\.3/)).toBeInTheDocument();
-    expect(screen.getByText(/docs:unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/docs@unknown/)).toBeInTheDocument();
   });
 
   it('shows complete MCP server information on hover', async () => {
@@ -373,7 +373,7 @@ describe('ResultDetail conversation toggle', () => {
 
     expect(
       await screen.findByRole('tooltip', {
-        name: 'a-very-long-mcp-server-name:2026.09.05, docs:unknown'
+        name: 'a-very-long-mcp-server-name@2026.09.05, docs@unknown'
       })
     ).toBeInTheDocument();
   });
@@ -444,7 +444,7 @@ describe('ResultDetail conversation toggle', () => {
     expect(cells[9]).toHaveClass('text-right');
   });
 
-  it('shows the formatted provider and model without the raw agent name', async () => {
+  it('shows the formatted provider and model alongside the agent name', async () => {
     const result = makeResult();
     result.scenarios[0].agentName = 'azure-deepseek-v4-flash';
     result.scenarios[0].provider = 'azure';
@@ -461,7 +461,7 @@ describe('ResultDetail conversation toggle', () => {
 
     await screen.findByText('run-1');
     expect(screen.getByText('Azure OpenAI · DeepSeek-V4-Flash')).toBeInTheDocument();
-    expect(screen.queryByText('azure-deepseek-v4-flash')).not.toBeInTheDocument();
+    expect(screen.getByText('azure-deepseek-v4-flash')).toBeInTheDocument();
   });
 
   it('filters displayed scenarios and metrics when agent query param is set', async () => {

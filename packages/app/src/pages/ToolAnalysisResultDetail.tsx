@@ -33,15 +33,6 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-function inferAssistantProvider(agentName: string): string | undefined {
-  const normalized = agentName.trim().toLowerCase();
-  if (normalized.startsWith('azure-')) return 'azure';
-  if (normalized.startsWith('openai-')) return 'openai';
-  if (normalized.startsWith('anthropic-') || normalized.startsWith('claude-')) return 'anthropic';
-  if (normalized.startsWith('google-') || normalized.startsWith('gemini-')) return 'google';
-  return undefined;
-}
-
 export default function ToolAnalysisResultDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -130,11 +121,9 @@ export default function ToolAnalysisResultDetailPage() {
             </span>{' '}
             ·{' '}
             {[
-              formatProvider(
-                record.report.assistantAgentProvider ??
-                  inferAssistantProvider(record.report.assistantAgentName) ??
-                  ''
-              ) || null,
+              record.report.assistantAgentProvider
+                ? formatProvider(record.report.assistantAgentProvider)
+                : null,
               record.report.assistantAgentModel
             ]
               .filter(Boolean)

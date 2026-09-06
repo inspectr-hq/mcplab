@@ -206,7 +206,9 @@ describe('Results', () => {
     const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
     const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
-    const evaluationName = within(runCell).getByText('Search evaluation');
+    const evaluationName = within(runCell).getByText(
+      'Search evaluation · /workspace/mcplab/evals/search.yaml'
+    );
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );
@@ -232,7 +234,7 @@ describe('Results', () => {
     expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
-    expect(within(evaluationCell).getByText(/long-mcp-server-name:1\.2\.3/)).toBeInTheDocument();
+    expect(within(evaluationCell).getByText(/long-mcp-server-name@1\.2\.3/)).toBeInTheDocument();
     expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText('Search evaluation')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
