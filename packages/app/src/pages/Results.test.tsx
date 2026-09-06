@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Results from './Results';
@@ -175,6 +175,41 @@ describe('Results', () => {
     expect(
       screen.getByPlaceholderText('Ask about historical run differences...')
     ).toBeInTheDocument();
+  });
+
+  it('shows MCP servers within Evaluation without the configuration file path', async () => {
+    const run = makeRun('run-with-mcp', 1200);
+    run.mcpServerVersions = { 'long-mcp-server-name': '1.2.3' };
+    run.configName = 'Search evaluation';
+    run.configPath = '/workspace/mcplab/evals/search.yaml';
+    run.runNote = 'Full 31-scenario MCPLab tool suite, post tool-name-prefix fix';
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const runLink = await screen.findByText('run-with-mcp');
+    const row = runLink.closest('tr');
+    expect(row).not.toBeNull();
+    const cells = within(row!).getAllByRole('cell');
+    const runCell = cells[0]!;
+    const evaluationCell = cells[1]!;
+
+    expect(screen.getByRole('columnheader', { name: 'Evaluation' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
+    expect(runCell).toHaveClass('w-[15rem]', 'min-w-[15rem]', 'max-w-[15rem]');
+    expect(runCell).toHaveTextContent(
+      'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
+    );
+    expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
+    expect(within(evaluationCell).getByText(/long-mcp-server-name: 1\.2\.3/)).toBeInTheDocument();
+    expect(within(evaluationCell).getByText('Search evaluation')).toBeInTheDocument();
+    expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
   });
 
   it('shows the LangSmith trace link in the run actions menu', async () => {

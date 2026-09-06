@@ -55,6 +55,7 @@ import {
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -501,10 +502,6 @@ const ResultDetail = () => {
     return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
-  const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
-  const mcpVersionSummary = mcpServerVersionEntries
-    .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
-    .join(', ');
   const checkCounts = tallyCheckCounts(
     filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
@@ -816,12 +813,7 @@ const ResultDetail = () => {
             </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
-            {mcpVersionSummary ? (
-              <span className="inline-flex max-w-[18rem] min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
-                <span className="font-medium">MCP:</span>
-                <span className="ml-1 min-w-0 truncate font-mono">{mcpVersionSummary}</span>
-              </span>
-            ) : null}
+            <McpServerBadge versions={result.mcpServerVersions} />
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {Object.entries(result.langsmithTraceUrls ?? {}).map(([requestId, url]) => (
                 <a

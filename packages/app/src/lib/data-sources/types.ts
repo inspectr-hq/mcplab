@@ -76,6 +76,7 @@ export interface WorkspaceRunSummary {
   configHash: string;
   configPath?: string;
   configName?: string;
+  mcpServerVersions?: Record<string, string | null>;
   langsmithTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];

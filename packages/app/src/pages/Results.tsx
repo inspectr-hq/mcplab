@@ -62,6 +62,7 @@ import { PassRateBadge } from '@/components/PassRateBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import ResultsDashboard from '@/components/results/ResultsDashboard';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
@@ -737,17 +738,14 @@ const Results = () => {
     const map = new Map<string, RunScopeSummary>();
     for (const run of sorted) {
       if (run.scenarios.length > 0) {
-        map.set(run.id, buildRunScopeSummary(run));
+        map.set(run.id, buildRunScopeSummary({ ...run, configPath: undefined }));
         continue;
       }
       const evalName = run.configName?.trim() || '';
-      const configPath = run.configPath?.trim() || '';
-      const evalLabel =
-        evalName && configPath ? `${evalName} · ${configPath}` : evalName || configPath;
       map.set(run.id, {
         scenarioCount: run.totalScenarios,
         agentCount: 0,
-        scopePreview: evalLabel || 'n/a',
+        scopePreview: evalName || 'n/a',
         modelSummary: ''
       });
     }
@@ -1053,7 +1051,7 @@ const Results = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <TableHead className="w-[15rem] min-w-[15rem] max-w-[15rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1063,7 +1061,7 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead>Evaluated</TableHead>
+                  <TableHead>Evaluation</TableHead>
                   <TableHead>
                     <button
                       type="button"
@@ -1148,7 +1146,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell>
+                        <TableCell className="w-[15rem] min-w-[15rem] max-w-[15rem]">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1172,16 +1170,30 @@ const Results = () => {
                               modelSummary: ''
                             };
                             return (
-                              <div className="space-y-0.5">
-                                <div>
-                                  Evaluated: {scope.scenarioCount} scenario
-                                  {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
-                                  {scope.agentCount === 1 ? '' : 's'}
-                                  {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
+                              <div className="space-y-1">
+                                <div className="flex min-w-0 items-baseline gap-1.5">
+                                  <span
+                                    className="min-w-0 truncate font-mono text-xs text-foreground/80"
+                                    title={scope.scopePreview}
+                                  >
+                                    {scope.scopePreview}
+                                  </span>
+                                  <span className="shrink-0 whitespace-nowrap">
+                                    {scope.scenarioCount} scenario
+                                    {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount}{' '}
+                                    agent
+                                    {scope.agentCount === 1 ? '' : 's'}
+                                  </span>
+                                  {scope.modelSummary ? (
+                                    <span className="min-w-0 truncate" title={scope.modelSummary}>
+                                      · {scope.modelSummary}
+                                    </span>
+                                  ) : null}
                                 </div>
-                                <div className="font-mono text-xs text-foreground/80">
-                                  {scope.scopePreview}
-                                </div>
+                                <McpServerBadge
+                                  versions={item.run.mcpServerVersions}
+                                  className="max-w-[18rem]"
+                                />
                               </div>
                             );
                           })()}

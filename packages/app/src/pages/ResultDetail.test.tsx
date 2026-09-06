@@ -351,6 +351,32 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText(/docs: unknown/)).toBeInTheDocument();
   });
 
+  it('shows complete MCP server information on hover', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = {
+      'a-very-long-mcp-server-name': '2026.09.05',
+      docs: null
+    };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.pointerMove(screen.getByText(/a-very-long-mcp-server-name/));
+
+    expect(
+      await screen.findByRole('tooltip', {
+        name: 'a-very-long-mcp-server-name: 2026.09.05, docs: unknown'
+      })
+    ).toBeInTheDocument();
+  });
+
   it('hides MCP inline metadata for historical runs without versions', async () => {
     getResultMock.mockResolvedValue(makeResult());
 
