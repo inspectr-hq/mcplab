@@ -461,6 +461,7 @@ export interface ToolAnalysisResultSummary {
   assistantAgentName: string;
   assistantAgentModel: string;
   serverNames: string[];
+  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
 }

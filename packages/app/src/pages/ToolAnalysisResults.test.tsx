@@ -26,6 +26,7 @@ describe('ToolAnalysisResultsPage', () => {
         assistantAgentName: 'agent',
         assistantAgentModel: 'model',
         serverNames: ['demo'],
+        mcpServerVersions: { demo: '1.0.0' },
         modes: { metadataReview: true, deeperAnalysis: false },
         summary: {
           serversAnalyzed: 1,
@@ -46,6 +47,8 @@ describe('ToolAnalysisResultsPage', () => {
     expect(await screen.findByText('ta-existing')).toBeInTheDocument();
     expect(screen.getByText('agent')).toBeInTheDocument();
     expect(screen.queryByText('model')).not.toBeInTheDocument();
+    expect(screen.getByText('MCP:')).toBeInTheDocument();
+    expect(screen.getByText('demo:1.0.0')).toBeInTheDocument();
     expect(screen.queryByText(/tok$/)).not.toBeInTheDocument();
   });
 });

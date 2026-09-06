@@ -31,6 +31,7 @@ describe('tool analysis report storage', () => {
         assistantAgentModel: 'model',
         modes: { metadataReview: true, deeperAnalysis: false },
         settings: {},
+        mcpServerVersions: { demo: '1.0.0' },
         summary: {
           serversAnalyzed: 1,
           toolsAnalyzed: 1,
@@ -66,5 +67,6 @@ describe('tool analysis report storage', () => {
       readToolAnalysisReportRecord(dir, 'ta-existing')?.report.servers[0]?.tokenEstimate?.total
     ).toBeGreaterThan(0);
     expect(listToolAnalysisReports(dir)[0]).not.toHaveProperty('toolDefinitionTokens');
+    expect(listToolAnalysisReports(dir)[0]?.mcpServerVersions).toEqual({ demo: '1.0.0' });
   });
 });

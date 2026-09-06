@@ -41,6 +41,7 @@ import { toast } from '@/hooks/use-toast';
 import type { ToolAnalysisResultSummary } from '@/lib/data-sources/types';
 import { Clock, Download, MoreHorizontal, Trash2, NotebookTabs, ChevronDown } from 'lucide-react';
 import { toolAnalysisReportToMarkdown } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 
@@ -317,12 +318,16 @@ export default function ToolAnalysisResultsPage() {
                                 {item.summary.toolsSkipped}
                               </span>
                             </div>
-                            <div className="font-mono text-xs text-foreground/80">
-                              {item.serverNames.slice(0, 2).join(', ')}
-                              {item.serverNames.length > 2
-                                ? ` +${item.serverNames.length - 2}`
-                                : ''}
-                            </div>
+                            {Object.keys(item.mcpServerVersions ?? {}).length > 0 ? (
+                              <McpServerBadge versions={item.mcpServerVersions} />
+                            ) : (
+                              <div className="font-mono text-xs text-foreground/80">
+                                {item.serverNames.slice(0, 2).join(', ')}
+                                {item.serverNames.length > 2
+                                  ? ` +${item.serverNames.length - 2}`
+                                  : ''}
+                              </div>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">

@@ -18,6 +18,7 @@ export interface ToolAnalysisResultSummary {
   assistantAgentName: string;
   assistantAgentModel: string;
   serverNames: string[];
+  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
 }
@@ -112,6 +113,7 @@ export function listToolAnalysisReports(baseDir: string): ToolAnalysisResultSumm
         assistantAgentName: record.report.assistantAgentName,
         assistantAgentModel: record.report.assistantAgentModel,
         serverNames: record.serverNames,
+        mcpServerVersions: record.report.mcpServerVersions,
         modes: record.report.modes,
         summary: record.report.summary
       });
