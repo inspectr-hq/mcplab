@@ -40,7 +40,7 @@ export function buildRunScopeSummary(run: EvalResult): RunScopeSummary {
   const modelRemainder = models.length > 2 ? ` +${models.length - 2}` : '';
   const evalName = run.configName?.trim() || '';
   const configPath = run.configPath?.trim() || '';
-  const evalLabel = evalName && configPath ? `${evalName} · ${configPath}` : evalName || configPath;
+  const evalLabel = evalName || configPath;
 
   return {
     scenarioCount: scenarioLabels.length,

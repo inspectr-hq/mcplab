@@ -206,18 +206,16 @@ describe('Results', () => {
     const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
     const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
     const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
-    const evaluationName = within(runCell).getByText(
-      'Search evaluation · /workspace/mcplab/evals/search.yaml'
-    );
+    const evaluationName = within(runCell).getByText('Search evaluation');
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );
 
     expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
-    expect(runHeader).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
-    expect(runHeader).not.toHaveClass('min-w-[22.5rem]');
-    expect(runCell).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
-    expect(runCell).not.toHaveClass('min-w-[22.5rem]');
+    expect(runHeader).toHaveClass('w-[25rem]', 'max-w-[25rem]');
+    expect(runHeader).not.toHaveClass('min-w-[25rem]');
+    expect(runCell).toHaveClass('w-[25rem]', 'max-w-[25rem]');
+    expect(runCell).not.toHaveClass('min-w-[25rem]');
     expect(evaluationHeader).toHaveClass('min-w-0');
     expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
     expect(evaluationCell).toHaveClass('min-w-0');

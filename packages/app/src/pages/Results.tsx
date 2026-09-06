@@ -707,8 +707,7 @@ const Results = () => {
       }
       const evalName = run.configName?.trim() || '';
       const configPath = run.configPath?.trim() || '';
-      const evalLabel =
-        evalName && configPath ? `${evalName} · ${configPath}` : evalName || configPath;
+      const evalLabel = evalName || configPath;
       map.set(run.id, {
         scenarioCount: run.totalScenarios,
         agentCount: 0,
@@ -1018,7 +1017,7 @@ const Results = () => {
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[22.5rem] max-w-[22.5rem]">
+                  <TableHead className="w-[25rem] max-w-[25rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1113,7 +1112,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell className="w-[22.5rem] max-w-[22.5rem]">
+                        <TableCell className="w-[25rem] max-w-[25rem]">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
