@@ -987,11 +987,7 @@ const ToolAnalysisPage = () => {
                       Deeper analysis may execute read-only MCP tools automatically.
                     </div>
                   </>
-                ) : (
-                  <div className="md:col-span-2 text-xs text-muted-foreground">
-                    Deeper analysis is disabled. Only metadata/schema review will run.
-                  </div>
-                )}
+                ) : null}
               </div>
             </div>
 

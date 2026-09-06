@@ -480,6 +480,39 @@ describe('Compare', () => {
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
   });
 
+  it('shows evaluation names with their paths available on hover in comparison summaries', async () => {
+    const left = makeRunAt('run-left', '2026-03-10T10:00:00.000Z');
+    left.configName = 'Search evaluation';
+    left.configPath = '/workspace/evals/search.yaml';
+    const right = makeRunAt('run-right', '2026-03-10T09:00:00.000Z');
+    right.configName = 'Tag evaluation';
+    right.configPath = '/workspace/evals/tag.yaml';
+    sourceMock.listResults.mockResolvedValue([left, right]);
+
+    render(
+      <MemoryRouter initialEntries={['/compare']}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-left');
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]!);
+    fireEvent.click(checkboxes[1]!);
+
+    await screen.findByText('Summary Comparison');
+    const evaluationLabels = screen.getAllByText('Search evaluation');
+    expect(evaluationLabels.length).toBeGreaterThan(0);
+    const summaryLabel = evaluationLabels.find((label) =>
+      label.className.includes('text-[10px]')
+    );
+    expect(summaryLabel).toBeDefined();
+    expect(summaryLabel).toHaveAttribute('title', '/workspace/evals/search.yaml');
+    expect(screen.getAllByText('Tag evaluation').length).toBeGreaterThan(0);
+  });
+
   it('filters runs mode by Last 15min preset', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:15:00.000Z').getTime());
     sourceMock.listResults.mockResolvedValue([

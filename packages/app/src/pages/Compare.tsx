@@ -171,6 +171,21 @@ function getRunEvaluationName(run: EvalResult): string {
   return scenarioNames.slice(0, 2).join(', ') || 'n/a';
 }
 
+function getRunConfigPath(run: EvalResult): string | undefined {
+  const path = run.configPath?.trim();
+  return path || undefined;
+}
+
+function EvaluationName({ run, className }: { run: EvalResult; className: string }) {
+  const name = getRunEvaluationName(run);
+  const path = getRunConfigPath(run);
+  return (
+    <div className={className} title={path}>
+      {name}
+    </div>
+  );
+}
+
 function formatChecksPassRate(run: EvalResult) {
   const counts = run.checkCounts;
   if (!counts || counts.total === 0) return '—';
@@ -1257,12 +1272,10 @@ const Compare = () => {
                       <TableCell className="font-mono text-xs">
                         <div className="space-y-0.5">
                           <div>{item.run.id}</div>
-                          <div
+                          <EvaluationName
+                            run={item.run}
                             className="truncate font-sans text-xs text-foreground/80"
-                            title={getRunEvaluationName(item.run)}
-                          >
-                            {getRunEvaluationName(item.run)}
-                          </div>
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground">
@@ -1423,11 +1436,10 @@ const Compare = () => {
                         className="font-mono text-xs"
                       >
                         <div>{r.id}</div>
-                        {r.configPath?.trim() ? (
-                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
-                            {r.configPath.trim()}
-                          </div>
-                        ) : null}
+                        <EvaluationName
+                          run={r}
+                          className="mt-0.5 truncate text-[10px] font-normal text-muted-foreground"
+                        />
                       </TableHead>
                     ))}
                   </TableRow>
@@ -1516,11 +1528,10 @@ const Compare = () => {
                         className="font-mono text-xs"
                       >
                         <div>{r.id}</div>
-                        {r.configPath?.trim() ? (
-                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
-                            {r.configPath.trim()}
-                          </div>
-                        ) : null}
+                        <EvaluationName
+                          run={r}
+                          className="mt-0.5 truncate text-[10px] font-normal text-muted-foreground"
+                        />
                         <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">
                           MCP: {formatMcpServersWithVersions(r.mcpServerVersions)}
                         </div>
