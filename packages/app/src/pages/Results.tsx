@@ -76,7 +76,7 @@ import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
-type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset = '15min' | '30min' | '1h' | '2h' | '4h' | '8h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -96,6 +96,9 @@ const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durat
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
   { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
   { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
+  { value: '2h', label: 'Last 2 hours', durationMs: 2 * 60 * 60 * 1000 },
+  { value: '4h', label: 'Last 4 hours', durationMs: 4 * 60 * 60 * 1000 },
+  { value: '8h', label: 'Last 8 hours', durationMs: 8 * 60 * 60 * 1000 },
   { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
   { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
   { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
@@ -175,6 +178,9 @@ function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
     value === '15min' ||
     value === '30min' ||
     value === '1h' ||
+    value === '2h' ||
+    value === '4h' ||
+    value === '8h' ||
     value === '24h' ||
     value === '7d' ||
     value === '14d' ||

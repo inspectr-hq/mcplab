@@ -41,6 +41,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/components/ProviderBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useDataSource } from '@/contexts/DataSourceContext';
@@ -61,7 +62,7 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
-type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset = '15min' | '30min' | '1h' | '2h' | '4h' | '8h' | '24h' | '7d' | '14d' | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -99,6 +100,9 @@ const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durat
   { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
   { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
   { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
+  { value: '2h', label: 'Last 2 hours', durationMs: 2 * 60 * 60 * 1000 },
+  { value: '4h', label: 'Last 4 hours', durationMs: 4 * 60 * 60 * 1000 },
+  { value: '8h', label: 'Last 8 hours', durationMs: 8 * 60 * 60 * 1000 },
   { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
   { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
   { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
@@ -158,6 +162,15 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
   );
 }
 
+function getRunEvaluationName(run: EvalResult): string {
+  const configName = run.configName?.trim();
+  if (configName) return configName;
+  const scenarioNames = Array.from(
+    new Set(run.scenarios.map((scenario) => scenario.scenarioName?.trim()).filter(Boolean))
+  );
+  return scenarioNames.slice(0, 2).join(', ') || 'n/a';
+}
+
 function formatChecksPassRate(run: EvalResult) {
   const counts = run.checkCounts;
   if (!counts || counts.total === 0) return '—';
@@ -181,6 +194,9 @@ function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
     value === '15min' ||
     value === '30min' ||
     value === '1h' ||
+    value === '2h' ||
+    value === '4h' ||
+    value === '8h' ||
     value === '24h' ||
     value === '7d' ||
     value === '14d' ||
@@ -1238,7 +1254,17 @@ const Compare = () => {
                           disabled={!selected.has(item.run.id) && selected.size >= 5}
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.run.id}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="space-y-0.5">
+                          <div>{item.run.id}</div>
+                          <div
+                            className="truncate font-sans text-xs text-foreground/80"
+                            title={getRunEvaluationName(item.run)}
+                          >
+                            {getRunEvaluationName(item.run)}
+                          </div>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground">
                         {(() => {
                           const scope = runScopesById.get(item.run.id) ?? {
@@ -1255,9 +1281,10 @@ const Compare = () => {
                                 {scope.agentCount === 1 ? '' : 's'}
                                 {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
                               </div>
-                              <div className="font-mono text-xs text-foreground/80">
-                                {scope.scopePreview}
-                              </div>
+                              <McpServerBadge
+                                versions={item.run.mcpServerVersions}
+                                showPrefix={false}
+                              />
                             </div>
                           );
                         })()}
@@ -1280,7 +1307,18 @@ const Compare = () => {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <PassRateBadge rate={item.run.overallPassRate} />
+                        <div className="flex flex-col items-center gap-1">
+                          <PassRateBadge rate={item.run.overallPassRate} />
+                          {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
+                            <span
+                              className="font-mono text-[11px] leading-none"
+                              aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed`}
+                              title={`${item.run.checkCounts.passed} passed · ${item.run.checkCounts.failed} failed`}
+                            >
+                              <CheckCountLabel counts={item.run.checkCounts} />
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {item.run.totalScenarios}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import Compare from './Compare';
@@ -454,6 +454,32 @@ describe('Compare', () => {
     expect(screen.queryByText(/Anthropic · gpt-4/)).not.toBeInTheDocument();
   });
 
+  it('shows the MCP badge and check counts in the run selection table', async () => {
+    const run = makeRunAt('run-with-metadata', '2026-03-10T10:00:00.000Z');
+    run.configName = 'MCPLab full tool suite';
+    run.configPath = '/workspace/mcplab/mcplab-full-tool-suite.yaml';
+    run.mcpServerVersions = { 'mcp-lab': '1.8.3' };
+    run.checkCounts = { passed: 3, failed: 1, not_evaluated: 0, total: 4 };
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/compare']}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-with-metadata');
+    const runCell = screen.getByText('run-with-metadata').closest('td');
+    expect(runCell).not.toBeNull();
+    expect(within(runCell!).getByText('MCPLab full tool suite')).toBeInTheDocument();
+    expect(screen.queryByText(/mcplab-full-tool-suite\.yaml/)).not.toBeInTheDocument();
+    expect(screen.getByText('mcp-lab:1.8.3')).toBeInTheDocument();
+    expect(screen.getByText('3 ✓')).toBeInTheDocument();
+    expect(screen.getByText('1 ✕')).toBeInTheDocument();
+  });
+
   it('filters runs mode by Last 15min preset', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:15:00.000Z').getTime());
     sourceMock.listResults.mockResolvedValue([
@@ -472,6 +498,24 @@ describe('Compare', () => {
     await screen.findByText('run-fresh');
     expect(screen.queryByText('run-old')).not.toBeInTheDocument();
     expect(screen.getByText('Last 15min')).toBeInTheDocument();
+  });
+
+  it('supports the Last 4 hours preset', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:00:00.000Z').getTime());
+    sourceMock.listResults.mockResolvedValue([
+      makeRunAt('run-in-window', '2026-03-10T07:00:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={['/compare?time_filter=last&time_preset=4h']}>
+        <Routes>
+          <Route path="/compare" element={<Compare />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-in-window');
+    expect(screen.getByText('Last 4 hours')).toBeInTheDocument();
   });
 
   it('filters runs mode by custom datetime range', async () => {
