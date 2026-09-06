@@ -418,6 +418,7 @@ export interface ToolAnalysisReport {
   schemaVersion: 1;
   createdAt: string;
   assistantAgentName: string;
+  assistantAgentProvider?: string;
   assistantAgentModel: string;
   modes: {
     metadataReview: boolean;

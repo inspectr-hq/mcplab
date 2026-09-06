@@ -100,6 +100,7 @@ export interface ToolAnalysisReport {
   schemaVersion: 1;
   createdAt: string;
   assistantAgentName: string;
+  assistantAgentProvider?: string;
   assistantAgentModel: string;
   modes: {
     metadataReview: boolean;
@@ -1106,6 +1107,7 @@ export async function runToolAnalysisJob(params: {
       schemaVersion: 1,
       createdAt: new Date().toISOString(),
       assistantAgentName: selectedAssistantAgentName,
+      assistantAgentProvider: agentConfig.provider,
       assistantAgentModel: agentConfig.model,
       modes,
       settings: {

@@ -475,7 +475,7 @@ describe('Compare', () => {
     expect(runCell).not.toBeNull();
     expect(within(runCell!).getByText('MCPLab full tool suite')).toBeInTheDocument();
     expect(screen.queryByText(/mcplab-full-tool-suite\.yaml/)).not.toBeInTheDocument();
-    expect(screen.getByText('mcp-lab:1.8.3')).toBeInTheDocument();
+    expect(document.body.textContent).toContain('mcp-lab@1.8.3');
     expect(screen.getByText('3 ✓')).toBeInTheDocument();
     expect(screen.getByText('1 ✕')).toBeInTheDocument();
   });

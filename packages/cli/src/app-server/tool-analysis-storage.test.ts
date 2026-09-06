@@ -28,6 +28,7 @@ describe('tool analysis report storage', () => {
         schemaVersion: 1,
         createdAt: '2026-09-05T23:03:14.000Z',
         assistantAgentName: 'agent',
+        assistantAgentProvider: 'azure',
         assistantAgentModel: 'model',
         modes: { metadataReview: true, deeperAnalysis: false },
         settings: {},

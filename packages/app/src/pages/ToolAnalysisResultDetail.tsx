@@ -19,6 +19,7 @@ import {
   toolAnalysisReportToMarkdown
 } from '@/components/tool-analysis/ToolAnalysisReportView';
 import { McpServerBadge } from '@/components/results/McpServerBadge';
+import { formatProvider } from '@/components/ProviderBadge';
 import { Clock, Download, Trash2 } from 'lucide-react';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
@@ -30,6 +31,15 @@ function downloadTextFile(filename: string, content: string, mimeType: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function inferAssistantProvider(agentName: string): string | undefined {
+  const normalized = agentName.trim().toLowerCase();
+  if (normalized.startsWith('azure-')) return 'azure';
+  if (normalized.startsWith('openai-')) return 'openai';
+  if (normalized.startsWith('anthropic-') || normalized.startsWith('claude-')) return 'anthropic';
+  if (normalized.startsWith('google-') || normalized.startsWith('gemini-')) return 'google';
+  return undefined;
 }
 
 export default function ToolAnalysisResultDetailPage() {
@@ -118,7 +128,17 @@ export default function ToolAnalysisResultDetailPage() {
               <Clock className="h-3 w-3 shrink-0" />
               {new Date(record.createdAt).toLocaleString()}
             </span>{' '}
-            · {record.serverNames.join(', ') || '—'}
+            ·{' '}
+            {[
+              formatProvider(
+                record.report.assistantAgentProvider ??
+                  inferAssistantProvider(record.report.assistantAgentName) ??
+                  ''
+              ) || null,
+              record.report.assistantAgentModel
+            ]
+              .filter(Boolean)
+              .join(' · ') || record.serverNames.join(', ') || '—'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

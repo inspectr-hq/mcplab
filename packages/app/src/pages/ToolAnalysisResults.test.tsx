@@ -24,6 +24,7 @@ describe('ToolAnalysisResultsPage', () => {
         reportId: 'ta-existing',
         createdAt: '2026-09-05T23:03:14.000Z',
         assistantAgentName: 'agent',
+        assistantAgentProvider: 'azure',
         assistantAgentModel: 'model',
         serverNames: ['demo'],
         mcpServerVersions: { demo: '1.0.0' },
@@ -47,8 +48,7 @@ describe('ToolAnalysisResultsPage', () => {
     expect(await screen.findByText('ta-existing')).toBeInTheDocument();
     expect(screen.getByText('agent')).toBeInTheDocument();
     expect(screen.queryByText('model')).not.toBeInTheDocument();
-    expect(screen.getByText('MCP:')).toBeInTheDocument();
-    expect(screen.getByText('demo:1.0.0')).toBeInTheDocument();
+    expect(document.body.textContent).toContain('demo@1.0.0');
     expect(screen.queryByText(/tok$/)).not.toBeInTheDocument();
   });
 });
