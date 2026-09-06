@@ -76,7 +76,17 @@ import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 
-type TimeFilterPreset = '15min' | '30min' | '1h' | '2h' | '4h' | '8h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset =
+  | '15min'
+  | '30min'
+  | '1h'
+  | '2h'
+  | '4h'
+  | '8h'
+  | '24h'
+  | '7d'
+  | '14d'
+  | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
@@ -1067,9 +1077,7 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead className="min-w-0">
-                    Evaluation
-                  </TableHead>
+                  <TableHead className="min-w-0">Evaluation</TableHead>
                   <TableHead className="w-[11rem] min-w-[11rem] max-w-[11rem]">
                     <button
                       type="button"

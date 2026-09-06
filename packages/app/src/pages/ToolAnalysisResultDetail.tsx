@@ -138,7 +138,9 @@ export default function ToolAnalysisResultDetailPage() {
               record.report.assistantAgentModel
             ]
               .filter(Boolean)
-              .join(' · ') || record.serverNames.join(', ') || '—'}
+              .join(' · ') ||
+              record.serverNames.join(', ') ||
+              '—'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

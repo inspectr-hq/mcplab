@@ -571,7 +571,9 @@ describe('Results', () => {
 
   it('supports the Last 2 hours preset', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:00:00.000Z').getTime());
-    sourceMock.listResults.mockResolvedValue([makeRun('run-in-window', 1200, '2026-03-10T08:30:00.000Z')]);
+    sourceMock.listResults.mockResolvedValue([
+      makeRun('run-in-window', 1200, '2026-03-10T08:30:00.000Z')
+    ]);
 
     render(
       <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=2h']}>

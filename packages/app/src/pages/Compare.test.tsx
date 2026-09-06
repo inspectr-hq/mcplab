@@ -505,9 +505,7 @@ describe('Compare', () => {
     await screen.findByText('Summary Comparison');
     const evaluationLabels = screen.getAllByText('Search evaluation');
     expect(evaluationLabels.length).toBeGreaterThan(0);
-    const summaryLabel = evaluationLabels.find((label) =>
-      label.className.includes('text-[10px]')
-    );
+    const summaryLabel = evaluationLabels.find((label) => label.className.includes('text-[10px]'));
     expect(summaryLabel).toBeDefined();
     expect(summaryLabel).toHaveAttribute('title', '/workspace/evals/search.yaml');
     expect(screen.getAllByText('Tag evaluation').length).toBeGreaterThan(0);

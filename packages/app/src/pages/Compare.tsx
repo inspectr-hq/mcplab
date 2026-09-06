@@ -62,7 +62,17 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
-type TimeFilterPreset = '15min' | '30min' | '1h' | '2h' | '4h' | '8h' | '24h' | '7d' | '14d' | '30d';
+type TimeFilterPreset =
+  | '15min'
+  | '30min'
+  | '1h'
+  | '2h'
+  | '4h'
+  | '8h'
+  | '24h'
+  | '7d'
+  | '14d'
+  | '30d';
 type TimeFilterMode = 'all' | 'last' | 'custom';
 type TimeFilterQueryState = {
   mode: TimeFilterMode;
