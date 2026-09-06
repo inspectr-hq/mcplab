@@ -1048,7 +1048,7 @@ const Results = () => {
       >
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[22.5rem] max-w-[22.5rem]">
@@ -1061,10 +1061,10 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-[10rem] min-w-[10rem] max-w-[10rem]">
+                  <TableHead className="min-w-0">
                     Evaluation
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="w-[11rem] min-w-[11rem] max-w-[11rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1074,7 +1074,7 @@ const Results = () => {
                       {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
                     <button
                       type="button"
                       className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
@@ -1084,7 +1084,7 @@ const Results = () => {
                       {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1094,7 +1094,7 @@ const Results = () => {
                       {sortIcon('scenarios')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1104,7 +1104,7 @@ const Results = () => {
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1114,7 +1114,7 @@ const Results = () => {
                       {sortIcon('toolTokens')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-[9rem] min-w-[9rem] max-w-[9rem]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1169,7 +1169,7 @@ const Results = () => {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="w-[10rem] min-w-[10rem] max-w-[10rem] text-[11px] text-muted-foreground">
+                        <TableCell className="min-w-0 text-[11px] text-muted-foreground">
                           {(() => {
                             const scope = runScopesById.get(item.run.id) ?? {
                               scenarioCount: 0,
@@ -1201,7 +1201,7 @@ const Results = () => {
                             );
                           })()}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="w-[11rem] min-w-[11rem] max-w-[11rem] text-xs text-muted-foreground">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -1218,7 +1218,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
                           <div className="flex flex-col items-center gap-1">
                             <PassRateBadge rate={item.run.overallPassRate} />
                             {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
@@ -1245,13 +1245,13 @@ const Results = () => {
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm">
                           {item.run.totalScenarios}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
                           <div className="space-y-0.5">
                             <div className="font-mono text-sm">
                               {formatToolTokenTotal(item.run)}
@@ -1267,7 +1267,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem]">
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"

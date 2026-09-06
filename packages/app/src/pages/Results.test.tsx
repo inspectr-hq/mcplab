@@ -201,6 +201,11 @@ describe('Results', () => {
     const evaluationCell = cells[1]!;
     const runHeader = screen.getByRole('columnheader', { name: 'Run ID' });
     const evaluationHeader = screen.getByRole('columnheader', { name: 'Evaluation' });
+    const timestampHeader = screen.getByRole('columnheader', { name: 'Timestamp' });
+    const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
+    const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
+    const avgToolCallsHeader = screen.getByRole('columnheader', { name: 'Avg Tool Calls' });
+    const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
     const evaluationName = within(runCell).getByText('Search evaluation');
     const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
@@ -211,8 +216,20 @@ describe('Results', () => {
     expect(runHeader).not.toHaveClass('min-w-[22.5rem]');
     expect(runCell).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
     expect(runCell).not.toHaveClass('min-w-[22.5rem]');
-    expect(evaluationHeader).toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
-    expect(evaluationCell).toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationHeader).toHaveClass('min-w-0');
+    expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationCell).toHaveClass('min-w-0');
+    expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
+    expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
+    expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
+    expect(avgToolCallsHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
+    expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass(
+      'w-[9rem]',
+      'min-w-[9rem]',
+      'max-w-[9rem]'
+    );
     expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
