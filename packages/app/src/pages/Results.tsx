@@ -1074,7 +1074,7 @@ const Results = () => {
                       {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
+                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center">
                     <button
                       type="button"
                       className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
@@ -1100,7 +1100,7 @@ const Results = () => {
                       className="inline-flex items-center gap-1 hover:text-foreground"
                       onClick={() => toggleSort('avgToolCalls')}
                     >
-                      Avg Tool Calls
+                      Avg Tools
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
@@ -1248,7 +1248,7 @@ const Results = () => {
                         <TableCell className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm">
                           {item.run.totalScenarios}
                         </TableCell>
-                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right font-mono text-sm">
+                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
                         <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">

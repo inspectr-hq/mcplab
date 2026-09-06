@@ -1031,10 +1031,10 @@ const ResultDetail = () => {
                     <TableHead>Runs</TableHead>
                     <TableHead>Pass Rate</TableHead>
                     <TableHead>Checks</TableHead>
-                    <TableHead>Total Time</TableHead>
-                    <TableHead>Tool Calls</TableHead>
-                    <TableHead>Tool Tokens</TableHead>
-                    <TableHead>Tool Duration</TableHead>
+                    <TableHead className="text-right">Total Time</TableHead>
+                    <TableHead className="text-right">Tool Calls</TableHead>
+                    <TableHead className="text-right">Tool Tokens</TableHead>
+                    <TableHead className="text-right">Tool Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1093,14 +1093,11 @@ const ResultDetail = () => {
                                 </div>
                               </TableCell>
                               <TableCell className="text-sm">
-                                <div>{sc.agentName}</div>
-                                {(sc.provider || sc.model) && (
-                                  <div className="text-xs text-muted-foreground">
-                                    {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
-                                      .filter(Boolean)
-                                      .join(' · ')}
-                                  </div>
-                                )}
+                                <div>
+                                  {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
+                                    .filter(Boolean)
+                                    .join(' · ') || sc.agentName}
+                                </div>
                               </TableCell>
                               <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                               <TableCell>
@@ -1138,18 +1135,18 @@ const ResultDetail = () => {
                                   '—'
                                 )}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatCompactOneDecimal(sc.avgToolCalls)}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatDurationMs(getScenarioToolTimeMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
