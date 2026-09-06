@@ -93,6 +93,7 @@ interface ToolAnalysisServerReport {
   toolCountSkipped: number;
   warnings: string[];
   tools: ToolAnalysisToolReport[];
+  tokenEstimate?: ReturnType<typeof estimateToolDefinitionTokens>;
 }
 
 export interface ToolAnalysisReport {

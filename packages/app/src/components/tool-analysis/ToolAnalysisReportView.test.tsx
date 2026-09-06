@@ -25,6 +25,12 @@ const report: ToolAnalysisReport = {
       toolCountAnalyzed: 1,
       toolCountSkipped: 0,
       warnings: [],
+      tokenEstimate: {
+        toolCount: 1,
+        total: 42,
+        tools: [{ name: 'get_user_profile', total: 42 }],
+        method: 'js_tiktoken_fallback'
+      },
       tools: [
         {
           serverName: 'demo',
@@ -77,6 +83,21 @@ describe('toolAnalysisReportToMarkdown', () => {
 });
 
 describe('ToolAnalysisReportView', () => {
+  it('shows aggregate and per-tool token badges for saved reports', () => {
+    render(
+      <MemoryRouter>
+        <ToolAnalysisReportView report={report} />
+      </MemoryRouter>
+    );
+
+    expect(
+      screen.getAllByTitle('Estimated tokens for this tool definition and its schemas')
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByTitle('Estimated tokens for the analyzed tool definitions and their schemas')
+    ).toHaveLength(1);
+  });
+
   it('renders output schema details when available', () => {
     render(
       <MemoryRouter>

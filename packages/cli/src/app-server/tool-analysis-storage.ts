@@ -1,5 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { estimateToolDefinitionTokens } from '@inspectr/mcplab-core';
 import type { ToolAnalysisReport } from './tool-analysis-domain.js';
 
 export interface SavedToolAnalysisReportRecord {
@@ -19,6 +20,28 @@ export interface ToolAnalysisResultSummary {
   serverNames: string[];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
+  toolDefinitionTokens?: number;
+}
+
+function reportToolDefinitionTokens(report: ToolAnalysisReport): number | undefined {
+  if (!Array.isArray(report.servers)) return undefined;
+  return report.servers.reduce((total, server) => total + (server.tokenEstimate?.total ?? 0), 0);
+}
+
+function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
+  if (!Array.isArray(report.servers)) return;
+  for (const server of report.servers) {
+    server.tokenEstimate = estimateToolDefinitionTokens(
+      server.tools.map((tool) => ({
+        name: tool.toolName,
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema
+      })),
+      'unknown-model'
+    );
+  }
 }
 
 function reportDir(baseDir: string, reportId: string): string {
@@ -41,7 +64,9 @@ function parseRecord(raw: string): SavedToolAnalysisReportRecord {
   ) {
     throw new Error('Invalid tool analysis report record');
   }
-  return parsed as SavedToolAnalysisReportRecord;
+  const record = parsed as SavedToolAnalysisReportRecord;
+  addToolDefinitionTokenEstimates(record.report);
+  return record;
 }
 
 export function createToolAnalysisReportId(date = new Date()): string {
@@ -94,7 +119,8 @@ export function listToolAnalysisReports(baseDir: string): ToolAnalysisResultSumm
         assistantAgentModel: record.report.assistantAgentModel,
         serverNames: record.serverNames,
         modes: record.report.modes,
-        summary: record.report.summary
+        summary: record.report.summary,
+        toolDefinitionTokens: reportToolDefinitionTokens(record.report)
       });
     } catch (error) {
       console.warn(`Skipping invalid tool analysis report '${reportId}':`, error);

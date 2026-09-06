@@ -411,6 +411,7 @@ export interface ToolAnalysisServerReport {
   toolCountSkipped: number;
   warnings: string[];
   tools: ToolAnalysisToolReport[];
+  tokenEstimate?: ToolDefinitionTokenEstimates;
 }
 
 export interface ToolAnalysisReport {
@@ -462,6 +463,7 @@ export interface ToolAnalysisResultSummary {
   serverNames: string[];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
+  toolDefinitionTokens?: number;
 }
 
 export interface ToolAnalysisDiscoveredTool {

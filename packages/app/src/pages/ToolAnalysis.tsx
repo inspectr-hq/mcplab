@@ -29,6 +29,7 @@ import {
   formatToolAnalysisTokenCount,
   selectedToolContextTokens
 } from '@/lib/tool-analysis-token-estimates';
+import { ToolTokenEstimateBadge } from '@/components/tool-analysis/ToolTokenEstimateBadge';
 import {
   ToolSchemaPreview,
   type SchemaViewMode
@@ -748,15 +749,10 @@ const ToolAnalysisPage = () => {
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-2">
                             <div className="font-medium">{server.serverName}</div>
-                            {server.tokenEstimate && (
-                              <Badge
-                                variant="outline"
-                                className="bg-background font-mono text-xs font-normal"
-                                title="Estimated tokens for all discovered tool definitions and their schemas"
-                              >
-                                ~{formatToolAnalysisTokenCount(server.tokenEstimate.total)}tok
-                              </Badge>
-                            )}
+                            <ToolTokenEstimateBadge
+                              total={server.tokenEstimate?.total}
+                              title="Estimated tokens for all discovered tool definitions and their schemas"
+                            />
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -879,15 +875,10 @@ const ToolAnalysisPage = () => {
                                         schema: output
                                       </Badge>
                                     )}
-                                    {tokenEstimate && (
-                                      <Badge
-                                        variant="outline"
-                                        className="bg-background font-mono text-[10px] font-normal"
-                                        title="Estimated tokens for this tool definition and its schemas"
-                                      >
-                                        ~{formatToolAnalysisTokenCount(tokenEstimate.total)}tok
-                                      </Badge>
-                                    )}
+                                    <ToolTokenEstimateBadge
+                                      total={tokenEstimate?.total}
+                                      className="text-[10px]"
+                                    />
                                   </div>
                                   {tool.description && (
                                     <p className="text-xs text-muted-foreground line-clamp-2">

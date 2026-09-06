@@ -20,6 +20,7 @@ import type { ToolAnalysisReport } from '@/lib/data-sources/types';
 import { isWriteDeleteClassification, safeJsonStringify } from '@/lib/tool-analysis-utils';
 import { toast } from '@/hooks/use-toast';
 import { ToolSchemaPreview, type SchemaViewMode } from './ToolSchemaPreview';
+import { ToolTokenEstimateBadge } from './ToolTokenEstimateBadge';
 
 const ALL_SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const;
 type FindingSeverity = (typeof ALL_SEVERITIES)[number];
@@ -619,6 +620,7 @@ export function ToolAnalysisReportView({
         ) : (
           <div ref={toolReportContainerRef} className="space-y-4">
             {report.servers.map((server) => {
+              const tokenEstimate = server.tokenEstimate;
               const filteredTools = server.tools.filter((tool) => {
                 const toolLabel = `${server.serverName}::${tool.publicToolName}`;
                 if (!matchesToolFilter(toolLabel)) return false;
@@ -634,7 +636,13 @@ export function ToolAnalysisReportView({
               return (
                 <Card key={server.serverName}>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{server.serverName}</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {server.serverName}
+                      <ToolTokenEstimateBadge
+                        total={tokenEstimate?.total}
+                        title="Estimated tokens for the analyzed tool definitions and their schemas"
+                      />
+                    </CardTitle>
                     <CardDescription>
                       Discovered {server.toolCountDiscovered} · Showing {filteredTools.length} of{' '}
                       {server.toolCountAnalyzed} analyzed · Skipped {server.toolCountSkipped}
@@ -654,6 +662,9 @@ export function ToolAnalysisReportView({
                       </Alert>
                     )}
                     {filteredTools.map((tool) => {
+                      const toolTokenEstimate = tokenEstimate?.tools.find(
+                        (item) => item.name === tool.toolName
+                      );
                       const toolDisplayName =
                         tool.publicToolName.split('::').pop() ?? tool.publicToolName;
                       const isWriteDelete = isWriteDeleteClassification(tool.classificationReason);
@@ -689,6 +700,10 @@ export function ToolAnalysisReportView({
                                     label={safetyLabel}
                                     reason={tool.classificationReason}
                                     variantClassName={safetyVariantClass}
+                                  />
+                                  <ToolTokenEstimateBadge
+                                    total={toolTokenEstimate?.total}
+                                    className="text-[10px]"
                                   />
                                 </div>
                                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
