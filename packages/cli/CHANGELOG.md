@@ -1,9 +1,15 @@
 # @inspectr/mcplab
 
+## 1.28.5
+
+### Patch Changes
+
+- fix: Result eval names clean-up
+
 ## 1.28.4
 
 ### Patch Changes
- 
+
 - feat: show MCP servers in evaluation results
 - feat: show tokens on saved analysis results
 - feat: add extended time filters
