@@ -41,16 +41,27 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { PassRateBadge } from '@/components/PassRateBadge';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { formatProvider } from '@/components/ProviderBadge';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import type { EvalResult, ScenarioResult, ScenarioRun } from '@/types/eval';
 import { toast } from '@/hooks/use-toast';
-import { buildRunScopeSummary, type RunScopeSummary } from '@/lib/run-scope-summary';
+import {
+  buildRunScopeSummary,
+  getScenarioLabels,
+  type RunScopeSummary
+} from '@/lib/run-scope-summary';
 import { summaryToResult } from '@/lib/run-summary-to-result';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
 import { formatTokenCount } from '@/lib/format-duration';
+import {
+  TIME_FILTER_PRESETS,
+  getTimeFilterQueryState,
+  type TimeFilterMode,
+  type TimeFilterPreset
+} from '@/lib/time-filter';
 
 const colors = [
   'hsl(38, 92%, 50%)',
@@ -61,14 +72,6 @@ const colors = [
 ];
 
 type CompareMode = 'runs' | 'within-run';
-type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
-type TimeFilterMode = 'all' | 'last' | 'custom';
-type TimeFilterQueryState = {
-  mode: TimeFilterMode;
-  preset: TimeFilterPreset;
-  start: string;
-  end: string;
-};
 
 type AgentSummary = {
   agentId: string;
@@ -95,16 +98,6 @@ type CompareTableItem =
 const COMPARE_RUNS_TABLE_COLUMN_COUNT = 9;
 const COMPARE_DAY_SEPARATOR_STORAGE_KEY = 'mcplab.compare.showDaySeparators';
 
-const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
-  { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
-  { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
-  { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
-  { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
-  { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
-  { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
-  { value: '30d', label: 'Last 30 days', durationMs: 30 * 24 * 60 * 60 * 1000 }
-];
-
 function parseLocalDateTime(value: string) {
   if (!value.trim()) return null;
   const parsed = new Date(value);
@@ -124,15 +117,6 @@ function getLocalDayKey(value: string) {
   const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
   const day = String(parsed.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function formatMcpServersWithVersions(mcpServerVersions: Record<string, string | null>): string {
-  const entries = Object.entries(mcpServerVersions ?? {});
-  if (entries.length === 0) return '—';
-  return entries
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([server, version]) => `${server}@${version ?? 'unknown'}`)
-    .join(', ');
 }
 
 function formatLocalDayLabel(value: string) {
@@ -158,6 +142,28 @@ function CheckCountLabel({ counts }: { counts: EvalResult['checkCounts'] }) {
   );
 }
 
+function getRunEvaluationName(run: EvalResult): string {
+  const configName = run.configName?.trim();
+  if (configName) return configName;
+  const scenarioLabels = getScenarioLabels(run);
+  return scenarioLabels.slice(0, 2).join(', ') || 'n/a';
+}
+
+function getRunConfigPath(run: EvalResult): string | undefined {
+  const path = run.configPath?.trim();
+  return path || undefined;
+}
+
+function EvaluationName({ run, className }: { run: EvalResult; className: string }) {
+  const name = getRunEvaluationName(run);
+  const path = getRunConfigPath(run);
+  return (
+    <div className={className} title={path}>
+      {name}
+    </div>
+  );
+}
+
 function formatChecksPassRate(run: EvalResult) {
   const counts = run.checkCounts;
   if (!counts || counts.total === 0) return '—';
@@ -170,33 +176,6 @@ function formatChecksPassRate(run: EvalResult) {
       <span>{Math.round((counts.passed / evaluated) * 100)}%</span>
     </>
   );
-}
-
-function isTimeFilterMode(value: string | null): value is TimeFilterMode {
-  return value === 'all' || value === 'last' || value === 'custom';
-}
-
-function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
-  return (
-    value === '15min' ||
-    value === '30min' ||
-    value === '1h' ||
-    value === '24h' ||
-    value === '7d' ||
-    value === '14d' ||
-    value === '30d'
-  );
-}
-
-function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQueryState {
-  const modeParam = searchParams.get('time_filter');
-  const presetParam = searchParams.get('time_preset');
-  return {
-    mode: isTimeFilterMode(modeParam) ? modeParam : 'all',
-    preset: isTimeFilterPreset(presetParam) ? presetParam : '15min',
-    start: searchParams.get('time_start') ?? '',
-    end: searchParams.get('time_end') ?? ''
-  };
 }
 
 function isSameStringArray(a: string[], b: string[]): boolean {
@@ -1238,7 +1217,15 @@ const Compare = () => {
                           disabled={!selected.has(item.run.id) && selected.size >= 5}
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.run.id}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="space-y-0.5">
+                          <div>{item.run.id}</div>
+                          <EvaluationName
+                            run={item.run}
+                            className="truncate font-sans text-xs text-foreground/80"
+                          />
+                        </div>
+                      </TableCell>
                       <TableCell className="text-[11px] text-muted-foreground">
                         {(() => {
                           const scope = runScopesById.get(item.run.id) ?? {
@@ -1255,9 +1242,10 @@ const Compare = () => {
                                 {scope.agentCount === 1 ? '' : 's'}
                                 {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
                               </div>
-                              <div className="font-mono text-xs text-foreground/80">
-                                {scope.scopePreview}
-                              </div>
+                              <McpServerBadge
+                                versions={item.run.mcpServerVersions}
+                                showPrefix={false}
+                              />
                             </div>
                           );
                         })()}
@@ -1280,7 +1268,18 @@ const Compare = () => {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <PassRateBadge rate={item.run.overallPassRate} />
+                        <div className="flex flex-col items-center gap-1">
+                          <PassRateBadge rate={item.run.overallPassRate} />
+                          {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
+                            <span
+                              className="font-mono text-[11px] leading-none"
+                              aria-label={`${item.run.checkCounts.passed} checks passed, ${item.run.checkCounts.failed} checks failed`}
+                              title={`${item.run.checkCounts.passed} passed · ${item.run.checkCounts.failed} failed`}
+                            >
+                              <CheckCountLabel counts={item.run.checkCounts} />
+                            </span>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {item.run.totalScenarios}
@@ -1385,11 +1384,10 @@ const Compare = () => {
                         className="font-mono text-xs"
                       >
                         <div>{r.id}</div>
-                        {r.configPath?.trim() ? (
-                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
-                            {r.configPath.trim()}
-                          </div>
-                        ) : null}
+                        <EvaluationName
+                          run={r}
+                          className="mt-0.5 truncate text-[10px] font-normal text-muted-foreground"
+                        />
                       </TableHead>
                     ))}
                   </TableRow>
@@ -1478,14 +1476,14 @@ const Compare = () => {
                         className="font-mono text-xs"
                       >
                         <div>{r.id}</div>
-                        {r.configPath?.trim() ? (
-                          <div className="mt-0.5 font-mono text-[10px] font-normal text-muted-foreground">
-                            {r.configPath.trim()}
-                          </div>
-                        ) : null}
-                        <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">
-                          MCP: {formatMcpServersWithVersions(r.mcpServerVersions)}
-                        </div>
+                        <EvaluationName
+                          run={r}
+                          className="mt-0.5 truncate text-[10px] font-normal text-muted-foreground"
+                        />
+                        <McpServerBadge
+                          versions={r.mcpServerVersions}
+                          className="mt-0.5 max-w-full border-0 bg-transparent p-0 text-[10px] font-normal"
+                        />
                       </TableHead>
                     ))}
                   </TableRow>

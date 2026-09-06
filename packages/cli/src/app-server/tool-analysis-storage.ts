@@ -1,5 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { estimateToolDefinitionTokens } from '@inspectr/mcplab-core';
 import type { ToolAnalysisReport } from './tool-analysis-domain.js';
 
 export interface SavedToolAnalysisReportRecord {
@@ -17,8 +18,26 @@ export interface ToolAnalysisResultSummary {
   assistantAgentName: string;
   assistantAgentModel: string;
   serverNames: string[];
+  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
+}
+
+function addToolDefinitionTokenEstimates(report: ToolAnalysisReport): void {
+  if (!Array.isArray(report.servers)) return;
+  for (const server of report.servers) {
+    if (server.tokenEstimate) continue;
+    server.tokenEstimate = estimateToolDefinitionTokens(
+      server.tools.map((tool) => ({
+        name: tool.toolName,
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema
+      })),
+      report.assistantAgentModel ?? 'unknown-model'
+    );
+  }
 }
 
 function reportDir(baseDir: string, reportId: string): string {
@@ -69,7 +88,9 @@ export function readToolAnalysisReportRecord(
   reportId: string
 ): SavedToolAnalysisReportRecord | null {
   try {
-    return parseRecord(readFileSync(reportFile(baseDir, reportId), 'utf8'));
+    const record = parseRecord(readFileSync(reportFile(baseDir, reportId), 'utf8'));
+    addToolDefinitionTokenEstimates(record.report);
+    return record;
   } catch {
     return null;
   }
@@ -93,6 +114,7 @@ export function listToolAnalysisReports(baseDir: string): ToolAnalysisResultSumm
         assistantAgentName: record.report.assistantAgentName,
         assistantAgentModel: record.report.assistantAgentModel,
         serverNames: record.serverNames,
+        mcpServerVersions: record.report.mcpServerVersions,
         modes: record.report.modes,
         summary: record.report.summary
       });

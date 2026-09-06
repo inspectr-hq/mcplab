@@ -76,6 +76,7 @@ export interface WorkspaceRunSummary {
   configHash: string;
   configPath?: string;
   configName?: string;
+  mcpServerVersions?: Record<string, string | null>;
   langsmithTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
@@ -410,12 +411,14 @@ export interface ToolAnalysisServerReport {
   toolCountSkipped: number;
   warnings: string[];
   tools: ToolAnalysisToolReport[];
+  tokenEstimate?: ToolDefinitionTokenEstimates;
 }
 
 export interface ToolAnalysisReport {
   schemaVersion: 1;
   createdAt: string;
   assistantAgentName: string;
+  assistantAgentProvider?: string;
   assistantAgentModel: string;
   modes: {
     metadataReview: boolean;
@@ -459,6 +462,7 @@ export interface ToolAnalysisResultSummary {
   assistantAgentName: string;
   assistantAgentModel: string;
   serverNames: string[];
+  mcpServerVersions?: ToolAnalysisReport['mcpServerVersions'];
   modes: ToolAnalysisReport['modes'];
   summary: ToolAnalysisReport['summary'];
 }

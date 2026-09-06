@@ -17,7 +17,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     rerunScenarioServerOverrides: summary.rerunScenarioServerOverrides,
     timestamp: summary.timestamp,
     runNote: summary.runNote,
-    mcpServerVersions: {},
+    mcpServerVersions: summary.mcpServerVersions ?? {},
     scenarios: (summary.scenarioIds ?? []).map((scenarioId, index) => ({
       scenarioId,
       scenarioName: summary.scenarioNames?.[index] ?? scenarioId,

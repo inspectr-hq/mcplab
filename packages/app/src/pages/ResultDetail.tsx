@@ -55,6 +55,7 @@ import {
 import { StatCard } from '@/components/StatCard';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import { OutcomeCard } from '@/components/results/ResultsDashboard';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { PassRateBadge } from '@/components/PassRateBadge';
 import {
@@ -501,10 +502,6 @@ const ResultDetail = () => {
     return <div className="p-8 text-center text-muted-foreground">Loading result...</div>;
   if (!result) return <div className="p-8 text-center text-muted-foreground">Result not found</div>;
 
-  const mcpServerVersionEntries = Object.entries(result.mcpServerVersions ?? {});
-  const mcpVersionSummary = mcpServerVersionEntries
-    .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
-    .join(', ');
   const checkCounts = tallyCheckCounts(
     filteredScenarios.flatMap((scenario) => scenario.runs.flatMap((run) => run.checkResults ?? []))
   );
@@ -816,12 +813,7 @@ const ResultDetail = () => {
             </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:ml-auto sm:w-auto">
-            {mcpVersionSummary ? (
-              <span className="inline-flex max-w-[18rem] min-w-0 items-center rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] text-muted-foreground">
-                <span className="font-medium">MCP:</span>
-                <span className="ml-1 min-w-0 truncate font-mono">{mcpVersionSummary}</span>
-              </span>
-            ) : null}
+            <McpServerBadge versions={result.mcpServerVersions} />
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {Object.entries(result.langsmithTraceUrls ?? {}).map(([requestId, url]) => (
                 <a
@@ -1039,10 +1031,10 @@ const ResultDetail = () => {
                     <TableHead>Runs</TableHead>
                     <TableHead>Pass Rate</TableHead>
                     <TableHead>Checks</TableHead>
-                    <TableHead>Total Time</TableHead>
-                    <TableHead>Tool Calls</TableHead>
-                    <TableHead>Tool Tokens</TableHead>
-                    <TableHead>Tool Duration</TableHead>
+                    <TableHead className="text-right">Total Time</TableHead>
+                    <TableHead className="text-right">Tool Calls</TableHead>
+                    <TableHead className="text-right">Tool Tokens</TableHead>
+                    <TableHead className="text-right">Tool Duration</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1102,13 +1094,13 @@ const ResultDetail = () => {
                               </TableCell>
                               <TableCell className="text-sm">
                                 <div>{sc.agentName}</div>
-                                {(sc.provider || sc.model) && (
+                                {sc.provider || sc.model ? (
                                   <div className="text-xs text-muted-foreground">
                                     {[sc.provider ? formatProvider(sc.provider) : null, sc.model]
                                       .filter(Boolean)
                                       .join(' · ')}
                                   </div>
-                                )}
+                                ) : null}
                               </TableCell>
                               <TableCell className="font-mono text-sm">{sc.runs.length}</TableCell>
                               <TableCell>
@@ -1146,18 +1138,18 @@ const ResultDetail = () => {
                                   '—'
                                 )}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatDurationMs(getScenarioTotalDurationMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatCompactOneDecimal(sc.avgToolCalls)}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatTokenCount(sc.toolTokenUsage?.totalTokens)}
                               </TableCell>
-                              <TableCell className="font-mono text-sm">
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatDurationMs(getScenarioToolTimeMs(sc), {
                                   preciseUnderTenSeconds: true
                                 })}

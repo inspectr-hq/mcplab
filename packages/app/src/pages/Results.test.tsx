@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Results from './Results';
@@ -175,6 +175,69 @@ describe('Results', () => {
     expect(
       screen.getByPlaceholderText('Ask about historical run differences...')
     ).toBeInTheDocument();
+  });
+
+  it('uses compact column widths and shows the evaluation name below the run ID', async () => {
+    const run = makeRun('run-with-mcp', 1200);
+    run.mcpServerVersions = { 'long-mcp-server-name': '1.2.3' };
+    run.configName = 'Search evaluation';
+    run.configPath = '/workspace/mcplab/evals/search.yaml';
+    run.runNote = 'Full 31-scenario MCPLab tool suite, post tool-name-prefix fix';
+    sourceMock.listResults.mockResolvedValue([run]);
+
+    render(
+      <MemoryRouter initialEntries={['/results']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const runLink = await screen.findByText('run-with-mcp');
+    const row = runLink.closest('tr');
+    expect(row).not.toBeNull();
+    const cells = within(row!).getAllByRole('cell');
+    const runCell = cells[0]!;
+    const evaluationCell = cells[1]!;
+    const avgToolCallsCell = cells[5]!;
+    const runHeader = screen.getByRole('columnheader', { name: 'Run ID' });
+    const evaluationHeader = screen.getByRole('columnheader', { name: 'Evaluation' });
+    const timestampHeader = screen.getByRole('columnheader', { name: 'Timestamp' });
+    const passRateHeader = screen.getByRole('columnheader', { name: 'Pass Rate' });
+    const scenariosHeader = screen.getByRole('columnheader', { name: 'Scenarios' });
+    const toolTokensHeader = screen.getByRole('columnheader', { name: 'Tool Tokens' });
+    const evaluationName = within(runCell).getByText(
+      'Search evaluation · /workspace/mcplab/evals/search.yaml'
+    );
+    const note = within(runCell).getByText(
+      'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
+    );
+
+    expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
+    expect(runHeader).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
+    expect(runHeader).not.toHaveClass('min-w-[22.5rem]');
+    expect(runCell).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
+    expect(runCell).not.toHaveClass('min-w-[22.5rem]');
+    expect(evaluationHeader).toHaveClass('min-w-0');
+    expect(evaluationHeader).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationCell).toHaveClass('min-w-0');
+    expect(evaluationCell).not.toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(timestampHeader).toHaveClass('w-[11rem]', 'min-w-[11rem]', 'max-w-[11rem]');
+    expect(passRateHeader).toHaveClass('w-[7.5rem]', 'min-w-[7.5rem]', 'max-w-[7.5rem]');
+    expect(scenariosHeader).toHaveClass('w-[5.5rem]', 'min-w-[5.5rem]', 'max-w-[5.5rem]');
+    expect(toolTokensHeader).toHaveClass('w-[9rem]', 'min-w-[9rem]', 'max-w-[9rem]');
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveClass(
+      'w-[9rem]',
+      'min-w-[9rem]',
+      'max-w-[9rem]'
+    );
+    expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
+    expect(within(evaluationCell).getByText(/long-mcp-server-name@1\.2\.3/)).toBeInTheDocument();
+    expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();
+    expect(within(evaluationCell).queryByText('Search evaluation')).not.toBeInTheDocument();
+    expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
   });
 
   it('shows the LangSmith trace link in the run actions menu', async () => {
@@ -506,6 +569,24 @@ describe('Results', () => {
         .filter((link) => link.getAttribute('href')?.startsWith('/results/run-'));
       expect(runLinks.map((link) => link.textContent)).toEqual(['run-fresh']);
     });
+  });
+
+  it('supports the Last 2 hours preset', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-10T10:00:00.000Z').getTime());
+    sourceMock.listResults.mockResolvedValue([
+      makeRun('run-in-window', 1200, '2026-03-10T08:30:00.000Z')
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={['/results?time_filter=last&time_preset=2h']}>
+        <Routes>
+          <Route path="/results" element={<Results />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-in-window');
+    expect(screen.getByText('Last 2 hours')).toBeInTheDocument();
   });
 
   it('filters runs by a custom date time range', async () => {

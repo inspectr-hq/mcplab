@@ -12,6 +12,7 @@ export interface RunSummary {
   configHash: string;
   configPath?: string;
   configName?: string;
+  mcpServerVersions?: Record<string, string | null>;
   langsmithTraceUrls?: Record<string, string>;
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
@@ -92,6 +93,7 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         configHash: results.metadata.config_hash,
         configPath: results.metadata.config_path,
         configName: results.metadata.config_name,
+        mcpServerVersions: results.metadata.mcp_server_versions,
         langsmithTraceUrls: results.metadata.langsmith_trace_urls,
         toolTokensTotal:
           typeof (results.metadata as { tool_tokens_total?: unknown }).tool_tokens_total ===

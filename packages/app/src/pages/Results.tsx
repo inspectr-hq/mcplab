@@ -62,6 +62,7 @@ import { PassRateBadge } from '@/components/PassRateBadge';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { ResultAssistantPanel } from '@/components/results/ResultAssistantPanel';
 import ResultsDashboard from '@/components/results/ResultsDashboard';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
 import { RunFailureSignalBadge } from '@/components/results/RunFailureSignalBadge';
 import { useDataSource } from '@/contexts/DataSourceContext';
 import { useResultAssistant } from '@/hooks/use-result-assistant';
@@ -74,15 +75,16 @@ import { rerunWithSameSettings } from '@/lib/rerun-run';
 import { useOffsetPagination } from '@/hooks/use-offset-pagination';
 import { useRunQueueStatus } from '@/hooks/use-run-queue-status';
 import { formatDurationMs, getRunToolTimeMs, getRunTotalDurationMs } from '@/lib/run-duration';
+import {
+  TIME_FILTER_PRESETS,
+  getTimeFilterQueryState,
+  isTimeFilterMode,
+  isTimeFilterPreset,
+  type TimeFilterMode,
+  type TimeFilterPreset,
+  type TimeFilterQueryState
+} from '@/lib/time-filter';
 
-type TimeFilterPreset = '15min' | '30min' | '1h' | '24h' | '7d' | '14d' | '30d';
-type TimeFilterMode = 'all' | 'last' | 'custom';
-type TimeFilterQueryState = {
-  mode: TimeFilterMode;
-  preset: TimeFilterPreset;
-  start: string;
-  end: string;
-};
 type ResultTableItem =
   | { type: 'day-separator'; dayKey: string; dayLabel: string }
   | { type: 'run'; run: EvalResult };
@@ -90,16 +92,6 @@ type ResultTableItem =
 const RESULTS_TABLE_COLUMN_COUNT = 8;
 const RESULTS_TIME_FILTER_STORAGE_KEY = 'mcplab:results:time-filter';
 const RESULTS_DASHBOARD_VISIBILITY_KEY = 'mcplab:results:dashboard-visible';
-
-const TIME_FILTER_PRESETS: Array<{ value: TimeFilterPreset; label: string; durationMs: number }> = [
-  { value: '15min', label: 'Last 15min', durationMs: 15 * 60 * 1000 },
-  { value: '30min', label: 'Last 30min', durationMs: 30 * 60 * 1000 },
-  { value: '1h', label: 'Last hour', durationMs: 60 * 60 * 1000 },
-  { value: '24h', label: 'Last 24 hours', durationMs: 24 * 60 * 60 * 1000 },
-  { value: '7d', label: 'Last 7 days', durationMs: 7 * 24 * 60 * 60 * 1000 },
-  { value: '14d', label: 'Last 14 days', durationMs: 14 * 24 * 60 * 60 * 1000 },
-  { value: '30d', label: 'Last 30 days', durationMs: 30 * 24 * 60 * 60 * 1000 }
-];
 
 function parseLocalDateTime(value: string) {
   if (!value.trim()) return null;
@@ -163,33 +155,6 @@ function formatLocalDayLabel(value: string) {
     year: 'numeric',
     timeZone: 'UTC'
   });
-}
-
-function isTimeFilterMode(value: string | null): value is TimeFilterMode {
-  return value === 'all' || value === 'last' || value === 'custom';
-}
-
-function isTimeFilterPreset(value: string | null): value is TimeFilterPreset {
-  return (
-    value === '15min' ||
-    value === '30min' ||
-    value === '1h' ||
-    value === '24h' ||
-    value === '7d' ||
-    value === '14d' ||
-    value === '30d'
-  );
-}
-
-function getTimeFilterQueryState(searchParams: URLSearchParams): TimeFilterQueryState {
-  const modeParam = searchParams.get('time_filter');
-  const presetParam = searchParams.get('time_preset');
-  return {
-    mode: isTimeFilterMode(modeParam) ? modeParam : 'all',
-    preset: isTimeFilterPreset(presetParam) ? presetParam : '15min',
-    start: searchParams.get('time_start') ?? '',
-    end: searchParams.get('time_end') ?? ''
-  };
 }
 
 function hasExplicitTimeFilterQuery(searchParams: URLSearchParams): boolean {
@@ -1050,10 +1015,10 @@ const Results = () => {
       >
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <TableHead className="w-[22.5rem] max-w-[22.5rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1063,8 +1028,8 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead>Evaluated</TableHead>
-                  <TableHead>
+                  <TableHead className="min-w-0">Evaluation</TableHead>
+                  <TableHead className="w-[11rem] min-w-[11rem] max-w-[11rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1074,7 +1039,7 @@ const Results = () => {
                       {sortIcon('timestamp')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center">
                     <button
                       type="button"
                       className="inline-flex w-full items-center justify-end gap-1 hover:text-foreground"
@@ -1084,7 +1049,7 @@ const Results = () => {
                       {sortIcon('passRate')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1094,17 +1059,17 @@ const Results = () => {
                       {sortIcon('scenarios')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
                       onClick={() => toggleSort('avgToolCalls')}
                     >
-                      Avg Tool Calls
+                      Avg Tools
                       {sortIcon('avgToolCalls')}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1114,7 +1079,7 @@ const Results = () => {
                       {sortIcon('toolTokens')}
                     </button>
                   </TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-[9rem] min-w-[9rem] max-w-[9rem]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1148,7 +1113,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell>
+                        <TableCell className="w-[22.5rem] max-w-[22.5rem]">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1156,6 +1121,12 @@ const Results = () => {
                             >
                               {item.run.id}
                             </Link>
+                            <div
+                              className="min-w-0 truncate font-mono text-xs text-foreground/80"
+                              title={runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}
+                            >
+                              {runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}
+                            </div>
                             {item.run.runNote ? (
                               <div className="text-[11px] text-muted-foreground break-words">
                                 Note: {item.run.runNote}
@@ -1163,7 +1134,7 @@ const Results = () => {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-[11px] text-muted-foreground">
+                        <TableCell className="min-w-0 text-[11px] text-muted-foreground">
                           {(() => {
                             const scope = runScopesById.get(item.run.id) ?? {
                               scenarioCount: 0,
@@ -1172,21 +1143,30 @@ const Results = () => {
                               modelSummary: ''
                             };
                             return (
-                              <div className="space-y-0.5">
-                                <div>
-                                  Evaluated: {scope.scenarioCount} scenario
-                                  {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount} agent
-                                  {scope.agentCount === 1 ? '' : 's'}
-                                  {scope.modelSummary ? ` · ${scope.modelSummary}` : ''}
+                              <div className="space-y-1">
+                                <div className="flex min-w-0 items-baseline gap-1.5">
+                                  <span className="shrink-0 whitespace-nowrap">
+                                    {scope.scenarioCount} scenario
+                                    {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount}{' '}
+                                    agent
+                                    {scope.agentCount === 1 ? '' : 's'}
+                                  </span>
+                                  {scope.modelSummary ? (
+                                    <span className="min-w-0 truncate" title={scope.modelSummary}>
+                                      · {scope.modelSummary}
+                                    </span>
+                                  ) : null}
                                 </div>
-                                <div className="font-mono text-xs text-foreground/80">
-                                  {scope.scopePreview}
-                                </div>
+                                <McpServerBadge
+                                  versions={item.run.mcpServerVersions}
+                                  showPrefix={false}
+                                  className="max-w-[18rem]"
+                                />
                               </div>
                             );
                           })()}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="w-[11rem] min-w-[11rem] max-w-[11rem] text-xs text-muted-foreground">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -1203,7 +1183,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-right">
                           <div className="flex flex-col items-center gap-1">
                             <PassRateBadge rate={item.run.overallPassRate} />
                             {item.run.checkCounts && item.run.checkCounts.total > 0 ? (
@@ -1230,13 +1210,13 @@ const Results = () => {
                             <RunFailureSignalBadge run={item.run} />
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="w-[5.5rem] min-w-[5.5rem] max-w-[5.5rem] text-right font-mono text-sm">
                           {item.run.totalScenarios}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="w-[7.5rem] min-w-[7.5rem] max-w-[7.5rem] text-center font-mono text-sm">
                           {item.run.avgToolCalls.toFixed(0)}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem] text-right">
                           <div className="space-y-0.5">
                             <div className="font-mono text-sm">
                               {formatToolTokenTotal(item.run)}
@@ -1252,7 +1232,7 @@ const Results = () => {
                             })()}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-[9rem] min-w-[9rem] max-w-[9rem]">
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"

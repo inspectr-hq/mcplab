@@ -346,9 +346,36 @@ describe('ResultDetail conversation toggle', () => {
     );
 
     await screen.findByText('run-1');
-    expect(screen.getByText(/MCP:/)).toBeInTheDocument();
-    expect(screen.getByText(/api: 1\.2\.3/)).toBeInTheDocument();
-    expect(screen.getByText(/docs: unknown/)).toBeInTheDocument();
+    const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
+    expect(badge).toHaveClass('leading-none');
+    expect(screen.getByText(/api@1\.2\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/docs@unknown/)).toBeInTheDocument();
+  });
+
+  it('shows complete MCP server information on hover', async () => {
+    const result = makeResult();
+    result.mcpServerVersions = {
+      'a-very-long-mcp-server-name': '2026.09.05',
+      docs: null
+    };
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    fireEvent.pointerMove(screen.getByText(/a-very-long-mcp-server-name/));
+
+    expect(
+      await screen.findByRole('tooltip', {
+        name: 'a-very-long-mcp-server-name@2026.09.05, docs@unknown'
+      })
+    ).toBeInTheDocument();
   });
 
   it('hides MCP inline metadata for historical runs without versions', async () => {
@@ -394,6 +421,47 @@ describe('ResultDetail conversation toggle', () => {
     expect(screen.getByText('Tool token estimate')).toBeInTheDocument();
     expect(screen.getByText('estimated')).toBeInTheDocument();
     expect(screen.getAllByText('search_tags').length).toBeGreaterThan(0);
+  });
+
+  it('right-aligns the scenario detail metric columns', async () => {
+    getResultMock.mockResolvedValue(makeResult());
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    const row = screen.getByText('Scenario 1').closest('tr');
+    expect(row).not.toBeNull();
+    const cells = row!.querySelectorAll('td');
+    expect(cells[6]).toHaveClass('text-right');
+    expect(cells[7]).toHaveClass('text-right');
+    expect(cells[8]).toHaveClass('text-right');
+    expect(cells[9]).toHaveClass('text-right');
+  });
+
+  it('shows the formatted provider and model alongside the agent name', async () => {
+    const result = makeResult();
+    result.scenarios[0].agentName = 'azure-deepseek-v4-flash';
+    result.scenarios[0].provider = 'azure';
+    result.scenarios[0].model = 'DeepSeek-V4-Flash';
+    getResultMock.mockResolvedValue(result);
+
+    render(
+      <MemoryRouter initialEntries={['/results/run-1']}>
+        <Routes>
+          <Route path="/results/:id" element={<ResultDetail />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText('run-1');
+    expect(screen.getByText('Azure OpenAI · DeepSeek-V4-Flash')).toBeInTheDocument();
+    expect(screen.getByText('azure-deepseek-v4-flash')).toBeInTheDocument();
   });
 
   it('filters displayed scenarios and metrics when agent query param is set', async () => {

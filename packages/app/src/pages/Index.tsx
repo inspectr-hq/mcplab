@@ -343,7 +343,7 @@ const Dashboard = () => {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">Avg Tool Calls</TableHead>
+                  <TableHead className="text-right">Avg Tools</TableHead>
                   <TableHead className="text-right">Tool Tokens</TableHead>
                 </TableRow>
               </TableHeader>

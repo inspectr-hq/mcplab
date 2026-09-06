@@ -43,6 +43,20 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
 }
 
 describe('listRuns filters', () => {
+  it('includes MCP server versions in run summaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-mcp-versions', '2026-03-10T10:00:00.000Z');
+    const resultsPath = join(runsDir, 'run-mcp-versions', 'results.json');
+    const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+    results.metadata.mcp_server_versions = { api: '1.2.3', docs: null };
+    writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
+
+    expect(listRuns(runsDir)[0]?.mcpServerVersions).toEqual({ api: '1.2.3', docs: null });
+  });
+
   it('aggregates check counts for dashboard summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');

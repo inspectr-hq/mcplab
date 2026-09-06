@@ -18,6 +18,8 @@ import {
   ToolAnalysisReportView,
   toolAnalysisReportToMarkdown
 } from '@/components/tool-analysis/ToolAnalysisReportView';
+import { McpServerBadge } from '@/components/results/McpServerBadge';
+import { formatProvider } from '@/components/ProviderBadge';
 import { Clock, Download, Trash2 } from 'lucide-react';
 import { buildToolSchemaExport } from '@/lib/tool-analysis-export';
 
@@ -117,21 +119,21 @@ export default function ToolAnalysisResultDetailPage() {
               <Clock className="h-3 w-3 shrink-0" />
               {new Date(record.createdAt).toLocaleString()}
             </span>{' '}
-            · {record.serverNames.join(', ') || '—'}
+            ·{' '}
+            {[
+              record.report.assistantAgentProvider
+                ? formatProvider(record.report.assistantAgentProvider)
+                : null,
+              record.report.assistantAgentModel
+            ]
+              .filter(Boolean)
+              .join(' · ') ||
+              record.serverNames.join(', ') ||
+              '—'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {record.report.mcpServerVersions &&
-            Object.keys(record.report.mcpServerVersions).length > 0 && (
-              <span className="inline-flex items-center align-middle rounded-sm border border-border/60 bg-muted/30 px-1.5 py-1 text-[11px] leading-none text-muted-foreground">
-                <span className="font-medium">MCP:</span>
-                <span className="ml-1 font-mono">
-                  {Object.entries(record.report.mcpServerVersions)
-                    .map(([name, v]) => `${name}: ${v ?? 'unknown'}`)
-                    .join(', ')}
-                </span>
-              </span>
-            )}
+          <McpServerBadge versions={record.report.mcpServerVersions} />
           <Button asChild size="sm" variant="outline">
             <Link to="/tool-analysis-results">Back to results</Link>
           </Button>
