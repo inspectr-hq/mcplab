@@ -177,7 +177,7 @@ describe('Results', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows MCP servers within Evaluation without the configuration file path', async () => {
+  it('uses compact column widths and shows the evaluation name below the run ID', async () => {
     const run = makeRun('run-with-mcp', 1200);
     run.mcpServerVersions = { 'long-mcp-server-name': '1.2.3' };
     run.configName = 'Search evaluation';
@@ -199,16 +199,26 @@ describe('Results', () => {
     const cells = within(row!).getAllByRole('cell');
     const runCell = cells[0]!;
     const evaluationCell = cells[1]!;
-
-    expect(screen.getByRole('columnheader', { name: 'Evaluation' })).toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
-    expect(runCell).toHaveClass('w-[15rem]', 'min-w-[15rem]', 'max-w-[15rem]');
-    expect(runCell).toHaveTextContent(
+    const runHeader = screen.getByRole('columnheader', { name: 'Run ID' });
+    const evaluationHeader = screen.getByRole('columnheader', { name: 'Evaluation' });
+    const evaluationName = within(runCell).getByText('Search evaluation');
+    const note = within(runCell).getByText(
       'Note: Full 31-scenario MCPLab tool suite, post tool-name-prefix fix'
     );
+
+    expect(screen.queryByRole('columnheader', { name: 'MCP Servers' })).not.toBeInTheDocument();
+    expect(runHeader).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
+    expect(runHeader).not.toHaveClass('min-w-[22.5rem]');
+    expect(runCell).toHaveClass('w-[22.5rem]', 'max-w-[22.5rem]');
+    expect(runCell).not.toHaveClass('min-w-[22.5rem]');
+    expect(evaluationHeader).toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(evaluationCell).toHaveClass('w-[10rem]', 'min-w-[10rem]', 'max-w-[10rem]');
+    expect(runLink.compareDocumentPosition(evaluationName)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(evaluationName.compareDocumentPosition(note)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(evaluationCell.firstElementChild).toHaveProperty('childElementCount', 2);
-    expect(within(evaluationCell).getByText(/long-mcp-server-name: 1\.2\.3/)).toBeInTheDocument();
-    expect(within(evaluationCell).getByText('Search evaluation')).toBeInTheDocument();
+    expect(within(evaluationCell).getByText(/long-mcp-server-name:1\.2\.3/)).toBeInTheDocument();
+    expect(within(evaluationCell).queryByText('MCP:')).not.toBeInTheDocument();
+    expect(within(evaluationCell).queryByText('Search evaluation')).not.toBeInTheDocument();
     expect(within(evaluationCell).queryByText(/search\.yaml/)).not.toBeInTheDocument();
   });
 

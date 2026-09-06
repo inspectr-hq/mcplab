@@ -348,8 +348,8 @@ describe('ResultDetail conversation toggle', () => {
     await screen.findByText('run-1');
     const badge = screen.getByText(/MCP:/).closest('[tabindex="0"]');
     expect(badge).toHaveClass('leading-none');
-    expect(screen.getByText(/api: 1\.2\.3/)).toBeInTheDocument();
-    expect(screen.getByText(/docs: unknown/)).toBeInTheDocument();
+    expect(screen.getByText(/api:1\.2\.3/)).toBeInTheDocument();
+    expect(screen.getByText(/docs:unknown/)).toBeInTheDocument();
   });
 
   it('shows complete MCP server information on hover', async () => {
@@ -373,7 +373,7 @@ describe('ResultDetail conversation toggle', () => {
 
     expect(
       await screen.findByRole('tooltip', {
-        name: 'a-very-long-mcp-server-name: 2026.09.05, docs: unknown'
+        name: 'a-very-long-mcp-server-name:2026.09.05, docs:unknown'
       })
     ).toBeInTheDocument();
   });

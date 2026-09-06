@@ -3,12 +3,13 @@ import { cn } from '@/lib/utils';
 
 type McpServerBadgeProps = {
   versions?: Record<string, string | null>;
+  showPrefix?: boolean;
   className?: string;
 };
 
-export function McpServerBadge({ versions, className }: McpServerBadgeProps) {
+export function McpServerBadge({ versions, showPrefix = true, className }: McpServerBadgeProps) {
   const summary = Object.entries(versions ?? {})
-    .map(([serverId, version]) => `${serverId}: ${version ?? 'unknown'}`)
+    .map(([serverId, version]) => `${serverId}:${version ?? 'unknown'}`)
     .join(', ');
 
   if (!summary) return null;
@@ -24,8 +25,10 @@ export function McpServerBadge({ versions, className }: McpServerBadgeProps) {
               className
             )}
           >
-            <span className="font-medium">MCP:</span>
-            <span className="ml-1 min-w-0 truncate font-mono">{summary}</span>
+            {showPrefix ? <span className="font-medium">MCP:</span> : null}
+            <span className={cn(showPrefix ? 'ml-1' : '', 'min-w-0 truncate font-mono')}>
+              {summary}
+            </span>
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-md break-words text-xs">

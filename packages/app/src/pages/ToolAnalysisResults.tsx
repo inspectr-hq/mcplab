@@ -297,7 +297,7 @@ export default function ToolAnalysisResultsPage() {
                               {item.reportId}
                             </Link>
                             <div className="text-[11px] text-muted-foreground">
-                              {item.assistantAgentName} · {item.assistantAgentModel}
+                              {item.assistantAgentName}
                             </div>
                           </div>
                         </TableCell>

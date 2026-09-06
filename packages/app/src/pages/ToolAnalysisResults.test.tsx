@@ -17,7 +17,7 @@ vi.mock('@/contexts/DataSourceContext', () => ({
 }));
 
 describe('ToolAnalysisResultsPage', () => {
-  it('does not show token estimates in the saved report overview', async () => {
+  it('shows only the agent name in the saved report overview', async () => {
     sourceMock.listToolAnalysisServers.mockResolvedValue(['demo']);
     sourceMock.listToolAnalysisResults.mockResolvedValue([
       {
@@ -44,6 +44,8 @@ describe('ToolAnalysisResultsPage', () => {
     );
 
     expect(await screen.findByText('ta-existing')).toBeInTheDocument();
+    expect(screen.getByText('agent')).toBeInTheDocument();
+    expect(screen.queryByText('model')).not.toBeInTheDocument();
     expect(screen.queryByText(/tok$/)).not.toBeInTheDocument();
   });
 });

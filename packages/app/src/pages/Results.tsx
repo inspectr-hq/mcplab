@@ -1051,7 +1051,7 @@ const Results = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[15rem] min-w-[15rem] max-w-[15rem]">
+                  <TableHead className="w-[22.5rem] max-w-[22.5rem]">
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 hover:text-foreground"
@@ -1061,7 +1061,9 @@ const Results = () => {
                       {sortIcon('id')}
                     </button>
                   </TableHead>
-                  <TableHead>Evaluation</TableHead>
+                  <TableHead className="w-[10rem] min-w-[10rem] max-w-[10rem]">
+                    Evaluation
+                  </TableHead>
                   <TableHead>
                     <button
                       type="button"
@@ -1146,7 +1148,7 @@ const Results = () => {
                       </TableRow>
                     ) : (
                       <TableRow key={item.run.id}>
-                        <TableCell className="w-[15rem] min-w-[15rem] max-w-[15rem]">
+                        <TableCell className="w-[22.5rem] max-w-[22.5rem]">
                           <div className="space-y-1">
                             <Link
                               to={`/results/${item.run.id}`}
@@ -1154,6 +1156,12 @@ const Results = () => {
                             >
                               {item.run.id}
                             </Link>
+                            <div
+                              className="min-w-0 truncate font-mono text-xs text-foreground/80"
+                              title={runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}
+                            >
+                              {runScopesById.get(item.run.id)?.scopePreview ?? 'n/a'}
+                            </div>
                             {item.run.runNote ? (
                               <div className="text-[11px] text-muted-foreground break-words">
                                 Note: {item.run.runNote}
@@ -1161,7 +1169,7 @@ const Results = () => {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-[11px] text-muted-foreground">
+                        <TableCell className="w-[10rem] min-w-[10rem] max-w-[10rem] text-[11px] text-muted-foreground">
                           {(() => {
                             const scope = runScopesById.get(item.run.id) ?? {
                               scenarioCount: 0,
@@ -1172,12 +1180,6 @@ const Results = () => {
                             return (
                               <div className="space-y-1">
                                 <div className="flex min-w-0 items-baseline gap-1.5">
-                                  <span
-                                    className="min-w-0 truncate font-mono text-xs text-foreground/80"
-                                    title={scope.scopePreview}
-                                  >
-                                    {scope.scopePreview}
-                                  </span>
                                   <span className="shrink-0 whitespace-nowrap">
                                     {scope.scenarioCount} scenario
                                     {scope.scenarioCount === 1 ? '' : 's'} · {scope.agentCount}{' '}
@@ -1192,6 +1194,7 @@ const Results = () => {
                                 </div>
                                 <McpServerBadge
                                   versions={item.run.mcpServerVersions}
+                                  showPrefix={false}
                                   className="max-w-[18rem]"
                                 />
                               </div>
