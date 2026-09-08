@@ -769,7 +769,7 @@ export async function startMcplabMcpServer(
   const sessions = new Map<string, SessionRuntime>();
   const httpServer = createServer(async (req, res) => {
     try {
-      await handleHttpRequest(req, res, sessions, options.path);
+      await handleHttpRequest(req, res, sessions, options.path, logger);
     } catch (error) {
       logger.error('[mcplab-mcp] request error:', error);
       if (!res.headersSent) {
@@ -4490,16 +4490,23 @@ export async function handleMcplabMcpHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  options?: { path?: string }
+  options?: { path?: string; logger?: Pick<Console, 'log' | 'error'> }
 ): Promise<void> {
-  await handleHttpRequest(req, res, sessions, options?.path ?? DEFAULT_MCP_PATH);
+  await handleHttpRequest(
+    req,
+    res,
+    sessions,
+    options?.path ?? DEFAULT_MCP_PATH,
+    options?.logger ?? console
+  );
 }
 
 async function handleHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   sessions: Map<string, SessionRuntime>,
-  mcpPath: string
+  mcpPath: string,
+  logger: Pick<Console, 'log' | 'error'> = console
 ): Promise<void> {
   const method = req.method ?? 'GET';
   const pathname = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`).pathname;
@@ -4537,14 +4544,30 @@ async function handleHttpRequest(
     }
 
     if (isInitializeRequest(body)) {
+      const clientInfo =
+        body.params && typeof body.params === 'object' && 'clientInfo' in body.params
+          ? body.params.clientInfo
+          : undefined;
+      const clientName =
+        clientInfo && typeof clientInfo === 'object' && 'name' in clientInfo
+          ? String(clientInfo.name)
+          : 'unknown';
+      const clientVersion =
+        clientInfo && typeof clientInfo === 'object' && 'version' in clientInfo
+          ? String(clientInfo.version)
+          : undefined;
       let runtime!: SessionRuntime;
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           sessions.set(sid, runtime);
+          logger.log(
+            `[mcplab-mcp] client connected: ${clientName}${clientVersion ? `/${clientVersion}` : ''} (session ${sid})`
+          );
         },
         onsessionclosed: (sid) => {
           sessions.delete(sid);
+          logger.log(`[mcplab-mcp] client disconnected: session ${sid}`);
         }
       });
       const mcpServer = createConfiguredServer();
