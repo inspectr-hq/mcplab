@@ -127,7 +127,15 @@ export interface MarkdownReportContent {
 }
 
 export interface RunJobEvent {
-  type: 'started' | 'log' | 'completed' | 'error' | 'queued' | 'oauth_required' | (string & {});
+  type:
+    | 'started'
+    | 'log'
+    | 'completed'
+    | 'error'
+    | 'queued'
+    | 'oauth_required'
+    | 'inspection_ready'
+    | (string & {});
   ts: string;
   payload: Record<string, unknown>;
 }
@@ -741,6 +749,7 @@ export interface EvalDataSource {
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
+    inspectWithInspectr?: boolean;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
   getRunQueue: () => Promise<QueueResponse>;

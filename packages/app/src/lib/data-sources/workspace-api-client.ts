@@ -355,6 +355,7 @@ export const workspaceApiClient = {
     runNote?: string;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
+    inspectWithInspectr?: boolean;
   }) =>
     request<{ jobId: string; queued?: boolean; position?: number }>('/api/runs', {
       method: 'POST',
@@ -774,6 +775,7 @@ export const workspaceApiClient = {
     source.addEventListener('completed', messageHandler);
     source.addEventListener('error', messageHandler);
     source.addEventListener('oauth_required', messageHandler);
+    source.addEventListener('inspection_ready', messageHandler);
     source.onerror = () => {
       if (closed) return;
       onEvent({

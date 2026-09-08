@@ -6,6 +6,7 @@ export interface QueueRunParams {
   runNote: string | null;
   serverOverrideAll: string[] | null;
   scenarioServerOverrides: Record<string, string[]> | null;
+  inspectWithInspectr: boolean;
 }
 
 export interface QueueEntry {

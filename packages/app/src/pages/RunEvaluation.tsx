@@ -73,6 +73,10 @@ const RunEvaluation = () => {
     Record<string, string[]>
   >({});
   const [runNote, setRunNote] = useState('');
+  const [inspectWithInspectr, setInspectWithInspectr] = useState(false);
+  const [inspectionDashboards, setInspectionDashboards] = useState<
+    Array<{ upstreamOrigin: string; dashboardUrl: string }>
+  >([]);
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
@@ -299,6 +303,7 @@ const RunEvaluation = () => {
     setDone(false);
     setStopped(false);
     setRunId('');
+    setInspectionDashboards([]);
     const compositionMode =
       (selectedConfig.serverEntries ?? []).some((entry) => entry.kind === 'referenced') ||
       (selectedConfig.agentEntries ?? []).some((entry) => entry.kind === 'referenced') ||
@@ -329,7 +334,8 @@ const RunEvaluation = () => {
         ...(runtimeOverridesEnabled && Object.keys(filteredScenarioServerOverrides).length > 0
           ? { scenarioServerOverrides: filteredScenarioServerOverrides }
           : {}),
-        runNote: runNote.trim() ? runNote.trim() : undefined
+        runNote: runNote.trim() ? runNote.trim() : undefined,
+        inspectWithInspectr: inspectWithInspectr || undefined
       });
       setActiveJobId(jobId);
       setActiveRunJob(jobId);
@@ -530,6 +536,18 @@ const RunEvaluation = () => {
         });
         return;
       }
+      if (event.type === 'inspection_ready') {
+        const upstreamOrigin = String(event.payload.upstreamOrigin ?? '').trim();
+        const dashboardUrl = String(event.payload.dashboardUrl ?? '').trim();
+        if (upstreamOrigin && dashboardUrl) {
+          setInspectionDashboards((prev) =>
+            prev.some((entry) => entry.dashboardUrl === dashboardUrl)
+              ? prev
+              : [...prev, { upstreamOrigin, dashboardUrl }]
+          );
+        }
+        return;
+      }
       if (event.type === 'started') {
         setOauthRequired(null);
         oauthConnectingRef.current = false;
@@ -688,6 +706,19 @@ const RunEvaluation = () => {
               onChange={(e) => setRunNote(e.target.value.slice(0, 500))}
               placeholder="Optional context for this run (for example: mcp-server v1.8.2 #staging)"
               rows={2}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="inspect-with-inspectr">Inspect MCP requests with Inspectr</Label>
+              <p className="text-xs text-muted-foreground">
+                Route MCP traffic through local Inspectr proxies for request tracing.
+              </p>
+            </div>
+            <Switch
+              id="inspect-with-inspectr"
+              checked={inspectWithInspectr}
+              onCheckedChange={setInspectWithInspectr}
             />
           </div>
           {selectedConfig && (
@@ -1040,6 +1071,22 @@ const RunEvaluation = () => {
                 </div>
               ))}
             </div>
+            {inspectionDashboards.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Inspectr:</span>
+                {inspectionDashboards.map((entry) => (
+                  <a
+                    key={entry.dashboardUrl}
+                    href={entry.dashboardUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Open {entry.upstreamOrigin}
+                  </a>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

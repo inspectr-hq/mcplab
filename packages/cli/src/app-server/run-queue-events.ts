@@ -16,7 +16,8 @@ export function toQueueEntry(job: RunJob): QueueEntry {
       agents: job.runParams.requestedAgents ?? null,
       runNote: job.runParams.runNote ?? null,
       serverOverrideAll: job.runParams.serverOverrideAll ?? null,
-      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null
+      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null,
+      inspectWithInspectr: Boolean(job.runParams.inspectWithInspectr)
     }
   };
 }

@@ -56,6 +56,20 @@ export interface RunOptions {
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
   traceExporter?: TraceExporter;
+  mcpServerUrlOverrides?: Record<string, string>;
+  resolveMcpRequestHeaders?: (
+    context: McpRequestHeaderContext
+  ) => Record<string, string> | undefined;
+}
+
+export interface McpRequestHeaderContext {
+  phase: 'connect' | 'scenario';
+  runId: string;
+  serverName: string;
+  requestId?: string;
+  scenarioId?: string;
+  agentName?: string;
+  runIndex?: number;
 }
 
 export type RunProgressEvent =
@@ -105,6 +119,19 @@ export function buildMcpServerAuthHeaders(
     }
   }
   return out;
+}
+
+function mergeServerRequestHeaders(
+  ...sources: Array<Record<string, Record<string, string>> | undefined>
+): Record<string, Record<string, string>> {
+  const merged: Record<string, Record<string, string>> = {};
+  for (const source of sources) {
+    if (!source) continue;
+    for (const [serverName, headers] of Object.entries(source)) {
+      merged[serverName] = { ...(merged[serverName] ?? {}), ...headers };
+    }
+  }
+  return merged;
 }
 
 export async function runAll(
@@ -167,7 +194,8 @@ export async function runAll(
             `Scenario references unknown MCP server '${id}'. Ensure override/config server refs exist in resolved config.servers.`
           );
         }
-        return [id, server];
+        const url = options.mcpServerUrlOverrides?.[id];
+        return [id, url ? { ...server, url } : server];
       })
     );
     await emitProgress({
@@ -175,8 +203,21 @@ export async function runAll(
       serverCount: usedServerIds.length,
       serverNames: usedServerIds
     });
+    const serverRequestHeaders = options.resolveMcpRequestHeaders
+      ? Object.fromEntries(
+          usedServerIds.map((serverName) => [
+            serverName,
+            options.resolveMcpRequestHeaders!({
+              phase: 'connect',
+              runId,
+              serverName
+            }) ?? {}
+          ])
+        )
+      : undefined;
     await mcp.connectAll(usedServers, options.signal, {
-      serverAuthHeaders: buildMcpServerAuthHeaders(options)
+      serverAuthHeaders: buildMcpServerAuthHeaders(options),
+      serverRequestHeaders
     });
     await emitProgress({
       type: 'mcp_connect_finished',
@@ -268,7 +309,30 @@ export async function runAll(
                 options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
                   Promise.resolve({})
               ]);
-              return { ...clientCredentialsHeaders, ...externalHeaders };
+              const requestHeaders = options.resolveMcpRequestHeaders
+                ? Object.fromEntries(
+                    serverNames.map((serverName) => [
+                      serverName,
+                      {
+                        ...options.resolveMcpRequestHeaders!({
+                          phase: 'scenario',
+                          runId,
+                          requestId,
+                          scenarioId: scenario.id,
+                          agentName: scenario.agent,
+                          runIndex,
+                          serverName
+                        }),
+                        'x-request-id': requestId
+                      }
+                    ])
+                  )
+                : undefined;
+              return mergeServerRequestHeaders(
+                clientCredentialsHeaders,
+                externalHeaders,
+                requestHeaders
+              );
             },
             maxTurns: agent.max_turns,
             signal: options.signal,

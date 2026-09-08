@@ -4,6 +4,7 @@ const connectEvents: string[] = [];
 const closeEvents: string[] = [];
 const callToolEvents: string[] = [];
 const callToolSignals: Array<AbortSignal | undefined> = [];
+const connectHeaders: Array<Record<string, string> | undefined> = [];
 let failFirstScopedConnect = false;
 
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
@@ -11,7 +12,9 @@ vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
     constructor(
       public url: URL,
       public options?: { requestInit?: { headers?: Record<string, string> } }
-    ) {}
+    ) {
+      connectHeaders.push(this.options?.requestInit?.headers);
+    }
   }
 }));
 
@@ -60,6 +63,7 @@ describe('McpClientManager scoped clients', () => {
     closeEvents.length = 0;
     callToolEvents.length = 0;
     callToolSignals.length = 0;
+    connectHeaders.length = 0;
     failFirstScopedConnect = false;
   });
 
@@ -80,6 +84,31 @@ describe('McpClientManager scoped clients', () => {
     expect(callToolEvents).toEqual(
       expect.arrayContaining(['mcp-eval-api-scoped:one', 'mcp-eval-api-scoped:two'])
     );
+
+    await manager.disconnectAll();
+  });
+
+  it('merges connection request headers without replacing auth or static headers', async () => {
+    const { McpClientManager } = await import('./mcp.js');
+    const manager = new McpClientManager();
+    await manager.connectAll(
+      {
+        api: {
+          transport: 'http',
+          url: 'https://example.test/mcp',
+          headers: { 'x-static': 'yes' },
+          auth: { type: 'bearer', token: 'secret' }
+        }
+      },
+      undefined,
+      { serverRequestHeaders: { api: { 'inspectr-tag': 'mcplab' } } }
+    );
+
+    expect(connectHeaders[0]).toEqual({
+      authorization: 'Bearer secret',
+      'x-static': 'yes',
+      'inspectr-tag': 'mcplab'
+    });
 
     await manager.disconnectAll();
   });

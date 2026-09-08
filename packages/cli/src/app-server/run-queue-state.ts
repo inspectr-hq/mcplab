@@ -11,6 +11,7 @@ export type RunParams = {
   oauthServerNames?: string[];
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
+  inspectWithInspectr?: boolean;
 };
 
 export type RunJobStatus =

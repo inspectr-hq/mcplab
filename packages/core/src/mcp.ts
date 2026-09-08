@@ -20,6 +20,7 @@ export interface McpCallToolOptions {
 
 export interface McpConnectAllOptions {
   serverAuthHeaders?: Record<string, Record<string, string>>;
+  serverRequestHeaders?: Record<string, Record<string, string>>;
 }
 
 export interface McpImplementationIcon {
@@ -101,7 +102,11 @@ export class McpClientManager {
             ? mergeRequestHeaders(authHeadersOverride)
             : await this.getAuthHeaders(name, server, signal);
         this.authHeaders.set(name, authHeaders);
-        const headers = mergeRequestHeaders(authHeaders, getStaticHeaders(server));
+        const headers = mergeRequestHeaders(
+          authHeaders,
+          getStaticHeaders(server),
+          options?.serverRequestHeaders?.[name]
+        );
         const client = await this.connectClientWithRetry(
           `mcp-eval-${name}`,
           server,

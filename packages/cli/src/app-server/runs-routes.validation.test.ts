@@ -28,6 +28,37 @@ import {
 } from './runs-routes.test-helpers.js';
 
 describe('run request validation', () => {
+  it('returns 400 when inspectWithInspectr is not boolean', async () => {
+    const responses: Array<{ status: number; payload: unknown }> = [];
+    const handled = await handleRunsRoutes({
+      req: { url: '/api/runs', headers: {}, on: () => undefined } as any,
+      res: {} as any,
+      pathname: '/api/runs',
+      method: 'POST',
+      settings: {
+        evalsDir: '/tmp',
+        runsDir: '/tmp',
+        librariesDir: '/tmp',
+        workspaceRoot: '/tmp',
+        toolAnalysisResultsDir: '/tmp'
+      } as any,
+      runQueueService: createRunQueueServiceForTest({ runQueueState: createRunQueueState() }),
+      oauthSessionManager: {} as any,
+      deps: makeRunsRouteDeps({
+        parseBody: async () => ({ configPath: '/tmp/eval.yaml', inspectWithInspectr: 'yes' }),
+        asJson: (_res: unknown, status: number, payload: unknown) => {
+          responses.push({ status, payload });
+        }
+      }) as any
+    });
+
+    expect(handled).toBe(true);
+    expect(responses[0]).toEqual({
+      status: 400,
+      payload: { error: 'inspectWithInspectr must be a boolean' }
+    });
+  });
+
   it('returns 400 when serverOverrideAll is an empty array', async () => {
     const responses: Array<{ status: number; payload: unknown }> = [];
     const handled = await handleRunsRoutes({

@@ -11,7 +11,7 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
-export { runAll, type RunProgressEvent } from './runner.js';
+export { runAll, type McpRequestHeaderContext, type RunProgressEvent, type RunOptions } from './runner.js';
 export { renderSummaryMarkdown } from './results.js';
 export {
   estimateToolDefinitionTokens,

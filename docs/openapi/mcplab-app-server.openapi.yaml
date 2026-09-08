@@ -333,6 +333,10 @@ paths:
                     type: array
                     items: { type: string }
                   description: Runtime per-scenario server ref overrides for this run.
+                inspectWithInspectr:
+                  type: boolean
+                  default: false
+                  description: Route MCP requests through local Inspectr proxies for this run.
       responses:
         "202":
           description: Job accepted
@@ -367,7 +371,7 @@ paths:
       operationId: streamRunJobEvents
       responses:
         "200":
-          description: "`text/event-stream` containing run job events (`started`, `log`, `completed`, `error`)"
+          description: "`text/event-stream` containing run job events (`started`, `inspection_ready`, `log`, `completed`, `error`)"
           content:
             text/event-stream:
               schema:
@@ -2076,7 +2080,8 @@ components:
           agents,
           runNote,
           serverOverrideAll,
-          scenarioServerOverrides
+          scenarioServerOverrides,
+          inspectWithInspectr
         ]
       properties:
         configPath: { type: string }
@@ -2102,6 +2107,7 @@ components:
           additionalProperties:
             type: array
             items: { type: string }
+        inspectWithInspectr: { type: boolean }
     RunQueueEntry:
       type: object
       required: [jobId, status, runParams]

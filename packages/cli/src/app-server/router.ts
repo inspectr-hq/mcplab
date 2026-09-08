@@ -106,6 +106,7 @@ import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
+import { InspectrSessionManager } from './inspectr-session-manager.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -141,6 +142,9 @@ export async function startAppServer(options: AppServerOptions) {
     librariesDir: settings.librariesDir,
     runtimeSessions: oauthRuntimeSessions,
     oauthDebuggerSessions
+  });
+  const inspectrSessionManager = new InspectrSessionManager({
+    storageRoot: join(settings.librariesDir, '.inspectr-sessions')
   });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
@@ -196,6 +200,7 @@ export async function startAppServer(options: AppServerOptions) {
   const runQueueService = createRunQueueService({
     settings,
     oauthSessionManager,
+    inspectrSessionManager,
     deps: routeDeps,
     jobs: jobs as any,
     state: runQueueState
@@ -492,6 +497,7 @@ export async function startAppServer(options: AppServerOptions) {
   server.on('close', () => {
     runQueueService.closeSubscribers();
     devMcp?.stop();
+    void inspectrSessionManager.closeAll();
   });
 
   const url = `http://${options.host}:${options.port}`;

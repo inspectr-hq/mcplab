@@ -13,6 +13,7 @@ import {
   type RunQueueState
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
+import type { InspectrSessionManager } from './inspectr-session-manager.js';
 
 export type QueueServiceDeps = Pick<
   AppRouteDeps,
@@ -48,13 +49,14 @@ export interface RunQueueService {
 export function createRunQueueService(params: {
   settings: AppRouteRequestContext['settings'];
   oauthSessionManager: OAuthSessionManager;
+  inspectrSessionManager?: InspectrSessionManager;
   deps: QueueServiceDeps;
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
-  const { settings, oauthSessionManager, deps } = params;
+  const { settings, oauthSessionManager, inspectrSessionManager, deps } = params;
 
   function emit(): void {
     emitQueueEvent(jobs, state, deps.sendSseEvent);
@@ -175,6 +177,7 @@ export function createRunQueueService(params: {
       job,
       settings,
       oauthSessionManager,
+      inspectrSessionManager,
       deps: deps as any
     });
     await handleExecutionOutcome(job, outcome, options);

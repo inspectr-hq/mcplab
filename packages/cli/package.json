@@ -44,6 +44,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
+    "@inspectr/inspectr": "^1.9.3",
     "@inspectr/mcplab-core": "1.22.2",
     "@inspectr/mcplab-mcp-server": "1.8.3",
     "@inspectr/mcplab-reporting": "1.2.4",

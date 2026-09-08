@@ -18,6 +18,11 @@ import {
 } from './oauth-session-manager.js';
 import { readLibraries as readLibrariesFromStore } from './libraries-store.js';
 import type { ExecutionOutcome, RunJob, RunParams } from './run-queue-state.js';
+import {
+  buildInspectrRequestHeaders,
+  InspectrSessionManager,
+  rewriteUrlThroughInspectr
+} from './inspectr-session-manager.js';
 
 export function mergeLibraryEntriesIntoConfig(
   config: EvalConfig,
@@ -161,6 +166,7 @@ export async function executeRunJob(params: {
     evaluationJudgeAgentName?: string;
   };
   oauthSessionManager: OAuthSessionManager;
+  inspectrSessionManager?: InspectrSessionManager;
   deps: RunsRouteDeps;
 }): Promise<ExecutionOutcome> {
   const { job, settings, oauthSessionManager, deps } = params;
@@ -181,7 +187,8 @@ export async function executeRunJob(params: {
     requestedAgents,
     runNote,
     serverOverrideAll,
-    scenarioServerOverrides
+    scenarioServerOverrides,
+    inspectWithInspectr
   } = job.runParams;
 
   try {
@@ -285,6 +292,40 @@ export async function executeRunJob(params: {
     const usedServerNames = new Set(
       expandedConfig.scenarios.flatMap((scenario) => scenario.servers)
     );
+    const mcpServerUrlOverrides: Record<string, string> = {};
+    if (inspectWithInspectr) {
+      if (!params.inspectrSessionManager) {
+        throw new Error('Inspectr request inspection is not available in this app server');
+      }
+      const sessions = new Map<string, Awaited<ReturnType<InspectrSessionManager['acquire']>>>();
+      for (const serverName of usedServerNames) {
+        const server = expandedConfig.servers[serverName];
+        if (!server || server.transport !== 'http') {
+          throw new Error(
+            `Inspectr request inspection currently supports HTTP MCP servers only: ${serverName}`
+          );
+        }
+        const origin = new URL(server.url).origin;
+        let session = sessions.get(origin);
+        if (!session) {
+          session = await params.inspectrSessionManager.acquire(server.url);
+          sessions.set(origin, session);
+          addJobEvent(job, {
+            type: 'inspection_ready',
+            ts: new Date().toISOString(),
+            payload: {
+              upstreamOrigin: session.upstreamOrigin,
+              proxyOrigin: session.proxyOrigin,
+              dashboardUrl: session.dashboardUrl
+            }
+          });
+        }
+        mcpServerUrlOverrides[serverName] = rewriteUrlThroughInspectr(
+          server.url,
+          session.proxyOrigin
+        );
+      }
+    }
     const oauthServers = Array.from(usedServerNames).filter(
       (serverName) => expandedConfig.servers[serverName]?.auth?.type === 'oauth_authorization_code'
     );
@@ -330,6 +371,10 @@ export async function executeRunJob(params: {
       cwd: settings.workspaceRoot,
       mcpServerAuthHeaders,
       evaluationJudge,
+      mcpServerUrlOverrides,
+      resolveMcpRequestHeaders: inspectWithInspectr
+        ? (context) => buildInspectrRequestHeaders(context)
+        : undefined,
       resolveMcpServerAuthHeaders:
         oauthServers.length > 0
           ? async (serverNames: string[], options?: { signal?: AbortSignal }) => {

@@ -69,6 +69,7 @@ type RunRequestBody = {
   runNote?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
+  inspectWithInspectr?: unknown;
 };
 
 type PreviewRunRequestBody = {
@@ -309,6 +310,11 @@ export async function handleRunsRoutes(params: {
       : undefined;
     const runNoteRaw = typeof body.runNote === 'string' ? body.runNote.trim() : '';
     const runNote = runNoteRaw ? runNoteRaw.slice(0, 500) : undefined;
+    if (body.inspectWithInspectr !== undefined && typeof body.inspectWithInspectr !== 'boolean') {
+      asJson(res, 400, { error: 'inspectWithInspectr must be a boolean' });
+      return true;
+    }
+    const inspectWithInspectr = body.inspectWithInspectr === true;
     const serverOverrideAll = Array.isArray(body.serverOverrideAll)
       ? body.serverOverrideAll.map((id: unknown) => String(id).trim()).filter(Boolean)
       : undefined;
@@ -401,7 +407,8 @@ export async function handleRunsRoutes(params: {
       runNote,
       oauthServerNames,
       serverOverrideAll,
-      scenarioServerOverrides
+      scenarioServerOverrides,
+      inspectWithInspectr
     };
     const response = runQueueService.enqueueRun(runParamsObj, { hostHeader: req.headers.host });
     asJson(res, 202, response);

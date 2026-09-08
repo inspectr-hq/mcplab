@@ -244,6 +244,7 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Agent A')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole('switch', { name: 'Inspect MCP requests with Inspectr' }));
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
     await waitFor(() => {
@@ -253,7 +254,8 @@ describe('RunEvaluation', () => {
       expect.objectContaining({
         configPath: '/path/to/test.yaml',
         scenarioIds: ['scenario-1'],
-        agents: ['agent-a', 'agent-b']
+        agents: ['agent-a', 'agent-b'],
+        inspectWithInspectr: true
       })
     );
   });
