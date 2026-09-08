@@ -1341,6 +1341,7 @@ export function fromCoreResultsJson(
       return {
         runIndex: run.run_index,
         passed: run.pass,
+        outcome: run.outcome,
         error: run.error,
         toolCalls: toToolCallsFromRecord(run, record),
         assistantTokenUsage: tokenUsage.assistant,
@@ -1452,7 +1453,10 @@ export function fromCoreResultsJson(
             0,
             (results.metadata as { total_tool_duration_ms?: number }).total_tool_duration_ms ?? 0
           )
-        : 0
+        : 0,
+    outcomes: results.summary.outcomes,
+    executionSource: results.metadata.execution_source,
+    executionClient: results.metadata.execution_client
   };
 }
 
@@ -1464,6 +1468,7 @@ export function fromCoreScenarioRunPreview(
   return {
     runIndex: run.run_index,
     passed: run.pass,
+    outcome: run.outcome,
     error: run.error,
     toolCalls: toToolCallsFromRecord(run, traceRecord ?? undefined),
     assistantTokenUsage: tokenUsage.assistant,

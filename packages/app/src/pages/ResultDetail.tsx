@@ -1219,7 +1219,9 @@ const ResultDetail = () => {
                                       className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                                     >
                                       <div className="mt-0.5">
-                                        {run.passed ? (
+                                        {run.outcome === 'incomplete' ? (
+                                          <Clock3 className="h-4 w-4 text-amber-500" />
+                                        ) : run.passed ? (
                                           <CheckCircle2 className="h-4 w-4 text-success" />
                                         ) : (
                                           <XCircle className="h-4 w-4 text-destructive" />
@@ -1268,14 +1270,21 @@ const ResultDetail = () => {
                                                   )}{' '}
                                                   tool tokens
                                                 </span>
-                                                {!run.passed && (
+                                                {run.outcome === 'incomplete' ? (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="h-5 border-amber-500/30 bg-amber-500/10 text-amber-600 text-[10px]"
+                                                  >
+                                                    Incomplete
+                                                  </Badge>
+                                                ) : !run.passed ? (
                                                   <Badge
                                                     variant="outline"
                                                     className="h-5 border-destructive/30 bg-destructive/10 text-destructive text-[10px]"
                                                   >
                                                     Failed
                                                   </Badge>
-                                                )}
+                                                ) : null}
                                               </div>
                                               {run.failureReasons.length > 0 && (
                                                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
@@ -1785,15 +1794,11 @@ const ResultDetail = () => {
                                                     openAssistantWithPrompt(
                                                       `Explain Run #${
                                                         run.runIndex + 1
-                                                      } for scenario '${scenarioLabel}'. It ${
-                                                        run.passed ? 'passed' : 'failed'
+                                                      } for scenario '${scenarioLabel}'. Its outcome was ${
+                                                        run.outcome ?? (run.passed ? 'passed' : 'failed')
                                                       } in ${
                                                         run.duration
-                                                      }ms. Focus on the tool sequence and ${
-                                                        run.passed
-                                                          ? 'why it passed'
-                                                          : 'what caused the failure'
-                                                      }.`,
+                                                      }ms. Focus on the tool sequence and evaluated checks.`,
                                                       { scenarioId: sc.scenarioId }
                                                     )
                                                   }

@@ -672,6 +672,13 @@ describe('fromCoreResultsJson conversation mapping', () => {
 });
 
 describe('fromCoreResultsJson check counts', () => {
+  it('preserves an incomplete run outcome', () => {
+    const results = baseResults();
+    results.scenarios[0]!.runs[0]!.outcome = 'incomplete';
+    const mapped = fromCoreResultsJson(results);
+    expect(mapped.scenarios[0]?.runs[0]?.outcome).toBe('incomplete');
+  });
+
   it('derives run and scenario check totals from persisted check results', () => {
     const results = baseResults();
     results.scenarios[0]!.runs[0]!.check_results = [

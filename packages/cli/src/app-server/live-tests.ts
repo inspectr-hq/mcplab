@@ -8,8 +8,6 @@ import {
   tallyCheckCounts,
   type AgentConfig,
   type EvalConfig,
-  type EvaluateScenarioObservationParams,
-  type ResultsJson,
   type RunOutcome,
   type Scenario,
   type ScenarioRunTraceRecord
@@ -151,7 +149,18 @@ export class LiveTestService {
       completedAt: input.completedAt
     };
     if (!normalized.finalText) throw new LiveTestError('finalText is required.', 400);
-    if (session.status === 'cancelled') throw new LiveTestError('Live Test session was cancelled.', 409);
+    const startedAtMs = Date.parse(normalized.startedAt);
+    const completedAtMs = Date.parse(normalized.completedAt);
+    if (
+      !Number.isFinite(startedAtMs) ||
+      !Number.isFinite(completedAtMs) ||
+      completedAtMs < startedAtMs
+    ) {
+      throw new LiveTestError('Valid startedAt and completedAt timestamps are required.', 400);
+    }
+    if (session.status === 'cancelled') {
+      throw new LiveTestError('Live Test session was cancelled.', 409);
+    }
     if (session.completion) {
       if (JSON.stringify(session.completionInput) === JSON.stringify(normalized)) return session.completion;
       throw new LiveTestError('Live Test session was already completed with different data.', 409);

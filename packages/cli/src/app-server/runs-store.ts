@@ -1,7 +1,13 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tallyCheckCounts } from '@inspectr/mcplab-core';
-import type { EvalConfig, ResultsJson, ScenarioRunTraceRecord } from '@inspectr/mcplab-core';
+import type {
+  EvalConfig,
+  ExecutionSource,
+  ResultsJson,
+  RunOutcome,
+  ScenarioRunTraceRecord
+} from '@inspectr/mcplab-core';
 import { ensureInsideRoot } from './store-utils.js';
 
 export interface RunSummary {
@@ -28,6 +34,9 @@ export interface RunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Record<RunOutcome, number>;
+  executionSource?: ExecutionSource;
+  executionClient?: string;
   checkCounts: {
     passed: number;
     failed: number;
@@ -132,6 +141,9 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
                 (results.metadata as { total_duration_ms?: number }).total_duration_ms ?? 0
               )
             : undefined,
+        outcomes: results.summary.outcomes,
+        executionSource: results.metadata.execution_source,
+        executionClient: results.metadata.execution_client,
         checkCounts
       });
     } catch {

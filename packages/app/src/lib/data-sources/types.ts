@@ -93,6 +93,9 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<'passed' | 'failed' | 'incomplete' | 'error', number>>;
+  executionSource?: 'mcplab' | 'rover';
+  executionClient?: string;
   checkCounts?: CoreCheckCounts;
 }
 

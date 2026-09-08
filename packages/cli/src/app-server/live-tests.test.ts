@@ -83,4 +83,21 @@ describe('LiveTestService', () => {
     await service.complete(session.id, { ...base, finalText: 'Antwerp' });
     await expect(service.complete(session.id, { ...base, finalText: 'Different' })).rejects.toMatchObject({ statusCode: 409 });
   });
+
+  it('rejects invalid execution timestamps', async () => {
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => undefined
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    await expect(
+      service.complete(session.id, {
+        finalText: 'Antwerp',
+        startedAt: 'invalid',
+        completedAt: '2026-09-08T10:00:01.000Z'
+      })
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
 });

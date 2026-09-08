@@ -168,6 +168,7 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
+  outcome?: 'passed' | 'failed' | 'incomplete' | 'error';
   error?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
@@ -223,6 +224,9 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
+  outcomes?: Partial<Record<'passed' | 'failed' | 'incomplete' | 'error', number>>;
+  executionSource?: 'mcplab' | 'rover';
+  executionClient?: string;
   checkCounts?: CheckCounts;
 }
 
