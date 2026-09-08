@@ -22,7 +22,7 @@ describe('buildScenarioRequestId', () => {
     expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:claude-sonnet-46:run1');
   });
 
-  it('uses scenario_exec_id when provided', () => {
+  it('keeps the trace ID compact when scenario_exec_id is provided', () => {
     const requestId = buildScenarioRequestId({
       runId: '20260303-120509',
       scenarioId: 'batch-quality',
@@ -31,9 +31,7 @@ describe('buildScenarioRequestId', () => {
       runIndex: 1
     });
 
-    expect(requestId).toBe(
-      'mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:batch-quality-azure-gpt-52-chat-run2'
-    );
+    expect(requestId).toBe('mcplab-run:20260303-120509:batch-quality:azure-gpt-52-chat:run2');
   });
 
   it('sanitizes agent names and falls back for missing scenario id', () => {
@@ -58,7 +56,7 @@ describe('buildScenarioRequestId', () => {
 
     expect(requestId.length).toBe(180);
     expect(requestId.startsWith('mcplab-run:run-123:')).toBe(true);
-    expect(requestId.endsWith('-run1')).toBe(true);
+    expect(requestId.endsWith(':run1')).toBe(true);
   });
 
   it('keeps IDs distinct across runs when scenario_exec_id is set and clamped', () => {
@@ -80,8 +78,8 @@ describe('buildScenarioRequestId', () => {
     expect(run1).not.toBe(run2);
     expect(run1.length).toBeLessThanOrEqual(180);
     expect(run2.length).toBeLessThanOrEqual(180);
-    expect(run1.endsWith('-run1')).toBe(true);
-    expect(run2.endsWith('-run2')).toBe(true);
+    expect(run1.endsWith(':run1')).toBe(true);
+    expect(run2.endsWith(':run2')).toBe(true);
   });
 });
 

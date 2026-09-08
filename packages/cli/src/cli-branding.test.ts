@@ -4,6 +4,7 @@ import {
   CLI_BANNER,
   formatCliBanner,
   formatCliStartupLine,
+  formatInspectrStatus,
   formatLangSmithStatus,
   isLangSmithEnabled
 } from './cli-branding.js';
@@ -79,5 +80,9 @@ describe('CLI branding', () => {
     expect(formatCliStartupLine('langsmith:', 'enabled · project: demo')).toBe(
       '[mcplab-app]  langsmith: enabled · project: demo'
     );
+  });
+
+  it('describes Inspectr request tracing at startup', () => {
+    expect(formatInspectrStatus()).toBe('available · enable Inspectr request tracing per run');
   });
 });

@@ -774,10 +774,8 @@ export function buildScenarioRequestId(params: {
   const scenarioId = normalizeRequestIdPart(params.scenarioId, 'unknown');
   const agentSlug = slugifyAgentName(params.agentName ?? 'unknown-agent');
   const runSuffix = `run${Math.max(1, params.runIndex + 1)}`;
-  const execBase = normalizeRequestIdPart(params.scenarioExecId, '');
-  const execSuffix = execBase ? `${execBase}-${runSuffix}` : runSuffix;
-  return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${execSuffix}`, {
-    requiredSuffix: `:${agentSlug}:${execSuffix}`
+  return clampRequestIdLength(`mcplab-run:${runId}:${scenarioId}:${agentSlug}:${runSuffix}`, {
+    requiredSuffix: `:${agentSlug}:${runSuffix}`
   });
 }
 

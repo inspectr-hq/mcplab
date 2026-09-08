@@ -26,6 +26,10 @@ export function formatCliStartupLine(label: string, value: string): string {
   return `[mcplab-app]  ${label.padEnd(10)} ${value}`;
 }
 
+export function formatInspectrStatus(): string {
+  return 'available · enable Inspectr request tracing per run';
+}
+
 export function formatLangSmithStatus(
   env: Record<string, string | undefined> = process.env
 ): string {

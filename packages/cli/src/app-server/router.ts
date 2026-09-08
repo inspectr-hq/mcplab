@@ -53,7 +53,7 @@ import { handleToolAnalysisRoutes } from './tool-analysis.js';
 import { handleMarkdownReportsRoutes } from './markdown-reports.js';
 import { handleOAuthDebuggerRoutes } from './oauth-debugger.js';
 import { handleOAuthRuntimeRoutes } from './oauth-runtime-routes.js';
-import { formatCliStartupLine } from '../cli-branding.js';
+import { formatCliStartupLine, formatInspectrStatus } from '../cli-branding.js';
 import { handleScenarioAssistantRoutes } from './scenario-assistant.js';
 import { handleResultAssistantRoutes } from './result-assistant.js';
 import { handleEvalsRoutes } from './evals-routes.js';
@@ -512,6 +512,7 @@ export async function startAppServer(options: AppServerOptions) {
   logPath('runs:', settings.runsDir);
   logPath('analysis:', settings.toolAnalysisResultsDir);
   logPath('libs:', settings.librariesDir);
+  logPath('inspectr:', formatInspectrStatus());
   if (isLangSmithEnabled()) {
     logPath('langsmith:', formatLangSmithStatus());
   }
