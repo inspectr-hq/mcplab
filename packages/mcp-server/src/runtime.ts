@@ -2131,6 +2131,10 @@ export function registerTools(server: McpServer): void {
           .positive()
           .optional()
           .describe('Runs per scenario (default 1).'),
+        inspect_with_inspectr: z
+          .boolean()
+          .optional()
+          .describe('Route MCP traffic through Inspectr for request tracing.'),
         run_note: z
           .string()
           .max(500)
@@ -2167,6 +2171,9 @@ export function registerTools(server: McpServer): void {
           body: JSON.stringify({
             configPath: input.config_path,
             runsPerScenario: input.runs_per_scenario ?? 1,
+            ...(input.inspect_with_inspectr !== undefined
+              ? { inspectWithInspectr: input.inspect_with_inspectr }
+              : {}),
             ...(input.scenario_id ? { scenarioId: input.scenario_id } : {}),
             ...(input.scenario_ids ? { scenarioIds: input.scenario_ids } : {}),
             ...(input.agents ? { agents: input.agents } : {}),

@@ -184,6 +184,7 @@ describe('mcp tool contracts', () => {
       scenario_ids: ['one', 'two'],
       agents: ['gpt-5'],
       runs_per_scenario: 3,
+      inspect_with_inspectr: true,
       server_override_all: ['mcp-lab'],
       scenario_server_overrides: { two: ['other-server'] }
     });
@@ -200,6 +201,7 @@ describe('mcp tool contracts', () => {
     expect(JSON.parse(request.body)).toEqual({
       configPath: 'evals/suite.yaml',
       runsPerScenario: 3,
+      inspectWithInspectr: true,
       scenarioIds: ['one', 'two'],
       agents: ['gpt-5'],
       serverOverrideAll: ['mcp-lab'],
