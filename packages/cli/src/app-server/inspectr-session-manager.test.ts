@@ -9,12 +9,14 @@ describe('InspectrSessionManager', () => {
   it('reuses a ready session for the same upstream origin and preserves request paths', async () => {
     const child = { kill: vi.fn(), once: vi.fn(), on: vi.fn() } as any;
     const spawn = vi.fn(() => child);
+    const log = vi.fn();
     let nextPort = 49000;
     const manager = new InspectrSessionManager({
       storageRoot: '/tmp/mcplab-inspectr-test',
       commandPath: 'inspectr-test',
       allocatePort: async () => nextPort++,
       spawn,
+      log,
       waitForReady: async () => undefined
     });
 
@@ -30,6 +32,11 @@ describe('InspectrSessionManager', () => {
     });
     expect(second).toBe(first);
     expect(spawn).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[mcplab-app] Inspectr started for https://backend.test, proxy: http://127.0.0.1:49000, dashboard:'
+      )
+    );
     const dashboardUrl = new URL(first.dashboardUrl);
     const channel = dashboardUrl.searchParams.get('channel');
     const channelCode = dashboardUrl.searchParams.get('channelCode');

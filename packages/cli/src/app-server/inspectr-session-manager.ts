@@ -36,6 +36,7 @@ interface InspectrChild {
 interface InspectrSessionManagerOptions {
   storageRoot: string;
   commandPath?: string;
+  log?: (message: string) => void;
   allocatePort?: () => Promise<number>;
   spawn?: (
     command: string,
@@ -50,6 +51,7 @@ type ManagedSession = InspectrProxySession & { child: InspectrChild; cwd: string
 export class InspectrSessionManager {
   private readonly storageRoot: string;
   private readonly commandPath: string;
+  private readonly log: (message: string) => void;
   private readonly allocatePort: () => Promise<number>;
   private readonly spawn: NonNullable<InspectrSessionManagerOptions['spawn']>;
   private readonly waitForReady: NonNullable<InspectrSessionManagerOptions['waitForReady']>;
@@ -59,6 +61,7 @@ export class InspectrSessionManager {
   constructor(options: InspectrSessionManagerOptions) {
     this.storageRoot = options.storageRoot;
     this.commandPath = options.commandPath ?? resolveInspectrCommand();
+    this.log = options.log ?? console.log;
     this.allocatePort = options.allocatePort ?? allocateFreePort;
     this.spawn = options.spawn ?? ((command, args, spawnOptions) => defaultSpawn(command, args, spawnOptions));
     this.waitForReady = options.waitForReady ?? waitForPorts;
@@ -120,6 +123,9 @@ export class InspectrSessionManager {
         `Inspectr failed to start for ${upstreamOrigin}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+    this.log(
+      `[mcplab-app] Inspectr started for ${session.upstreamOrigin}, proxy: ${session.proxyOrigin}, dashboard: ${session.dashboardUrl}`
+    );
     const managed = session as ManagedSession;
     Object.defineProperties(managed, {
       child: { value: child, enumerable: false },
