@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawn as defaultSpawn } from 'node:child_process';
 import { createConnection, createServer } from 'node:net';
@@ -90,10 +90,15 @@ export class InspectrSessionManager {
     const dashboardPort = await this.allocatePort();
     const cwd = join(this.storageRoot, originKey(upstreamOrigin));
     mkdirSync(cwd, { recursive: true });
+    const channel = `mcplab-${originKey(upstreamOrigin)}`;
+    const channelCode = randomBytes(16).toString('hex');
+    const dashboardUrl = new URL(`http://127.0.0.1:${dashboardPort}`);
+    dashboardUrl.searchParams.set('channel', channel);
+    dashboardUrl.searchParams.set('channelCode', channelCode);
     const session: InspectrProxySession = {
       upstreamOrigin,
       proxyOrigin: `http://127.0.0.1:${proxyPort}`,
-      dashboardUrl: `http://127.0.0.1:${dashboardPort}`
+      dashboardUrl: dashboardUrl.toString()
     };
     const child = this.spawn(
       this.commandPath,
@@ -101,6 +106,8 @@ export class InspectrSessionManager {
         `--listen=127.0.0.1:${proxyPort}`,
         `--app-port=${dashboardPort}`,
         `--backend=${upstreamOrigin}`,
+        `--channel=${channel}`,
+        `--channel-code=${channelCode}`,
         '--print=false'
       ],
       { cwd, stdio: ['ignore', 'ignore', 'ignore'] }
@@ -191,13 +198,31 @@ async function waitForPorts(session: InspectrProxySession, child: InspectrChild)
     if (childExited) throw new Error('Inspectr process exited during startup');
     if (await Promise.all(ports.map(canConnect))) {
       stableChecks += 1;
-      if (stableChecks >= 2) return;
+      if (stableChecks >= 2 && (await hasDashboardConfig(session.dashboardUrl))) return;
     } else {
       stableChecks = 0;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error('timed out waiting for Inspectr proxy and dashboard');
+}
+
+async function hasDashboardConfig(dashboardUrl: string): Promise<boolean> {
+  try {
+    const configUrl = new URL('/app/config', dashboardUrl);
+    const response = await fetch(configUrl, {
+      signal: AbortSignal.timeout(1_000)
+    });
+    if (!response.ok) return false;
+    const config = (await response.json()) as {
+      token?: unknown;
+      channel_code?: unknown;
+      sse_endpoint?: unknown;
+    };
+    return Boolean(config.token && config.channel_code && config.sse_endpoint);
+  } catch {
+    return false;
+  }
 }
 
 function canConnect(port: number): Promise<boolean> {

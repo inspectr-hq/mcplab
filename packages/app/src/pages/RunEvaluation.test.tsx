@@ -166,6 +166,17 @@ describe('RunEvaluation', () => {
       expect(screen.getByText('Inline Agent')).toBeInTheDocument();
     });
     expect(screen.getByText('Library Only Agent')).toBeInTheDocument();
+    expect(
+      screen.getByText('Inspect MCP requests with Inspectr', { exact: true })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Inspectr' })).toHaveAttribute(
+      'src',
+      'https://inspectr.dev/brand/inspectr_brand_logo.png'
+    );
+    expect(screen.getByRole('link', { name: 'Learn more about Inspectr' })).toHaveAttribute(
+      'href',
+      'https://inspectr.dev'
+    );
   });
 
   it('defaults the run selection to config-scoped agents instead of all library agents', async () => {

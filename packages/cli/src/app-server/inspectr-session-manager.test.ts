@@ -24,14 +24,21 @@ describe('InspectrSessionManager', () => {
     expect(first).toEqual({
       upstreamOrigin: 'https://backend.test',
       proxyOrigin: 'http://127.0.0.1:49000',
-      dashboardUrl: 'http://127.0.0.1:49001'
+      dashboardUrl: expect.stringMatching(
+        /^http:\/\/127\.0\.0\.1:49001\/\?channel=mcplab-[0-9a-f]{16}&channelCode=[0-9a-f]{32}$/
+      )
     });
     expect(second).toBe(first);
     expect(spawn).toHaveBeenCalledTimes(1);
+    const dashboardUrl = new URL(first.dashboardUrl);
+    const channel = dashboardUrl.searchParams.get('channel');
+    const channelCode = dashboardUrl.searchParams.get('channelCode');
     expect(spawn.mock.calls[0]?.[1]).toEqual([
       '--listen=127.0.0.1:49000',
       '--app-port=49001',
       '--backend=https://backend.test',
+      `--channel=${channel}`,
+      `--channel-code=${channelCode}`,
       '--print=false'
     ]);
   });
