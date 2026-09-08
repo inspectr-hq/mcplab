@@ -1,16 +1,14 @@
-import { writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
   applyRuntimeServerOverrides,
   hashConfig,
   loadConfig,
-  renderSummaryMarkdown,
   runAll,
   type EvalConfig,
   type RunProgressEvent,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
-import { renderReport } from '@inspectr/mcplab-reporting';
+import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -393,9 +391,7 @@ export async function executeRunJob(params: {
       settings.runsDir
     ) as ScenarioRunTraceRecord[];
     results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
-    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    persistAppRunArtifacts({ runDir, results });
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),

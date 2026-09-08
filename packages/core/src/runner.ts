@@ -20,13 +20,10 @@ import {
   runAgentScenario,
   type AgentRunProgressEvent
 } from './agent.js';
-import {
-  buildNotEvaluatedCheckResults,
-  evaluateScenarioWithAgentChecks,
-  extractValues,
-  normalizeToolConstraintAliases
-} from './eval.js';
-import { aggregateResults, renderSummaryMarkdown } from './results.js';
+import { buildNotEvaluatedCheckResults, normalizeToolConstraintAliases } from './eval.js';
+import { aggregateResults } from './results.js';
+import { evaluateScenarioObservation } from './scenario-observation.js';
+import { persistEvaluationArtifacts } from './artifacts.js';
 import { enrichTraceMessagesWithEstimatedTokens } from './trace-token-estimates.js';
 import {
   createLangSmithTraceExporter,
@@ -282,58 +279,34 @@ export async function runAll(
               });
             }
           });
-          const evalResult = await evaluateScenarioWithAgentChecks(
-            runResult.finalText,
-            runResult.toolSequence,
-            (effectiveScenarioEval = normalizeToolConstraintAliases(
-              scenario.eval,
-              runResult.availableToolNames
-            )),
-            {
+          effectiveScenarioEval = normalizeToolConstraintAliases(
+            scenario.eval,
+            runResult.availableToolNames
+          );
+          const scenarioRun = await evaluateScenarioObservation({
+            scenario: { ...scenario, eval: effectiveScenarioEval },
+            runIndex,
+            observation: {
+              finalText: runResult.finalText,
               toolCalls: runResult.toolCalls,
+              toolDurationsMs: runResult.toolDurationsMs,
               availableToolNames: runResult.availableToolNames,
-              scenarioPrompt: scenario.prompt,
-              judgeAgentAssertions: options.evaluationJudge
-                ? async (input) => {
-                    return judgeAgentAssertions({
-                      assertions: input.assertions,
-                      context: input.context,
-                      finalText: runResult.finalText,
-                      judge: options.evaluationJudge!,
-                      signal: options.signal
-                    });
-                  }
-                : undefined
-            }
-          );
-          const extracted = extractValues(
-            runResult.finalText,
-            scenario.extract?.map((rule) => ({ name: rule.name, regex: rule.regex })) ?? []
-          );
-
-          const toolUsage: Record<string, number> = {};
-          for (const tool of runResult.toolSequence) {
-            toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
-          }
-
-          const scenarioRun: ScenarioRunResult = {
-            run_index: runIndex,
-            request_id: requestId,
-            pass: evalResult.pass,
-            failures: evalResult.failures,
-            check_results: evalResult.check_results,
-            tool_calls: runResult.toolSequence,
-            tool_call_count: runResult.toolSequence.length,
-            tool_sequence: runResult.toolSequence,
-            tool_usage: toolUsage,
-            tool_durations_ms: runResult.toolDurationsMs,
-            run_duration_ms: Math.max(
-              0,
-              Date.parse(runResult.traceEndedAt) - Date.parse(runResult.traceStartedAt)
-            ),
-            final_text: runResult.finalText,
-            extracted
-          };
+              startedAt: runResult.traceStartedAt,
+              completedAt: runResult.traceEndedAt,
+              requestId,
+              executionSource: 'mcplab'
+            },
+            judgeAgentAssertions: options.evaluationJudge
+              ? async (input) =>
+                  judgeAgentAssertions({
+                    assertions: input.assertions,
+                    context: input.context,
+                    finalText: runResult.finalText,
+                    judge: options.evaluationJudge!,
+                    signal: options.signal
+                  })
+              : undefined
+          });
           runs.push(scenarioRun);
           const traceRecord: ScenarioRunTraceRecord = {
             type: 'scenario_run',
@@ -346,7 +319,8 @@ export async function runAll(
             model: runResult.traceModel,
             ts_start: runResult.traceStartedAt,
             ts_end: runResult.traceEndedAt,
-            pass: evalResult.pass,
+            pass: scenarioRun.pass,
+            outcome: scenarioRun.outcome,
             messages: enrichTraceMessagesWithEstimatedTokens(
               runResult.traceMessages,
               runResult.traceModel
@@ -360,7 +334,7 @@ export async function runAll(
           await scenarioTrace.end({
             outputs: {
               finalText: runResult.finalText,
-              pass: evalResult.pass,
+              pass: scenarioRun.pass,
               messages: toLangSmithMessages(runResult.traceMessages),
               metrics: traceRecord.metrics
             }
@@ -373,7 +347,7 @@ export async function runAll(
             totalScenarioRuns,
             runIndex,
             runsPerScenario: options.runsPerScenario,
-            pass: evalResult.pass,
+            pass: scenarioRun.pass,
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
@@ -391,6 +365,7 @@ export async function runAll(
             run_index: runIndex,
             request_id: requestId,
             pass: false,
+            outcome: 'error',
             error: errorMessage,
             failures: [`Scenario error: ${errorMessage}`],
             check_results: buildNotEvaluatedCheckResults(scenario.eval),
@@ -416,6 +391,7 @@ export async function runAll(
             ts_start: tsStart,
             ts_end: tsEnd,
             pass: false,
+            outcome: 'error',
             error: errorMessage,
             messages: []
           };
@@ -457,14 +433,10 @@ export async function runAll(
       cliVersion: options.cliVersion,
       langsmithTraceUrls: traceExport.traceUrls,
       mcpServerVersions,
+      executionSource: 'mcplab',
       scenarioRuns
     });
-
-    const resultsPath = join(runDir, 'results.json');
-    writeFileSync(resultsPath, `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-
-    const summaryPath = join(runDir, 'summary.md');
-    writeFileSync(summaryPath, renderSummaryMarkdown(results), 'utf8');
+    persistEvaluationArtifacts({ runDir, results });
     await emitProgress({ type: 'run_finished', runId, totalScenarioRuns });
 
     return { runDir, results };
@@ -562,7 +534,7 @@ export function mapJudgeBatchResults(params: {
   });
 }
 
-async function judgeAgentAssertions(params: {
+export async function judgeAgentAssertions(params: {
   assertions: AgentAssertion[];
   finalText: string;
   context?: AgentJudgeContext;

@@ -11,8 +11,15 @@ export {
   normalizeLibraryAgents,
   resolveScenarioLibraryDir
 } from './config.js';
-export { runAll, type RunProgressEvent } from './runner.js';
-export { renderSummaryMarkdown } from './results.js';
+export { createRunId, judgeAgentAssertions, runAll, type RunProgressEvent } from './runner.js';
+export { aggregateResults, renderSummaryMarkdown } from './results.js';
+export { persistEvaluationArtifacts, type PersistEvaluationArtifactsParams } from './artifacts.js';
+export {
+  deriveRunOutcome,
+  evaluateScenarioObservation,
+  type EvaluateScenarioObservationParams,
+  type ScenarioObservation
+} from './scenario-observation.js';
 export {
   estimateToolDefinitionTokens,
   type ToolDefinitionForTokenEstimate,

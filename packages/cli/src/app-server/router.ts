@@ -106,6 +106,9 @@ import { startBrowser } from './browser-launch.js';
 import { formatLangSmithStatus, isLangSmithEnabled } from '../cli-branding.js';
 import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
+import { LiveTestService } from './live-tests.js';
+import { handleLiveTestRoutes } from './live-tests-routes.js';
+import { persistAppRunArtifacts } from './app-run-artifacts.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -144,6 +147,19 @@ export async function startAppServer(options: AppServerOptions) {
   });
   const assistantSessions = new Map<string, ScenarioAssistantSession>();
   const resultAssistantSessions = new Map<string, ResultAssistantSession>();
+  const liveTestService = new LiveTestService({
+    runsDir: settings.runsDir,
+    cliVersion: pkgVersion,
+    readScenarios: () => readLibraries(settings.librariesDir).scenarios,
+    persist: persistAppRunArtifacts,
+    getEvaluationJudge: () => {
+      const libraries = readLibraries(settings.librariesDir);
+      return resolveEvaluationJudge({
+        agents: libraries.agents,
+        evaluationJudgeAgentName: settings.evaluationJudgeAgentName
+      });
+    }
+  });
   const runQueueState: RunQueueState = createRunQueueState(settings.defaultQueueWorkers);
   const routeDeps: AppRouteDeps = {
     parseBody,
@@ -440,6 +456,19 @@ export async function startAppServer(options: AppServerOptions) {
           pathname,
           method,
           settings,
+          deps: routeDeps
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleLiveTestRoutes({
+          req,
+          res,
+          pathname,
+          method,
+          service: liveTestService,
           deps: routeDeps
         })
       ) {

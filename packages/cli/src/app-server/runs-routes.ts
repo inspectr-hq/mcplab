@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -7,13 +7,12 @@ import {
   loadConfig,
   hashConfig,
   runAll,
-  renderSummaryMarkdown,
   applyRuntimeServerOverrides,
   type EvalConfig,
   type ScenarioAttachment,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
-import { renderReport } from '@inspectr/mcplab-reporting';
+import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -648,9 +647,7 @@ export async function handleRunsRoutes(params: {
     } else {
       delete results.metadata.run_note;
     }
-    writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-    writeFileSync(join(runDir, 'report.html'), renderReport(results), 'utf8');
-    writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+    persistAppRunArtifacts({ runDir, results });
     asJson(res, 200, { ok: true, runId, runNote: runNote ?? null });
     return true;
   }

@@ -380,6 +380,7 @@ export interface ScenarioRunTraceRecord {
   ts_start: string;
   ts_end: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
   messages: TraceMessage[];
   metrics?: {
@@ -387,6 +388,10 @@ export interface ScenarioRunTraceRecord {
     total_tool_duration_ms: number;
   };
 }
+
+export type RunOutcome = 'passed' | 'failed' | 'incomplete' | 'error';
+
+export type ExecutionSource = 'mcplab' | 'rover';
 
 export interface TraceFileLegacyMeta {
   type: 'trace_meta';
@@ -404,6 +409,7 @@ export interface ScenarioRunResult {
   run_index: number;
   request_id?: string;
   pass: boolean;
+  outcome?: RunOutcome;
   error?: string;
   failures: string[];
   check_results?: CheckResult[];
@@ -475,6 +481,8 @@ export interface ResultsJson {
     total_tool_duration_ms?: number;
     cli_version: string;
     mcp_server_versions: Record<string, string | null>;
+    execution_source?: ExecutionSource;
+    execution_client?: string;
   };
   summary: {
     total_scenarios: number;
@@ -482,6 +490,7 @@ export interface ResultsJson {
     pass_rate: number;
     avg_tool_calls_per_run: number;
     avg_tool_latency_ms: number | null;
+    outcomes?: Record<RunOutcome, number>;
   };
   scenarios: ScenarioAggregate[];
 }

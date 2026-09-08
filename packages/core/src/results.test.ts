@@ -38,6 +38,21 @@ describe('aggregateResults', () => {
     expect(result.scenarios).toHaveLength(0);
   });
 
+  it('counts explicit and legacy run outcomes', () => {
+    const incomplete = makeRun(false);
+    incomplete.outcome = 'incomplete';
+    incomplete.failures = [];
+    incomplete.check_results = [{ type: 'required_tool', label: 'Required tool', status: 'not_evaluated' }];
+    const result = aggregateResults({
+      ...BASE,
+      scenarioRuns: [
+        { scenario_id: 's1', agent: 'external', runs: [makeRun(true), incomplete, makeRun(false)] }
+      ]
+    });
+
+    expect(result.summary.outcomes).toEqual({ passed: 1, failed: 1, incomplete: 1, error: 0 });
+  });
+
   it('passes provider and model through to scenario aggregate', () => {
     const result = aggregateResults({
       ...BASE,
