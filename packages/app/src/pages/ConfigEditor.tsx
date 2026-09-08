@@ -87,7 +87,7 @@ const ConfigEditor = () => {
     Record<string, boolean>
   >({});
   const activeTab = useMemo(() => {
-    const tab = tabParam || searchParams.get('tab');
+    const tab = tabParam === 'edit' ? searchParams.get('tab') : tabParam || searchParams.get('tab');
     return tab === 'agents' || tab === 'scenarios' ? tab : 'scenarios';
   }, [tabParam, searchParams]);
   const testCaseReturnToPath = `${location.pathname}${location.search}`;
@@ -747,7 +747,7 @@ const ConfigEditor = () => {
               size="sm"
               onClick={() => {
                 setEditing(true);
-                navigate(`${configBasePath}/edit`);
+                navigate(`${configBasePath}/edit?tab=${activeTab}`);
               }}
             >
               Edit
