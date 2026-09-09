@@ -809,6 +809,13 @@ const ResultDetail = () => {
                     Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
                   </span>
                 ) : null}
+                {result.executionSource ? <>
+                  {(resultEvalName || resultConfigPath || resultConfigLabel) && <span className="mx-1">·</span>}
+                  <span className="inline-flex items-center align-middle">
+                    Source: <span className="ml-1 font-medium">{result.executionSource}</span>
+                    {result.executionClient ? <span className="ml-1">({result.executionClient})</span> : null}
+                  </span>
+                </> : null}
               </p>
             </div>
           </div>

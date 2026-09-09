@@ -31,6 +31,7 @@ import {
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
 import type { EvaluationQueueItem, QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
+import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
@@ -77,7 +78,6 @@ const RunEvaluation = () => {
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationQueueItem[]>([]);
-  const [roverStatus, setRoverStatus] = useState<{ connected: boolean; provider?: string; activeJobId?: string | null }>({ connected: false });
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -87,6 +87,7 @@ const RunEvaluation = () => {
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
+  const roverStatus = useRoverStatus();
   const {
     agents: libraryAgents,
     scenarios: libraryScenarios,
@@ -461,21 +462,6 @@ const RunEvaluation = () => {
       // ignore fetch errors
     }
   };
-
-  useEffect(() => {
-    let disposed = false;
-    const refreshRoverStatus = () => {
-      if (typeof source.getRoverStatus !== 'function') return;
-      void source.getRoverStatus().then((status) => {
-        if (!disposed) setRoverStatus({ connected: status.connected, provider: status.provider, activeJobId: status.activeJobId });
-      }).catch(() => {
-        if (!disposed) setRoverStatus({ connected: false });
-      });
-    };
-    refreshRoverStatus();
-    const timer = window.setInterval(refreshRoverStatus, 3000);
-    return () => { disposed = true; window.clearInterval(timer); };
-  }, [source]);
 
   const refreshConfigAndLibraries = () => {
     void reload();

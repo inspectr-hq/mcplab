@@ -1,6 +1,11 @@
 // Core mcp-lab types
-import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
-import type { RoverAgentProvider } from '@inspectr/mcplab-core';
+import type {
+  CoreCheckCounts,
+  ScenarioAttachment,
+  ExecutionSource,
+  RoverAgentProvider,
+  RunOutcome
+} from '@/lib/data-sources/types';
 export { tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
@@ -182,7 +187,7 @@ export interface TokenUsage {
 export interface ScenarioRun {
   runIndex: number;
   passed: boolean;
-  outcome?: 'passed' | 'failed' | 'incomplete' | 'error';
+  outcome?: RunOutcome;
   error?: string;
   toolCalls: ToolCall[];
   assistantTokenUsage?: TokenUsage | null;
@@ -238,8 +243,8 @@ export interface EvalResult {
   avgLatency: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  outcomes?: Partial<Record<'passed' | 'failed' | 'incomplete' | 'error', number>>;
-  executionSource?: 'mcplab' | 'rover';
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
   executionClient?: string;
   evaluationRunId?: string;
   checkCounts?: CheckCounts;

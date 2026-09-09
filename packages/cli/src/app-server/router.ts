@@ -243,26 +243,15 @@ export async function startAppServer(options: AppServerOptions) {
         const assigned = runQueueService.assignRoverJob(connection.registration.provider, (payload: RoverSocketMessage) => roverConnection.send(payload));
         activeRoverJobId = assigned?.id ?? null;
       }
-      if (message.type === 'progress' && typeof message.jobId === 'string') {
-        const job = jobs.get(message.jobId);
-        if (job?.runParams.executionType === 'rover') {
-          if (typeof message.completed === 'number' && typeof message.total === 'number') {
-            job.roverProgress = {
-              completed: Math.max(0, Math.min(message.completed, message.total)),
-              total: Math.max(0, message.total),
-              ...(typeof message.currentScenarioId === 'string' ? { currentScenarioId: message.currentScenarioId } : {}),
-              ...(typeof message.lastDurationMs === 'number' ? { lastDurationMs: Math.max(0, message.lastDurationMs) } : {}),
-              ...(typeof message.error === 'string' ? { error: message.error } : {})
-            };
-          }
-          addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: String(message.message ?? 'Rover progress') } });
+      if (message.type === 'progress' || message.type === 'complete') {
+        const nextJobId = runQueueService.handleRoverMessage(
+          message,
+          connection.registration.provider,
+          (payload: RoverSocketMessage) => roverConnection.send(payload)
+        );
+        if (message.type === 'complete' && typeof message.jobId === 'string' && activeRoverJobId === message.jobId) {
+          activeRoverJobId = nextJobId;
         }
-      }
-      if (message.type === 'complete' && typeof message.jobId === 'string') {
-        runQueueService.completeRoverJob(message.jobId, { runId: message.runId, outcome: message.outcome, provider: connection.registration.provider });
-        if (activeRoverJobId === message.jobId) activeRoverJobId = null;
-        const next = runQueueService.assignRoverJob(connection.registration.provider, (payload: RoverSocketMessage) => roverConnection.send(payload));
-        if (next) activeRoverJobId = next.id;
       }
     },
     onDisconnect: () => {

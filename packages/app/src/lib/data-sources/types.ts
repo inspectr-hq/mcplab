@@ -20,7 +20,10 @@ import type {
   QueueResponse,
   EvaluationQueueItem,
   RunQueueEvent,
-  ToolDefinitionTokenEstimates
+  ToolDefinitionTokenEstimates,
+  RoverAgentProvider
+  ,RunOutcome,
+  ExecutionSource
 } from '@inspectr/mcplab-core';
 
 import type {
@@ -51,6 +54,7 @@ export type {
   HealthMcpConnectionInfo,
   ScenarioAttachment
 };
+export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
@@ -96,8 +100,8 @@ export interface WorkspaceRunSummary {
   avgLatencyMs: number;
   totalDurationMs?: number;
   totalToolDurationMs?: number;
-  outcomes?: Partial<Record<'passed' | 'failed' | 'incomplete' | 'error', number>>;
-  executionSource?: 'mcplab' | 'rover';
+  outcomes?: Partial<Record<RunOutcome, number>>;
+  executionSource?: ExecutionSource;
   executionClient?: string;
   checkCounts?: CoreCheckCounts;
 }

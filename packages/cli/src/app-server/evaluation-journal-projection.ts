@@ -12,7 +12,7 @@ export function projectEvaluationJournal(params: {
 }): ResultsJson | null {
   const events = readExecutionEvents(join(params.runsDir, params.evaluationRunId));
   const executions = events
-    .filter((event) => (event.type === 'execution_completed' || event.type === 'child_result_completed') && event.results)
+    .filter((event) => event.type === 'execution_completed' && event.results)
     .reduce<ResultsJson[]>((results, event) => {
       const executionId = event.executionId ?? (event.results as ResultsJson).metadata.run_id;
       if (results.some((result) => result.metadata.run_id === executionId)) return results;
@@ -27,7 +27,7 @@ export function projectEvaluationJournal(params: {
     events.filter((event) => event.type === 'execution_stopped').map((event) => event.executionId ?? event.eventId)
   );
   const traceRecords = events
-    .filter((event) => (event.type === 'execution_completed' || event.type === 'child_result_completed') && Array.isArray(event.traceRecords))
+    .filter((event) => event.type === 'execution_completed' && Array.isArray(event.traceRecords))
     .flatMap((event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]);
   const results = projectEvaluationResult({
     evaluationRunId: params.evaluationRunId,

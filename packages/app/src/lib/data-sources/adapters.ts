@@ -1,5 +1,6 @@
 import type {
   AgentContext,
+  AgentConfig,
   ConversationItem,
   AgentEntry,
   CheckCounts,
@@ -24,7 +25,7 @@ import {
   attachmentTypeFromMediaType,
   inferAttachmentMediaType
 } from '../../../../core/src/attachments';
-import type { ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
+import type { AgentConfig as CoreAgentConfig, ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -41,6 +42,18 @@ import { toComparableString } from '../value-normalization';
 
 function toId(base: string, index: number): string {
   return `${base}-${index + 1}`;
+}
+
+function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
+  if (agent.type === 'browser') {
+    return { id, name: String(agent.name || id), type: 'browser', provider: agent.provider, model: '', maxTokens: 0, url: agent.url };
+  }
+  return { id, name: String(agent.name || id), provider: agent.provider === 'azure_openai' ? 'azure' : agent.provider, model: agent.model, ...withOptionalTemperature(agent.temperature), maxTokens: agent.max_tokens ?? 2048, maxTurns: agent.max_turns, systemPrompt: agent.system };
+}
+
+function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
+  if (agent.type === 'browser') return { id: agent.id, name: agent.name, type: 'browser', provider: agent.provider, url: agent.url };
+  return { id: agent.id, name: agent.name, provider: agent.provider === 'azure' ? 'azure_openai' : agent.provider === 'anthropic' ? 'anthropic' : 'openai', model: agent.model, ...withOptionalTemperature(agent.temperature), max_tokens: agent.maxTokens, max_turns: agent.maxTurns, system: agent.systemPrompt };
 }
 
 function normalizeText(value: unknown): string | undefined {
@@ -468,32 +481,7 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
-    if (entry.type === 'browser') {
-      const mappedBrowserAgent = {
-        id,
-        name: String(entry.name || inlineId),
-        type: 'browser' as const,
-        provider: entry.provider,
-        model: '',
-        url: entry.url,
-        maxTokens: 0
-      };
-      agents.push(mappedBrowserAgent);
-      mixedAgentEntries.push({ kind: 'inline', agent: mappedBrowserAgent });
-      continue;
-    }
-    const provider: 'openai' | 'anthropic' | 'azure' =
-      entry.provider === 'azure_openai' ? 'azure' : entry.provider;
-    const mappedAgent = {
-      id,
-      name: String(entry.name || inlineId),
-      provider,
-      model: entry.model,
-      ...withOptionalTemperature(entry.temperature),
-      maxTokens: entry.max_tokens ?? 2048,
-      maxTurns: entry.max_turns,
-      systemPrompt: entry.system
-    };
+    const mappedAgent = fromCoreAgent(id, entry);
     agents.push(mappedAgent);
     mixedAgentEntries.push({ kind: 'inline', agent: mappedAgent });
   }
@@ -645,27 +633,10 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         url: server.url,
         auth: server.auth
       })) as unknown as CoreSourceEvalConfig['servers'],
-      agents: Object.entries(libraries.agents).map(([name, agent]) =>
-        agent.type === 'browser'
-          ? {
-              id: name,
-              name: normalizeText(agent.name) || name,
-              type: 'browser' as const,
-              provider: agent.provider,
-              url: agent.url
-            }
-          : {
-              id: name,
-              name: normalizeText(agent.name) || name,
-              type: 'llm' as const,
-              provider: agent.provider,
-              model: agent.model,
-              temperature: agent.temperature,
-              max_tokens: agent.max_tokens,
-              max_turns: agent.max_turns,
-              system: agent.system
-            }
-      ) as unknown as CoreSourceEvalConfig['agents'],
+      agents: Object.entries(libraries.agents).map(([name, agent]) => ({
+        id: name,
+        ...agent
+      })) as unknown as CoreSourceEvalConfig['agents'],
       scenarios: libraries.scenarios.map((scenario, index) => ({
         ...scenario,
         name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`
@@ -762,31 +733,7 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
   );
 
   const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
-    const sourceId = agent.id;
-    if (agent.type === 'browser') {
-      return {
-        id: sourceId,
-        ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
-        type: 'browser' as const,
-        provider: agent.provider,
-        url: agent.url
-      } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
-    }
-    return {
-      id: sourceId,
-      ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
-      provider:
-        agent.provider === 'azure'
-          ? 'azure_openai'
-          : agent.provider === 'anthropic'
-          ? 'anthropic'
-          : 'openai',
-      model: agent.model,
-      ...withOptionalTemperature(agent.temperature),
-      max_tokens: agent.maxTokens,
-      max_turns: agent.maxTurns,
-      system: agent.systemPrompt
-    } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
+    return toCoreAgent(agent) as NonNullable<CoreSourceEvalConfig['agents']>[number];
   };
 
   const mixedAgentEntries =
@@ -918,25 +865,10 @@ export function toCoreLibraries(
   ) as CoreEvalConfig['servers'];
 
   const agents = Object.fromEntries(
-    input.agents.map((agent) => [
-      agent.id,
-      {
-        ...(agent.name && agent.name !== agent.id ? { name: agent.name } : {}),
-        ...(agent.type === 'browser' ? { type: 'browser', provider: agent.provider, url: agent.url } : {
-        provider:
-          agent.provider === 'azure'
-            ? 'azure_openai'
-            : agent.provider === 'anthropic'
-            ? 'anthropic'
-            : 'openai',
-        model: agent.model,
-        ...withOptionalTemperature(agent.temperature),
-        max_tokens: agent.maxTokens,
-        max_turns: agent.maxTurns,
-        system: agent.systemPrompt
-        })
-      }
-    ])
+    input.agents.map((agent) => {
+      const { id: _id, ...libraryAgent } = toCoreAgent(agent);
+      return [agent.id, libraryAgent];
+    })
   ) as CoreEvalConfig['agents'];
 
   return {

@@ -14,7 +14,7 @@ import {
 } from '@inspectr/mcplab-core';
 import type { PersistEvaluationArtifactsParams } from '@inspectr/mcplab-core';
 import { appendExecutionEvent } from './execution-journal.js';
-import { projectEvaluationJournal } from './evaluation-journal-projection.js';
+import { recordEvaluationExecution } from './evaluation-journal-writer.js';
 
 export interface LiveTestCatalogItem {
   id: string;
@@ -274,20 +274,16 @@ export class LiveTestService {
       });
     }
     if (session.evaluationRunId) {
-      (this.options.appendJournalEvent ?? appendExecutionEvent)(join(this.options.runsDir, session.evaluationRunId), {
-        eventId: `rover-result-${runId}`,
-        type: 'execution_completed',
-        ts: now.toISOString(),
+      recordEvaluationExecution({
+        runsDir: this.options.runsDir,
         evaluationRunId: session.evaluationRunId,
+        evaluationName: `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`,
         executionId: runId,
         executionSource: 'rover',
         results,
-        traceRecords: [traceRecord]
-      });
-      projectEvaluationJournal({
-        runsDir: this.options.runsDir,
-        evaluationRunId: session.evaluationRunId,
-        evaluationName: `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`
+        traceRecords: [traceRecord],
+        eventId: `rover-result-${runId}`,
+        appendEvent: this.options.appendJournalEvent
       });
     }
     const completion: LiveTestCompletion = {

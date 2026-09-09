@@ -16,6 +16,7 @@ import {
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
 import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
+import { recordEvaluationTerminalExecution } from './evaluation-journal-writer.js';
 import { projectEvaluationJournal } from './evaluation-journal-projection.js';
 
 export type QueueServiceDeps = Pick<
@@ -52,6 +53,7 @@ export interface RunQueueService {
   pauseRoverJob(jobId: string): void;
   resumeRoverJob(jobId: string): boolean;
   completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
+  handleRoverMessage(message: RoverSocketMessage, provider: 'claude' | 'trendminer', send: (message: RoverSocketMessage) => boolean): string | null;
 }
 
 export function createRunQueueService(params: {
@@ -102,19 +104,13 @@ export function createRunQueueService(params: {
   function recordTerminalExecution(job: RunJob, status: 'error' | 'stopped', reason: string): void {
     const evaluationRunId = job.runParams.evaluationRunId;
     if (!evaluationRunId) return;
-    appendExecutionEvent(join(settings.runsDir, evaluationRunId), {
-      eventId: `execution-${status}-${job.id}`,
-      type: status === 'error' ? 'execution_failed' : 'execution_stopped',
-      ts: new Date().toISOString(),
-      executionId: job.id,
-      evaluationRunId,
-      reason
-    });
-    projectEvaluationJournal({
+    recordEvaluationTerminalExecution({
       runsDir: settings.runsDir,
       evaluationRunId,
       evaluationName: job.runParams.evaluationName,
-      ...(status === 'stopped' ? { executionStatus: 'stopped' as const } : {})
+      executionId: job.id,
+      status,
+      reason
     });
   }
 
@@ -603,6 +599,29 @@ export function createRunQueueService(params: {
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);
       emit();
+    },
+    handleRoverMessage(message, provider, send) {
+      if (message.type === 'progress' && typeof message.jobId === 'string') {
+        const job = jobs.get(message.jobId);
+        if (job?.runParams.executionType === 'rover') {
+          if (typeof message.completed === 'number' && typeof message.total === 'number') {
+            const total = Math.max(0, message.total);
+            job.roverProgress = {
+              completed: Math.max(0, Math.min(message.completed, total)),
+              total,
+              ...(typeof message.currentScenarioId === 'string' ? { currentScenarioId: message.currentScenarioId } : {}),
+              ...(typeof message.lastDurationMs === 'number' ? { lastDurationMs: Math.max(0, message.lastDurationMs) } : {}),
+              ...(typeof message.error === 'string' ? { error: message.error } : {})
+            };
+          }
+          deps.addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: String(message.message ?? 'Rover progress') } });
+          emit();
+        }
+      }
+      if (message.type !== 'complete' || typeof message.jobId !== 'string') return null;
+      this.completeRoverJob(message.jobId, { runId: message.runId, outcome: message.outcome, provider });
+      const next = this.assignRoverJob(provider, send);
+      return next?.id ?? null;
     }
   };
 }
