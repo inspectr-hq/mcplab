@@ -675,7 +675,7 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/rover/jobs/${encodeURIComponent(jobId)}/resume`, {
       method: 'POST'
     }),
-  getRoverStatus: () => request<{ connected: boolean; provider?: string; pageUrl?: string }>('/api/rover/status'),
+  getRoverStatus: () => request<{ connected: boolean; provider?: string; pageUrl?: string; activeJobId?: string | null }>('/api/rover/status'),
   getRunQueue: () => request<QueueResponse>('/api/runs/queue'),
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => {
     if (typeof SharedWorker === 'undefined') {

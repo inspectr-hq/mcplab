@@ -246,6 +246,13 @@ export async function startAppServer(options: AppServerOptions) {
       if (message.type === 'progress' && typeof message.jobId === 'string') {
         const job = jobs.get(message.jobId);
         if (job?.runParams.executionType === 'rover') {
+          if (typeof message.completed === 'number' && typeof message.total === 'number') {
+            job.roverProgress = {
+              completed: Math.max(0, Math.min(message.completed, message.total)),
+              total: Math.max(0, message.total),
+              ...(typeof message.currentScenarioId === 'string' ? { currentScenarioId: message.currentScenarioId } : {})
+            };
+          }
           addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: String(message.message ?? 'Rover progress') } });
         }
       }
@@ -338,11 +345,12 @@ export async function startAppServer(options: AppServerOptions) {
         asJson(res, 200, {
           connected: Boolean(connection),
           ...(connection
-            ? {
+          ? {
                 provider: connection.registration.provider,
                 pageUrl: connection.registration.pageUrl,
                 connectedAt: connection.connectedAt,
-                lastSeenAt: connection.lastSeenAt
+                lastSeenAt: connection.lastSeenAt,
+                activeJobId: activeRoverJobId
               }
             : {})
         });

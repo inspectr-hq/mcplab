@@ -269,6 +269,7 @@ export function createRunQueueService(params: {
         state.queue.splice(queueIndex, 1);
       }
       job.status = 'running';
+      job.roverProgress = { completed: 0, total: job.runParams.roverScenarios?.length ?? 0 };
       state.activeJobIds.add(job.id);
       deps.addJobEvent(job, {
         type: 'started',

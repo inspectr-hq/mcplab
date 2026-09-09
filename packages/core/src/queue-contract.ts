@@ -15,6 +15,7 @@ export interface QueueRunParams {
 export interface QueueEntry {
   jobId: string;
   resultRunId?: string;
+  roverProgress?: { completed: number; total: number; currentScenarioId?: string };
   evaluationGroupId?: string;
   status: 'queued' | 'waiting_for_rover' | 'paused_rover' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
   blockedReason?: 'oauth_required' | 'rover_required' | 'rover_interrupted';

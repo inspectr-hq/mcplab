@@ -77,7 +77,7 @@ const RunEvaluation = () => {
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [evaluationGroups, setEvaluationGroups] = useState<EvaluationGroup[]>([]);
-  const [roverStatus, setRoverStatus] = useState<{ connected: boolean; provider?: string }>({ connected: false });
+  const [roverStatus, setRoverStatus] = useState<{ connected: boolean; provider?: string; activeJobId?: string | null }>({ connected: false });
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -467,7 +467,7 @@ const RunEvaluation = () => {
     const refreshRoverStatus = () => {
       if (typeof source.getRoverStatus !== 'function') return;
       void source.getRoverStatus().then((status) => {
-        if (!disposed) setRoverStatus({ connected: status.connected, provider: status.provider });
+        if (!disposed) setRoverStatus({ connected: status.connected, provider: status.provider, activeJobId: status.activeJobId });
       }).catch(() => {
         if (!disposed) setRoverStatus({ connected: false });
       });
@@ -1072,7 +1072,9 @@ const RunEvaluation = () => {
             <div className="flex items-center gap-2">
               <span className={`text-xs ${roverStatus.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
                 <span className="mr-1">●</span>
-                {roverStatus.connected ? `Rover connected${roverStatus.provider ? ` (${roverStatus.provider})` : ''}` : 'Rover disconnected'}
+                {roverStatus.connected
+                  ? `${roverStatus.provider ?? 'Rover'}${roverStatus.activeJobId ? ' assigned' : ' connected'}`
+                  : 'Rover disconnected'}
               </span>
               <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
                 <RefreshCw className="h-3 w-3" />
@@ -1107,6 +1109,7 @@ const RunEvaluation = () => {
                     {group.jobs.map((job) => (
                       <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
                         {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status.replaceAll('_', ' ')}
+                        {job.roverProgress && ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
                         {job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
                           <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
                             void source.openRover(job.jobId).then((result) => {

@@ -7,6 +7,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
     resultRunId: job.resultRunId,
+    roverProgress: job.roverProgress,
     evaluationGroupId: job.runParams.evaluationGroupId,
     status: job.status,
     blockedReason:
