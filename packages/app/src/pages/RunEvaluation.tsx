@@ -1083,8 +1083,26 @@ const RunEvaluation = () => {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     {group.jobs.map((job) => (
-                      <span key={job.jobId} className="rounded bg-background px-2 py-1">
+                      <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
                         {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status.replaceAll('_', ' ')}
+                        {job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
+                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
+                            void source.openRover(job.jobId).then((result) => {
+                              if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer');
+                              void refreshQueue();
+                            });
+                          }}>Connect to Rover</Button>
+                        )}
+                        {job.executionType === 'rover' && job.status === 'paused_rover' && (
+                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
+                            void source.resumeRover(job.jobId).then(() => void refreshQueue());
+                          }}>Resume</Button>
+                        )}
+                        {job.executionType === 'rover' && (job.status === 'waiting_for_rover' || job.status === 'paused_rover' || job.status === 'running') && (
+                          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[11px] text-destructive" onClick={() => {
+                            void source.stopRun(job.jobId).then(() => void refreshQueue());
+                          }}>Stop</Button>
+                        )}
                       </span>
                     ))}
                   </div>

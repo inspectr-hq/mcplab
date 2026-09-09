@@ -47,6 +47,7 @@ export interface RunQueueService {
   closeSubscribers(): void;
   assignRoverJob(provider: 'claude' | 'trendminer', send: (message: RoverSocketMessage) => boolean): RunJob | null;
   pauseRoverJob(jobId: string): void;
+  resumeRoverJob(jobId: string): boolean;
   completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
 }
 
@@ -518,6 +519,15 @@ export function createRunQueueService(params: {
         payload: { message: 'Rover disconnected. Job paused until Rover reconnects.' }
       });
       emit();
+    },
+    resumeRoverJob(jobId) {
+      const job = jobs.get(jobId);
+      if (!job || job.runParams.executionType !== 'rover' || job.status !== 'paused_rover') return false;
+      job.status = 'waiting_for_rover';
+      if (!state.queue.includes(jobId)) state.queue.push(jobId);
+      deps.addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: 'Rover job resumed and waiting for Rover connection.' } });
+      emit();
+      return true;
     },
     completeRoverJob(jobId, payload = {}) {
       const job = jobs.get(jobId);

@@ -362,6 +362,13 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
+      const roverResumeMatch = pathname.match(/^\/api\/rover\/jobs\/([^/]+)\/resume$/);
+      if (roverResumeMatch && method === 'POST') {
+        const resumed = runQueueService.resumeRoverJob(decodeURIComponent(roverResumeMatch[1]!));
+        asJson(res, resumed ? 200 : 404, { ok: resumed });
+        return;
+      }
+
       if (pathname === '/api/settings' && method === 'PUT') {
         const body = await parseBody(req);
         if (body.evalsDir) {
