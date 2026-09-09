@@ -644,6 +644,29 @@ export function createRunQueueService(params: {
       emit();
     },
     handleRoverMessage(message, provider, send) {
+      if (message.type === 'stage' && typeof message.jobId === 'string') {
+        const job = jobs.get(message.jobId);
+        const stage = typeof message.stage === 'string' ? message.stage : 'progress';
+        const scenario = typeof message.scenarioId === 'string' ? ` (${message.scenarioId})` : '';
+        const labels: Record<string, string> = {
+          prompt_sent: 'Prompt sent to Rover',
+          waiting_for_response: 'Waiting for the agent response',
+          response_captured: 'Response captured from Rover',
+          evaluating: 'Evaluating response in MCPLab',
+          persisted: 'Result persisted in MCPLab'
+        };
+        if (job?.runParams.executionType === 'rover') {
+          deps.addJobEvent(job, {
+            type: 'log',
+            ts: new Date().toISOString(),
+            payload: {
+              message: `${labels[stage] ?? String(message.message ?? 'Rover progress')}${scenario}`
+            }
+          });
+          emit();
+        }
+        return null;
+      }
       if (message.type === 'progress' && typeof message.jobId === 'string') {
         const job = jobs.get(message.jobId);
         if (job?.runParams.executionType === 'rover') {
