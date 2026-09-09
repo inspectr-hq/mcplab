@@ -41,6 +41,14 @@ export function createRoverConnectionService(options: {
   const wss = new WebSocketServer({ noServer: true });
   let current: RoverConnection | null = null;
   let closed = false;
+  const heartbeat = setInterval(() => {
+    if (closed || !current) return;
+    if (Date.now() - Date.parse(current.lastSeenAt) > 45_000) {
+      current.socket.terminate();
+      return;
+    }
+    if (current.socket.readyState === WebSocket.OPEN) current.socket.ping();
+  }, 15_000);
 
   const parse = (raw: RawData): RoverSocketMessage | null => {
     try {
@@ -113,6 +121,9 @@ export function createRoverConnectionService(options: {
       log(`[mcplab-app] Rover disconnected: ${disconnected.registration.provider}`);
       void options.onDisconnect?.(disconnected);
     });
+    socket.on('pong', () => {
+      if (connection) connection.lastSeenAt = new Date().toISOString();
+    });
     socket.on('error', () => undefined);
   });
 
@@ -127,6 +138,7 @@ export function createRoverConnectionService(options: {
     broadcast: (message) => current ? send(current.socket, message) : false,
     close: () => {
       closed = true;
+      clearInterval(heartbeat);
       current?.socket.close(1001, 'MCPLab shutting down');
       current = null;
       wss.close();
