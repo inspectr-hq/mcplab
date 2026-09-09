@@ -1108,7 +1108,7 @@ const RunEvaluation = () => {
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     {group.jobs.map((job) => (
                       <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
-                        {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status.replaceAll('_', ' ')}
+                        {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status === 'waiting_for_rover' ? 'waiting for Rover' : job.status === 'paused_rover' ? 'paused' : job.status.replaceAll('_', ' ')}
                         {job.roverProgress && ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
                         {job.roverProgress?.lastDurationMs != null && ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
                         {job.roverProgress?.error && ` · ${job.roverProgress.error}`}

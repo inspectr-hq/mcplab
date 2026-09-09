@@ -125,6 +125,7 @@ describe('queue event emission', () => {
       clients: new Set(),
       events: [],
       abortController: new AbortController(),
+      resultRunId: 'child-run-1',
       runParams: {
         configPath: '/tmp/eval.yaml',
         runsPerScenario: 1,
@@ -136,7 +137,7 @@ describe('queue event emission', () => {
         evaluationGroupId: 'group-1'
       }
     } as any;
-    const queuedJob = { ...runningJob, id: 'job-2', status: 'queued' } as any;
+    const queuedJob = { ...runningJob, id: 'job-2', status: 'queued', resultRunId: undefined } as any;
 
     await handleRunsRoutes({
       req: { url: '/api/runs/queue', headers: {}, on: () => undefined } as any,
@@ -158,7 +159,8 @@ describe('queue event emission', () => {
         ]),
         runQueueState: createRunQueueState({
           queue: ['job-2'],
-          activeJobIds: new Set(['job-1'])
+          activeJobIds: new Set(['job-1']),
+          evaluationGroupResultIds: new Map([['group-1', 'parent-run-1']])
         })
       }),
       oauthSessionManager: {} as any,
@@ -172,7 +174,7 @@ describe('queue event emission', () => {
       queued: [expect.objectContaining({ jobId: 'job-2' })]
     });
     expect((res.__body as any).evaluation_groups).toEqual([
-      expect.objectContaining({ evaluationGroupId: 'group-1', totalJobs: 2, completedJobs: 0 })
+      expect.objectContaining({ evaluationGroupId: 'group-1', parentRunId: 'parent-run-1', totalJobs: 2, resultRunIds: ['child-run-1'] })
     ]);
   });
 
