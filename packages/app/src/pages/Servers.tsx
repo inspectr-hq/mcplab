@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Plus, Pencil, Copy, Trash2, Database } from 'lucide-react';
+import { RefreshCw, Plus, Pencil, Copy, Trash2 } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,7 +90,7 @@ const Servers = () => {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="inline-flex items-center gap-2 text-2xl font-bold">
-            <Database className="h-6 w-6" />
+            <img src="/mcp.svg" alt="" aria-hidden="true" className="h-6 w-6" />
             MCP Servers
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -159,7 +159,12 @@ const Servers = () => {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/libraries/servers/${encodeURIComponent(server.id)}`)}
                   >
-                    <TableCell className="font-medium">{displayName(server)}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        <img src="/mcp.svg" alt="" aria-hidden="true" className="h-4 w-4" />
+                        {displayName(server)}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="font-mono text-xs">
                         {server.transport}
