@@ -250,7 +250,9 @@ export async function startAppServer(options: AppServerOptions) {
             job.roverProgress = {
               completed: Math.max(0, Math.min(message.completed, message.total)),
               total: Math.max(0, message.total),
-              ...(typeof message.currentScenarioId === 'string' ? { currentScenarioId: message.currentScenarioId } : {})
+              ...(typeof message.currentScenarioId === 'string' ? { currentScenarioId: message.currentScenarioId } : {}),
+              ...(typeof message.lastDurationMs === 'number' ? { lastDurationMs: Math.max(0, message.lastDurationMs) } : {}),
+              ...(typeof message.error === 'string' ? { error: message.error } : {})
             };
           }
           addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: String(message.message ?? 'Rover progress') } });

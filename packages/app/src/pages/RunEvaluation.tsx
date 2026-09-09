@@ -1110,6 +1110,8 @@ const RunEvaluation = () => {
                       <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
                         {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status.replaceAll('_', ' ')}
                         {job.roverProgress && ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
+                        {job.roverProgress?.lastDurationMs != null && ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
+                        {job.roverProgress?.error && ` · ${job.roverProgress.error}`}
                         {job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
                           <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
                             void source.openRover(job.jobId).then((result) => {

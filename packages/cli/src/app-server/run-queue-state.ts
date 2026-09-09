@@ -38,7 +38,7 @@ export type RunJob = {
   runParams: RunParams;
   blockedAuthServers?: string[];
   resultRunId?: string;
-  roverProgress?: { completed: number; total: number; currentScenarioId?: string };
+  roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
 };
 
 export interface RunQueueState {
