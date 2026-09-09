@@ -244,6 +244,10 @@ export async function startAppServer(options: AppServerOptions) {
       if (!assigned) console.log(`[mcplab-app] Rover connected, no queued ${connection.registration.provider} jobs`);
     },
     onMessage: (connection, message) => {
+      if (message.type === 'register_update' && !activeRoverJobId) {
+        const assigned = runQueueService.assignRoverJob(connection.registration.provider, (payload: RoverSocketMessage) => roverConnection.send(payload));
+        activeRoverJobId = assigned?.id ?? null;
+      }
       if (message.type === 'progress' && typeof message.jobId === 'string') {
         const job = jobs.get(message.jobId);
         if (job?.runParams.executionType === 'rover') {
