@@ -241,7 +241,6 @@ export function createRunQueueService(params: {
           type: 'log',
           ts: new Date().toISOString(),
           payload: {
-            evaluationGroupId: runParams.evaluationGroupId,
             message: `OAuth credentials ready for queued run: ${admission.readyServers.join(', ')}`
           }
         });
@@ -383,6 +382,7 @@ export function createRunQueueService(params: {
           type: 'queued',
           ts: new Date().toISOString(),
           payload: {
+            evaluationGroupId: runParams.evaluationGroupId,
             configPath: runParams.configPath,
             runsPerScenario: runParams.runsPerScenario,
             scenarioId: runParams.scenarioId ?? null,
@@ -483,6 +483,7 @@ export function createRunQueueService(params: {
       send({
         type: 'assignment',
         jobId: job.id,
+        evaluationGroupId: job.runParams.evaluationGroupId,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
         newConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios !== false
