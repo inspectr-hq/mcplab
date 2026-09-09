@@ -235,7 +235,6 @@ export async function startAppServer(options: AppServerOptions) {
         .map((job) => job.resultRunId)
         .filter((runId): runId is string => Boolean(runId))
         .map((runId) => getRunResults(runId, settings.runsDir));
-      if (childResults.length !== groupJobs.length) return;
       completedEvaluationGroups.add(groupId);
       const parentRunId = `group-${Date.now()}-${groupId.slice(0, 8)}`;
       const results = aggregateEvaluationGroupResults({ groupId, runId: parentRunId, children: childResults });

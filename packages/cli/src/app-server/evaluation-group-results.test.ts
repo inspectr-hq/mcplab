@@ -18,4 +18,11 @@ describe('aggregateEvaluationGroupResults', () => {
     expect(result.summary.pass_rate).toBe(0.5);
     expect(result.summary.outcomes).toEqual({ passed: 1, failed: 1, incomplete: 0, error: 0 });
   });
+
+  it('creates a durable empty parent when every child failed before persistence', () => {
+    const result = aggregateEvaluationGroupResults({ groupId: 'group-failed', runId: 'parent-failed', children: [] });
+    expect(result.metadata.run_id).toBe('parent-failed');
+    expect(result.summary.total_runs).toBe(0);
+    expect(result.summary.pass_rate).toBe(0);
+  });
 });

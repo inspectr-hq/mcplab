@@ -69,7 +69,7 @@ export function createRunQueueService(params: {
   async function maybeCompleteEvaluationGroup(groupId?: string): Promise<void> {
     if (!groupId || !params.onEvaluationGroupComplete) return;
     const members = Array.from(jobs.values()).filter((candidate) => candidate.runParams.evaluationGroupId === groupId);
-    if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth' || !candidate.resultRunId)) return;
+    if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth')) return;
     const parentRunId = await params.onEvaluationGroupComplete(groupId, members);
     if (parentRunId) {
       if (!state.evaluationGroupResultIds) state.evaluationGroupResultIds = new Map();
