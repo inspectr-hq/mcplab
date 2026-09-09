@@ -83,6 +83,7 @@ export function buildQueueState(
       : 'completed';
     return {
       evaluationGroupId,
+      parentRunId: runQueueState.evaluationGroupResultIds?.get(evaluationGroupId),
       status,
       totalJobs: entries.length,
       completedJobs,

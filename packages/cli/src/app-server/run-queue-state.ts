@@ -49,6 +49,7 @@ export interface RunQueueState {
   isAdvancingQueue: boolean;
   needsAdvanceQueue: boolean;
   clients: Set<ServerResponse>;
+  evaluationGroupResultIds?: Map<string, string>;
 }
 
 export type QueueAdvanceOptions = {
@@ -71,7 +72,8 @@ export function createRunQueueState(queueWorkerCount = 1): RunQueueState {
     queueWorkerCount,
     isAdvancingQueue: false,
     needsAdvanceQueue: false,
-    clients: new Set()
+    clients: new Set(),
+    evaluationGroupResultIds: new Map<string, string>()
   };
 }
 

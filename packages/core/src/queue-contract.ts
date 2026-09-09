@@ -34,6 +34,7 @@ export interface QueueResponse {
 
 export interface EvaluationGroup {
   evaluationGroupId: string;
+  parentRunId?: string;
   status: 'queued' | 'running' | 'paused' | 'completed' | 'partial' | 'failed';
   totalJobs: number;
   completedJobs: number;

@@ -56,7 +56,7 @@ export function createRunQueueService(params: {
   deps: QueueServiceDeps;
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
-  onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<void> | void;
+  onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<string | void> | string | void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
@@ -66,7 +66,11 @@ export function createRunQueueService(params: {
     if (!groupId || !params.onEvaluationGroupComplete) return;
     const members = Array.from(jobs.values()).filter((candidate) => candidate.runParams.evaluationGroupId === groupId);
     if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth' || !candidate.resultRunId)) return;
-    await params.onEvaluationGroupComplete(groupId, members);
+    const parentRunId = await params.onEvaluationGroupComplete(groupId, members);
+    if (parentRunId) {
+      if (!state.evaluationGroupResultIds) state.evaluationGroupResultIds = new Map();
+      state.evaluationGroupResultIds.set(groupId, parentRunId);
+    }
   }
 
   function emit(): void {

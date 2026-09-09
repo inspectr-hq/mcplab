@@ -231,6 +231,7 @@ export async function startAppServer(options: AppServerOptions) {
       const results = aggregateEvaluationGroupResults({ groupId, runId: parentRunId, children: childResults });
       persistAppRunArtifacts({ runDir: join(settings.runsDir, parentRunId), results });
       console.log(`[mcplab-app] Evaluation group completed: ${groupId} (${parentRunId})`);
+      return parentRunId;
     }
   });
   let activeRoverJobId: string | null = null;
