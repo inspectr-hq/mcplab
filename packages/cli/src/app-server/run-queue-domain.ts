@@ -565,10 +565,25 @@ export function createRunQueueService(params: {
             candidate.runParams.roverAgent?.provider === provider
         );
       if (!job) return null;
+      const assignment: RoverSocketMessage = {
+        type: 'assignment',
+        jobId: job.id,
+        evaluationRunId: job.runParams.evaluationRunId,
+        agent: job.runParams.roverAgent,
+        scenarios: job.runParams.roverScenarios ?? [],
+        newConversationBetweenScenarios:
+          job.runParams.roverNewConversationBetweenScenarios !== false
+      };
       const index = state.queue.indexOf(job.id);
       if (index !== -1) state.queue.splice(index, 1);
       job.status = 'running';
       state.activeJobIds.add(job.id);
+      if (!send(assignment)) {
+        state.activeJobIds.delete(job.id);
+        job.status = 'waiting_for_rover';
+        if (index !== -1) state.queue.splice(index, 0, job.id);
+        return null;
+      }
       deps.addJobEvent(job, {
         type: 'started',
         ts: new Date().toISOString(),
@@ -577,15 +592,6 @@ export function createRunQueueService(params: {
           roverAgent: job.runParams.roverAgent,
           agents: job.runParams.requestedAgents ?? null
         }
-      });
-      send({
-        type: 'assignment',
-        jobId: job.id,
-        evaluationRunId: job.runParams.evaluationRunId,
-        agent: job.runParams.roverAgent,
-        scenarios: job.runParams.roverScenarios ?? [],
-        newConversationBetweenScenarios:
-          job.runParams.roverNewConversationBetweenScenarios !== false
       });
       emit();
       return job;

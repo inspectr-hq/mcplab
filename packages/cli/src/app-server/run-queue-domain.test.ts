@@ -27,6 +27,17 @@ describe('Rover run queue domain', () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'assignment', jobId }));
   });
 
+  it('does not consume a waiting job when the Rover assignment cannot be delivered', () => {
+    const service = createRunQueueServiceForTest();
+    const { jobId } = service.enqueueRun(roverParams());
+
+    expect(service.assignRoverJob('claude', () => false)).toBeNull();
+    expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(service.state.queue).toContain(jobId);
+    expect(service.state.activeJobIds.has(jobId)).toBe(false);
+    expect(service.jobs.get(jobId)?.events).toHaveLength(0);
+  });
+
   it('pauses disconnected jobs and requires an explicit resume before reassignment', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
