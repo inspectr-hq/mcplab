@@ -7,6 +7,7 @@ import {
   McpClientManager,
   loadConfig,
   hashConfig,
+  createRunId,
   runAll,
   applyRuntimeServerOverrides,
   type EvalConfig,
@@ -414,7 +415,7 @@ export async function handleRunsRoutes(params: {
       .filter((entry) => entry.agent?.type !== 'browser')
       .map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
-    const evaluationRunId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const evaluationRunId = createRunId();
     const baseRunParams = {
       evaluationRunId,
       evaluationName: selectedConfig.name?.trim() || undefined,
