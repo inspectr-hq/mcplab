@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendExecutionEvent } from './execution-journal.js';
@@ -21,6 +21,9 @@ describe('recoverJournalSnapshots', () => {
         }
       });
       expect(recoverJournalSnapshots(root)).toBe(1);
+      unlinkSync(join(runDir, 'summary.md'));
+      expect(recoverJournalSnapshots(root)).toBe(1);
+      expect(existsSync(join(runDir, 'summary.md'))).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
