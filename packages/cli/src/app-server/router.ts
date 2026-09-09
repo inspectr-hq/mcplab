@@ -220,7 +220,11 @@ export async function startAppServer(options: AppServerOptions) {
     jobs: jobs as any,
     state: runQueueState,
     sendRoverMessage: (message) => roverConnection.send(message),
-    assignRoverJob: (provider) => runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) => roverConnection.send(message)),
+    assignRoverJob: (provider) => {
+      const assigned = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) => roverConnection.send(message));
+      if (assigned) activeRoverJobId = assigned.id;
+      return assigned;
+    },
     onEvaluationGroupComplete: (groupId, groupJobs) => {
       if (completedEvaluationGroups.has(groupId)) return;
       const childResults = groupJobs

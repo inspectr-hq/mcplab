@@ -493,6 +493,8 @@ export function createRunQueueService(params: {
       state.clients.clear();
     },
     assignRoverJob(provider, send) {
+      const roverAlreadyBusy = Array.from(state.activeJobIds).some((id) => jobs.get(id)?.runParams.executionType === 'rover');
+      if (roverAlreadyBusy) return null;
       const job = state.queue
         .map((id) => jobs.get(id))
         .find((candidate) => candidate?.status === 'waiting_for_rover' && candidate.runParams.roverAgent?.provider === provider);
