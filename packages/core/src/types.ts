@@ -500,6 +500,7 @@ export interface ResultsJson {
     evaluation_group_id?: string;
     evaluation_run_id?: string;
     child_run_ids?: string[];
+    execution_status?: 'stopped';
   };
   summary: {
     total_scenarios: number;

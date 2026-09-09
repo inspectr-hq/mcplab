@@ -8,6 +8,7 @@ export function projectEvaluationJournal(params: {
   runsDir: string;
   evaluationRunId: string;
   evaluationName?: string;
+  executionStatus?: 'stopped';
 }): ResultsJson | null {
   const events = readExecutionEvents(join(params.runsDir, params.evaluationRunId));
   const children = events
@@ -28,6 +29,7 @@ export function projectEvaluationJournal(params: {
     evaluationName: params.evaluationName,
     children
   });
+  if (params.executionStatus) results.metadata.execution_status = params.executionStatus;
   persistAppRunArtifacts({
     runDir: join(params.runsDir, params.evaluationRunId),
     results,

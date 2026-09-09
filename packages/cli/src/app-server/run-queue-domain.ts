@@ -16,6 +16,7 @@ import {
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
 import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
+import { projectEvaluationJournal } from './evaluation-journal-projection.js';
 
 export type QueueServiceDeps = Pick<
   AppRouteDeps,
@@ -59,7 +60,6 @@ export function createRunQueueService(params: {
   deps: QueueServiceDeps;
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
-  onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<string | void> | string | void;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   assignRoverJob?: (provider: 'claude' | 'trendminer') => RunJob | null;
   onRoverJobReleased?: (provider: 'claude' | 'trendminer') => void;
@@ -67,19 +67,6 @@ export function createRunQueueService(params: {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
   const { settings, oauthSessionManager, deps } = params;
-
-  async function maybeCompleteEvaluationGroup(groupId?: string): Promise<void> {
-    if (!groupId) return;
-    const members = Array.from(jobs.values()).filter((candidate) => candidate.runParams.evaluationGroupId === groupId);
-    if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth')) return;
-    const parentRunId = params.onEvaluationGroupComplete
-      ? await params.onEvaluationGroupComplete(groupId, members)
-      : members.find((member) => member.runParams.evaluationRunId)?.runParams.evaluationRunId;
-    if (parentRunId) {
-      if (!state.evaluationGroupResultIds) state.evaluationGroupResultIds = new Map();
-      state.evaluationGroupResultIds.set(groupId, parentRunId);
-    }
-  }
 
   function emit(): void {
     emitQueueEvent(jobs, state, deps.sendSseEvent);
@@ -93,6 +80,25 @@ export function createRunQueueService(params: {
     });
   }
 
+  function markEvaluationStopped(job: RunJob, reason: string): void {
+    const evaluationRunId = job.runParams.evaluationRunId;
+    if (!evaluationRunId) return;
+    appendExecutionEvent(join(settings.runsDir, evaluationRunId), {
+      eventId: `evaluation-stopped-${job.id}`,
+      type: 'evaluation_stopped',
+      ts: new Date().toISOString(),
+      executionId: job.id,
+      evaluationRunId,
+      reason
+    });
+    projectEvaluationJournal({
+      runsDir: settings.runsDir,
+      evaluationRunId,
+      evaluationName: job.runParams.evaluationName,
+      executionStatus: 'stopped'
+    });
+  }
+
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
@@ -100,6 +106,7 @@ export function createRunQueueService(params: {
     state.blockedJobIds.delete(job.id);
     job.status = 'stopped';
     addStopEvent(job, message);
+    markEvaluationStopped(job, message);
     closeJobClients(job);
   }
 
@@ -186,7 +193,6 @@ export function createRunQueueService(params: {
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
     if (outcome.status === 'completed' && outcome.runId) job.resultRunId = outcome.runId;
-    void maybeCompleteEvaluationGroup(job.runParams.evaluationGroupId);
     closeJobClients(job);
     emit();
     pruneOldJobs();
@@ -404,7 +410,7 @@ export function createRunQueueService(params: {
             type: 'evaluation_started',
             ts: new Date().toISOString(),
             evaluationRunId: runParams.evaluationRunId,
-            evaluationGroupId: runParams.evaluationGroupId,
+            evaluationId: runParams.evaluationId,
             evaluationName: runParams.evaluationName
           });
         }
@@ -423,7 +429,7 @@ export function createRunQueueService(params: {
           type: 'queued',
           ts: new Date().toISOString(),
           payload: {
-            evaluationGroupId: runParams.evaluationGroupId,
+            evaluationId: runParams.evaluationId,
             configPath: runParams.configPath,
             runsPerScenario: runParams.runsPerScenario,
             scenarioId: runParams.scenarioId ?? null,
@@ -463,6 +469,7 @@ export function createRunQueueService(params: {
         params.sendRoverMessage?.({ type: 'stop', jobId: job.id });
       }
       job.status = 'stopped';
+      markEvaluationStopped(job, 'Run stopped by user');
       if (job.runParams.executionType === 'rover' && job.runParams.roverAgent) {
         params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
       }
@@ -532,7 +539,7 @@ export function createRunQueueService(params: {
       send({
         type: 'assignment',
         jobId: job.id,
-        evaluationGroupId: job.runParams.evaluationGroupId,
+        evaluationId: job.runParams.evaluationId,
         evaluationRunId: job.runParams.evaluationRunId,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
@@ -572,7 +579,6 @@ export function createRunQueueService(params: {
       job.status = 'completed';
       if (job.runParams.evaluationRunId) job.resultRunId = job.runParams.evaluationRunId;
       else if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
-      void maybeCompleteEvaluationGroup(job.runParams.evaluationGroupId);
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);
       emit();

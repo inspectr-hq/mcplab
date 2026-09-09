@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { EvaluationGroup, QueueEntry, QueueResponse } from '@inspectr/mcplab-core';
+import type { EvaluationQueueItem, QueueEntry, QueueResponse } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 import type { RunJob, RunQueueState } from './run-queue-state.js';
 
@@ -8,7 +8,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     jobId: job.id,
     resultRunId: job.resultRunId,
     roverProgress: job.roverProgress,
-    evaluationGroupId: job.runParams.evaluationGroupId,
+    evaluationId: job.runParams.evaluationId,
     evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     status: job.status,
@@ -24,7 +24,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     roverAgent: job.runParams.roverAgent,
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
     runParams: {
-      evaluationGroupId: job.runParams.evaluationGroupId,
+      evaluationId: job.runParams.evaluationId,
       evaluationRunId: job.runParams.evaluationRunId,
       evaluationName: job.runParams.evaluationName,
       configPath: job.runParams.configPath,
@@ -67,35 +67,34 @@ export function buildQueueState(
     )
     .map((job) => toQueueEntry(job));
   const allJobs = Array.from(jobs.values());
-  const groups = new Map<string, QueueEntry[]>();
+  const evaluations = new Map<string, QueueEntry[]>();
   for (const job of allJobs) {
-    const groupId = job.runParams.evaluationGroupId;
-    if (!groupId) continue;
-    const entries = groups.get(groupId) ?? [];
+    const evaluationId = job.runParams.evaluationId;
+    if (!evaluationId) continue;
+    const entries = evaluations.get(evaluationId) ?? [];
     entries.push(toQueueEntry(job));
-    groups.set(groupId, entries);
+    evaluations.set(evaluationId, entries);
   }
-  const evaluation_groups: EvaluationGroup[] = Array.from(groups, ([evaluationGroupId, entries]) => {
+  const evaluationItems: EvaluationQueueItem[] = Array.from(evaluations, ([evaluationId, entries]) => {
     const completedJobs = entries.filter((entry) => entry.status === 'completed').length;
     const failedJobs = entries.filter((entry) => entry.status === 'error' || entry.status === 'stopped').length;
     const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
     const hasPending = entries.some((entry) => ['queued', 'waiting_for_rover', 'blocked_auth', 'running'].includes(entry.status));
-    const status: EvaluationGroup['status'] = failedJobs > 0 && !hasPending
+    const status: EvaluationQueueItem['status'] = failedJobs > 0 && !hasPending
       ? completedJobs > 0 ? 'partial' : 'failed'
       : pausedJobs > 0 ? 'paused'
       : hasPending && entries.some((entry) => entry.status === 'running') ? 'running'
       : hasPending ? 'queued'
       : 'completed';
     return {
-      evaluationGroupId,
+      evaluationId,
       evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,
-      parentRunId: runQueueState.evaluationGroupResultIds?.get(evaluationGroupId),
       status,
       totalJobs: entries.length,
       completedJobs,
       failedJobs,
       pausedJobs,
-      resultRunIds: entries.map((entry) => entry.resultRunId).filter((id): id is string => Boolean(id)),
+      resultRunId: entries.find((entry) => entry.resultRunId)?.resultRunId,
       jobs: entries
     };
   });
@@ -104,7 +103,7 @@ export function buildQueueState(
     active_jobs: activeJobs,
     admitting_jobs: admittingJobs,
     queued: queuedEntries,
-    evaluation_groups
+    evaluations: evaluationItems
   };
 }
 

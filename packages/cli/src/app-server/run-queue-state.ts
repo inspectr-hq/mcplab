@@ -4,7 +4,7 @@ import type { SseEvent } from './jobs.js';
 
 export type RunParams = {
   evaluationRunId?: string;
-  evaluationGroupId?: string;
+  evaluationId?: string;
   evaluationName?: string;
   configPath: string;
   runsPerScenario: number;
@@ -52,7 +52,6 @@ export interface RunQueueState {
   isAdvancingQueue: boolean;
   needsAdvanceQueue: boolean;
   clients: Set<ServerResponse>;
-  evaluationGroupResultIds?: Map<string, string>;
 }
 
 export type QueueAdvanceOptions = {
@@ -76,7 +75,6 @@ export function createRunQueueState(queueWorkerCount = 1): RunQueueState {
     isAdvancingQueue: false,
     needsAdvanceQueue: false,
     clients: new Set(),
-    evaluationGroupResultIds: new Map<string, string>()
   };
 }
 

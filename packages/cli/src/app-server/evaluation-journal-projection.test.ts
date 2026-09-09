@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appendExecutionEvent } from './execution-journal.js';
@@ -20,6 +20,23 @@ describe('projectEvaluationJournal', () => {
       expect(projected?.metadata.run_id).toBe('run-1');
       expect(projected?.metadata.config_name).toBe('Batch quality');
       expect(projected?.summary.total_runs).toBe(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('marks a partial canonical result as stopped', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-projection-stopped-'));
+    try {
+      const result = {
+        metadata: { run_id: 'llm-1', timestamp: new Date().toISOString(), config_hash: 'hash', cli_version: 'test', mcp_server_versions: {} },
+        summary: { total_scenarios: 1, total_runs: 1, pass_rate: 1, avg_tool_calls_per_run: 0, avg_tool_latency_ms: 1, outcomes: { passed: 1, failed: 0, incomplete: 0, error: 0 } },
+        scenarios: []
+      };
+      appendExecutionEvent(join(root, 'run-1'), { eventId: 'child-1', type: 'child_result_completed', ts: new Date().toISOString(), results: result });
+      const projected = projectEvaluationJournal({ runsDir: root, evaluationRunId: 'run-1', executionStatus: 'stopped' });
+      expect(projected?.metadata.execution_status).toBe('stopped');
+      expect(JSON.parse(readFileSync(join(root, 'run-1', 'results.json'), 'utf8')).metadata.execution_status).toBe('stopped');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

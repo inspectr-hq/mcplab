@@ -363,9 +363,6 @@ export async function executeRunJob(params: {
     results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
       (scenario) => scenario.id
     );
-    if (job.runParams.evaluationGroupId) {
-      results.metadata.evaluation_group_id = job.runParams.evaluationGroupId;
-    }
     if (job.runParams.evaluationRunId) {
       results.metadata.evaluation_run_id = job.runParams.evaluationRunId;
     }
