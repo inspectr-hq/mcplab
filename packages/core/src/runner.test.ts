@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildFallbackScenarioRequestId,
   buildJudgeBatchPayload,
@@ -7,8 +10,34 @@ import {
   mapJudgeBatchResults,
   buildScenarioRequestId,
   createRunId,
-  extractJudgeJson
+  extractJudgeJson,
+  runAll
 } from './runner.js';
+
+const temporaryRunDirs: string[] = [];
+afterEach(() => {
+  for (const dir of temporaryRunDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe('runAll agent dispatch', () => {
+  it('rejects browser agents instead of sending them through the LLM runner', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-test-'));
+    temporaryRunDirs.push(runsDir);
+    await expect(
+      runAll(
+        {
+          name: 'browser evaluation',
+          servers: {},
+          agents: {
+            claude: { type: 'browser', provider: 'claude', url: 'https://claude.ai' }
+          },
+          scenarios: [{ id: 's1', prompt: 'test', agent: 'claude', servers: [] }]
+        } as any,
+        { runsPerScenario: 1, configHash: 'test', cliVersion: 'test', runsDir }
+      )
+    ).rejects.toThrow("Browser agent 'claude' must be dispatched through Rover.");
+  });
+});
 
 describe('buildScenarioRequestId', () => {
   it('builds deterministic IDs with run fallback suffix', () => {
