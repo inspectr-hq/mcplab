@@ -14,6 +14,7 @@ import {
 } from '@inspectr/mcplab-core';
 import type { PersistEvaluationArtifactsParams } from '@inspectr/mcplab-core';
 import { appendExecutionEvent } from './execution-journal.js';
+import { projectEvaluationJournal } from './evaluation-journal-projection.js';
 
 export interface LiveTestCatalogItem {
   id: string;
@@ -262,6 +263,11 @@ export class LiveTestService {
         executionId: runId,
         executionSource: 'rover',
         results
+      });
+      projectEvaluationJournal({
+        runsDir: this.options.runsDir,
+        evaluationRunId: session.evaluationRunId,
+        evaluationName: `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`
       });
     }
     const completion: LiveTestCompletion = {

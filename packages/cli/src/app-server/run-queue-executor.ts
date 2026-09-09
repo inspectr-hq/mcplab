@@ -10,6 +10,7 @@ import {
 } from '@inspectr/mcplab-core';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import { appendExecutionEvent } from './execution-journal.js';
+import { projectEvaluationJournal } from './evaluation-journal-projection.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -408,6 +409,11 @@ export async function executeRunJob(params: {
         executionId: results.metadata.run_id,
         executionSource: 'mcplab',
         results
+      });
+      projectEvaluationJournal({
+        runsDir: settings.runsDir,
+        evaluationRunId: job.runParams.evaluationRunId,
+        evaluationName: job.runParams.evaluationName
       });
     }
     addJobEvent(job, {
