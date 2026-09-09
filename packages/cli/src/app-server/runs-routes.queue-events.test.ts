@@ -158,7 +158,7 @@ describe('queue event emission', () => {
         ]),
         runQueueState: createRunQueueState({
           queue: ['job-2'],
-          activeJobIds: new Set(['job-1']),
+          activeJobIds: new Set(['job-1'])
         })
       }),
       oauthSessionManager: {} as any,

@@ -1,4 +1,10 @@
-import type { EvalRules, ResultsJson, RunOutcome, ScenarioAggregate, ScenarioRunResult } from './types.js';
+import type {
+  EvalRules,
+  ResultsJson,
+  RunOutcome,
+  ScenarioAggregate,
+  ScenarioRunResult
+} from './types.js';
 import { deriveRunOutcome } from './scenario-observation.js';
 
 export function aggregateResults(params: {

@@ -81,7 +81,12 @@ export function listLiveTestCases(scenarios: Scenario[]): LiveTestCatalogItem[] 
         ? { description: source.description.trim() }
         : {}),
       ...(Array.isArray(source.tags)
-        ? { tags: source.tags.map(String).map((tag) => tag.trim()).filter(Boolean) }
+        ? {
+            tags: source.tags
+              .map(String)
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          }
         : {}),
       assertionCount: countAssertions(scenario),
       eligible: !hasAttachments,
@@ -103,7 +108,10 @@ export interface LiveTestServiceOptions {
 
 export class LiveTestService {
   private readonly sessions = new Map<string, LiveTestSession>();
-  private readonly completionsInFlight = new Map<string, { inputKey: string; promise: Promise<LiveTestCompletion> }>();
+  private readonly completionsInFlight = new Map<
+    string,
+    { inputKey: string; promise: Promise<LiveTestCompletion> }
+  >();
 
   constructor(private readonly options: LiveTestServiceOptions) {}
 
@@ -114,7 +122,9 @@ export class LiveTestService {
 
   start(input: { testCaseId: string; client: string; evaluationRunId?: string }): LiveTestSession {
     this.cleanup();
-    const scenario = this.options.readScenarios().find((candidate) => candidate.id === input.testCaseId);
+    const scenario = this.options
+      .readScenarios()
+      .find((candidate) => candidate.id === input.testCaseId);
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
     if (scenario.attachments?.length) {
       throw new LiveTestError('Attachments are not supported by Rover yet.', 400);
@@ -142,7 +152,8 @@ export class LiveTestService {
 
   cancel(id: string): LiveTestSession {
     const session = this.requireSession(id);
-    if (session.status === 'completed') throw new LiveTestError('Completed Live Tests cannot be cancelled.', 409);
+    if (session.status === 'completed')
+      throw new LiveTestError('Completed Live Tests cannot be cancelled.', 409);
     session.status = 'cancelled';
     return structuredClone(session);
   }
@@ -156,16 +167,22 @@ export class LiveTestService {
     const existing = this.completionsInFlight.get(id);
     if (existing) {
       if (existing.inputKey === inputKey) return existing.promise;
-      return Promise.reject(new LiveTestError('Live Test session is completing with different data.', 409));
+      return Promise.reject(
+        new LiveTestError('Live Test session is completing with different data.', 409)
+      );
     }
     const promise = this.completeInternal(id, input).finally(() => {
-      if (this.completionsInFlight.get(id)?.promise === promise) this.completionsInFlight.delete(id);
+      if (this.completionsInFlight.get(id)?.promise === promise)
+        this.completionsInFlight.delete(id);
     });
     this.completionsInFlight.set(id, { inputKey, promise });
     return promise;
   }
 
-  private async completeInternal(id: string, input: CompleteLiveTestInput): Promise<LiveTestCompletion> {
+  private async completeInternal(
+    id: string,
+    input: CompleteLiveTestInput
+  ): Promise<LiveTestCompletion> {
     const session = this.requireSession(id);
     const normalized: CompleteLiveTestInput = {
       finalText: input.finalText.trim(),
@@ -186,7 +203,8 @@ export class LiveTestService {
       throw new LiveTestError('Live Test session was cancelled.', 409);
     }
     if (session.completion) {
-      if (JSON.stringify(session.completionInput) === JSON.stringify(normalized)) return session.completion;
+      if (JSON.stringify(session.completionInput) === JSON.stringify(normalized))
+        return session.completion;
       throw new LiveTestError('Live Test session was already completed with different data.', 409);
     }
 
@@ -312,7 +330,8 @@ export class LiveTestService {
   private cleanup(): void {
     const now = this.now().getTime();
     for (const [id, session] of this.sessions) {
-      if (Date.parse(session.expiresAt) <= now && session.status === 'ready') this.sessions.delete(id);
+      if (Date.parse(session.expiresAt) <= now && session.status === 'ready')
+        this.sessions.delete(id);
     }
   }
 }

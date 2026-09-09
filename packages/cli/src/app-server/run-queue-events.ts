@@ -21,14 +21,13 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     status: job.status,
-    blockedReason: (
-      job.status === 'blocked_auth'
-        ? 'oauth_required'
-        : job.status === 'waiting_for_rover'
-        ? 'rover_required'
-        : job.status === 'paused_rover'
-        ? 'rover_interrupted'
-        : undefined) as 'oauth_required' | 'rover_required' | 'rover_interrupted' | undefined,
+    blockedReason: (job.status === 'blocked_auth'
+      ? 'oauth_required'
+      : job.status === 'waiting_for_rover'
+      ? 'rover_required'
+      : job.status === 'paused_rover'
+      ? 'rover_interrupted'
+      : undefined) as 'oauth_required' | 'rover_required' | 'rover_interrupted' | undefined,
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined
   };
   if (job.runParams.executionType === 'rover') {
@@ -68,12 +67,13 @@ export function buildQueueState(
   const queuedEntries = runQueueState.queue
     .filter((id) => !runQueueState.admittingJobIds.has(id))
     .map((id) => jobs.get(id))
-    .filter((j): j is RunJob =>
-      !!j &&
-      (j.status === 'queued' ||
-        j.status === 'blocked_auth' ||
-        j.status === 'waiting_for_rover' ||
-        j.status === 'paused_rover')
+    .filter(
+      (j): j is RunJob =>
+        !!j &&
+        (j.status === 'queued' ||
+          j.status === 'blocked_auth' ||
+          j.status === 'waiting_for_rover' ||
+          j.status === 'paused_rover')
     )
     .map((job) => toQueueEntry(job));
   const allJobs = Array.from(jobs.values());
@@ -85,28 +85,41 @@ export function buildQueueState(
     entries.push(toQueueEntry(job));
     evaluations.set(evaluationRunId, entries);
   }
-  const evaluationItems: EvaluationQueueItem[] = Array.from(evaluations, ([evaluationRunId, entries]) => {
-    const completedJobs = entries.filter((entry) => entry.status === 'completed').length;
-    const failedJobs = entries.filter((entry) => entry.status === 'error' || entry.status === 'stopped').length;
-    const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
-    const hasPending = entries.some((entry) => ['queued', 'waiting_for_rover', 'blocked_auth', 'running'].includes(entry.status));
-    const status: EvaluationQueueItem['status'] = failedJobs > 0 && !hasPending
-      ? completedJobs > 0 ? 'partial' : 'failed'
-      : pausedJobs > 0 ? 'paused'
-      : hasPending && entries.some((entry) => entry.status === 'running') ? 'running'
-      : hasPending ? 'queued'
-      : 'completed';
-    return {
-      evaluationRunId,
-      evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,
-      status,
-      totalJobs: entries.length,
-      completedJobs,
-      failedJobs,
-      pausedJobs,
-      jobs: entries
-    };
-  });
+  const evaluationItems: EvaluationQueueItem[] = Array.from(
+    evaluations,
+    ([evaluationRunId, entries]) => {
+      const completedJobs = entries.filter((entry) => entry.status === 'completed').length;
+      const failedJobs = entries.filter(
+        (entry) => entry.status === 'error' || entry.status === 'stopped'
+      ).length;
+      const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
+      const hasPending = entries.some((entry) =>
+        ['queued', 'waiting_for_rover', 'blocked_auth', 'running'].includes(entry.status)
+      );
+      const status: EvaluationQueueItem['status'] =
+        failedJobs > 0 && !hasPending
+          ? completedJobs > 0
+            ? 'partial'
+            : 'failed'
+          : pausedJobs > 0
+          ? 'paused'
+          : hasPending && entries.some((entry) => entry.status === 'running')
+          ? 'running'
+          : hasPending
+          ? 'queued'
+          : 'completed';
+      return {
+        evaluationRunId,
+        evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,
+        status,
+        totalJobs: entries.length,
+        completedJobs,
+        failedJobs,
+        pausedJobs,
+        jobs: entries
+      };
+    }
+  );
   return {
     active: activeJobs[0] ?? null,
     active_jobs: activeJobs,

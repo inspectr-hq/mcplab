@@ -26,7 +26,8 @@ export function persistEvaluationArtifacts({
   if (traceRecords !== undefined) {
     writeAtomic(
       join(runDir, 'trace.jsonl'),
-      traceRecords.map((record) => JSON.stringify(record)).join('\n') + (traceRecords.length ? '\n' : '')
+      traceRecords.map((record) => JSON.stringify(record)).join('\n') +
+        (traceRecords.length ? '\n' : '')
     );
   }
 }

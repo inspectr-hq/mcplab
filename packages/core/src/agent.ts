@@ -214,7 +214,8 @@ export async function runAgentScenario(params: {
   trace?: ScenarioTraceSpan;
 }): Promise<AgentRunResult> {
   const { scenario, agent, mcp } = params;
-  if (!isLlmAgent(agent)) throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
+  if (!isLlmAgent(agent))
+    throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
   const serverRequestHeaders =
     typeof params.resolveServerRequestHeaders === 'function'
       ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
@@ -525,7 +526,9 @@ export async function chatWithAgent(params: {
   });
 }
 
-function createAdapter(agent: Extract<AgentConfig, { provider: 'openai' | 'anthropic' | 'azure_openai' }>): LlmAdapter {
+function createAdapter(
+  agent: Extract<AgentConfig, { provider: 'openai' | 'anthropic' | 'azure_openai' }>
+): LlmAdapter {
   if (agent.provider === 'openai') {
     return new OpenAiAdapter(process.env.OPENAI_API_KEY);
   }

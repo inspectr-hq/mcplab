@@ -4562,7 +4562,9 @@ async function handleHttpRequest(
         onsessioninitialized: (sid) => {
           sessions.set(sid, runtime);
           logger.log(
-            `[mcplab-mcp] client connected: ${clientName}${clientVersion ? `/${clientVersion}` : ''} (session ${sid})`
+            `[mcplab-mcp] client connected: ${clientName}${
+              clientVersion ? `/${clientVersion}` : ''
+            } (session ${sid})`
           );
         },
         onsessionclosed: (sid) => {

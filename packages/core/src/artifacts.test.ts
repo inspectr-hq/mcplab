@@ -39,7 +39,12 @@ describe('persistEvaluationArtifacts', () => {
       messages: []
     };
 
-    persistEvaluationArtifacts({ runDir, results, resolvedConfig: { scenarios: [] }, traceRecords: [trace] });
+    persistEvaluationArtifacts({
+      runDir,
+      results,
+      resolvedConfig: { scenarios: [] },
+      traceRecords: [trace]
+    });
 
     expect(JSON.parse(readFileSync(join(runDir, 'results.json'), 'utf8'))).toEqual(results);
     expect(readFileSync(join(runDir, 'summary.md'), 'utf8')).toContain('Run ID: run-1');

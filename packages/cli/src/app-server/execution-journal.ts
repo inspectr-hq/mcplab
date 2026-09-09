@@ -1,4 +1,11 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync
+} from 'node:fs';
 import { join } from 'node:path';
 
 export interface ExecutionJournalEvent {
@@ -28,7 +35,9 @@ export function readExecutionEvents(runDir: string): ExecutionJournalEvent[] {
     .flatMap((line) => {
       try {
         const value = JSON.parse(line) as ExecutionJournalEvent;
-        return value && typeof value.eventId === 'string' && typeof value.type === 'string' ? [value] : [];
+        return value && typeof value.eventId === 'string' && typeof value.type === 'string'
+          ? [value]
+          : [];
       } catch {
         return [];
       }

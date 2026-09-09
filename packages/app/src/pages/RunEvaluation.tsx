@@ -1051,15 +1051,21 @@ const RunEvaluation = () => {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-              <CardTitle className="inline-flex items-center gap-2 text-base">
-                <Clock className="h-4 w-4" />
-                Run Queue
-              </CardTitle>
+            <CardTitle className="inline-flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4" />
+              Run Queue
+            </CardTitle>
             <div className="flex items-center gap-2">
-              <span className={`text-xs ${roverStatus.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+              <span
+                className={`text-xs ${
+                  roverStatus.connected ? 'text-emerald-600' : 'text-muted-foreground'
+                }`}
+              >
                 <span className="mr-1">●</span>
                 {roverStatus.connected
-                  ? `${roverStatus.provider ?? 'Rover'}${roverStatus.activeJobId ? ' assigned' : ' connected'}`
+                  ? `${roverStatus.provider ?? 'Rover'}${
+                      roverStatus.activeJobId ? ' assigned' : ' connected'
+                    }`
                   : 'Rover disconnected'}
               </span>
               <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
@@ -1069,53 +1075,106 @@ const RunEvaluation = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {!activeQueueEntry && admittingQueueEntries.length === 0 && queuedJobs.length === 0 && evaluations.length === 0 ? (
+          {!activeQueueEntry &&
+          admittingQueueEntries.length === 0 &&
+          queuedJobs.length === 0 &&
+          evaluations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No active or queued runs. Start a run above.
             </p>
           ) : (
             <div className="space-y-2">
               {evaluations.map((evaluation) => (
-                <div key={evaluation.evaluationRunId} className={`rounded-md border p-3 text-sm ${evaluation.status === 'failed' ? 'border-destructive/40 bg-destructive/5' : evaluation.status === 'partial' ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'}`}>
+                <div
+                  key={evaluation.evaluationRunId}
+                  className={`rounded-md border p-3 text-sm ${
+                    evaluation.status === 'failed'
+                      ? 'border-destructive/40 bg-destructive/5'
+                      : evaluation.status === 'partial'
+                      ? 'border-yellow-500/40 bg-yellow-500/5'
+                      : 'border-primary/20 bg-primary/5'
+                  }`}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">{evaluation.evaluationName || 'Evaluation'}</span>
-                      <Badge variant="outline" className="capitalize">{evaluation.status}</Badge>
+                      <span className="font-semibold">
+                        {evaluation.evaluationName || 'Evaluation'}
+                      </span>
+                      <Badge variant="outline" className="capitalize">
+                        {evaluation.status}
+                      </Badge>
                       <span className="text-xs text-muted-foreground">
                         {evaluation.completedJobs}/{evaluation.totalJobs} agents complete
                       </span>
                     </div>
                     {evaluation.evaluationRunId && (
                       <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                        <Link to={`/results/${encodeURIComponent(evaluation.evaluationRunId)}`}>View result</Link>
+                        <Link to={`/results/${encodeURIComponent(evaluation.evaluationRunId)}`}>
+                          View result
+                        </Link>
                       </Button>
                     )}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                     {evaluation.jobs.map((job) => (
-                      <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
-                        {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status === 'waiting_for_rover' ? 'waiting for Rover' : job.status === 'paused_rover' ? 'paused' : job.status.replaceAll('_', ' ')}
-                        {job.roverProgress && ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
-                        {job.roverProgress?.lastDurationMs != null && ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
+                      <span
+                        key={job.jobId}
+                        className="inline-flex items-center gap-1 rounded bg-background px-2 py-1"
+                      >
+                        {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}:{' '}
+                        {job.status === 'waiting_for_rover'
+                          ? 'waiting for Rover'
+                          : job.status === 'paused_rover'
+                          ? 'paused'
+                          : job.status.replaceAll('_', ' ')}
+                        {job.roverProgress &&
+                          ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
+                        {job.roverProgress?.lastDurationMs != null &&
+                          ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
                         {job.roverProgress?.error && ` · ${job.roverProgress.error}`}
                         {job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
-                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
-                            void source.openRover(job.jobId).then((result) => {
-                              if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer');
-                              void refreshQueue();
-                            });
-                          }}>Connect to Rover</Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-1.5 text-[11px]"
+                            onClick={() => {
+                              void source.openRover(job.jobId).then((result) => {
+                                if (result.url)
+                                  window.open(result.url, '_blank', 'noopener,noreferrer');
+                                void refreshQueue();
+                              });
+                            }}
+                          >
+                            Connect to Rover
+                          </Button>
                         )}
                         {job.executionType === 'rover' && job.status === 'paused_rover' && (
-                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[11px]" onClick={() => {
-                            void source.resumeRover(job.jobId).then(() => void refreshQueue());
-                          }}>Resume</Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-1.5 text-[11px]"
+                            onClick={() => {
+                              void source.resumeRover(job.jobId).then(() => void refreshQueue());
+                            }}
+                          >
+                            Resume
+                          </Button>
                         )}
-                        {job.executionType === 'rover' && (job.status === 'waiting_for_rover' || job.status === 'paused_rover' || job.status === 'running') && (
-                          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[11px] text-destructive" onClick={() => {
-                            void source.stopRun(job.jobId).then(() => void refreshQueue());
-                          }}>Stop</Button>
-                        )}
+                        {job.executionType === 'rover' &&
+                          (job.status === 'waiting_for_rover' ||
+                            job.status === 'paused_rover' ||
+                            job.status === 'running') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-1.5 text-[11px] text-destructive"
+                              onClick={() => {
+                                void source.stopRun(job.jobId).then(() => void refreshQueue());
+                              }}
+                            >
+                              Stop
+                            </Button>
+                          )}
                       </span>
                     ))}
                   </div>

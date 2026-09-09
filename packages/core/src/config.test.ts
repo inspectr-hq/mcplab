@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { expandConfigForAgents, loadConfig, normalizeLibraryAgents, readLibraryAgentsAndServers } from './config.js';
+import {
+  expandConfigForAgents,
+  loadConfig,
+  normalizeLibraryAgents,
+  readLibraryAgentsAndServers
+} from './config.js';
 import type { EvalConfig } from './types.js';
 
 const BASE_CONFIG: EvalConfig = {
@@ -58,7 +63,11 @@ describe('browser agent normalization', () => {
   it('loads browser agents alongside legacy LLM agents', () => {
     const agents = normalizeLibraryAgents({
       claude: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-      trendminer: { type: 'browser', provider: 'trendminer', url: 'https://trendminer.example/agent' }
+      trendminer: {
+        type: 'browser',
+        provider: 'trendminer',
+        url: 'https://trendminer.example/agent'
+      }
     });
     expect(agents.claude).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
     expect(agents.trendminer).toEqual({
@@ -69,9 +78,9 @@ describe('browser agent normalization', () => {
   });
 
   it('rejects incomplete browser agents', () => {
-    expect(() => normalizeLibraryAgents({ trendminer: { type: 'browser', provider: 'trendminer' } })).toThrow(
-      'Browser agent trendminer requires a url'
-    );
+    expect(() =>
+      normalizeLibraryAgents({ trendminer: { type: 'browser', provider: 'trendminer' } })
+    ).toThrow('Browser agent trendminer requires a url');
   });
 });
 

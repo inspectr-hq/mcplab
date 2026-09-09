@@ -31,12 +31,14 @@ export interface RoverConnectionService {
   close(): void;
 }
 
-export function createRoverConnectionService(options: {
-  log?: (message: string) => void;
-  onRegister?: (connection: RoverConnection) => void | Promise<void>;
-  onMessage?: (connection: RoverConnection, message: RoverSocketMessage) => void | Promise<void>;
-  onDisconnect?: (connection: RoverConnection) => void | Promise<void>;
-} = {}): RoverConnectionService {
+export function createRoverConnectionService(
+  options: {
+    log?: (message: string) => void;
+    onRegister?: (connection: RoverConnection) => void | Promise<void>;
+    onMessage?: (connection: RoverConnection, message: RoverSocketMessage) => void | Promise<void>;
+    onDisconnect?: (connection: RoverConnection) => void | Promise<void>;
+  } = {}
+): RoverConnectionService {
   const log = options.log ?? console.log;
   const wss = new WebSocketServer({ noServer: true });
   let current: RoverConnection | null = null;
@@ -53,8 +55,10 @@ export function createRoverConnectionService(options: {
   const parse = (raw: RawData): RoverSocketMessage | null => {
     try {
       const value = JSON.parse(raw.toString()) as unknown;
-      return value && typeof value === 'object' && typeof (value as { type?: unknown }).type === 'string'
-        ? value as RoverSocketMessage
+      return value &&
+        typeof value === 'object' &&
+        typeof (value as { type?: unknown }).type === 'string'
+        ? (value as RoverSocketMessage)
         : null;
     } catch {
       return null;
@@ -76,9 +80,13 @@ export function createRoverConnectionService(options: {
         return;
       }
       if (!connection) {
-        if (message.type !== 'register' || message.protocolVersion !== 1 ||
+        if (
+          message.type !== 'register' ||
+          message.protocolVersion !== 1 ||
           (message.provider !== 'claude' && message.provider !== 'trendminer') ||
-          typeof message.pageUrl !== 'string' || typeof message.extensionVersion !== 'string') {
+          typeof message.pageUrl !== 'string' ||
+          typeof message.extensionVersion !== 'string'
+        ) {
           socket.close(1008, 'Rover registration required');
           return;
         }
@@ -101,16 +109,24 @@ export function createRoverConnectionService(options: {
         };
         current = connection;
         send(socket, { type: 'registered', connectedAt: now });
-        log(`[mcplab-app] Rover connected: ${connection.registration.provider} (${connection.registration.pageUrl})`);
+        log(
+          `[mcplab-app] Rover connected: ${connection.registration.provider} (${connection.registration.pageUrl})`
+        );
         void options.onRegister?.(connection);
         return;
       }
       connection.lastSeenAt = new Date().toISOString();
       if (message.type === 'register_update') {
         if (message.provider !== 'claude' && message.provider !== 'trendminer') return;
-        connection.registration = { ...connection.registration, provider: message.provider, pageUrl: String(message.pageUrl ?? connection.registration.pageUrl) };
+        connection.registration = {
+          ...connection.registration,
+          provider: message.provider,
+          pageUrl: String(message.pageUrl ?? connection.registration.pageUrl)
+        };
         send(socket, { type: 'registered', connectedAt: connection.connectedAt });
-        log(`[mcplab-app] Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`);
+        log(
+          `[mcplab-app] Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`
+        );
       }
       void options.onMessage?.(connection, message);
     });
@@ -134,8 +150,8 @@ export function createRoverConnectionService(options: {
       return true;
     },
     connection: () => current,
-    send: (message) => current ? send(current.socket, message) : false,
-    broadcast: (message) => current ? send(current.socket, message) : false,
+    send: (message) => (current ? send(current.socket, message) : false),
+    broadcast: (message) => (current ? send(current.socket, message) : false),
     close: () => {
       closed = true;
       clearInterval(heartbeat);

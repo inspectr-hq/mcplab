@@ -25,7 +25,11 @@ import {
   attachmentTypeFromMediaType,
   inferAttachmentMediaType
 } from '../../../../core/src/attachments';
-import type { AgentConfig as CoreAgentConfig, ScenarioAttachment, SourceScenarioAttachment } from '@inspectr/mcplab-core';
+import type {
+  AgentConfig as CoreAgentConfig,
+  ScenarioAttachment,
+  SourceScenarioAttachment
+} from '@inspectr/mcplab-core';
 import type {
   CoreEvalConfig,
   CoreResultsJson,
@@ -46,14 +50,52 @@ function toId(base: string, index: number): string {
 
 function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
   if (agent.type === 'browser') {
-    return { id, name: String(agent.name || id), type: 'browser', provider: agent.provider, model: '', maxTokens: 0, url: agent.url };
+    return {
+      id,
+      name: String(agent.name || id),
+      type: 'browser',
+      provider: agent.provider,
+      model: '',
+      maxTokens: 0,
+      url: agent.url
+    };
   }
-  return { id, name: String(agent.name || id), provider: agent.provider === 'azure_openai' ? 'azure' : agent.provider, model: agent.model, ...withOptionalTemperature(agent.temperature), maxTokens: agent.max_tokens ?? 2048, maxTurns: agent.max_turns, systemPrompt: agent.system };
+  return {
+    id,
+    name: String(agent.name || id),
+    provider: agent.provider === 'azure_openai' ? 'azure' : agent.provider,
+    model: agent.model,
+    ...withOptionalTemperature(agent.temperature),
+    maxTokens: agent.max_tokens ?? 2048,
+    maxTurns: agent.max_turns,
+    systemPrompt: agent.system
+  };
 }
 
 function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
-  if (agent.type === 'browser') return { id: agent.id, name: agent.name, type: 'browser', provider: agent.provider, url: agent.url };
-  return { id: agent.id, name: agent.name, provider: agent.provider === 'azure' ? 'azure_openai' : agent.provider === 'anthropic' ? 'anthropic' : 'openai', model: agent.model, ...withOptionalTemperature(agent.temperature), max_tokens: agent.maxTokens, max_turns: agent.maxTurns, system: agent.systemPrompt };
+  if (agent.type === 'browser')
+    return {
+      id: agent.id,
+      name: agent.name,
+      type: 'browser',
+      provider: agent.provider,
+      url: agent.url
+    };
+  return {
+    id: agent.id,
+    name: agent.name,
+    provider:
+      agent.provider === 'azure'
+        ? 'azure_openai'
+        : agent.provider === 'anthropic'
+        ? 'anthropic'
+        : 'openai',
+    model: agent.model,
+    ...withOptionalTemperature(agent.temperature),
+    max_tokens: agent.maxTokens,
+    max_turns: agent.maxTurns,
+    system: agent.systemPrompt
+  };
 }
 
 function normalizeText(value: unknown): string | undefined {

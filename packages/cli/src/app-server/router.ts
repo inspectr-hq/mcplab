@@ -131,7 +131,10 @@ export async function startAppServer(options: AppServerOptions) {
   mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
   const recoveredRuns = recoverJournalSnapshots(settings.runsDir);
-  if (recoveredRuns > 0) console.log(`[mcplab-app] Recovered ${recoveredRuns} result projection(s) from execution journals`);
+  if (recoveredRuns > 0)
+    console.log(
+      `[mcplab-app] Recovered ${recoveredRuns} result projection(s) from execution journals`
+    );
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
@@ -221,26 +224,39 @@ export async function startAppServer(options: AppServerOptions) {
     state: runQueueState,
     sendRoverMessage: (message) => roverConnection.send(message),
     assignRoverJob: (provider) => {
-      const assigned = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) => roverConnection.send(message));
+      const assigned = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
+        roverConnection.send(message)
+      );
       if (assigned) activeRoverJobId = assigned.id;
       return assigned;
     },
     onRoverJobReleased: (provider) => {
-      const next = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) => roverConnection.send(message));
+      const next = runQueueService.assignRoverJob(provider, (message: RoverSocketMessage) =>
+        roverConnection.send(message)
+      );
       activeRoverJobId = next?.id ?? null;
-    },
+    }
   });
   let activeRoverJobId: string | null = null;
   const roverConnection = createRoverConnectionService({
     log: (message) => console.log(message),
     onRegister: (connection) => {
-      const assigned = runQueueService.assignRoverJob(connection.registration.provider, (message: RoverSocketMessage) => roverConnection.send(message));
+      const assigned = runQueueService.assignRoverJob(
+        connection.registration.provider,
+        (message: RoverSocketMessage) => roverConnection.send(message)
+      );
       activeRoverJobId = assigned?.id ?? null;
-      if (!assigned) console.log(`[mcplab-app] Rover connected, no queued ${connection.registration.provider} jobs`);
+      if (!assigned)
+        console.log(
+          `[mcplab-app] Rover connected, no queued ${connection.registration.provider} jobs`
+        );
     },
     onMessage: (connection, message) => {
       if (message.type === 'register_update' && !activeRoverJobId) {
-        const assigned = runQueueService.assignRoverJob(connection.registration.provider, (payload: RoverSocketMessage) => roverConnection.send(payload));
+        const assigned = runQueueService.assignRoverJob(
+          connection.registration.provider,
+          (payload: RoverSocketMessage) => roverConnection.send(payload)
+        );
         activeRoverJobId = assigned?.id ?? null;
       }
       if (message.type === 'progress' || message.type === 'complete') {
@@ -249,7 +265,11 @@ export async function startAppServer(options: AppServerOptions) {
           connection.registration.provider,
           (payload: RoverSocketMessage) => roverConnection.send(payload)
         );
-        if (message.type === 'complete' && typeof message.jobId === 'string' && activeRoverJobId === message.jobId) {
+        if (
+          message.type === 'complete' &&
+          typeof message.jobId === 'string' &&
+          activeRoverJobId === message.jobId
+        ) {
           activeRoverJobId = nextJobId;
         }
       }
@@ -338,7 +358,7 @@ export async function startAppServer(options: AppServerOptions) {
         asJson(res, 200, {
           connected: Boolean(connection),
           ...(connection
-          ? {
+            ? {
                 provider: connection.registration.provider,
                 pageUrl: connection.registration.pageUrl,
                 connectedAt: connection.connectedAt,

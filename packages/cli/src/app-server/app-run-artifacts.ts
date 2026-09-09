@@ -37,14 +37,20 @@ export function recoverJournalSnapshots(runsDir: string): number {
       join(runDir, 'summary.md'),
       join(runDir, 'report.html')
     ];
-    if (snapshot.resolvedConfig !== undefined) requiredProjectionPaths.push(join(runDir, 'resolved-config.yaml'));
-    if (snapshot.traceRecords !== undefined) requiredProjectionPaths.push(join(runDir, 'trace.jsonl'));
+    if (snapshot.resolvedConfig !== undefined)
+      requiredProjectionPaths.push(join(runDir, 'resolved-config.yaml'));
+    if (snapshot.traceRecords !== undefined)
+      requiredProjectionPaths.push(join(runDir, 'trace.jsonl'));
     if (requiredProjectionPaths.every((path) => existsSync(path))) continue;
     const params: PersistEvaluationArtifactsParams = {
       runDir,
       results: snapshot.results as PersistEvaluationArtifactsParams['results'],
       ...(snapshot.resolvedConfig !== undefined ? { resolvedConfig: snapshot.resolvedConfig } : {}),
-      ...(Array.isArray(snapshot.traceRecords) ? { traceRecords: snapshot.traceRecords as PersistEvaluationArtifactsParams['traceRecords'] } : {})
+      ...(Array.isArray(snapshot.traceRecords)
+        ? {
+            traceRecords: snapshot.traceRecords as PersistEvaluationArtifactsParams['traceRecords']
+          }
+        : {})
     };
     persistEvaluationArtifacts(params);
     const reportPath = join(runDir, 'report.html');

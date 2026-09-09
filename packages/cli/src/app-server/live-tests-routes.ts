@@ -50,7 +50,9 @@ export async function handleLiveTestRoutes(params: {
         client: String(body.client ?? 'unknown'),
         evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined
       });
-      log(`[mcplab-app] Rover Live Test started: ${session.id} (${session.testCase.id}, ${session.client})`);
+      log(
+        `[mcplab-app] Rover Live Test started: ${session.id} (${session.testCase.id}, ${session.client})`
+      );
       deps.asJson(res, 201, sessionView(session));
       return true;
     }

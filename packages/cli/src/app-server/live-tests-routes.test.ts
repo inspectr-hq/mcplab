@@ -74,8 +74,13 @@ describe('Live Test routes', () => {
     });
     expect(completed).toEqual({
       status: 200,
-      payload: expect.objectContaining({ outcome: 'passed', resultUrl: expect.stringContaining('/results/') })
+      payload: expect.objectContaining({
+        outcome: 'passed',
+        resultUrl: expect.stringContaining('/results/')
+      })
     });
-    expect(logs.some((line) => line.includes('Rover Live Test completed') && line.includes('passed'))).toBe(true);
+    expect(
+      logs.some((line) => line.includes('Rover Live Test completed') && line.includes('passed'))
+    ).toBe(true);
   });
 });

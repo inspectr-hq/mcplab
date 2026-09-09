@@ -120,7 +120,10 @@ const AgentDetail = () => {
     setShowConnectPanel(true);
     if (form.type === 'browser') {
       setConnectState({ status: 'unsupported' });
-      toast({ title: 'Browser Agent connection is handled by Rover', description: 'Open Rover and connect the configured browser provider.' });
+      toast({
+        title: 'Browser Agent connection is handled by Rover',
+        description: 'Open Rover and connect the configured browser provider.'
+      });
       return;
     }
     if (form.provider === 'google' || form.provider === 'custom') {
@@ -349,11 +352,35 @@ const AgentDetail = () => {
               <Label>Agent type</Label>
               <Select
                 value={form.type ?? 'llm'}
-                onValueChange={(v) => setForm((f) => v === 'browser'
-                  ? { id: f.id, name: f.name, type: 'browser', provider: 'claude', model: '', maxTokens: 0, url: f.type === 'browser' ? f.url : '' }
-                  : { id: f.id, name: f.name, type: 'llm', provider: 'openai', model: f.model || 'gpt-4o', maxTokens: f.maxTokens || 4096, temperature: f.type === 'llm' ? f.temperature : DEFAULT_AGENT_TEMPERATURE, maxTurns: f.type === 'llm' ? f.maxTurns : undefined, systemPrompt: f.type === 'llm' ? f.systemPrompt : undefined })}
+                onValueChange={(v) =>
+                  setForm((f) =>
+                    v === 'browser'
+                      ? {
+                          id: f.id,
+                          name: f.name,
+                          type: 'browser',
+                          provider: 'claude',
+                          model: '',
+                          maxTokens: 0,
+                          url: f.type === 'browser' ? f.url : ''
+                        }
+                      : {
+                          id: f.id,
+                          name: f.name,
+                          type: 'llm',
+                          provider: 'openai',
+                          model: f.model || 'gpt-4o',
+                          maxTokens: f.maxTokens || 4096,
+                          temperature: f.type === 'llm' ? f.temperature : DEFAULT_AGENT_TEMPERATURE,
+                          maxTurns: f.type === 'llm' ? f.maxTurns : undefined,
+                          systemPrompt: f.type === 'llm' ? f.systemPrompt : undefined
+                        }
+                  )
+                }
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="llm">LLM Agent</SelectItem>
                   <SelectItem value="browser">Browser Agent</SelectItem>
@@ -364,24 +391,36 @@ const AgentDetail = () => {
               <Label>Provider</Label>
               <Select
                 value={form.provider}
-                onValueChange={(v) => setForm((f) => f.type === 'browser'
-                  ? { ...f, provider: v as 'claude' | 'trendminer' }
-                  : { ...f, provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom', model: modelSuggestions[v]?.[0] || '' })}
+                onValueChange={(v) =>
+                  setForm((f) =>
+                    f.type === 'browser'
+                      ? { ...f, provider: v as 'claude' | 'trendminer' }
+                      : {
+                          ...f,
+                          provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom',
+                          model: modelSuggestions[v]?.[0] || ''
+                        }
+                  )
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {form.type === 'browser' ? <>
-                    <SelectItem value="claude">Claude</SelectItem>
-                    <SelectItem value="trendminer">TrendMiner</SelectItem>
-                  </> : <>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
-                  <SelectItem value="azure">Azure OpenAI</SelectItem>
-                  <SelectItem value="google">Google</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
-                  </>}
+                  {form.type === 'browser' ? (
+                    <>
+                      <SelectItem value="claude">Claude</SelectItem>
+                      <SelectItem value="trendminer">TrendMiner</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="openai">OpenAI</SelectItem>
+                      <SelectItem value="anthropic">Anthropic</SelectItem>
+                      <SelectItem value="azure">Azure OpenAI</SelectItem>
+                      <SelectItem value="google">Google</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -390,185 +429,201 @@ const AgentDetail = () => {
           {form.type === 'browser' && (
             <div className="space-y-1.5">
               <Label>Browser agent URL</Label>
-              <Input value={form.url ?? ''} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://claude.ai or TrendMiner URL" />
-              <p className="text-[11px] text-muted-foreground">Rover opens this URL when the queued Browser Agent needs attention.</p>
+              <Input
+                value={form.url ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+                placeholder="https://claude.ai or TrendMiner URL"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Rover opens this URL when the queued Browser Agent needs attention.
+              </p>
             </div>
           )}
 
-          {form.type !== 'browser' && <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
-              <div className="flex items-center gap-2">
-                <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openModelPicker}
-                      aria-controls="agent-model-command-list"
-                      className="h-9 flex-1 justify-between font-mono text-xs"
-                    >
-                      <span className="truncate text-left">{form.model || 'Select model...'}</span>
-                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[420px] p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder={`Search ${
-                          form.provider === 'azure' ? 'deployments' : 'models'
-                        }...`}
-                      />
-                      <CommandList id="agent-model-command-list">
-                        <CommandEmpty>
-                          No {form.provider === 'azure' ? 'deployments' : 'models'} found.
-                        </CommandEmpty>
-                        <CommandGroup
-                          heading={form.provider === 'azure' ? 'Deployments' : 'Models'}
-                        >
-                          {modelOptions.map((modelName) => (
+          {form.type !== 'browser' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
+                <div className="flex items-center gap-2">
+                  <Popover open={openModelPicker} onOpenChange={setOpenModelPicker}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openModelPicker}
+                        aria-controls="agent-model-command-list"
+                        className="h-9 flex-1 justify-between font-mono text-xs"
+                      >
+                        <span className="truncate text-left">
+                          {form.model || 'Select model...'}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[420px] p-0" align="start">
+                      <Command>
+                        <CommandInput
+                          placeholder={`Search ${
+                            form.provider === 'azure' ? 'deployments' : 'models'
+                          }...`}
+                        />
+                        <CommandList id="agent-model-command-list">
+                          <CommandEmpty>
+                            No {form.provider === 'azure' ? 'deployments' : 'models'} found.
+                          </CommandEmpty>
+                          <CommandGroup
+                            heading={form.provider === 'azure' ? 'Deployments' : 'Models'}
+                          >
+                            {modelOptions.map((modelName) => (
+                              <CommandItem
+                                key={modelName}
+                                value={modelName}
+                                onSelect={(value) => {
+                                  setForm((f) => ({ ...f, model: value }));
+                                  setShowManualInput(false);
+                                  setOpenModelPicker(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    form.model === modelName ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <span className="font-mono text-xs">{modelName}</span>
+                              </CommandItem>
+                            ))}
                             <CommandItem
-                              key={modelName}
-                              value={modelName}
-                              onSelect={(value) => {
-                                setForm((f) => ({ ...f, model: value }));
-                                setShowManualInput(false);
+                              value="__custom_model_id__"
+                              onSelect={() => {
+                                setShowManualInput(true);
                                 setOpenModelPicker(false);
                               }}
                             >
-                              <Check
-                                className={cn(
-                                  'mr-2 h-4 w-4',
-                                  form.model === modelName ? 'opacity-100' : 'opacity-0'
-                                )}
-                              />
-                              <span className="font-mono text-xs">{modelName}</span>
+                              <span className="font-medium">
+                                {form.provider === 'azure'
+                                  ? 'Custom deployment ID...'
+                                  : 'Custom model ID...'}
+                              </span>
                             </CommandItem>
-                          ))}
-                          <CommandItem
-                            value="__custom_model_id__"
-                            onSelect={() => {
-                              setShowManualInput(true);
-                              setOpenModelPicker(false);
-                            }}
-                          >
-                            <span className="font-medium">
-                              {form.provider === 'azure'
-                                ? 'Custom deployment ID...'
-                                : 'Custom model ID...'}
-                            </span>
-                          </CommandItem>
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-                {supportsDiscovery && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 shrink-0 text-xs"
-                    onClick={() => void fetchModels()}
-                    disabled={loadingModels}
-                    title={
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {supportsDiscovery && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 shrink-0 text-xs"
+                      onClick={() => void fetchModels()}
+                      disabled={loadingModels}
+                      title={
+                        form.provider === 'azure'
+                          ? 'Fetch Azure OpenAI deployments'
+                          : `Fetch ${form.provider} models`
+                      }
+                    >
+                      {loadingModels ? (
+                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-1 h-3 w-3" />
+                      )}
+                      {form.provider === 'azure' ? 'Fetch Deployments' : 'Fetch Models'}
+                    </Button>
+                  )}
+                </div>
+                {showManualField && (
+                  <Input
+                    value={form.model}
+                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                    placeholder={
                       form.provider === 'azure'
-                        ? 'Fetch Azure OpenAI deployments'
-                        : `Fetch ${form.provider} models`
+                        ? 'Type deployment name manually'
+                        : 'Type model name manually'
                     }
-                  >
-                    {loadingModels ? (
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="mr-1 h-3 w-3" />
-                    )}
-                    {form.provider === 'azure' ? 'Fetch Deployments' : 'Fetch Models'}
-                  </Button>
+                    className="font-mono text-xs"
+                  />
+                )}
+                {providerModels.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Loaded {providerModels.length}{' '}
+                    {form.provider === 'azure' ? 'deployment names' : 'models'} from provider
+                    discovery.
+                  </p>
                 )}
               </div>
-              {showManualField && (
+              <div className="space-y-1.5">
+                <Label>Max Tokens</Label>
                 <Input
-                  value={form.model}
-                  onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                  placeholder={
-                    form.provider === 'azure'
-                      ? 'Type deployment name manually'
-                      : 'Type model name manually'
+                  type="number"
+                  min={1}
+                  max={128000}
+                  value={form.maxTokens}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, maxTokens: parseInt(e.target.value) || 0 }))
                   }
                   className="font-mono text-xs"
                 />
-              )}
-              {providerModels.length > 0 && (
+              </div>
+            </div>
+          )}
+
+          {form.type !== 'browser' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Max Turns</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={form.maxTurns ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
+                  }}
+                  placeholder="30 (default)"
+                  className="font-mono text-xs"
+                />
                 <p className="text-[11px] text-muted-foreground">
-                  Loaded {providerModels.length}{' '}
-                  {form.provider === 'azure' ? 'deployment names' : 'models'} from provider
-                  discovery.
+                  Maximum number of LLM round-trips (tool calls + final answer) per eval run.
                 </p>
-              )}
+              </div>
             </div>
+          )}
+
+          {form.type !== 'browser' && (
             <div className="space-y-1.5">
-              <Label>Max Tokens</Label>
-              <Input
-                type="number"
-                min={1}
-                max={128000}
-                value={form.maxTokens}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, maxTokens: parseInt(e.target.value) || 0 }))
-                }
-                className="font-mono text-xs"
+              <div className="flex items-center justify-between">
+                <Label>Temperature</Label>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {resolveAgentTemperature(form.temperature).toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                value={[resolveAgentTemperature(form.temperature)]}
+                onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
+                min={0}
+                max={2}
+                step={0.01}
               />
             </div>
-          </div>}
+          )}
 
-          {form.type !== 'browser' && <div className="grid gap-4 sm:grid-cols-2">
+          {form.type !== 'browser' && (
             <div className="space-y-1.5">
-              <Label>Max Turns</Label>
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                value={form.maxTurns ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value.trim();
-                  setForm((f) => ({ ...f, maxTurns: v ? parseInt(v) || undefined : undefined }));
-                }}
-                placeholder="30 (default)"
-                className="font-mono text-xs"
+              <Label>System Prompt</Label>
+              <Textarea
+                value={form.systemPrompt || ''}
+                onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
+                placeholder="Optional system prompt..."
+                rows={3}
+                className="text-xs"
               />
-              <p className="text-[11px] text-muted-foreground">
-                Maximum number of LLM round-trips (tool calls + final answer) per eval run.
-              </p>
             </div>
-          </div>}
-
-          {form.type !== 'browser' && <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Temperature</Label>
-              <span className="font-mono text-xs text-muted-foreground">
-                {resolveAgentTemperature(form.temperature).toFixed(2)}
-              </span>
-            </div>
-            <Slider
-              value={[resolveAgentTemperature(form.temperature)]}
-              onValueChange={([v]) => setForm((f) => ({ ...f, temperature: v }))}
-              min={0}
-              max={2}
-              step={0.01}
-            />
-          </div>}
-
-          {form.type !== 'browser' && <div className="space-y-1.5">
-            <Label>System Prompt</Label>
-            <Textarea
-              value={form.systemPrompt || ''}
-              onChange={(e) => setForm((f) => ({ ...f, systemPrompt: e.target.value }))}
-              placeholder="Optional system prompt..."
-              rows={3}
-              className="text-xs"
-            />
-          </div>}
+          )}
 
           <div className="flex items-center justify-between pt-2">
             <div>

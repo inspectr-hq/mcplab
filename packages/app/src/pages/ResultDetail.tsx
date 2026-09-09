@@ -809,13 +809,19 @@ const ResultDetail = () => {
                     Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
                   </span>
                 ) : null}
-                {result.executionSource ? <>
-                  {(resultEvalName || resultConfigPath || resultConfigLabel) && <span className="mx-1">·</span>}
-                  <span className="inline-flex items-center align-middle">
-                    Source: <span className="ml-1 font-medium">{result.executionSource}</span>
-                    {result.executionClient ? <span className="ml-1">({result.executionClient})</span> : null}
-                  </span>
-                </> : null}
+                {result.executionSource ? (
+                  <>
+                    {(resultEvalName || resultConfigPath || resultConfigLabel) && (
+                      <span className="mx-1">·</span>
+                    )}
+                    <span className="inline-flex items-center align-middle">
+                      Source: <span className="ml-1 font-medium">{result.executionSource}</span>
+                      {result.executionClient ? (
+                        <span className="ml-1">({result.executionClient})</span>
+                      ) : null}
+                    </span>
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
@@ -1802,7 +1808,8 @@ const ResultDetail = () => {
                                                       `Explain Run #${
                                                         run.runIndex + 1
                                                       } for scenario '${scenarioLabel}'. Its outcome was ${
-                                                        run.outcome ?? (run.passed ? 'passed' : 'failed')
+                                                        run.outcome ??
+                                                        (run.passed ? 'passed' : 'failed')
                                                       } in ${
                                                         run.duration
                                                       }ms. Focus on the tool sequence and evaluated checks.`,

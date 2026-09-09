@@ -15,8 +15,20 @@ describe('recoverJournalSnapshots', () => {
         type: 'result_snapshot',
         ts: new Date().toISOString(),
         results: {
-          metadata: { run_id: 'run-1', timestamp: new Date().toISOString(), config_hash: 'x', cli_version: 'test', mcp_server_versions: {} },
-          summary: { total_scenarios: 0, total_runs: 0, pass_rate: 0, avg_tool_calls_per_run: 0, avg_tool_latency_ms: null },
+          metadata: {
+            run_id: 'run-1',
+            timestamp: new Date().toISOString(),
+            config_hash: 'x',
+            cli_version: 'test',
+            mcp_server_versions: {}
+          },
+          summary: {
+            total_scenarios: 0,
+            total_runs: 0,
+            pass_rate: 0,
+            avg_tool_calls_per_run: 0,
+            avg_tool_latency_ms: null
+          },
           scenarios: []
         }
       });

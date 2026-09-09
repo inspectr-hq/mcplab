@@ -216,7 +216,10 @@ function resolveReferences(
       throw new Error(`Duplicate agent id detected: ${resolvedId}`);
     }
     seenAgentNames.add(resolvedId);
-    resolvedAgents[resolvedId] = normalizeAgentDefinition(entry as unknown as Record<string, unknown>, resolvedId);
+    resolvedAgents[resolvedId] = normalizeAgentDefinition(
+      entry as unknown as Record<string, unknown>,
+      resolvedId
+    );
   }
 
   type ResolvedScenarioDraft = SourceScenario & { servers?: string[] };
@@ -482,7 +485,10 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       if (!inlineId && legacyName) {
         warnings.push(`Legacy inline agent.name migrated to agent.id: ${legacyName}`);
       }
-      normalizedAgents.push({ id: resolvedId, ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, resolvedId) });
+      normalizedAgents.push({
+        id: resolvedId,
+        ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, resolvedId)
+      });
     }
   } else {
     const legacyInlineAgents =
@@ -490,7 +496,10 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
         ? (rawAgents as Record<string, EvalConfig['agents'][string]>)
         : {};
     for (const [name, agent] of Object.entries(legacyInlineAgents)) {
-      normalizedAgents.push({ id: name, ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, name) });
+      normalizedAgents.push({
+        id: name,
+        ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, name)
+      });
     }
     if (Object.keys(legacyInlineAgents).length > 0) {
       warnings.push('Legacy agents object map was migrated into agents[] entries.');
@@ -657,7 +666,10 @@ export function normalizeLibraryServers(
   return out;
 }
 
-function normalizeAgentDefinition(raw: Record<string, unknown>, id: string): EvalConfig['agents'][string] {
+function normalizeAgentDefinition(
+  raw: Record<string, unknown>,
+  id: string
+): EvalConfig['agents'][string] {
   if (raw.type === 'browser') {
     if (!raw.url) throw new Error(`Browser agent ${id} requires a url`);
     if (raw.provider !== 'claude' && raw.provider !== 'trendminer') {
@@ -671,7 +683,11 @@ function normalizeAgentDefinition(raw: Record<string, unknown>, id: string): Eva
     };
   }
   if (!raw.provider || !raw.model) throw new Error(`LLM agent ${id} requires a provider and model`);
-  if (raw.provider !== 'openai' && raw.provider !== 'anthropic' && raw.provider !== 'azure_openai') {
+  if (
+    raw.provider !== 'openai' &&
+    raw.provider !== 'anthropic' &&
+    raw.provider !== 'azure_openai'
+  ) {
     throw new Error(`LLM agent ${id} has unsupported provider: ${String(raw.provider)}`);
   }
   return {
@@ -702,12 +718,12 @@ export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig[
   if (!raw || typeof raw !== 'object') return out;
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== 'object') continue;
-      const agent = value as Record<string, unknown>;
-      if (agent.type === 'browser') {
-        out[id] = normalizeAgentDefinition(agent, id);
-      } else if (agent.provider && agent.model) {
-        out[id] = normalizeAgentDefinition(agent, id);
-      }
+    const agent = value as Record<string, unknown>;
+    if (agent.type === 'browser') {
+      out[id] = normalizeAgentDefinition(agent, id);
+    } else if (agent.provider && agent.model) {
+      out[id] = normalizeAgentDefinition(agent, id);
+    }
   }
   return out;
 }

@@ -29,7 +29,10 @@ export function recordEvaluationExecution(
     results: options.results,
     ...(options.traceRecords ? { traceRecords: options.traceRecords } : {})
   };
-  (options.appendEvent ?? appendExecutionEvent)(join(options.runsDir, options.evaluationRunId), event);
+  (options.appendEvent ?? appendExecutionEvent)(
+    join(options.runsDir, options.evaluationRunId),
+    event
+  );
   return projectEvaluationJournal({
     runsDir: options.runsDir,
     evaluationRunId: options.evaluationRunId,
@@ -52,7 +55,10 @@ export function recordEvaluationTerminalExecution(
     evaluationRunId: options.evaluationRunId,
     reason: options.reason
   };
-  (options.appendEvent ?? appendExecutionEvent)(join(options.runsDir, options.evaluationRunId), event);
+  (options.appendEvent ?? appendExecutionEvent)(
+    join(options.runsDir, options.evaluationRunId),
+    event
+  );
   return projectEvaluationJournal({
     runsDir: options.runsDir,
     evaluationRunId: options.evaluationRunId,

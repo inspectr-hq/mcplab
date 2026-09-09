@@ -15,9 +15,15 @@ export function useRoverStatus(): RoverStatus {
     let disposed = false;
     const refresh = () => {
       if (typeof source.getRoverStatus !== 'function') return;
-      void source.getRoverStatus()
+      void source
+        .getRoverStatus()
         .then((next) => {
-          if (!disposed) setStatus({ connected: next.connected, provider: next.provider, activeJobId: next.activeJobId });
+          if (!disposed)
+            setStatus({
+              connected: next.connected,
+              provider: next.provider,
+              activeJobId: next.activeJobId
+            });
         })
         .catch(() => {
           if (!disposed) setStatus({ connected: false });

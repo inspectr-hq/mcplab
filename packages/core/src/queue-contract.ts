@@ -29,9 +29,23 @@ export type QueueRunParams = McplabQueueRunParams | RoverQueueRunParams;
 interface QueueEntryBase {
   jobId: string;
   evaluationRunId?: string;
-  roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
+  roverProgress?: {
+    completed: number;
+    total: number;
+    currentScenarioId?: string;
+    lastDurationMs?: number;
+    error?: string;
+  };
   evaluationName?: string;
-  status: 'queued' | 'waiting_for_rover' | 'paused_rover' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
+  status:
+    | 'queued'
+    | 'waiting_for_rover'
+    | 'paused_rover'
+    | 'blocked_auth'
+    | 'running'
+    | 'completed'
+    | 'error'
+    | 'stopped';
   blockedReason?: 'oauth_required' | 'rover_required' | 'rover_interrupted';
   requiredServers?: string[];
 }

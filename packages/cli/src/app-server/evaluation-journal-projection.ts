@@ -21,14 +21,20 @@ export function projectEvaluationJournal(params: {
     }, []);
   if (executions.length === 0) return null;
   const failedExecutions = new Set(
-    events.filter((event) => event.type === 'execution_failed').map((event) => event.executionId ?? event.eventId)
+    events
+      .filter((event) => event.type === 'execution_failed')
+      .map((event) => event.executionId ?? event.eventId)
   );
   const stoppedExecutions = new Set(
-    events.filter((event) => event.type === 'execution_stopped').map((event) => event.executionId ?? event.eventId)
+    events
+      .filter((event) => event.type === 'execution_stopped')
+      .map((event) => event.executionId ?? event.eventId)
   );
   const traceRecords = events
     .filter((event) => event.type === 'execution_completed' && Array.isArray(event.traceRecords))
-    .flatMap((event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]);
+    .flatMap(
+      (event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]
+    );
   const results = projectEvaluationResult({
     evaluationRunId: params.evaluationRunId,
     runId: params.evaluationRunId,
@@ -48,7 +54,12 @@ export function projectEvaluationJournal(params: {
     ...(traceRecords.length > 0
       ? {
           traceRecords: [
-            { type: 'trace_meta' as const, trace_version: 3 as const, run_id: params.evaluationRunId, ts: new Date().toISOString() },
+            {
+              type: 'trace_meta' as const,
+              trace_version: 3 as const,
+              run_id: params.evaluationRunId,
+              ts: new Date().toISOString()
+            },
             ...traceRecords
           ]
         }

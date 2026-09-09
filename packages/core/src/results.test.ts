@@ -42,7 +42,9 @@ describe('aggregateResults', () => {
     const incomplete = makeRun(false);
     incomplete.outcome = 'incomplete';
     incomplete.failures = [];
-    incomplete.check_results = [{ type: 'required_tool', label: 'Required tool', status: 'not_evaluated' }];
+    incomplete.check_results = [
+      { type: 'required_tool', label: 'Required tool', status: 'not_evaluated' }
+    ];
     const result = aggregateResults({
       ...BASE,
       scenarioRuns: [

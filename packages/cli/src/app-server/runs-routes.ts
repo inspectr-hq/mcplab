@@ -397,16 +397,22 @@ export async function handleRunsRoutes(params: {
     const oauthServerNames: string[] | undefined = undefined;
 
     const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents);
-    const selectedAgents = selectedAgentNames.map((name) => ({ name, agent: selectedConfig.agents[name] }));
+    const selectedAgents = selectedAgentNames.map((name) => ({
+      name,
+      agent: selectedConfig.agents[name]
+    }));
     const missingAgents = selectedAgents.filter((entry) => !entry.agent).map((entry) => entry.name);
     if (missingAgents.length > 0) {
       asJson(res, 400, { error: `Unknown agents: ${missingAgents.join(', ')}` });
       return true;
     }
     const browserAgents = selectedAgents.filter(
-      (entry): entry is { name: string; agent: BrowserAgentConfig } => entry.agent?.type === 'browser'
+      (entry): entry is { name: string; agent: BrowserAgentConfig } =>
+        entry.agent?.type === 'browser'
     );
-    const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
+    const llmAgentNames = selectedAgents
+      .filter((entry) => entry.agent?.type !== 'browser')
+      .map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
     const evaluationRunId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const baseRunParams = {
@@ -421,23 +427,31 @@ export async function handleRunsRoutes(params: {
       serverOverrideAll,
       scenarioServerOverrides
     };
-    const runParamsList = browserAgents.length === 0
-      ? [{ ...baseRunParams, requestedAgents }]
-      : [
-          ...(llmAgentNames.length > 0 ? [{ ...baseRunParams, requestedAgents: llmAgentNames }] : []),
-          ...browserAgents.map(({ name, agent }) => ({
-            ...baseRunParams,
-            requestedAgents: [name],
-            executionType: 'rover' as const,
-            roverAgent: { name, provider: agent.provider, url: agent.url },
-            roverScenarios: structuredClone(selectedConfig.scenarios),
-            roverNewConversationBetweenScenarios: newConversationBetweenScenarios
-          }))
-        ];
-    const responses = runParamsList.map((runParams) => runQueueService.enqueueRun(runParams, { hostHeader: req.headers.host }));
+    const runParamsList =
+      browserAgents.length === 0
+        ? [{ ...baseRunParams, requestedAgents }]
+        : [
+            ...(llmAgentNames.length > 0
+              ? [{ ...baseRunParams, requestedAgents: llmAgentNames }]
+              : []),
+            ...browserAgents.map(({ name, agent }) => ({
+              ...baseRunParams,
+              requestedAgents: [name],
+              executionType: 'rover' as const,
+              roverAgent: { name, provider: agent.provider, url: agent.url },
+              roverScenarios: structuredClone(selectedConfig.scenarios),
+              roverNewConversationBetweenScenarios: newConversationBetweenScenarios
+            }))
+          ];
+    const responses = runParamsList.map((runParams) =>
+      runQueueService.enqueueRun(runParams, { hostHeader: req.headers.host })
+    );
     asJson(res, 202, {
       ...responses[0],
-      jobs: responses.map((response, index) => ({ ...response, agents: runParamsList[index]?.requestedAgents ?? null }))
+      jobs: responses.map((response, index) => ({
+        ...response,
+        agents: runParamsList[index]?.requestedAgents ?? null
+      }))
     });
     return true;
   }

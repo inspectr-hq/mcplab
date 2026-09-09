@@ -50,7 +50,13 @@ export type RunJob = {
   abortController: AbortController;
   runParams: RunParams;
   blockedAuthServers?: string[];
-  roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
+  roverProgress?: {
+    completed: number;
+    total: number;
+    currentScenarioId?: string;
+    lastDurationMs?: number;
+    error?: string;
+  };
 };
 
 export interface RunQueueState {
@@ -84,7 +90,7 @@ export function createRunQueueState(queueWorkerCount = 1): RunQueueState {
     queueWorkerCount,
     isAdvancingQueue: false,
     needsAdvanceQueue: false,
-    clients: new Set(),
+    clients: new Set()
   };
 }
 

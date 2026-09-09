@@ -1,5 +1,12 @@
 import type { ServerResponse } from 'node:http';
-import { isLlmAgent, type AgentConfig, type EvalConfig, type LlmAgentConfig, type LlmMessage, type ToolDef } from '@inspectr/mcplab-core';
+import {
+  isLlmAgent,
+  type AgentConfig,
+  type EvalConfig,
+  type LlmAgentConfig,
+  type LlmMessage,
+  type ToolDef
+} from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   chatWithJsonRetry,
@@ -818,7 +825,10 @@ export function resolveAssistantAgentFromConfig(
       `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
     );
   }
-  if (!isLlmAgent(agent)) throw new Error(`Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`);
+  if (!isLlmAgent(agent))
+    throw new Error(
+      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
+    );
   return agent;
 }
 
@@ -832,7 +842,10 @@ export function resolveAssistantAgentFromLibraries(
       `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
     );
   }
-  if (!isLlmAgent(agent)) throw new Error(`Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`);
+  if (!isLlmAgent(agent))
+    throw new Error(
+      `Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`
+    );
   return agent;
 }
 

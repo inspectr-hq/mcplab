@@ -2,11 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  LiveTestService,
-  listLiveTestCases,
-  type LiveTestSession
-} from './live-tests.js';
+import { LiveTestService, listLiveTestCases, type LiveTestSession } from './live-tests.js';
 
 const scenarios = [
   {
@@ -29,7 +25,11 @@ describe('Live Test catalog', () => {
     const result = listLiveTestCases(scenarios);
     expect(result).toEqual([
       expect.objectContaining({ id: 'plain', eligible: true, assertionCount: 1 }),
-      expect.objectContaining({ id: 'attachment', eligible: false, ineligibleReason: expect.stringContaining('Attachments') })
+      expect.objectContaining({
+        id: 'attachment',
+        eligible: false,
+        ineligibleReason: expect.stringContaining('Attachments')
+      })
     ]);
     expect(result[0]).not.toHaveProperty('prompt');
     expect(JSON.stringify(result)).not.toContain('servers');
@@ -74,7 +74,9 @@ describe('LiveTestService', () => {
       runsDir: '/tmp',
       cliVersion: 'test',
       readScenarios: () => scenarios,
-      persist: (params) => { persistedResults = params.results; }
+      persist: (params) => {
+        persistedResults = params.results;
+      }
     });
     const session = service.start({ testCaseId: 'plain', client: 'claude' });
     await service.complete(session.id, {
@@ -93,7 +95,9 @@ describe('LiveTestService', () => {
       runsDir,
       cliVersion: 'test',
       readScenarios: () => scenarios,
-      persist: () => { persisted += 1; }
+      persist: () => {
+        persisted += 1;
+      }
     });
     const session = service.start({
       testCaseId: 'plain',
@@ -128,7 +132,9 @@ describe('LiveTestService', () => {
       completedAt: '2026-09-08T10:00:01.000Z'
     };
     await service.complete(session.id, { ...base, finalText: 'Antwerp' });
-    await expect(service.complete(session.id, { ...base, finalText: 'Different' })).rejects.toMatchObject({ statusCode: 409 });
+    await expect(
+      service.complete(session.id, { ...base, finalText: 'Different' })
+    ).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('deduplicates concurrent completion requests for one session', async () => {
@@ -138,7 +144,9 @@ describe('LiveTestService', () => {
       runsDir,
       cliVersion: 'test',
       readScenarios: () => scenarios,
-      persist: () => { persisted += 1; }
+      persist: () => {
+        persisted += 1;
+      }
     });
     const session = service.start({ testCaseId: 'plain', client: 'claude' });
     const input = {

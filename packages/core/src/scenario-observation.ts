@@ -32,14 +32,19 @@ export interface EvaluateScenarioObservationParams {
   judgeAgentAssertions?: EvaluateScenarioWithAgentChecksOptions['judgeAgentAssertions'];
 }
 
-export function deriveRunOutcome(run: Pick<ScenarioRunResult, 'pass' | 'error' | 'check_results'>): RunOutcome {
+export function deriveRunOutcome(
+  run: Pick<ScenarioRunResult, 'pass' | 'error' | 'check_results'>
+): RunOutcome {
   if (run.error) return 'error';
   if (run.check_results?.some((check) => check.status === 'failed')) return 'failed';
   if (run.check_results?.some((check) => check.status === 'not_evaluated')) return 'incomplete';
   return run.pass ? 'passed' : 'failed';
 }
 
-function observedRules(rules: EvalRules | undefined, hasToolTelemetry: boolean): EvalRules | undefined {
+function observedRules(
+  rules: EvalRules | undefined,
+  hasToolTelemetry: boolean
+): EvalRules | undefined {
   if (!rules || hasToolTelemetry) return rules;
   return {
     response_assertions: rules.response_assertions,
@@ -86,8 +91,8 @@ export async function evaluateScenarioObservation({
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
     : checkResults.some((check) => check.status === 'not_evaluated')
-      ? 'incomplete'
-      : 'passed';
+    ? 'incomplete'
+    : 'passed';
   const toolUsage: Record<string, number> = {};
   for (const tool of toolSequence) toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
 

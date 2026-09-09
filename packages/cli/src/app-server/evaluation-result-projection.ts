@@ -12,13 +12,24 @@ export function projectEvaluationResult(params: {
   const executions = params.executions;
   const failedExecutions = params.failedExecutions ?? 0;
   const stoppedExecutions = params.stoppedExecutions ?? 0;
-  const totalRuns = executions.reduce((sum, result) => sum + result.summary.total_runs, 0) + failedExecutions + stoppedExecutions;
-  const totalScenarios = executions.reduce((sum, result) => sum + result.summary.total_scenarios, 0);
+  const totalRuns =
+    executions.reduce((sum, result) => sum + result.summary.total_runs, 0) +
+    failedExecutions +
+    stoppedExecutions;
+  const totalScenarios = executions.reduce(
+    (sum, result) => sum + result.summary.total_scenarios,
+    0
+  );
   const weighted = (field: 'avg_tool_calls_per_run' | 'avg_tool_latency_ms'): number | null => {
     if (totalRuns === 0) return null;
     const values = executions.map((result) => result.summary[field]);
     if (field === 'avg_tool_latency_ms' && values.some((value) => value === null)) return null;
-    return executions.reduce((sum, result) => sum + (result.summary[field] ?? 0) * result.summary.total_runs, 0) / totalRuns;
+    return (
+      executions.reduce(
+        (sum, result) => sum + (result.summary[field] ?? 0) * result.summary.total_runs,
+        0
+      ) / totalRuns
+    );
   };
   const outcomes: Record<RunOutcome, number> = {
     passed: 0,
@@ -40,7 +51,9 @@ export function projectEvaluationResult(params: {
       mcp_server_versions: {},
       execution_client: 'mixed',
       config_name: params.evaluationName || `Evaluation ${params.evaluationRunId}`,
-      run_note: params.evaluationName ? `Evaluation: ${params.evaluationName}` : `Evaluation ${params.evaluationRunId}`,
+      run_note: params.evaluationName
+        ? `Evaluation: ${params.evaluationName}`
+        : `Evaluation ${params.evaluationRunId}`,
       rerun_agents: executions.flatMap((result) => result.metadata.rerun_agents ?? []),
       evaluation_run_id: params.runId
     },

@@ -21,8 +21,8 @@ import type {
   EvaluationQueueItem,
   RunQueueEvent,
   ToolDefinitionTokenEstimates,
-  RoverAgentProvider
-  ,RunOutcome,
+  RoverAgentProvider,
+  RunOutcome,
   ExecutionSource
 } from '@inspectr/mcplab-core';
 
@@ -755,7 +755,12 @@ export interface EvalDataSource {
   stopRun: (jobId: string) => Promise<void>;
   openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;
   resumeRover: (jobId: string) => Promise<{ ok: boolean }>;
-  getRoverStatus: () => Promise<{ connected: boolean; provider?: string; pageUrl?: string; activeJobId?: string | null }>;
+  getRoverStatus: () => Promise<{
+    connected: boolean;
+    provider?: string;
+    pageUrl?: string;
+    activeJobId?: string | null;
+  }>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;
