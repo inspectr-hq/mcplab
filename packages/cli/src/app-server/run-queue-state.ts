@@ -4,6 +4,7 @@ import type { SseEvent } from './jobs.js';
 
 export type RunParams = {
   evaluationGroupId?: string;
+  evaluationName?: string;
   configPath: string;
   runsPerScenario: number;
   scenarioId?: string;

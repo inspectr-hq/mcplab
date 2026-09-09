@@ -408,6 +408,7 @@ export async function handleRunsRoutes(params: {
     const evaluationGroupId = randomUUID();
     const baseRunParams = {
       evaluationGroupId,
+      evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,
       runsPerScenario,
       scenarioId,

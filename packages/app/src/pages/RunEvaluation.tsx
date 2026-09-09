@@ -1093,7 +1093,7 @@ const RunEvaluation = () => {
                 <div key={group.evaluationGroupId} className={`rounded-md border p-3 text-sm ${group.status === 'failed' ? 'border-destructive/40 bg-destructive/5' : group.status === 'partial' ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">Evaluation group</span>
+                      <span className="font-semibold">{group.evaluationName || 'Evaluation group'}</span>
                       <Badge variant="outline" className="capitalize">{group.status}</Badge>
                       <span className="text-xs text-muted-foreground">
                         {group.completedJobs}/{group.totalJobs} agents complete

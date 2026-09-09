@@ -1,5 +1,6 @@
 export interface QueueRunParams {
   evaluationGroupId?: string;
+  evaluationName?: string;
   configPath: string;
   runsPerScenario: number;
   scenarioIds: string[] | null;
@@ -17,6 +18,7 @@ export interface QueueEntry {
   resultRunId?: string;
   roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
   evaluationGroupId?: string;
+  evaluationName?: string;
   status: 'queued' | 'waiting_for_rover' | 'paused_rover' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
   blockedReason?: 'oauth_required' | 'rover_required' | 'rover_interrupted';
   executionType?: 'mcplab' | 'rover';
@@ -35,6 +37,7 @@ export interface QueueResponse {
 
 export interface EvaluationGroup {
   evaluationGroupId: string;
+  evaluationName?: string;
   parentRunId?: string;
   status: 'queued' | 'running' | 'paused' | 'completed' | 'partial' | 'failed';
   totalJobs: number;

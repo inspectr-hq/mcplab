@@ -122,8 +122,8 @@ export class LiveTestService {
       client: input.client.trim() || 'unknown',
       status: 'ready',
       createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString()
-      ,evaluationGroupId: input.evaluationGroupId
+      expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
+      evaluationGroupId: input.evaluationGroupId
     };
     this.sessions.set(session.id, session);
     return structuredClone(session);
