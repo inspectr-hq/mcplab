@@ -359,6 +359,9 @@ export async function executeRunJob(params: {
     results.metadata.rerun_scenario_ids = selectedBaseScenarios.scenarios.map(
       (scenario) => scenario.id
     );
+    if (job.runParams.evaluationGroupId) {
+      results.metadata.evaluation_group_id = job.runParams.evaluationGroupId;
+    }
     if (serverOverrideAll && serverOverrideAll.length > 0) {
       results.metadata.rerun_server_override_all = [...serverOverrideAll];
     } else {
