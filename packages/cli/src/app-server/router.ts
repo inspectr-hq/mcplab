@@ -108,7 +108,7 @@ import { getAppServerVersionInfo } from './version-info.js';
 import { resolveEvaluationJudge } from './run-queue-executor.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
-import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { persistAppRunArtifacts, recoverJournalSnapshots } from './app-run-artifacts.js';
 import { createRoverConnectionService } from './rover-connection.js';
 import type { RoverSocketMessage } from './rover-connection.js';
 import { aggregateEvaluationGroupResults } from './evaluation-group-results.js';
@@ -131,6 +131,8 @@ export async function startAppServer(options: AppServerOptions) {
   };
   mkdirSync(settings.evalsDir, { recursive: true });
   mkdirSync(settings.runsDir, { recursive: true });
+  const recoveredRuns = recoverJournalSnapshots(settings.runsDir);
+  if (recoveredRuns > 0) console.log(`[mcplab-app] Recovered ${recoveredRuns} result projection(s) from execution journals`);
   mkdirSync(settings.toolAnalysisResultsDir, { recursive: true });
   mkdirSync(settings.librariesDir, { recursive: true });
   mkdirSync(join(settings.librariesDir, 'test-cases'), { recursive: true });
