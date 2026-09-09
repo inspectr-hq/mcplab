@@ -35,6 +35,11 @@ export function readExecutionEvents(runDir: string): ExecutionJournalEvent[] {
     });
 }
 
+export function readLatestResultSnapshot(runDir: string): ExecutionJournalEvent | null {
+  const snapshots = readExecutionEvents(runDir).filter((event) => event.type === 'result_snapshot');
+  return snapshots[snapshots.length - 1] ?? null;
+}
+
 export function writeAtomicText(path: string, content: string): void {
   const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(temporaryPath, content, 'utf8');

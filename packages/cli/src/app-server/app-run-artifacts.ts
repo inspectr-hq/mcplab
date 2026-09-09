@@ -5,8 +5,18 @@ import {
   type PersistEvaluationArtifactsParams
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
+import { appendExecutionEvent } from './execution-journal.js';
 
 export function persistAppRunArtifacts(params: PersistEvaluationArtifactsParams): void {
+  appendExecutionEvent(params.runDir, {
+    eventId: `snapshot-${params.results.metadata.run_id}-${Date.now()}`,
+    type: 'result_snapshot',
+    ts: new Date().toISOString(),
+    executionId: params.results.metadata.run_id,
+    results: params.results,
+    ...(params.resolvedConfig !== undefined ? { resolvedConfig: params.resolvedConfig } : {}),
+    ...(params.traceRecords !== undefined ? { traceRecords: params.traceRecords } : {})
+  });
   persistEvaluationArtifacts(params);
   const reportPath = join(params.runDir, 'report.html');
   const temporaryPath = `${reportPath}.tmp-${process.pid}-${Date.now()}`;
