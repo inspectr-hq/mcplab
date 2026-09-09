@@ -271,6 +271,8 @@ export async function startAppServer(options: AppServerOptions) {
       if (message.type === 'complete' && typeof message.jobId === 'string') {
         runQueueService.completeRoverJob(message.jobId, { runId: message.runId, outcome: message.outcome, provider: connection.registration.provider });
         if (activeRoverJobId === message.jobId) activeRoverJobId = null;
+        const next = runQueueService.assignRoverJob(connection.registration.provider, (payload: RoverSocketMessage) => roverConnection.send(payload));
+        if (next) activeRoverJobId = next.id;
       }
     },
     onDisconnect: () => {
