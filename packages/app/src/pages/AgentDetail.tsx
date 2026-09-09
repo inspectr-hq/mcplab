@@ -39,6 +39,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_AGENT_TEMPERATURE, resolveAgentTemperature } from '@/lib/agent-temperature';
 import type { AgentConfig } from '@/types/eval';
+import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const modelSuggestions: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
@@ -75,6 +76,7 @@ const AgentDetail = () => {
   const navigate = useNavigate();
   const { agents, setAgents } = useLibraries();
   const { source } = useDataSource();
+  const roverStatus = useRoverStatus();
 
   const isNew = agentName === 'new';
   const decodedParam = agentName ? decodeURIComponent(agentName) : '';
@@ -242,7 +244,17 @@ const AgentDetail = () => {
           </Link>
           <h1 className="text-2xl font-bold">{isNew ? 'New Agent' : form.name}</h1>
         </div>
-        {!isNew && (
+        {!isNew && form.type === 'browser' ? (
+          <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <span className={`h-2.5 w-2.5 rounded-full ${roverStatus.connected && roverStatus.provider === form.provider ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+            <span>{roverStatus.connected && roverStatus.provider === form.provider ? 'Rover connected' : 'Rover not connected'}</span>
+            {roverStatus.connected && roverStatus.provider === form.provider && roverStatus.pageUrl ? (
+              <span className="max-w-48 truncate text-xs text-muted-foreground" title={roverStatus.pageUrl}>
+                {roverStatus.pageUrl}
+              </span>
+            ) : null}
+          </div>
+        ) : !isNew && (
           <Button type="button" onClick={() => void handleConnect()}>
             <Wifi className="mr-2 h-4 w-4" />
             Test Connection

@@ -37,7 +37,6 @@ export async function handleLiveTestRoutes(params: {
 
   try {
     if (pathname === '/api/live-tests/test-cases' && method === 'GET') {
-      log('[mcplab-app] Rover connected, catalog requested');
       deps.asJson(res, 200, { testCases: service.list() });
       return true;
     }

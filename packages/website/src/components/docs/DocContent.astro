@@ -19,7 +19,11 @@ function escapeHtml(value: string): string {
 
 function renderInlineCode(text: string): string {
   const escaped = escapeHtml(text);
-  return escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+  const withCode = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+  return withCode.replace(
+    /\[([^\]]+)\]\((\/[^)]+)\)/g,
+    '<a href="$2" class="text-primary underline underline-offset-2 hover:no-underline">$1</a>'
+  );
 }
 ---
 

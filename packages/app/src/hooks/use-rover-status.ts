@@ -4,6 +4,7 @@ import { useDataSource } from '@/contexts/DataSourceContext';
 export interface RoverStatus {
   connected: boolean;
   provider?: string;
+  pageUrl?: string;
   activeJobId?: string | null;
 }
 
@@ -22,6 +23,7 @@ export function useRoverStatus(): RoverStatus {
             setStatus({
               connected: next.connected,
               provider: next.provider,
+              pageUrl: next.pageUrl,
               activeJobId: next.activeJobId
             });
         })

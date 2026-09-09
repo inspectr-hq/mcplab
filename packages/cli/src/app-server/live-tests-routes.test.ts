@@ -42,7 +42,7 @@ describe('Live Test routes', () => {
       status: 200,
       payload: { testCases: [expect.objectContaining({ id: 'case-1', eligible: true })] }
     });
-    expect(logs).toContain('[mcplab-app] Rover connected, catalog requested');
+    expect(logs).toEqual([]);
   });
 
   it('starts and reads a session', async () => {

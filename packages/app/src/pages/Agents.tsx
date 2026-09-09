@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot } from 'lucide-react';
+import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot, Globe2 } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -144,7 +144,16 @@ const Agents = () => {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
                   >
-                    <TableCell className="font-medium">{agent.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="inline-flex items-center gap-2" title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}>
+                        {agent.type === 'browser' ? (
+                          <Globe2 className="h-4 w-4 text-sky-600" aria-hidden="true" />
+                        ) : (
+                          <Bot className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                        )}
+                        {agent.name}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <ProviderBadge provider={agent.provider} />
                     </TableCell>

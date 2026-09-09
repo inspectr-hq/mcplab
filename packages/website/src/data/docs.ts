@@ -108,6 +108,13 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_DEPLOYMENT=gpt-4o`
         }
       ]
+    },
+    {
+      id: 'rover-companion',
+      title: 'Optional: Rover Browser Agents',
+      paragraphs: [
+        'To evaluate Claude or TrendMiner through a browser chat, install the MCPLab Rover extension and configure a browser agent. See [Rover Browser Agents](/docs/app/rover/) for the complete setup guide.'
+      ]
     }
   ]
 };
@@ -1283,7 +1290,7 @@ const appRunning: DocPage = {
       id: 'choose-agents',
       title: 'Choose Agents',
       paragraphs: [
-        'The agent picker shows agents defined in the selected config plus any agents loaded from the library. Select one or more agents — each selected agent runs every scenario.'
+        'The agent picker shows agents defined in the selected config plus any agents loaded from the library. Select one or more agents. LLM agents run through MCPLab, while browser agents are handed to Rover. See [Rover Browser Agents](/docs/app/rover/) for browser execution.'
       ]
     },
     {
@@ -1301,6 +1308,25 @@ const appRunning: DocPage = {
       ],
       screenshot: '/screenshots/run-evaluation-progress.png'
     }
+  ]
+};
+
+const appRover: DocPage = {
+  slug: 'app-rover', label: 'Rover Browser Agents', href: '/docs/app/rover/',
+  description: 'Run and queue evaluations in supported browser chat applications.',
+  keywords: ['rover', 'browser agent', 'claude', 'trendminer', 'queue', 'chrome extension'],
+  seoTitle: 'App | Rover Browser Agents', track: 'app',
+  sections: [
+    { id: 'what-rover-is', title: 'What Rover Is', paragraphs: ['MCPLab Rover is a Chrome extension that connects a supported browser chat to MCPLab. It lets you evaluate responses from Claude and TrendMiner using the same assertions and result pipeline as normal MCPLab runs.', 'Use Rover when the agent runs in a browser interface instead of through an API that MCPLab can call directly.'], bullets: ['LLM agents call provider APIs directly from MCPLab.', 'Browser agents run through Rover in an active browser chat.', 'Both agent types produce the same MCPLab result format.', 'Rover currently supports Claude and TrendMiner providers.'] },
+    { id: 'boundaries', title: 'What Rover Does Not Do', bullets: ['Rover is not an MCP proxy or replacement for the MCPLab MCP server.', 'Rover does not currently provide Inspectr tool telemetry.', 'Rover does not support arbitrary browser providers without an adapter.', 'Tool-dependent checks are not evaluated when Rover has no tool observations.'] },
+    { id: 'start-mcplab', title: '1. Start MCPLab', paragraphs: ['Start the App with the directory that contains your shared agents and evaluations.'], codeBlocks: [{ title: 'start MCPLab with Rover support', language: 'bash', code: 'npx @inspectr/mcplab app \\\n  --libraries-dir ./mcplab \\\n  --evals-dir ./mcplab/evals \\\n  --runs-dir ./mcplab/results/evaluation-runs \\\n  --port 8787 \\\n  --open' }] },
+    { id: 'configure-browser-agent', title: '2. Configure a Browser Agent', paragraphs: ['Add browser agents to agents.yaml. Browser agents require type, provider, and url. They do not use model, temperature, max_tokens, or system settings.'], codeBlocks: [{ title: 'mcplab/agents.yaml', language: 'yaml', code: 'claude-browser:\n  type: browser\n  name: Claude browser\n  provider: claude\n  url: https://claude.ai\n\ntrendminer-browser:\n  type: browser\n  name: TrendMiner browser\n  provider: trendminer\n  url: https://tm-pipeline-aa01.trendminer.net/' }], bullets: ['Use provider: claude for Claude browser chats.', 'Use provider: trendminer for TrendMiner browser chats.', 'Restart MCPLab after changing library files.'] },
+    { id: 'install-rover', title: '3. Install Rover', paragraphs: ['When Rover is published, install it from the Chrome Web Store. Until then, install the local development build from the Rover repository.'], codeBlocks: [{ title: 'build Rover locally', language: 'bash', code: 'cd /path/to/mcp-lab-rover\nnpm install\nnpm run build' }], bullets: ['Open chrome://extensions in Chrome.', 'Enable Developer mode.', 'Choose Load unpacked.', 'Select the Rover dist directory.', 'Reload the extension after rebuilding it.'] },
+    { id: 'connect-rover', title: '4. Connect Rover to MCPLab', paragraphs: ['Open a supported Claude or TrendMiner page, then open Rover from the Chrome toolbar. Rover connects to http://127.0.0.1:8787 by default and shows a green connected indicator when MCPLab is reachable.', 'Use Rover settings only when you need to change the MCPLab origin. V1 accepts loopback HTTP origins such as 127.0.0.1 and localhost.'], bullets: ['A connection error usually means MCPLab is not running or the origin is incorrect.', 'Unsupported pages can use the manual fallback to copy the prompt and paste the final response.'] },
+    { id: 'run-manual', title: '5. Run a Browser Evaluation Manually', paragraphs: ['Open Run Evaluation, select an evaluation that references a browser agent, and start it. Rover receives the assignment, runs the prompt in the active chat, and captures the newly created or changed assistant response.', 'MCPLab evaluates response assertions, judge assertions, and extraction rules, then saves the result through the normal pipeline.'] },
+    { id: 'queue-rover', title: '6. Queue Evaluations for Rover', paragraphs: ['Select a browser agent when starting an evaluation. MCPLab places the Rover job in its queue. The job waits when Rover is disconnected and is assigned when a matching provider connects.'], bullets: ['Use Connect to Rover to open the configured browser URL.', 'Open or enable Rover in the target chat.', 'Waiting assignments are received automatically after connection.', 'Paused Rover jobs require an explicit Resume action.', 'Stop is available for waiting, running, and paused Rover jobs.'] },
+    { id: 'read-results', title: '7. Read Rover Results', paragraphs: ['Rover results use the same result layout as normal MCPLab evaluations. Browser runs include Rover provenance, and outcomes are passed, failed, incomplete, or error.', 'Tool-dependent assertions are marked not evaluated because Rover does not currently report MCP tool observations.'], codeBlocks: [{ title: 'canonical result layout', language: 'text', code: 'results/\n  evaluation-run-id/\n    results.json\n    trace.jsonl\n    summary.md\n    resolved-config.yaml\n    report.html' }] },
+    { id: 'troubleshooting', title: 'Troubleshooting', bullets: ['Connection refused: start MCPLab and verify the Rover origin is http://127.0.0.1:8787.', 'Disconnected indicator: reload Rover and confirm the MCPLab App is running.', 'Unsupported page: use the manual fallback or switch to Claude or TrendMiner.', 'Provider not detected: navigate to the configured provider URL and reload the page.', 'Missing URL: add a valid url and restart MCPLab.', 'Waiting for Rover: connect Rover using the same provider as the queued job.', 'Stale local build: run npm run build and reload the unpacked extension.'] }
   ]
 };
 
@@ -1460,7 +1486,8 @@ const appResults: DocPage = {
       title: 'Result Detail',
       paragraphs: [
         "Click a run to open the Result Detail. The detail view shows per-scenario pass/fail, the tool calls the agent made, which assertions passed, and the agent's final response.",
-        'Expand a scenario to inspect the full tool call trace — every LLM message and tool invocation in sequence.'
+        'Expand a scenario to inspect the full tool call trace, including every LLM message and tool invocation in sequence.',
+        'Rover runs show their execution source and provider in the run details. Tool-dependent checks are shown as not evaluated when Rover did not provide tool observations.'
       ],
       screenshot: '/screenshots/evaluation-results-run-detail.png'
     },
@@ -1875,7 +1902,7 @@ const appLibrary: DocPage = {
       title: 'Library Items in the UI',
       paragraphs: [
         'Library agents appear in the agent picker on the Run Evaluation page alongside agents defined in the selected config. Library servers appear in the server list when editing a config.',
-        'The Library section in the sidebar shows all loaded agents and servers with their full definitions.'
+        'The Library section in the sidebar shows all loaded agents and servers with their full definitions. Browser agents are identified by type and can be used by Rover.'
       ],
       screenshot: '/screenshots/agents-library.png'
     },
@@ -2310,6 +2337,7 @@ const pageIndex: DocPage[] = [
   appGettingStarted,
   appConfigurations,
   appRunning,
+  appRover,
   appLangSmith,
   appResults,
   appAssistants,
@@ -2348,6 +2376,7 @@ export const docsNavSections = [
       appGettingStarted,
       appConfigurations,
       appRunning,
+      appRover,
       appLangSmith,
       appResults,
       appAssistants,

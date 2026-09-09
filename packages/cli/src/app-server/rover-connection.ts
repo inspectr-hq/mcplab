@@ -109,9 +109,7 @@ export function createRoverConnectionService(
         };
         current = connection;
         send(socket, { type: 'registered', connectedAt: now });
-        log(
-          `[mcplab-app] Rover connected: ${connection.registration.provider} (${connection.registration.pageUrl})`
-        );
+        log(`[mcplab-app] Rover connected: ${connection.registration.provider}`);
         void options.onRegister?.(connection);
         return;
       }
