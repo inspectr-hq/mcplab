@@ -1,13 +1,13 @@
 import type { ResultsJson, RunOutcome } from '@inspectr/mcplab-core';
 
-/** Combine persisted child runs into a read-only parent result representation. */
-export function aggregateEvaluationGroupResults(params: {
-  groupId: string;
+/** Project completed execution snapshots into the single canonical evaluation result. */
+export function projectEvaluationResult(params: {
+  evaluationRunId: string;
   runId: string;
   children: ResultsJson[];
   evaluationName?: string;
-  failedChildren?: number;
-  stoppedChildren?: number;
+  failedExecutions?: number;
+  stoppedExecutions?: number;
 }): ResultsJson {
   const children = params.children;
   const totalRuns = children.reduce((sum, result) => sum + result.summary.total_runs, 0);
@@ -18,7 +18,12 @@ export function aggregateEvaluationGroupResults(params: {
     if (field === 'avg_tool_latency_ms' && values.some((value) => value === null)) return null;
     return children.reduce((sum, result) => sum + (result.summary[field] ?? 0) * result.summary.total_runs, 0) / totalRuns;
   };
-  const outcomes: Record<RunOutcome, number> = { passed: 0, failed: params.failedChildren ?? 0, incomplete: 0, error: params.stoppedChildren ?? 0 };
+  const outcomes: Record<RunOutcome, number> = {
+    passed: 0,
+    failed: params.failedExecutions ?? 0,
+    incomplete: 0,
+    error: params.stoppedExecutions ?? 0
+  };
   for (const result of children) {
     for (const outcome of Object.keys(outcomes) as RunOutcome[]) {
       outcomes[outcome] += result.summary.outcomes?.[outcome] ?? 0;
@@ -28,15 +33,13 @@ export function aggregateEvaluationGroupResults(params: {
     metadata: {
       run_id: params.runId,
       timestamp: new Date().toISOString(),
-      config_hash: children[0]?.metadata.config_hash ?? params.groupId,
+      config_hash: children[0]?.metadata.config_hash ?? params.evaluationRunId,
       cli_version: children[0]?.metadata.cli_version ?? 'unknown',
       mcp_server_versions: {},
       execution_client: 'mixed',
-      config_name: params.evaluationName || `Evaluation group ${params.groupId}`,
-      run_note: params.evaluationName ? `Combined evaluation: ${params.evaluationName}` : `Evaluation group ${params.groupId}`,
+      config_name: params.evaluationName || `Evaluation ${params.evaluationRunId}`,
+      run_note: params.evaluationName ? `Evaluation: ${params.evaluationName}` : `Evaluation ${params.evaluationRunId}`,
       rerun_agents: children.flatMap((result) => result.metadata.rerun_agents ?? []),
-      child_run_ids: children.map((result) => result.metadata.run_id),
-      evaluation_group_id: children[0]?.metadata.evaluation_group_id ?? params.groupId,
       evaluation_run_id: params.runId
     },
     summary: {

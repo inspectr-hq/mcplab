@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateEvaluationGroupResults } from './evaluation-group-results.js';
+import { projectEvaluationResult } from './evaluation-result-projection.js';
 import type { ResultsJson } from '@inspectr/mcplab-core';
 
 function child(runId: string, passed: number, total: number): ResultsJson {
@@ -10,19 +10,19 @@ function child(runId: string, passed: number, total: number): ResultsJson {
   };
 }
 
-describe('aggregateEvaluationGroupResults', () => {
-  it('combines child summaries and scenarios into one parent result', () => {
-    const result = aggregateEvaluationGroupResults({ groupId: 'group-1', runId: 'parent-1', children: [child('llm-1', 1, 1), child('rover-1', 0, 1)] });
-    expect(result.metadata.run_id).toBe('parent-1');
+describe('projectEvaluationResult', () => {
+  it('combines execution summaries into one canonical result', () => {
+    const result = projectEvaluationResult({ evaluationRunId: 'evaluation-1', runId: 'run-1', children: [child('llm-1', 1, 1), child('rover-1', 0, 1)] });
+    expect(result.metadata.run_id).toBe('run-1');
     expect(result.summary.total_runs).toBe(2);
     expect(result.summary.pass_rate).toBe(0.5);
     expect(result.summary.outcomes).toEqual({ passed: 1, failed: 1, incomplete: 0, error: 0 });
+    expect(result.metadata).not.toHaveProperty('child_run_ids');
   });
 
-  it('creates a durable empty parent when every child failed before persistence', () => {
-    const result = aggregateEvaluationGroupResults({ groupId: 'group-failed', runId: 'parent-failed', children: [] });
-    expect(result.metadata.run_id).toBe('parent-failed');
+  it('creates an empty result when executions fail before producing snapshots', () => {
+    const result = projectEvaluationResult({ evaluationRunId: 'evaluation-failed', runId: 'run-failed', children: [] });
+    expect(result.metadata.run_id).toBe('run-failed');
     expect(result.summary.total_runs).toBe(0);
-    expect(result.summary.pass_rate).toBe(0);
   });
 });
