@@ -25,6 +25,7 @@ export type QueueServiceDeps = Pick<
   | 'resolveRunSelectedAgents'
   | 'readLibraries'
   | 'pkgVersion'
+  | 'getRunResults'
 >;
 
 export type EnqueueResult = { jobId: string; queued?: boolean; position?: number };
@@ -55,10 +56,18 @@ export function createRunQueueService(params: {
   deps: QueueServiceDeps;
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
+  onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<void> | void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
   const { settings, oauthSessionManager, deps } = params;
+
+  async function maybeCompleteEvaluationGroup(groupId?: string): Promise<void> {
+    if (!groupId || !params.onEvaluationGroupComplete) return;
+    const members = Array.from(jobs.values()).filter((candidate) => candidate.runParams.evaluationGroupId === groupId);
+    if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth' || !candidate.resultRunId)) return;
+    await params.onEvaluationGroupComplete(groupId, members);
+  }
 
   function emit(): void {
     emitQueueEvent(jobs, state, deps.sendSseEvent);
@@ -165,6 +174,7 @@ export function createRunQueueService(params: {
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
     if (outcome.status === 'completed' && outcome.runId) job.resultRunId = outcome.runId;
+    void maybeCompleteEvaluationGroup(job.runParams.evaluationGroupId);
     closeJobClients(job);
     emit();
     pruneOldJobs();
@@ -513,6 +523,7 @@ export function createRunQueueService(params: {
       if (index !== -1) state.queue.splice(index, 1);
       job.status = 'completed';
       if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
+      void maybeCompleteEvaluationGroup(job.runParams.evaluationGroupId);
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);
       emit();

@@ -111,6 +111,7 @@ import { handleLiveTestRoutes } from './live-tests-routes.js';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
 import { createRoverConnectionService } from './rover-connection.js';
 import type { RoverSocketMessage } from './rover-connection.js';
+import { aggregateEvaluationGroupResults } from './evaluation-group-results.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -211,12 +212,26 @@ export async function startAppServer(options: AppServerOptions) {
     chatWithAgent,
     pkgVersion
   };
+  const completedEvaluationGroups = new Set<string>();
   const runQueueService = createRunQueueService({
     settings,
     oauthSessionManager,
     deps: routeDeps,
     jobs: jobs as any,
-    state: runQueueState
+    state: runQueueState,
+    onEvaluationGroupComplete: (groupId, groupJobs) => {
+      if (completedEvaluationGroups.has(groupId)) return;
+      const childResults = groupJobs
+        .map((job) => job.resultRunId)
+        .filter((runId): runId is string => Boolean(runId))
+        .map((runId) => getRunResults(runId, settings.runsDir));
+      if (childResults.length !== groupJobs.length) return;
+      completedEvaluationGroups.add(groupId);
+      const parentRunId = `group-${Date.now()}-${groupId.slice(0, 8)}`;
+      const results = aggregateEvaluationGroupResults({ groupId, runId: parentRunId, children: childResults });
+      persistAppRunArtifacts({ runDir: join(settings.runsDir, parentRunId), results });
+      console.log(`[mcplab-app] Evaluation group completed: ${groupId} (${parentRunId})`);
+    }
   });
   let activeRoverJobId: string | null = null;
   const roverConnection = createRoverConnectionService({
