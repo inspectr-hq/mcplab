@@ -20,6 +20,12 @@ export function projectEvaluationJournal(params: {
       return results;
     }, []);
   if (executions.length === 0) return null;
+  const failedExecutions = new Set(
+    events.filter((event) => event.type === 'execution_failed').map((event) => event.executionId ?? event.eventId)
+  );
+  const stoppedExecutions = new Set(
+    events.filter((event) => event.type === 'execution_stopped').map((event) => event.executionId ?? event.eventId)
+  );
   const traceRecords = events
     .filter((event) => (event.type === 'execution_completed' || event.type === 'child_result_completed') && Array.isArray(event.traceRecords))
     .flatMap((event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]);
@@ -27,7 +33,9 @@ export function projectEvaluationJournal(params: {
     evaluationRunId: params.evaluationRunId,
     runId: params.evaluationRunId,
     evaluationName: params.evaluationName,
-    executions
+    executions,
+    failedExecutions: failedExecutions.size,
+    stoppedExecutions: stoppedExecutions.size
   });
   if (params.executionStatus) results.metadata.execution_status = params.executionStatus;
   persistAppRunArtifacts({

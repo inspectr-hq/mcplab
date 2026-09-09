@@ -103,6 +103,7 @@ export interface LiveTestServiceOptions {
 
 export class LiveTestService {
   private readonly sessions = new Map<string, LiveTestSession>();
+  private readonly completionsInFlight = new Map<string, { inputKey: string; promise: Promise<LiveTestCompletion> }>();
 
   constructor(private readonly options: LiveTestServiceOptions) {}
 
@@ -146,7 +147,25 @@ export class LiveTestService {
     return structuredClone(session);
   }
 
-  async complete(id: string, input: CompleteLiveTestInput): Promise<LiveTestCompletion> {
+  complete(id: string, input: CompleteLiveTestInput): Promise<LiveTestCompletion> {
+    const inputKey = JSON.stringify({
+      finalText: String(input.finalText ?? '').trim(),
+      startedAt: input.startedAt,
+      completedAt: input.completedAt
+    });
+    const existing = this.completionsInFlight.get(id);
+    if (existing) {
+      if (existing.inputKey === inputKey) return existing.promise;
+      return Promise.reject(new LiveTestError('Live Test session is completing with different data.', 409));
+    }
+    const promise = this.completeInternal(id, input).finally(() => {
+      if (this.completionsInFlight.get(id)?.promise === promise) this.completionsInFlight.delete(id);
+    });
+    this.completionsInFlight.set(id, { inputKey, promise });
+    return promise;
+  }
+
+  private async completeInternal(id: string, input: CompleteLiveTestInput): Promise<LiveTestCompletion> {
     const session = this.requireSession(id);
     const normalized: CompleteLiveTestInput = {
       finalText: input.finalText.trim(),

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { listRuns } from './runs-store.js';
 
-function writeRun(runsDir: string, runId: string, timestamp: string) {
+function writeRun(runsDir: string, runId: string, timestamp: string, evaluationRunId?: string) {
   const runDir = join(runsDir, runId);
   mkdirSync(runDir, { recursive: true });
   writeFileSync(
@@ -13,7 +13,8 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
       metadata: {
         run_id: runId,
         timestamp,
-        config_hash: `hash-${runId}`
+        config_hash: `hash-${runId}`,
+        ...(evaluationRunId ? { evaluation_run_id: evaluationRunId } : {})
       },
       summary: {
         total_scenarios: 1,
@@ -43,6 +44,16 @@ function writeRun(runsDir: string, runId: string, timestamp: string) {
 }
 
 describe('listRuns filters', () => {
+  it('exposes the parent evaluation run identity in summaries', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'child-run', '2026-03-10T10:00:00.000Z', 'evaluation-1');
+
+    expect(listRuns(runsDir)[0]?.evaluationRunId).toBe('evaluation-1');
+  });
+
   it('includes MCP server versions in run summaries', () => {
     const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
     const runsDir = join(root, 'runs');

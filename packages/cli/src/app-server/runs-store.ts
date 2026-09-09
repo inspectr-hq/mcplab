@@ -12,6 +12,8 @@ import { ensureInsideRoot } from './store-utils.js';
 
 export interface RunSummary {
   runId: string;
+  /** Parent evaluation identity for queue/grouped runs, when present. */
+  evaluationRunId?: string;
   path: string;
   timestamp: string;
   runNote?: string;
@@ -96,6 +98,8 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
       );
       summaries.push({
         runId: results.metadata.run_id,
+        evaluationRunId:
+          results.metadata.evaluation_run_id ?? results.metadata.evaluation_group_id,
         path: dir,
         timestamp: results.metadata.timestamp,
         runNote: results.metadata.run_note,

@@ -131,6 +131,29 @@ describe('LiveTestService', () => {
     await expect(service.complete(session.id, { ...base, finalText: 'Different' })).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  it('deduplicates concurrent completion requests for one session', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-race-'));
+    let persisted = 0;
+    const service = new LiveTestService({
+      runsDir,
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => { persisted += 1; }
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
+    const input = {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    };
+    const [first, second] = await Promise.all([
+      service.complete(session.id, input),
+      service.complete(session.id, input)
+    ]);
+    expect(first).toEqual(second);
+    expect(persisted).toBe(1);
+  });
+
   it('rejects invalid execution timestamps', async () => {
     const service = new LiveTestService({
       runsDir: '/tmp',

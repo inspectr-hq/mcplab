@@ -25,4 +25,15 @@ describe('projectEvaluationResult', () => {
     expect(result.metadata.run_id).toBe('run-failed');
     expect(result.summary.total_runs).toBe(0);
   });
+
+  it('keeps stopped executions distinct from failures', () => {
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-stopped',
+      runId: 'run-stopped',
+      executions: [],
+      stoppedExecutions: 1
+    });
+    expect(result.summary.total_runs).toBe(1);
+    expect(result.summary.outcomes).toEqual({ passed: 0, failed: 0, incomplete: 0, error: 1 });
+  });
 });

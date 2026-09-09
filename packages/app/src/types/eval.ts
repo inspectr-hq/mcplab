@@ -35,18 +35,29 @@ export type ServerEntry =
   | { kind: 'inline'; server: ServerConfig }
   | { kind: 'referenced'; ref: string };
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
   id: string;
   name: string;
-  type?: 'llm' | 'browser';
-  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom' | 'claude' | 'trendminer';
+  type?: 'llm';
+  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
   model: string;
-  url?: string;
   temperature?: number;
   maxTokens: number;
   maxTurns?: number;
   systemPrompt?: string;
 }
+
+export interface BrowserAgentConfig {
+  id: string;
+  name: string;
+  type: 'browser';
+  provider: 'claude' | 'trendminer';
+  model: string;
+  maxTokens: number;
+  url: string;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
 
 export interface EvalRule {
   type:

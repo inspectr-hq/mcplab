@@ -4,37 +4,50 @@ import type { SseEvent } from './jobs.js';
 import type { RunJob, RunQueueState } from './run-queue-state.js';
 
 export function toQueueEntry(job: RunJob): QueueEntry {
-  return {
+  const commonRunParams = {
+    evaluationRunId: job.runParams.evaluationRunId,
+    evaluationName: job.runParams.evaluationName,
+    configPath: job.runParams.configPath,
+    runsPerScenario: job.runParams.runsPerScenario,
+    scenarioIds: job.runParams.scenarioIds ?? null,
+    agents: job.runParams.requestedAgents ?? null,
+    runNote: job.runParams.runNote ?? null,
+    serverOverrideAll: job.runParams.serverOverrideAll ?? null,
+    scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null
+  };
+  const common = {
     jobId: job.id,
     roverProgress: job.roverProgress,
     evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     status: job.status,
-    blockedReason:
+    blockedReason: (
       job.status === 'blocked_auth'
         ? 'oauth_required'
         : job.status === 'waiting_for_rover'
         ? 'rover_required'
         : job.status === 'paused_rover'
         ? 'rover_interrupted'
-        : undefined,
-    executionType: job.runParams.executionType ?? 'mcplab',
-    roverAgent: job.runParams.roverAgent,
-    requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
-    runParams: {
-      evaluationRunId: job.runParams.evaluationRunId,
-      evaluationName: job.runParams.evaluationName,
-      configPath: job.runParams.configPath,
-      runsPerScenario: job.runParams.runsPerScenario,
-      scenarioIds: job.runParams.scenarioIds ?? null,
-      agents: job.runParams.requestedAgents ?? null,
-      runNote: job.runParams.runNote ?? null,
-      serverOverrideAll: job.runParams.serverOverrideAll ?? null,
-      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null,
-      executionType: job.runParams.executionType ?? 'mcplab',
-      roverAgent: job.runParams.roverAgent,
-      roverNewConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios
-    }
+        : undefined) as 'oauth_required' | 'rover_required' | 'rover_interrupted' | undefined,
+    requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined
+  };
+  if (job.runParams.executionType === 'rover') {
+    return {
+      ...common,
+      executionType: 'rover',
+      roverAgent: job.runParams.roverAgent!,
+      runParams: {
+        ...commonRunParams,
+        executionType: 'rover',
+        roverAgent: job.runParams.roverAgent!,
+        roverNewConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios
+      }
+    };
+  }
+  return {
+    ...common,
+    executionType: 'mcplab',
+    runParams: { ...commonRunParams, executionType: 'mcplab' }
   };
 }
 

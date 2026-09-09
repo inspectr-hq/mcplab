@@ -1,4 +1,4 @@
-export interface QueueRunParams {
+interface QueueRunParamsBase {
   evaluationRunId?: string;
   evaluationName?: string;
   configPath: string;
@@ -8,23 +8,43 @@ export interface QueueRunParams {
   runNote: string | null;
   serverOverrideAll: string[] | null;
   scenarioServerOverrides: Record<string, string[]> | null;
-  executionType?: 'mcplab' | 'rover';
-  roverAgent?: { name: string; provider: 'claude' | 'trendminer'; url: string };
+}
+
+export interface McplabQueueRunParams extends QueueRunParamsBase {
+  executionType: 'mcplab';
+  roverAgent?: never;
+  roverNewConversationBetweenScenarios?: never;
+}
+
+export interface RoverQueueRunParams extends QueueRunParamsBase {
+  executionType: 'rover';
+  roverAgent: { name: string; provider: 'claude' | 'trendminer'; url: string };
   roverNewConversationBetweenScenarios?: boolean;
 }
 
-export interface QueueEntry {
+export type QueueRunParams = McplabQueueRunParams | RoverQueueRunParams;
+
+interface QueueEntryBase {
   jobId: string;
   evaluationRunId?: string;
   roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
   evaluationName?: string;
   status: 'queued' | 'waiting_for_rover' | 'paused_rover' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
   blockedReason?: 'oauth_required' | 'rover_required' | 'rover_interrupted';
-  executionType?: 'mcplab' | 'rover';
-  roverAgent?: { name: string; provider: 'claude' | 'trendminer'; url: string };
   requiredServers?: string[];
-  runParams: QueueRunParams;
 }
+
+export type QueueEntry =
+  | (QueueEntryBase & {
+      executionType: 'mcplab';
+      roverAgent?: never;
+      runParams: McplabQueueRunParams;
+    })
+  | (QueueEntryBase & {
+      executionType: 'rover';
+      roverAgent: RoverQueueRunParams['roverAgent'];
+      runParams: RoverQueueRunParams;
+    });
 
 export interface QueueResponse {
   active: QueueEntry | null;

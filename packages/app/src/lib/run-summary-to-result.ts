@@ -6,6 +6,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     typeof summary.toolTokensTotal === 'number' ? summary.toolTokensTotal : null;
   return {
     id: summary.runId,
+    evaluationRunId: summary.evaluationRunId,
     configId: '',
     configHash: summary.configHash,
     configPath: summary.configPath,

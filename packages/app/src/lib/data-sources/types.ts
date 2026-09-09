@@ -18,6 +18,7 @@ import type {
   HealthMcpConnectionInfo,
   QueueEntry,
   QueueResponse,
+  EvaluationQueueItem,
   RunQueueEvent,
   ToolDefinitionTokenEstimates
 } from '@inspectr/mcplab-core';
@@ -50,6 +51,7 @@ export type {
   HealthMcpConnectionInfo,
   ScenarioAttachment
 };
+export type { EvaluationQueueItem };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
 export type ScenarioRunTraceMessage = CoreTraceMessage;
@@ -70,6 +72,7 @@ export interface WorkspaceConfigRecord {
 
 export interface WorkspaceRunSummary {
   runId: string;
+  evaluationRunId?: string;
   path: string;
   timestamp: string;
   runNote?: string;

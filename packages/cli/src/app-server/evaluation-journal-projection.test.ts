@@ -41,4 +41,22 @@ describe('projectEvaluationJournal', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('counts failed executions that produced no result snapshot', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-projection-failed-'));
+    try {
+      const result = {
+        metadata: { run_id: 'llm-1', timestamp: new Date().toISOString(), config_hash: 'hash', cli_version: 'test', mcp_server_versions: {} },
+        summary: { total_scenarios: 1, total_runs: 1, pass_rate: 1, avg_tool_calls_per_run: 0, avg_tool_latency_ms: 1, outcomes: { passed: 1, failed: 0, incomplete: 0, error: 0 } },
+        scenarios: []
+      };
+      appendExecutionEvent(join(root, 'run-1'), { eventId: 'execution-1', type: 'execution_completed', ts: new Date().toISOString(), executionId: 'llm-1', results: result });
+      appendExecutionEvent(join(root, 'run-1'), { eventId: 'execution-2', type: 'execution_failed', ts: new Date().toISOString(), executionId: 'rover-1' });
+      const projected = projectEvaluationJournal({ runsDir: root, evaluationRunId: 'run-1' });
+      expect(projected?.summary.outcomes).toMatchObject({ passed: 1, failed: 1 });
+      expect(projected?.summary.total_runs).toBe(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

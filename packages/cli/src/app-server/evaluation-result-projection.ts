@@ -10,7 +10,9 @@ export function projectEvaluationResult(params: {
   stoppedExecutions?: number;
 }): ResultsJson {
   const executions = params.executions;
-  const totalRuns = executions.reduce((sum, result) => sum + result.summary.total_runs, 0);
+  const failedExecutions = params.failedExecutions ?? 0;
+  const stoppedExecutions = params.stoppedExecutions ?? 0;
+  const totalRuns = executions.reduce((sum, result) => sum + result.summary.total_runs, 0) + failedExecutions + stoppedExecutions;
   const totalScenarios = executions.reduce((sum, result) => sum + result.summary.total_scenarios, 0);
   const weighted = (field: 'avg_tool_calls_per_run' | 'avg_tool_latency_ms'): number | null => {
     if (totalRuns === 0) return null;
@@ -20,9 +22,9 @@ export function projectEvaluationResult(params: {
   };
   const outcomes: Record<RunOutcome, number> = {
     passed: 0,
-    failed: params.failedExecutions ?? 0,
+    failed: failedExecutions,
     incomplete: 0,
-    error: params.stoppedExecutions ?? 0
+    error: stoppedExecutions
   };
   for (const result of executions) {
     for (const outcome of Object.keys(outcomes) as RunOutcome[]) {

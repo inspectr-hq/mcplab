@@ -99,6 +99,25 @@ export function createRunQueueService(params: {
     });
   }
 
+  function recordTerminalExecution(job: RunJob, status: 'error' | 'stopped', reason: string): void {
+    const evaluationRunId = job.runParams.evaluationRunId;
+    if (!evaluationRunId) return;
+    appendExecutionEvent(join(settings.runsDir, evaluationRunId), {
+      eventId: `execution-${status}-${job.id}`,
+      type: status === 'error' ? 'execution_failed' : 'execution_stopped',
+      ts: new Date().toISOString(),
+      executionId: job.id,
+      evaluationRunId,
+      reason
+    });
+    projectEvaluationJournal({
+      runsDir: settings.runsDir,
+      evaluationRunId,
+      evaluationName: job.runParams.evaluationName,
+      ...(status === 'stopped' ? { executionStatus: 'stopped' as const } : {})
+    });
+  }
+
   function stopQueuedJob(job: RunJob, message = 'Run stopped before it started'): void {
     const idx = state.queue.indexOf(job.id);
     if (idx !== -1) state.queue.splice(idx, 1);
@@ -192,6 +211,13 @@ export function createRunQueueService(params: {
     }
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
+    if (outcome.status === 'error' || outcome.status === 'stopped') {
+      recordTerminalExecution(
+        job,
+        outcome.status,
+        outcome.status === 'stopped' ? 'Run stopped by user' : 'Run failed'
+      );
+    }
     closeJobClients(job);
     emit();
     pruneOldJobs();

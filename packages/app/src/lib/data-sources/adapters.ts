@@ -403,20 +403,6 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
-    if (entry.type === 'browser') {
-      const mappedBrowserAgent = {
-        id,
-        name: String(entry.name || inlineId),
-        type: 'browser' as const,
-        provider: entry.provider as 'claude' | 'trendminer',
-        model: '',
-        url: String(entry.url || ''),
-        maxTokens: 0
-      };
-      agents.push(mappedBrowserAgent);
-      mixedAgentEntries.push({ kind: 'inline', agent: mappedBrowserAgent });
-      continue;
-    }
     serverIdByName.set(inlineId, id);
     const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
       entry.auth?.type === 'bearer'
@@ -482,6 +468,20 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
+    if (entry.type === 'browser') {
+      const mappedBrowserAgent = {
+        id,
+        name: String(entry.name || inlineId),
+        type: 'browser' as const,
+        provider: entry.provider,
+        model: '',
+        url: entry.url,
+        maxTokens: 0
+      };
+      agents.push(mappedBrowserAgent);
+      mixedAgentEntries.push({ kind: 'inline', agent: mappedBrowserAgent });
+      continue;
+    }
     const provider: 'openai' | 'anthropic' | 'azure' =
       entry.provider === 'azure_openai' ? 'azure' : entry.provider;
     const mappedAgent = {
