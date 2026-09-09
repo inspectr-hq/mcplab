@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SearchInput } from '@/components/SearchInput';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -33,17 +40,17 @@ const Agents = () => {
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<AgentConfig | null>(null);
   const [agentFilter, setAgentFilter] = useState('');
+  const [agentTypeFilter, setAgentTypeFilter] = useState<'all' | 'llm' | 'browser'>('all');
   const normalizedAgentFilter = agentFilter.trim().toLowerCase();
   const filteredAgents = useMemo(
-    () =>
-      normalizedAgentFilter.length === 0
-        ? agents
-        : agents.filter((agent) => {
-            const name = agent.name.toLowerCase();
-            const model = agent.model.toLowerCase();
-            return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
-          }),
-    [agents, normalizedAgentFilter]
+    () => agents.filter((agent) => {
+      if (agentTypeFilter !== 'all' && (agent.type ?? 'llm') !== agentTypeFilter) return false;
+      if (normalizedAgentFilter.length === 0) return true;
+      const name = agent.name.toLowerCase();
+      const model = agent.model.toLowerCase();
+      return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
+    }),
+    [agents, normalizedAgentFilter, agentTypeFilter]
   );
 
   const handleDuplicate = async (agent: AgentConfig) => {
@@ -87,6 +94,16 @@ const Agents = () => {
             onValueChange={setAgentFilter}
             placeholder="Search agents..."
           />
+          <Select value={agentTypeFilter} onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}>
+            <SelectTrigger className="w-32" aria-label="Filter agents by type">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="llm">LLM</SelectItem>
+              <SelectItem value="browser">Browser</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"
