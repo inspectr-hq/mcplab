@@ -244,7 +244,18 @@ export async function startAppServer(options: AppServerOptions) {
         failedChildren: groupJobs.filter((job) => job.status === 'error').length,
         stoppedChildren: groupJobs.filter((job) => job.status === 'stopped').length
       });
-      persistAppRunArtifacts({ runDir: join(settings.runsDir, parentRunId), results });
+      const childTraces = groupJobs.flatMap((job) =>
+        job.resultRunId ? getScenarioRunTraceRecords(job.resultRunId, settings.runsDir) : []
+      );
+      persistAppRunArtifacts({
+        runDir: join(settings.runsDir, parentRunId),
+        results,
+        resolvedConfig: { evaluation_group_id: groupId, child_run_ids: results.metadata.child_run_ids ?? [] },
+        traceRecords: [
+          { type: 'trace_meta', trace_version: 3, run_id: parentRunId, ts: new Date().toISOString() },
+          ...childTraces
+        ]
+      });
       console.log(`[mcplab-app] Evaluation group completed: ${groupId} (${parentRunId})`);
       return parentRunId;
     }
