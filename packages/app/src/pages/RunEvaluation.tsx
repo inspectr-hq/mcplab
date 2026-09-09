@@ -77,6 +77,7 @@ const RunEvaluation = () => {
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [evaluationGroups, setEvaluationGroups] = useState<EvaluationGroup[]>([]);
+  const [roverStatus, setRoverStatus] = useState<{ connected: boolean; provider?: string }>({ connected: false });
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -460,6 +461,21 @@ const RunEvaluation = () => {
       // ignore fetch errors
     }
   };
+
+  useEffect(() => {
+    let disposed = false;
+    const refreshRoverStatus = () => {
+      if (typeof source.getRoverStatus !== 'function') return;
+      void source.getRoverStatus().then((status) => {
+        if (!disposed) setRoverStatus({ connected: status.connected, provider: status.provider });
+      }).catch(() => {
+        if (!disposed) setRoverStatus({ connected: false });
+      });
+    };
+    refreshRoverStatus();
+    const timer = window.setInterval(refreshRoverStatus, 3000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [source]);
 
   const refreshConfigAndLibraries = () => {
     void reload();
@@ -1049,13 +1065,19 @@ const RunEvaluation = () => {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="inline-flex items-center gap-2 text-base">
-              <Clock className="h-4 w-4" />
-              Run Queue
-            </CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
-              <RefreshCw className="h-3 w-3" />
-            </Button>
+              <CardTitle className="inline-flex items-center gap-2 text-base">
+                <Clock className="h-4 w-4" />
+                Run Queue
+              </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${roverStatus.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                <span className="mr-1">●</span>
+                {roverStatus.connected ? `Rover connected${roverStatus.provider ? ` (${roverStatus.provider})` : ''}` : 'Rover disconnected'}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

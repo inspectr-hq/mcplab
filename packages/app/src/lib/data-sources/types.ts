@@ -748,6 +748,7 @@ export interface EvalDataSource {
   stopRun: (jobId: string) => Promise<void>;
   openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;
   resumeRover: (jobId: string) => Promise<{ ok: boolean }>;
+  getRoverStatus: () => Promise<{ connected: boolean; provider?: string; pageUrl?: string }>;
   getRunQueue: () => Promise<QueueResponse>;
   subscribeRunQueue: (onEvent: (event: RunQueueSseEvent) => void) => () => void;
   removeQueuedRun: (jobId: string) => Promise<void>;
