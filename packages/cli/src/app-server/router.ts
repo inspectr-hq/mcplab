@@ -109,6 +109,8 @@ import { resolveEvaluationJudge } from './run-queue-executor.js';
 import { LiveTestService } from './live-tests.js';
 import { handleLiveTestRoutes } from './live-tests-routes.js';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { createRoverConnectionService } from './rover-connection.js';
+import type { RoverSocketMessage } from './rover-connection.js';
 
 const { cliVersion: pkgVersion, mcpServerPackageVersion: mcpServerPkgVersion } =
   getAppServerVersionInfo();
@@ -216,6 +218,31 @@ export async function startAppServer(options: AppServerOptions) {
     jobs: jobs as any,
     state: runQueueState
   });
+  let activeRoverJobId: string | null = null;
+  const roverConnection = createRoverConnectionService({
+    log: (message) => console.log(message),
+    onRegister: (connection) => {
+      const assigned = runQueueService.assignRoverJob(connection.registration.provider, (message: RoverSocketMessage) => roverConnection.send(message));
+      activeRoverJobId = assigned?.id ?? null;
+      if (!assigned) console.log(`[mcplab-app] Rover connected, no queued ${connection.registration.provider} jobs`);
+    },
+    onMessage: (connection, message) => {
+      if (message.type === 'progress' && typeof message.jobId === 'string') {
+        const job = jobs.get(message.jobId);
+        if (job?.runParams.executionType === 'rover') {
+          addJobEvent(job, { type: 'log', ts: new Date().toISOString(), payload: { message: String(message.message ?? 'Rover progress') } });
+        }
+      }
+      if (message.type === 'complete' && typeof message.jobId === 'string') {
+        runQueueService.completeRoverJob(message.jobId, { runId: message.runId, outcome: message.outcome, provider: connection.registration.provider });
+        if (activeRoverJobId === message.jobId) activeRoverJobId = null;
+      }
+    },
+    onDisconnect: () => {
+      if (activeRoverJobId) runQueueService.pauseRoverJob(activeRoverJobId);
+      activeRoverJobId = null;
+    }
+  });
 
   const server = createServer(async (req, res) => {
     try {
@@ -287,6 +314,35 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/settings' && method === 'GET') {
         asJson(res, 200, settings);
+        return;
+      }
+
+      if (pathname === '/api/rover/status' && method === 'GET') {
+        const connection = roverConnection.connection();
+        asJson(res, 200, {
+          connected: Boolean(connection),
+          ...(connection
+            ? {
+                provider: connection.registration.provider,
+                pageUrl: connection.registration.pageUrl,
+                connectedAt: connection.connectedAt,
+                lastSeenAt: connection.lastSeenAt
+              }
+            : {})
+        });
+        return;
+      }
+
+      if (pathname === '/api/rover/open' && method === 'POST') {
+        const body = await parseBody(req);
+        const jobId = String(body.jobId ?? '').trim();
+        const job = runQueueService.jobs.get(jobId);
+        if (!job || job.runParams.executionType !== 'rover' || !job.runParams.roverAgent) {
+          asJson(res, 404, { error: 'Rover job not found.' });
+          return;
+        }
+        startBrowser(job.runParams.roverAgent.url);
+        asJson(res, 200, { ok: true, url: job.runParams.roverAgent.url });
         return;
       }
 
@@ -514,12 +570,17 @@ export async function startAppServer(options: AppServerOptions) {
     }
   });
 
+  server.on('upgrade', (req, socket, head) => {
+    if (!roverConnection.upgrade(req, socket, head)) socket.destroy();
+  });
+
   await new Promise<void>((resolveReady) => {
     server.listen(options.port, options.host, () => resolveReady());
   });
 
   server.on('close', () => {
     runQueueService.closeSubscribers();
+    roverConnection.close();
     devMcp?.stop();
   });
 

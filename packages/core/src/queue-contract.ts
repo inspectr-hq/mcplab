@@ -6,12 +6,17 @@ export interface QueueRunParams {
   runNote: string | null;
   serverOverrideAll: string[] | null;
   scenarioServerOverrides: Record<string, string[]> | null;
+  executionType?: 'mcplab' | 'rover';
+  roverAgent?: { name: string; provider: 'claude' | 'trendminer'; url: string };
+  roverNewConversationBetweenScenarios?: boolean;
 }
 
 export interface QueueEntry {
   jobId: string;
-  status: 'queued' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
-  blockedReason?: 'oauth_required';
+  status: 'queued' | 'waiting_for_rover' | 'paused_rover' | 'blocked_auth' | 'running' | 'completed' | 'error' | 'stopped';
+  blockedReason?: 'oauth_required' | 'rover_required' | 'rover_interrupted';
+  executionType?: 'mcplab' | 'rover';
+  roverAgent?: { name: string; provider: 'claude' | 'trendminer'; url: string };
   requiredServers?: string[];
   runParams: QueueRunParams;
 }

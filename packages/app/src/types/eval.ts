@@ -38,8 +38,10 @@ export type ServerEntry =
 export interface AgentConfig {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom';
+  type?: 'llm' | 'browser';
+  provider: 'openai' | 'anthropic' | 'azure' | 'google' | 'custom' | 'claude' | 'trendminer';
   model: string;
+  url?: string;
   temperature?: number;
   maxTokens: number;
   maxTurns?: number;

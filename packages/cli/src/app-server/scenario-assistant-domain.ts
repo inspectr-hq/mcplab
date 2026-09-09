@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { AgentConfig, EvalConfig, LlmMessage, ToolDef } from '@inspectr/mcplab-core';
+import { isLlmAgent, type AgentConfig, type EvalConfig, type LlmAgentConfig, type LlmMessage, type ToolDef } from '@inspectr/mcplab-core';
 import { McpClientManager } from '@inspectr/mcplab-core';
 import {
   chatWithJsonRetry,
@@ -116,7 +116,7 @@ export interface ScenarioAssistantSession {
   configPath?: string;
   selectedAssistantAgentName: string;
   context: ScenarioAssistantContextInput;
-  agentConfig: AgentConfig;
+  agentConfig: LlmAgentConfig;
   mcp: McpClientManager;
   tools: ToolDef[];
   toolPublicMap: Map<string, { server: string; tool: string }>;
@@ -811,26 +811,28 @@ export function summarizeToolResultForAssistant(result: unknown): string {
 export function resolveAssistantAgentFromConfig(
   config: EvalConfig,
   selectedAssistantAgentName: string
-): AgentConfig {
+): LlmAgentConfig {
   const agent = config.agents[selectedAssistantAgentName];
   if (!agent) {
     throw new Error(
       `Scenario Assistant agent '${selectedAssistantAgentName}' not found in resolved config agents.`
     );
   }
+  if (!isLlmAgent(agent)) throw new Error(`Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`);
   return agent;
 }
 
 export function resolveAssistantAgentFromLibraries(
   libraries: ReturnType<typeof readLibraries>,
   selectedAssistantAgentName: string
-): AgentConfig {
+): LlmAgentConfig {
   const agent = libraries.agents[selectedAssistantAgentName];
   if (!agent) {
     throw new Error(
       `Scenario Assistant agent '${selectedAssistantAgentName}' not found in library agents. Configure the central Scenario Assistant Agent in Libraries > Scenarios.`
     );
   }
+  if (!isLlmAgent(agent)) throw new Error(`Browser Agent '${selectedAssistantAgentName}' cannot be used by Scenario Assistant.`);
   return agent;
 }
 

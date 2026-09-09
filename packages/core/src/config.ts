@@ -216,13 +216,7 @@ function resolveReferences(
       throw new Error(`Duplicate agent id detected: ${resolvedId}`);
     }
     seenAgentNames.add(resolvedId);
-    resolvedAgents[resolvedId] = {
-      provider: entry.provider,
-      model: entry.model,
-      temperature: entry.temperature,
-      max_tokens: entry.max_tokens,
-      system: entry.system
-    };
+    resolvedAgents[resolvedId] = normalizeAgentDefinition(entry as unknown as Record<string, unknown>, resolvedId);
   }
 
   type ResolvedScenarioDraft = SourceScenario & { servers?: string[] };
@@ -488,15 +482,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
       if (!inlineId && legacyName) {
         warnings.push(`Legacy inline agent.name migrated to agent.id: ${legacyName}`);
       }
-      normalizedAgents.push({
-        id: resolvedId,
-        name: legacyName || undefined,
-        provider: (agent as AgentInlineEntry).provider,
-        model: (agent as AgentInlineEntry).model,
-        temperature: (agent as AgentInlineEntry).temperature,
-        max_tokens: (agent as AgentInlineEntry).max_tokens,
-        system: (agent as AgentInlineEntry).system
-      });
+      normalizedAgents.push({ id: resolvedId, ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, resolvedId) });
     }
   } else {
     const legacyInlineAgents =
@@ -504,18 +490,7 @@ export function normalizeSourceConfig(sourceConfig: SourceEvalConfig): {
         ? (rawAgents as Record<string, EvalConfig['agents'][string]>)
         : {};
     for (const [name, agent] of Object.entries(legacyInlineAgents)) {
-      normalizedAgents.push({
-        id: name,
-        name:
-          typeof (agent as { name?: unknown }).name === 'string'
-            ? String((agent as { name?: unknown }).name)
-            : undefined,
-        provider: agent.provider,
-        model: agent.model,
-        temperature: agent.temperature,
-        max_tokens: agent.max_tokens,
-        system: agent.system
-      });
+      normalizedAgents.push({ id: name, ...normalizeAgentDefinition(agent as unknown as Record<string, unknown>, name) });
     }
     if (Object.keys(legacyInlineAgents).length > 0) {
       warnings.push('Legacy agents object map was migrated into agents[] entries.');
@@ -682,49 +657,57 @@ export function normalizeLibraryServers(
   return out;
 }
 
+function normalizeAgentDefinition(raw: Record<string, unknown>, id: string): EvalConfig['agents'][string] {
+  if (raw.type === 'browser') {
+    if (!raw.url) throw new Error(`Browser agent ${id} requires a url`);
+    if (raw.provider !== 'claude' && raw.provider !== 'trendminer') {
+      throw new Error(`Browser agent ${id} has unsupported provider: ${String(raw.provider)}`);
+    }
+    return {
+      type: 'browser',
+      name: typeof raw.name === 'string' ? raw.name : undefined,
+      provider: raw.provider,
+      url: String(raw.url)
+    };
+  }
+  if (!raw.provider || !raw.model) throw new Error(`LLM agent ${id} requires a provider and model`);
+  if (raw.provider !== 'openai' && raw.provider !== 'anthropic' && raw.provider !== 'azure_openai') {
+    throw new Error(`LLM agent ${id} has unsupported provider: ${String(raw.provider)}`);
+  }
+  return {
+    name: typeof raw.name === 'string' ? raw.name : undefined,
+    provider: raw.provider,
+    model: String(raw.model),
+    ...(typeof raw.temperature === 'number' ? { temperature: raw.temperature } : {}),
+    ...(typeof raw.max_tokens === 'number' ? { max_tokens: raw.max_tokens } : {}),
+    ...(typeof raw.max_turns === 'number' ? { max_turns: raw.max_turns } : {}),
+    ...(typeof raw.system === 'string' ? { system: raw.system } : {})
+  };
+}
+
 export function normalizeLibraryAgents(raw: unknown): Record<string, EvalConfig['agents'][string]> {
   const out: Record<string, EvalConfig['agents'][string]> = {};
   if (Array.isArray(raw)) {
     for (const entry of raw) {
       if (!entry || typeof entry !== 'object') continue;
-      const agent = entry as {
-        id?: unknown;
-        name?: unknown;
-        provider?: EvalConfig['agents'][string]['provider'];
-        model?: string;
-        temperature?: number;
-        max_tokens?: number;
-        max_turns?: number;
-        system?: string;
-      };
+      const agent = entry as Record<string, unknown>;
       const id = String(agent.id ?? agent.name ?? '').trim();
-      if (!id || !agent.provider || !agent.model) continue;
-      out[id] = {
-        name: typeof agent.name === 'string' ? agent.name : undefined,
-        provider: agent.provider,
-        model: agent.model,
-        temperature: agent.temperature,
-        max_tokens: agent.max_tokens,
-        max_turns: agent.max_turns,
-        system: agent.system
-      };
+      if (!id) continue;
+      if (agent.type === 'browser' || (agent.provider && agent.model)) {
+        out[id] = normalizeAgentDefinition(agent, id);
+      }
     }
     return out;
   }
   if (!raw || typeof raw !== 'object') return out;
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== 'object') continue;
-    const agent = value as EvalConfig['agents'][string];
-    if (!agent.provider || !agent.model) continue;
-    out[id] = {
-      name: typeof agent.name === 'string' ? agent.name : undefined,
-      provider: agent.provider,
-      model: agent.model,
-      temperature: agent.temperature,
-      max_tokens: agent.max_tokens,
-      max_turns: agent.max_turns,
-      system: agent.system
-    };
+      const agent = value as Record<string, unknown>;
+      if (agent.type === 'browser') {
+        out[id] = normalizeAgentDefinition(agent, id);
+      } else if (agent.provider && agent.model) {
+        out[id] = normalizeAgentDefinition(agent, id);
+      }
   }
   return out;
 }

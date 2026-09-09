@@ -13,6 +13,7 @@ import {
   type RunQueueState
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
+import type { RoverSocketMessage } from './rover-connection.js';
 
 export type QueueServiceDeps = Pick<
   AppRouteDeps,
@@ -43,6 +44,9 @@ export interface RunQueueService {
   advance(options?: QueueAdvanceOptions): Promise<void>;
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
   closeSubscribers(): void;
+  assignRoverJob(provider: 'claude' | 'trendminer', send: (message: RoverSocketMessage) => boolean): RunJob | null;
+  pauseRoverJob(jobId: string): void;
+  completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
 }
 
 export function createRunQueueService(params: {
@@ -299,12 +303,18 @@ export function createRunQueueService(params: {
           index -= 1;
           continue;
         }
-        if (nextJob.status !== 'queued' && nextJob.status !== 'blocked_auth') {
+        if (
+          nextJob.status !== 'queued' &&
+          nextJob.status !== 'blocked_auth' &&
+          nextJob.status !== 'waiting_for_rover' &&
+          nextJob.status !== 'paused_rover'
+        ) {
           state.queue.splice(index, 1);
           queueMutated = true;
           index -= 1;
           continue;
         }
+        if (nextJob.status === 'waiting_for_rover' || nextJob.status === 'paused_rover') continue;
         if (nextJob.status === 'blocked_auth' && !allowBlockedAuth) {
           continue;
         }
@@ -352,9 +362,10 @@ export function createRunQueueService(params: {
     state,
     enqueueRun(runParams: RunParams, options) {
       const jobId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const isRover = runParams.executionType === 'rover';
       const job: RunJob = {
         id: jobId,
-        status: 'queued',
+        status: isRover ? 'waiting_for_rover' : 'queued',
         events: [],
         clients: new Set(),
         abortController: new AbortController(),
@@ -363,10 +374,10 @@ export function createRunQueueService(params: {
       jobs.set(jobId, job);
       state.queue.push(jobId);
       const queuedPosition = state.queue.length;
-      const shouldAttemptAdvance = currentWorkerUsage(state) < state.queueWorkerCount;
+      const shouldAttemptAdvance = !isRover && currentWorkerUsage(state) < state.queueWorkerCount;
       const shouldStartImmediately = shouldStartQueuedJobImmediately(jobId);
 
-      if (!shouldStartImmediately) {
+      if (!shouldStartImmediately || isRover) {
         deps.addJobEvent(job, {
           type: 'queued',
           ts: new Date().toISOString(),
@@ -379,7 +390,9 @@ export function createRunQueueService(params: {
             runNote: runParams.runNote ?? null,
             serverOverrideAll: runParams.serverOverrideAll ?? null,
             scenarioServerOverrides: runParams.scenarioServerOverrides ?? null,
-            position: queuedPosition
+            position: queuedPosition,
+            executionType: runParams.executionType ?? 'mcplab',
+            roverAgent: runParams.roverAgent
           }
         });
         emit();
@@ -395,7 +408,7 @@ export function createRunQueueService(params: {
     stopJob(jobId, options) {
       const job = jobs.get(jobId);
       if (!job) return null;
-      if (job.status === 'queued' || job.status === 'blocked_auth') {
+      if (job.status === 'queued' || job.status === 'blocked_auth' || job.status === 'waiting_for_rover' || job.status === 'paused_rover') {
         stopQueuedJob(job);
         void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
         return { ok: true, status: 'stopped' };
@@ -451,6 +464,54 @@ export function createRunQueueService(params: {
     closeSubscribers() {
       for (const client of state.clients) client.end();
       state.clients.clear();
+    },
+    assignRoverJob(provider, send) {
+      const job = state.queue
+        .map((id) => jobs.get(id))
+        .find((candidate) => candidate?.status === 'waiting_for_rover' && candidate.runParams.roverAgent?.provider === provider);
+      if (!job) return null;
+      const index = state.queue.indexOf(job.id);
+      if (index !== -1) state.queue.splice(index, 1);
+      job.status = 'running';
+      state.activeJobIds.add(job.id);
+      deps.addJobEvent(job, {
+        type: 'started',
+        ts: new Date().toISOString(),
+        payload: { executionType: 'rover', roverAgent: job.runParams.roverAgent, agents: job.runParams.requestedAgents ?? null }
+      });
+      send({
+        type: 'assignment',
+        jobId: job.id,
+        agent: job.runParams.roverAgent,
+        scenarios: job.runParams.roverScenarios ?? [],
+        newConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios !== false
+      });
+      emit();
+      return job;
+    },
+    pauseRoverJob(jobId) {
+      const job = jobs.get(jobId);
+      if (!job || job.runParams.executionType !== 'rover' || job.status !== 'running') return;
+      state.activeJobIds.delete(jobId);
+      job.status = 'paused_rover';
+      state.queue.unshift(jobId);
+      deps.addJobEvent(job, {
+        type: 'log',
+        ts: new Date().toISOString(),
+        payload: { message: 'Rover disconnected. Job paused until Rover reconnects.' }
+      });
+      emit();
+    },
+    completeRoverJob(jobId, payload = {}) {
+      const job = jobs.get(jobId);
+      if (!job || job.runParams.executionType !== 'rover' || (job.status !== 'running' && job.status !== 'paused_rover')) return;
+      state.activeJobIds.delete(jobId);
+      const index = state.queue.indexOf(jobId);
+      if (index !== -1) state.queue.splice(index, 1);
+      job.status = 'completed';
+      deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
+      closeJobClients(job);
+      emit();
     }
   };
 }

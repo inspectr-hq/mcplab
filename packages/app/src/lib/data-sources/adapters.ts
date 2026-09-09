@@ -403,6 +403,20 @@ export function fromCoreConfigYaml(record: WorkspaceConfigRecord): EvalConfig {
     const inlineId = String(entry.id || entry.name || '').trim();
     if (!inlineId) continue;
     const id = inlineId;
+    if (entry.type === 'browser') {
+      const mappedBrowserAgent = {
+        id,
+        name: String(entry.name || inlineId),
+        type: 'browser' as const,
+        provider: entry.provider as 'claude' | 'trendminer',
+        model: '',
+        url: String(entry.url || ''),
+        maxTokens: 0
+      };
+      agents.push(mappedBrowserAgent);
+      mixedAgentEntries.push({ kind: 'inline', agent: mappedBrowserAgent });
+      continue;
+    }
     serverIdByName.set(inlineId, id);
     const authType: 'none' | 'bearer' | 'api-key' | 'oauth2' =
       entry.auth?.type === 'bearer'
@@ -738,6 +752,15 @@ export function toCoreConfigYaml(config: EvalConfig): CoreSourceEvalConfig {
 
   const mapInlineAgent = (agent: EvalConfig['agents'][number]) => {
     const sourceId = agent.id;
+    if (agent.type === 'browser') {
+      return {
+        id: sourceId,
+        ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
+        type: 'browser' as const,
+        provider: agent.provider,
+        url: agent.url
+      } satisfies NonNullable<CoreSourceEvalConfig['agents']>[number];
+    }
     return {
       id: sourceId,
       ...(agent.name && agent.name !== sourceId ? { name: agent.name } : {}),
@@ -888,6 +911,7 @@ export function toCoreLibraries(
       agent.id,
       {
         ...(agent.name && agent.name !== agent.id ? { name: agent.name } : {}),
+        ...(agent.type === 'browser' ? { type: 'browser', provider: agent.provider, url: agent.url } : {
         provider:
           agent.provider === 'azure'
             ? 'azure_openai'
@@ -899,6 +923,7 @@ export function toCoreLibraries(
         max_tokens: agent.maxTokens,
         max_turns: agent.maxTurns,
         system: agent.systemPrompt
+        })
       }
     ])
   ) as CoreEvalConfig['agents'];

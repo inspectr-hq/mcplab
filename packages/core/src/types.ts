@@ -59,7 +59,8 @@ export interface ServerRefEntry {
 
 export type ServerListEntry = ServerInlineEntry | ServerRefEntry;
 
-export interface AgentConfig {
+export interface LlmAgentConfig {
+  type?: 'llm';
   name?: string;
   provider: 'openai' | 'anthropic' | 'azure_openai';
   model: string;
@@ -69,16 +70,29 @@ export interface AgentConfig {
   system?: string;
 }
 
-export interface AgentInlineEntry extends AgentConfig {
+export interface BrowserAgentConfig {
+  type: 'browser';
+  name?: string;
+  provider: 'claude' | 'trendminer';
+  url: string;
+}
+
+export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
+
+export type AgentInlineEntry = (LlmAgentConfig | BrowserAgentConfig) & {
   id: string;
   name?: string;
-}
+};
 
 export interface AgentRefEntry {
   ref: string;
 }
 
 export type AgentListEntry = AgentInlineEntry | AgentRefEntry;
+
+export function isLlmAgent(agent: AgentConfig): agent is LlmAgentConfig {
+  return agent.type !== 'browser';
+}
 
 export interface ToolConstraints {
   required_tools?: string[];

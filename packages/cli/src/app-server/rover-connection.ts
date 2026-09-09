@@ -1,0 +1,135 @@
+import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
+import { WebSocketServer, WebSocket, type RawData } from 'ws';
+
+export type RoverProvider = 'claude' | 'trendminer';
+
+export interface RoverRegistration {
+  protocolVersion: 1;
+  provider: RoverProvider;
+  pageUrl: string;
+  extensionVersion: string;
+}
+
+export interface RoverSocketMessage {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface RoverConnection {
+  registration: RoverRegistration;
+  socket: WebSocket;
+  connectedAt: string;
+  lastSeenAt: string;
+}
+
+export interface RoverConnectionService {
+  upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean;
+  connection(): RoverConnection | null;
+  send(message: RoverSocketMessage): boolean;
+  broadcast(message: RoverSocketMessage): boolean;
+  close(): void;
+}
+
+export function createRoverConnectionService(options: {
+  log?: (message: string) => void;
+  onRegister?: (connection: RoverConnection) => void | Promise<void>;
+  onMessage?: (connection: RoverConnection, message: RoverSocketMessage) => void | Promise<void>;
+  onDisconnect?: (connection: RoverConnection) => void | Promise<void>;
+} = {}): RoverConnectionService {
+  const log = options.log ?? console.log;
+  const wss = new WebSocketServer({ noServer: true });
+  let current: RoverConnection | null = null;
+  let closed = false;
+
+  const parse = (raw: RawData): RoverSocketMessage | null => {
+    try {
+      const value = JSON.parse(raw.toString()) as unknown;
+      return value && typeof value === 'object' && typeof (value as { type?: unknown }).type === 'string'
+        ? value as RoverSocketMessage
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const send = (socket: WebSocket, message: RoverSocketMessage): boolean => {
+    if (socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(message));
+    return true;
+  };
+
+  wss.on('connection', (socket: WebSocket) => {
+    let connection: RoverConnection | null = null;
+    socket.on('message', (raw) => {
+      const message = parse(raw);
+      if (!message) {
+        socket.close(1003, 'Invalid Rover message');
+        return;
+      }
+      if (!connection) {
+        if (message.type !== 'register' || message.protocolVersion !== 1 ||
+          (message.provider !== 'claude' && message.provider !== 'trendminer') ||
+          typeof message.pageUrl !== 'string' || typeof message.extensionVersion !== 'string') {
+          socket.close(1008, 'Rover registration required');
+          return;
+        }
+        if (current && current.socket.readyState === WebSocket.OPEN) {
+          send(socket, { type: 'rejected', reason: 'another Rover is already connected' });
+          socket.close(1008, 'Another Rover is already connected');
+          return;
+        }
+        const now = new Date().toISOString();
+        connection = {
+          registration: {
+            protocolVersion: 1,
+            provider: message.provider,
+            pageUrl: message.pageUrl,
+            extensionVersion: message.extensionVersion
+          },
+          socket,
+          connectedAt: now,
+          lastSeenAt: now
+        };
+        current = connection;
+        send(socket, { type: 'registered', connectedAt: now });
+        log(`[mcplab-app] Rover connected: ${connection.registration.provider} (${connection.registration.pageUrl})`);
+        void options.onRegister?.(connection);
+        return;
+      }
+      connection.lastSeenAt = new Date().toISOString();
+      if (message.type === 'register_update') {
+        if (message.provider !== 'claude' && message.provider !== 'trendminer') return;
+        connection.registration = { ...connection.registration, provider: message.provider, pageUrl: String(message.pageUrl ?? connection.registration.pageUrl) };
+        send(socket, { type: 'registered', connectedAt: connection.connectedAt });
+        log(`[mcplab-app] Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`);
+      }
+      void options.onMessage?.(connection, message);
+    });
+    socket.on('close', () => {
+      if (current?.socket !== socket) return;
+      const disconnected = current;
+      current = null;
+      log(`[mcplab-app] Rover disconnected: ${disconnected.registration.provider}`);
+      void options.onDisconnect?.(disconnected);
+    });
+    socket.on('error', () => undefined);
+  });
+
+  return {
+    upgrade(req, socket, head) {
+      if (closed || req.url?.split('?')[0] !== '/api/rover/ws') return false;
+      wss.handleUpgrade(req, socket, head, (upgraded) => wss.emit('connection', upgraded, req));
+      return true;
+    },
+    connection: () => current,
+    send: (message) => current ? send(current.socket, message) : false,
+    broadcast: (message) => current ? send(current.socket, message) : false,
+    close: () => {
+      closed = true;
+      current?.socket.close(1001, 'MCPLab shutting down');
+      current = null;
+      wss.close();
+    }
+  };
+}

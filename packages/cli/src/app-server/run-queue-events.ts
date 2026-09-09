@@ -7,7 +7,16 @@ export function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
     status: job.status,
-    blockedReason: job.status === 'blocked_auth' ? 'oauth_required' : undefined,
+    blockedReason:
+      job.status === 'blocked_auth'
+        ? 'oauth_required'
+        : job.status === 'waiting_for_rover'
+        ? 'rover_required'
+        : job.status === 'paused_rover'
+        ? 'rover_interrupted'
+        : undefined,
+    executionType: job.runParams.executionType ?? 'mcplab',
+    roverAgent: job.runParams.roverAgent,
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
     runParams: {
       configPath: job.runParams.configPath,
@@ -16,7 +25,10 @@ export function toQueueEntry(job: RunJob): QueueEntry {
       agents: job.runParams.requestedAgents ?? null,
       runNote: job.runParams.runNote ?? null,
       serverOverrideAll: job.runParams.serverOverrideAll ?? null,
-      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null
+      scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null,
+      executionType: job.runParams.executionType ?? 'mcplab',
+      roverAgent: job.runParams.roverAgent
+      ,roverNewConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios
     }
   };
 }
@@ -38,7 +50,13 @@ export function buildQueueState(
   const queuedEntries = runQueueState.queue
     .filter((id) => !runQueueState.admittingJobIds.has(id))
     .map((id) => jobs.get(id))
-    .filter((j): j is RunJob => !!j && (j.status === 'queued' || j.status === 'blocked_auth'))
+    .filter((j): j is RunJob =>
+      !!j &&
+      (j.status === 'queued' ||
+        j.status === 'blocked_auth' ||
+        j.status === 'waiting_for_rover' ||
+        j.status === 'paused_rover')
+    )
     .map((job) => toQueueEntry(job));
   return {
     active: activeJobs[0] ?? null,

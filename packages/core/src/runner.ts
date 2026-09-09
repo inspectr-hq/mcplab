@@ -11,6 +11,7 @@ import type {
   ExecutableScenario,
   ScenarioRunTraceRecord
 } from './types.js';
+import { isLlmAgent } from './types.js';
 import { isAbortError, throwIfAborted } from './abort.js';
 import { TraceWriter } from './trace.js';
 import { McpClientManager } from './mcp.js';
@@ -203,6 +204,9 @@ export async function runAll(
       const agent = config.agents[scenario.agent];
       if (!agent) {
         throw new Error(`Agent not found: ${scenario.agent}`);
+      }
+      if (!isLlmAgent(agent)) {
+        throw new Error(`Browser agent '${scenario.agent}' must be dispatched through Rover.`);
       }
       const runs: ScenarioRunResult[] = [];
       let effectiveScenarioEval = scenario.eval;
@@ -578,6 +582,7 @@ export async function judgeAgentAssertions(params: {
 }
 
 function buildJudgeCheckMetadata(judgeName: string, judgeAgent: AgentConfig, checkId: string) {
+  if (!isLlmAgent(judgeAgent)) throw new Error('Browser agents cannot be evaluation judges.');
   return {
     check_id: checkId,
     judge_agent: judgeName,

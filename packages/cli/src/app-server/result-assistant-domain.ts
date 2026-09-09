@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { AgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
+import type { AgentConfig, LlmAgentConfig, LlmMessage, ResultsJson, ToolDef } from '@inspectr/mcplab-core';
 import { chatWithAgent, McpClientManager } from '@inspectr/mcplab-core';
 import {
   cleanupSessionsByTtl,
@@ -56,7 +56,7 @@ export interface ResultAssistantSession {
   createdAt: number;
   lastTouchedAt: number;
   selectedAssistantAgentName: string;
-  agentConfig: AgentConfig;
+  agentConfig: LlmAgentConfig;
   resultSummary: ResultsJson | null;
   referenceReportsForRun: Array<{
     path: string;

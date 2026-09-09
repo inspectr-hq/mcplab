@@ -68,6 +68,7 @@ type RunRequestBody = {
   runNote?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
+  newConversationBetweenScenarios?: unknown;
 };
 
 type PreviewRunRequestBody = {
@@ -366,6 +367,7 @@ export async function handleRunsRoutes(params: {
       asJson(res, 404, { error: `Config not found: ${configPath}` });
       return true;
     }
+    let selectedConfig: EvalConfig;
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
       const libraries = readLibraries(settings.librariesDir);
@@ -383,6 +385,7 @@ export async function handleRunsRoutes(params: {
         serverOverrideAll,
         scenarioServerOverrides: filteredScenarioOverrides
       });
+      selectedConfig = selected;
     } catch (error) {
       asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
       return true;
@@ -391,19 +394,47 @@ export async function handleRunsRoutes(params: {
     // Resolve lazily in advanceQueue so runtime overrides are always reflected.
     const oauthServerNames: string[] | undefined = undefined;
 
-    const runParamsObj = {
+    const selectedAgentNames = deps.resolveRunSelectedAgents(selectedConfig, requestedAgents);
+    const selectedAgents = selectedAgentNames.map((name) => ({ name, agent: selectedConfig.agents[name] }));
+    const missingAgents = selectedAgents.filter((entry) => !entry.agent).map((entry) => entry.name);
+    if (missingAgents.length > 0) {
+      asJson(res, 400, { error: `Unknown agents: ${missingAgents.join(', ')}` });
+      return true;
+    }
+    const browserAgents = selectedAgents.filter((entry) => entry.agent?.type === 'browser');
+    const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
+    const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
+    const baseRunParams = {
       configPath,
       runsPerScenario,
       scenarioId,
       scenarioIds,
-      requestedAgents,
       runNote,
       oauthServerNames,
       serverOverrideAll,
       scenarioServerOverrides
     };
-    const response = runQueueService.enqueueRun(runParamsObj, { hostHeader: req.headers.host });
-    asJson(res, 202, response);
+    const runParamsList = browserAgents.length === 0
+      ? [{ ...baseRunParams, requestedAgents }]
+      : [
+          ...(llmAgentNames.length > 0 ? [{ ...baseRunParams, requestedAgents: llmAgentNames }] : []),
+          ...browserAgents.map(({ name, agent }) => ({
+            ...baseRunParams,
+            requestedAgents: [name],
+            executionType: 'rover' as const,
+            roverAgent:
+              agent && agent.type === 'browser'
+                ? { name, provider: agent.provider, url: agent.url }
+                : undefined,
+            roverScenarios: structuredClone(selectedConfig.scenarios),
+            roverNewConversationBetweenScenarios: newConversationBetweenScenarios
+          }))
+        ];
+    const responses = runParamsList.map((runParams) => runQueueService.enqueueRun(runParams, { hostHeader: req.headers.host }));
+    asJson(res, 202, {
+      ...responses[0],
+      jobs: responses.map((response, index) => ({ ...response, agents: runParamsList[index]?.requestedAgents ?? null }))
+    });
     return true;
   }
 
