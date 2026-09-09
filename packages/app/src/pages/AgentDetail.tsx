@@ -177,6 +177,10 @@ const AgentDetail = () => {
       toast({ title: 'Name is required', variant: 'destructive' });
       return;
     }
+    if (form.type === 'browser' && !form.url?.trim()) {
+      toast({ title: 'Browser agent URL is required', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       if (isNew) {
@@ -337,6 +341,19 @@ const AgentDetail = () => {
               />
             </div>
             <div className="space-y-1.5">
+              <Label>Agent type</Label>
+              <Select
+                value={form.type ?? 'llm'}
+                onValueChange={(v) => setForm((f) => ({ ...f, type: v as AgentConfig['type'], provider: v === 'browser' ? 'claude' : 'openai', url: v === 'browser' ? f.url : undefined }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="llm">LLM Agent</SelectItem>
+                  <SelectItem value="browser">Browser Agent</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label>Provider</Label>
               <Select
                 value={form.provider}
@@ -344,7 +361,8 @@ const AgentDetail = () => {
                   setForm((f) => ({
                     ...f,
                     provider: v as AgentConfig['provider'],
-                    model: modelSuggestions[v]?.[0] || ''
+                    model: modelSuggestions[v]?.[0] || '',
+                    ...(form.type === 'browser' ? { type: 'browser' as const } : {})
                   }))
                 }
               >
@@ -352,15 +370,28 @@ const AgentDetail = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {form.type === 'browser' ? <>
+                    <SelectItem value="claude">Claude</SelectItem>
+                    <SelectItem value="trendminer">TrendMiner</SelectItem>
+                  </> : <>
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="azure">Azure OpenAI</SelectItem>
                   <SelectItem value="google">Google</SelectItem>
                   <SelectItem value="custom">Custom</SelectItem>
+                  </>}
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {form.type === 'browser' && (
+            <div className="space-y-1.5">
+              <Label>Browser agent URL</Label>
+              <Input value={form.url ?? ''} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://claude.ai or TrendMiner URL" />
+              <p className="text-[11px] text-muted-foreground">Rover opens this URL when the queued Browser Agent needs attention.</p>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
