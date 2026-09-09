@@ -11,23 +11,23 @@ export function projectEvaluationJournal(params: {
   executionStatus?: 'stopped';
 }): ResultsJson | null {
   const events = readExecutionEvents(join(params.runsDir, params.evaluationRunId));
-  const children = events
-    .filter((event) => event.type === 'child_result_completed' && event.results)
+  const executions = events
+    .filter((event) => (event.type === 'execution_completed' || event.type === 'child_result_completed') && event.results)
     .reduce<ResultsJson[]>((results, event) => {
       const executionId = event.executionId ?? (event.results as ResultsJson).metadata.run_id;
       if (results.some((result) => result.metadata.run_id === executionId)) return results;
       results.push(event.results as ResultsJson);
       return results;
     }, []);
-  if (children.length === 0) return null;
+  if (executions.length === 0) return null;
   const traceRecords = events
-    .filter((event) => event.type === 'child_result_completed' && Array.isArray(event.traceRecords))
+    .filter((event) => (event.type === 'execution_completed' || event.type === 'child_result_completed') && Array.isArray(event.traceRecords))
     .flatMap((event) => event.traceRecords as import('@inspectr/mcplab-core').ScenarioRunTraceRecord[]);
   const results = projectEvaluationResult({
     evaluationRunId: params.evaluationRunId,
     runId: params.evaluationRunId,
     evaluationName: params.evaluationName,
-    children
+    executions
   });
   if (params.executionStatus) results.metadata.execution_status = params.executionStatus;
   persistAppRunArtifacts({

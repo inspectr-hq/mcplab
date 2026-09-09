@@ -407,7 +407,7 @@ export async function executeRunJob(params: {
     if (job.runParams.evaluationRunId) {
       appendExecutionEvent(join(settings.runsDir, job.runParams.evaluationRunId), {
         eventId: `llm-result-${results.metadata.run_id}`,
-        type: 'child_result_completed',
+        type: 'execution_completed',
         ts: new Date().toISOString(),
         evaluationRunId: job.runParams.evaluationRunId,
         executionId: results.metadata.run_id,

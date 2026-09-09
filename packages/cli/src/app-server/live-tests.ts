@@ -257,7 +257,7 @@ export class LiveTestService {
     if (session.evaluationRunId) {
       (this.options.appendJournalEvent ?? appendExecutionEvent)(join(this.options.runsDir, session.evaluationRunId), {
         eventId: `rover-result-${runId}`,
-        type: 'child_result_completed',
+        type: 'execution_completed',
         ts: now.toISOString(),
         evaluationRunId: session.evaluationRunId,
         executionId: runId,
