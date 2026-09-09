@@ -60,6 +60,7 @@ export function createRunQueueService(params: {
   onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<string | void> | string | void;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
   assignRoverJob?: (provider: 'claude' | 'trendminer') => RunJob | null;
+  onRoverJobReleased?: (provider: 'claude' | 'trendminer') => void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
@@ -445,6 +446,9 @@ export function createRunQueueService(params: {
         params.sendRoverMessage?.({ type: 'stop', jobId: job.id });
       }
       job.status = 'stopped';
+      if (job.runParams.executionType === 'rover' && job.runParams.roverAgent) {
+        params.onRoverJobReleased?.(job.runParams.roverAgent.provider);
+      }
       return { ok: true, status: 'stopped' };
     },
     removeQueuedJob(jobId, options) {
