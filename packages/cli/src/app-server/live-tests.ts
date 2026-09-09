@@ -127,8 +127,8 @@ export class LiveTestService {
       status: 'ready',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
-      evaluationGroupId: input.evaluationGroupId
-      ,evaluationRunId: input.evaluationRunId
+      evaluationGroupId: input.evaluationGroupId,
+      evaluationRunId: input.evaluationRunId
     };
     this.sessions.set(session.id, session);
     return structuredClone(session);
@@ -226,6 +226,7 @@ export class LiveTestService {
       ]
     });
     results.metadata.evaluation_group_id = session.evaluationGroupId;
+    results.metadata.evaluation_run_id = session.evaluationRunId;
     const traceRecord: ScenarioRunTraceRecord = {
       type: 'scenario_run',
       trace_version: 3,
@@ -245,15 +246,17 @@ export class LiveTestService {
       ],
       metrics: { tool_call_count: 0, total_tool_duration_ms: 0 }
     };
-    this.options.persist({
-      runDir: join(this.options.runsDir, runId),
-      results,
-      resolvedConfig: config,
-      traceRecords: [
-        { type: 'trace_meta', trace_version: 3, run_id: runId, ts: now.toISOString() },
-        traceRecord
-      ]
-    });
+    if (!session.evaluationRunId) {
+      this.options.persist({
+        runDir: join(this.options.runsDir, runId),
+        results,
+        resolvedConfig: config,
+        traceRecords: [
+          { type: 'trace_meta', trace_version: 3, run_id: runId, ts: now.toISOString() },
+          traceRecord
+        ]
+      });
+    }
     if (session.evaluationRunId) {
       (this.options.appendJournalEvent ?? appendExecutionEvent)(join(this.options.runsDir, session.evaluationRunId), {
         eventId: `rover-result-${runId}`,
@@ -262,7 +265,8 @@ export class LiveTestService {
         evaluationRunId: session.evaluationRunId,
         executionId: runId,
         executionSource: 'rover',
-        results
+        results,
+        traceRecords: [traceRecord]
       });
       projectEvaluationJournal({
         runsDir: this.options.runsDir,
@@ -274,7 +278,7 @@ export class LiveTestService {
       runId,
       outcome: run.outcome ?? 'failed',
       checkCounts: tallyCheckCounts(run.check_results ?? []),
-      resultUrl: `/results/${encodeURIComponent(runId)}`
+      resultUrl: `/results/${encodeURIComponent(session.evaluationRunId ?? runId)}`
     };
     session.status = 'completed';
     session.completionInput = normalized;

@@ -36,7 +36,8 @@ export function aggregateEvaluationGroupResults(params: {
       run_note: params.evaluationName ? `Combined evaluation: ${params.evaluationName}` : `Evaluation group ${params.groupId}`,
       rerun_agents: children.flatMap((result) => result.metadata.rerun_agents ?? []),
       child_run_ids: children.map((result) => result.metadata.run_id),
-      evaluation_group_id: params.groupId
+      evaluation_group_id: children[0]?.metadata.evaluation_group_id ?? params.groupId,
+      evaluation_run_id: params.runId
     },
     summary: {
       total_scenarios: totalScenarios,

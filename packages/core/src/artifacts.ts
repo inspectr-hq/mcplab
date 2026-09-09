@@ -24,7 +24,7 @@ export function persistEvaluationArtifacts({
     writeAtomic(join(runDir, 'resolved-config.yaml'), `${stringifyYaml(resolvedConfig)}\n`);
   }
   if (traceRecords !== undefined) {
-    writeFileSync(
+    writeAtomic(
       join(runDir, 'trace.jsonl'),
       traceRecords.map((record) => JSON.stringify(record)).join('\n') + (traceRecords.length ? '\n' : '')
     );

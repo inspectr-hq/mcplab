@@ -69,10 +69,12 @@ export function createRunQueueService(params: {
   const { settings, oauthSessionManager, deps } = params;
 
   async function maybeCompleteEvaluationGroup(groupId?: string): Promise<void> {
-    if (!groupId || !params.onEvaluationGroupComplete) return;
+    if (!groupId) return;
     const members = Array.from(jobs.values()).filter((candidate) => candidate.runParams.evaluationGroupId === groupId);
     if (members.length === 0 || members.some((candidate) => candidate.status === 'queued' || candidate.status === 'waiting_for_rover' || candidate.status === 'paused_rover' || candidate.status === 'running' || candidate.status === 'blocked_auth')) return;
-    const parentRunId = await params.onEvaluationGroupComplete(groupId, members);
+    const parentRunId = params.onEvaluationGroupComplete
+      ? await params.onEvaluationGroupComplete(groupId, members)
+      : members.find((member) => member.runParams.evaluationRunId)?.runParams.evaluationRunId;
     if (parentRunId) {
       if (!state.evaluationGroupResultIds) state.evaluationGroupResultIds = new Map();
       state.evaluationGroupResultIds.set(groupId, parentRunId);
@@ -568,7 +570,8 @@ export function createRunQueueService(params: {
       const index = state.queue.indexOf(jobId);
       if (index !== -1) state.queue.splice(index, 1);
       job.status = 'completed';
-      if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
+      if (job.runParams.evaluationRunId) job.resultRunId = job.runParams.evaluationRunId;
+      else if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
       void maybeCompleteEvaluationGroup(job.runParams.evaluationGroupId);
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);

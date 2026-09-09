@@ -49,8 +49,8 @@ export async function handleLiveTestRoutes(params: {
       const session = service.start({
         testCaseId,
         client: String(body.client ?? 'unknown'),
-        evaluationGroupId: typeof body.evaluationGroupId === 'string' ? body.evaluationGroupId : undefined
-        ,evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined
+        evaluationGroupId: typeof body.evaluationGroupId === 'string' ? body.evaluationGroupId : undefined,
+        evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined
       });
       log(`[mcplab-app] Rover Live Test started: ${session.id} (${session.testCase.id}, ${session.client})`);
       deps.asJson(res, 201, sessionView(session));

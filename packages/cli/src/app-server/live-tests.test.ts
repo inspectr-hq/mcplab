@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -84,6 +84,38 @@ describe('LiveTestService', () => {
     });
     expect(session.evaluationGroupId).toBe('group-7');
     expect(persistedResults.metadata.evaluation_group_id).toBe('group-7');
+  });
+
+  it('projects grouped Rover completion into the canonical evaluation result', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-live-test-group-'));
+    let persisted = 0;
+    const service = new LiveTestService({
+      runsDir,
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: () => { persisted += 1; }
+    });
+    const session = service.start({
+      testCaseId: 'plain',
+      client: 'claude',
+      evaluationGroupId: 'group-8',
+      evaluationRunId: 'evaluation-8'
+    });
+
+    const completion = await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    });
+
+    expect(persisted).toBe(0);
+    expect(completion.resultUrl).toBe('/results/evaluation-8');
+    expect(existsSync(join(runsDir, 'evaluation-8', 'results.json'))).toBe(true);
+    const results = JSON.parse(readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8'));
+    expect(results.metadata.run_id).toBe('evaluation-8');
+    expect(results.metadata.evaluation_group_id).toBe('group-8');
+    expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
+    expect(results.metadata.child_run_ids).toHaveLength(1);
   });
 
   it('rejects conflicting completion data', async () => {

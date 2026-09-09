@@ -54,6 +54,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
   traceExporter?: TraceExporter;
+  /** Skip standard result projections when a caller owns shared persistence. */
+  persistArtifacts?: boolean;
 }
 
 export type RunProgressEvent =
@@ -440,7 +442,9 @@ export async function runAll(
       executionSource: 'mcplab',
       scenarioRuns
     });
-    persistEvaluationArtifacts({ runDir, results });
+    if (options.persistArtifacts !== false) {
+      persistEvaluationArtifacts({ runDir, results });
+    }
     await emitProgress({ type: 'run_finished', runId, totalScenarioRuns });
 
     return { runDir, results };

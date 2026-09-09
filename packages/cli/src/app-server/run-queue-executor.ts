@@ -1,4 +1,5 @@
 import { join, relative } from 'node:path';
+import { rmSync } from 'node:fs';
 import {
   applyRuntimeServerOverrides,
   hashConfig,
@@ -340,6 +341,7 @@ export async function executeRunJob(params: {
             }
           : undefined,
       signal: job.abortController.signal,
+      persistArtifacts: !job.runParams.evaluationRunId,
       onProgress: async (event: RunProgressEvent) => {
         const message = formatRunProgressMessage(event);
         if (!message) return;
@@ -398,8 +400,13 @@ export async function executeRunJob(params: {
       results.metadata.run_id,
       settings.runsDir
     ) as ScenarioRunTraceRecord[];
+    if (job.runParams.evaluationRunId) {
+      rmSync(runDir, { recursive: true, force: true });
+    }
     results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
-    persistAppRunArtifacts({ runDir, results });
+    if (!job.runParams.evaluationRunId) {
+      persistAppRunArtifacts({ runDir, results });
+    }
     if (job.runParams.evaluationRunId) {
       appendExecutionEvent(join(settings.runsDir, job.runParams.evaluationRunId), {
         eventId: `llm-result-${results.metadata.run_id}`,
@@ -408,7 +415,8 @@ export async function executeRunJob(params: {
         evaluationRunId: job.runParams.evaluationRunId,
         executionId: results.metadata.run_id,
         executionSource: 'mcplab',
-        results
+        results,
+        traceRecords
       });
       projectEvaluationJournal({
         runsDir: settings.runsDir,
@@ -434,7 +442,7 @@ export async function executeRunJob(params: {
         summary: results.summary
       }
     });
-    return { status: 'completed', runId: results.metadata.run_id };
+    return { status: 'completed', runId: job.runParams.evaluationRunId ?? results.metadata.run_id };
   } catch (error: unknown) {
     if (error instanceof OAuthAuthorizationRequiredError) {
       const blockedServers = Array.from(
