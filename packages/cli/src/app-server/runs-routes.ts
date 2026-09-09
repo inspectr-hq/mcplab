@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
@@ -404,7 +405,9 @@ export async function handleRunsRoutes(params: {
     const browserAgents = selectedAgents.filter((entry) => entry.agent?.type === 'browser');
     const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
+    const evaluationGroupId = randomUUID();
     const baseRunParams = {
+      evaluationGroupId,
       configPath,
       runsPerScenario,
       scenarioId,

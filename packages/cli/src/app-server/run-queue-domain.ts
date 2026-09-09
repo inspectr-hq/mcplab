@@ -241,6 +241,7 @@ export function createRunQueueService(params: {
           type: 'log',
           ts: new Date().toISOString(),
           payload: {
+            evaluationGroupId: runParams.evaluationGroupId,
             message: `OAuth credentials ready for queued run: ${admission.readyServers.join(', ')}`
           }
         });

@@ -6,6 +6,7 @@ import type { RunJob, RunQueueState } from './run-queue-state.js';
 export function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
+    evaluationGroupId: job.runParams.evaluationGroupId,
     status: job.status,
     blockedReason:
       job.status === 'blocked_auth'
@@ -19,6 +20,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     roverAgent: job.runParams.roverAgent,
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
     runParams: {
+      evaluationGroupId: job.runParams.evaluationGroupId,
       configPath: job.runParams.configPath,
       runsPerScenario: job.runParams.runsPerScenario,
       scenarioIds: job.runParams.scenarioIds ?? null,
@@ -27,8 +29,8 @@ export function toQueueEntry(job: RunJob): QueueEntry {
       serverOverrideAll: job.runParams.serverOverrideAll ?? null,
       scenarioServerOverrides: job.runParams.scenarioServerOverrides ?? null,
       executionType: job.runParams.executionType ?? 'mcplab',
-      roverAgent: job.runParams.roverAgent
-      ,roverNewConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios
+      roverAgent: job.runParams.roverAgent,
+      roverNewConversationBetweenScenarios: job.runParams.roverNewConversationBetweenScenarios
     }
   };
 }
