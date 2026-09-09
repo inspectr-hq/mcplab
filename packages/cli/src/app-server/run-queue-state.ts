@@ -37,6 +37,7 @@ export type RunJob = {
   abortController: AbortController;
   runParams: RunParams;
   blockedAuthServers?: string[];
+  resultRunId?: string;
 };
 
 export interface RunQueueState {
@@ -57,7 +58,7 @@ export type QueueAdvanceOptions = {
 };
 
 export type ExecutionOutcome =
-  | { status: 'completed' }
+  | { status: 'completed'; runId?: string }
   | { status: 'error' | 'stopped' }
   | { status: 'blocked_auth'; blockedServers: string[] };
 

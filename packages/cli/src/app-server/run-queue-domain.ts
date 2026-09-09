@@ -164,6 +164,7 @@ export function createRunQueueService(params: {
     }
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
+    if (outcome.status === 'completed' && outcome.runId) job.resultRunId = outcome.runId;
     closeJobClients(job);
     emit();
     pruneOldJobs();
@@ -511,6 +512,7 @@ export function createRunQueueService(params: {
       const index = state.queue.indexOf(jobId);
       if (index !== -1) state.queue.splice(index, 1);
       job.status = 'completed';
+      if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);
       emit();

@@ -6,6 +6,7 @@ import type { RunJob, RunQueueState } from './run-queue-state.js';
 export function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
+    resultRunId: job.resultRunId,
     evaluationGroupId: job.runParams.evaluationGroupId,
     status: job.status,
     blockedReason:
@@ -80,7 +81,16 @@ export function buildQueueState(
       : hasPending && entries.some((entry) => entry.status === 'running') ? 'running'
       : hasPending ? 'queued'
       : 'completed';
-    return { evaluationGroupId, status, totalJobs: entries.length, completedJobs, failedJobs, pausedJobs, jobs: entries };
+    return {
+      evaluationGroupId,
+      status,
+      totalJobs: entries.length,
+      completedJobs,
+      failedJobs,
+      pausedJobs,
+      resultRunIds: entries.map((entry) => entry.resultRunId).filter((id): id is string => Boolean(id)),
+      jobs: entries
+    };
   });
   return {
     active: activeJobs[0] ?? null,
