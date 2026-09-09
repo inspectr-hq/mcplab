@@ -349,7 +349,9 @@ const AgentDetail = () => {
               <Label>Agent type</Label>
               <Select
                 value={form.type ?? 'llm'}
-                onValueChange={(v) => setForm((f) => ({ ...f, type: v as AgentConfig['type'], provider: v === 'browser' ? 'claude' : 'openai', url: v === 'browser' ? f.url : undefined }))}
+                onValueChange={(v) => setForm((f) => v === 'browser'
+                  ? { id: f.id, name: f.name, type: 'browser', provider: 'claude', model: '', maxTokens: 0, url: f.type === 'browser' ? f.url : '' }
+                  : { id: f.id, name: f.name, type: 'llm', provider: 'openai', model: f.model || 'gpt-4o', maxTokens: f.maxTokens || 4096, temperature: f.type === 'llm' ? f.temperature : DEFAULT_AGENT_TEMPERATURE, maxTurns: f.type === 'llm' ? f.maxTurns : undefined, systemPrompt: f.type === 'llm' ? f.systemPrompt : undefined })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -362,14 +364,9 @@ const AgentDetail = () => {
               <Label>Provider</Label>
               <Select
                 value={form.provider}
-                onValueChange={(v) =>
-                  setForm((f) => ({
-                    ...f,
-                    provider: v as AgentConfig['provider'],
-                    model: modelSuggestions[v]?.[0] || '',
-                    ...(form.type === 'browser' ? { type: 'browser' as const } : {})
-                  }))
-                }
+                onValueChange={(v) => setForm((f) => f.type === 'browser'
+                  ? { ...f, provider: v as 'claude' | 'trendminer' }
+                  : { ...f, provider: v as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom', model: modelSuggestions[v]?.[0] || '' })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -398,7 +395,7 @@ const AgentDetail = () => {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {form.type !== 'browser' && <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>{form.provider === 'azure' ? 'Deployment' : 'Model'}</Label>
               <div className="flex items-center gap-2">
@@ -523,9 +520,9 @@ const AgentDetail = () => {
                 className="font-mono text-xs"
               />
             </div>
-          </div>
+          </div>}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          {form.type !== 'browser' && <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Max Turns</Label>
               <Input
@@ -544,9 +541,9 @@ const AgentDetail = () => {
                 Maximum number of LLM round-trips (tool calls + final answer) per eval run.
               </p>
             </div>
-          </div>
+          </div>}
 
-          <div className="space-y-1.5">
+          {form.type !== 'browser' && <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>Temperature</Label>
               <span className="font-mono text-xs text-muted-foreground">
@@ -560,9 +557,9 @@ const AgentDetail = () => {
               max={2}
               step={0.01}
             />
-          </div>
+          </div>}
 
-          <div className="space-y-1.5">
+          {form.type !== 'browser' && <div className="space-y-1.5">
             <Label>System Prompt</Label>
             <Textarea
               value={form.systemPrompt || ''}
@@ -571,7 +568,7 @@ const AgentDetail = () => {
               rows={3}
               className="text-xs"
             />
-          </div>
+          </div>}
 
           <div className="flex items-center justify-between pt-2">
             <div>

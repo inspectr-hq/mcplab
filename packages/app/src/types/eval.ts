@@ -1,5 +1,6 @@
 // Core mcp-lab types
 import type { CoreCheckCounts, ScenarioAttachment } from '@/lib/data-sources/types';
+import type { RoverAgentProvider } from '@inspectr/mcplab-core';
 export { tallyCheckCounts } from '@/lib/data-sources/types';
 export type CheckCounts = CoreCheckCounts;
 
@@ -51,7 +52,7 @@ export interface BrowserAgentConfig {
   id: string;
   name: string;
   type: 'browser';
-  provider: 'claude' | 'trendminer';
+  provider: RoverAgentProvider;
   model: string;
   maxTokens: number;
   url: string;

@@ -1,8 +1,8 @@
 import type { ServerResponse } from 'node:http';
-import type { Scenario } from '@inspectr/mcplab-core';
+import type { RoverAgentRef, Scenario } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
-export type RunParams = {
+type RunParamsBase = {
   evaluationRunId?: string;
   evaluationName?: string;
   configPath: string;
@@ -14,11 +14,23 @@ export type RunParams = {
   oauthServerNames?: string[];
   serverOverrideAll?: string[];
   scenarioServerOverrides?: Record<string, string[]>;
-  executionType?: 'mcplab' | 'rover';
-  roverAgent?: { name: string; provider: 'claude' | 'trendminer'; url: string };
+};
+
+export type McplabRunParams = RunParamsBase & {
+  executionType?: 'mcplab';
+  roverAgent?: never;
+  roverScenarios?: never;
+  roverNewConversationBetweenScenarios?: never;
+};
+
+export type RoverRunParams = RunParamsBase & {
+  executionType: 'rover';
+  roverAgent: RoverAgentRef;
   roverScenarios?: Scenario[];
   roverNewConversationBetweenScenarios?: boolean;
 };
+
+export type RunParams = McplabRunParams | RoverRunParams;
 
 export type RunJobStatus =
   | 'queued'

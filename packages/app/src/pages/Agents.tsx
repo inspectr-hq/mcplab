@@ -153,7 +153,7 @@ const Agents = () => {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
                     <TableCell className="font-mono text-xs">
-                      {resolveAgentTemperature(agent.temperature).toFixed(2)}
+                      {agent.type === 'llm' ? resolveAgentTemperature(agent.temperature).toFixed(2) : 'n/a'}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-2">

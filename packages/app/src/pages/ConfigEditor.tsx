@@ -1134,7 +1134,7 @@ const ConfigEditor = () => {
                             </Button>
                           </div>
                         </div>
-                        {entry.kind === 'inline' && inlineExpanded && (
+                        {entry.kind === 'inline' && entry.agent.type === 'llm' && inlineExpanded && (
                           <div className="border-t px-3 py-3 space-y-3">
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div className="space-y-1.5">
@@ -1157,12 +1157,14 @@ const ConfigEditor = () => {
                                 <Select
                                   value={entry.agent.provider}
                                   onValueChange={(value) => {
+                                    const current = entry.agent;
+                                    if (current.type !== 'llm') return;
                                     const nextEntries = [...agentEntries];
                                     nextEntries[index] = {
                                       kind: 'inline',
                                       agent: {
-                                        ...entry.agent,
-                                        provider: value as AgentConfig['provider']
+                                        ...current,
+                                        provider: value as 'openai' | 'anthropic' | 'azure' | 'google' | 'custom'
                                       }
                                     };
                                     setAgentEntries(nextEntries);
@@ -1228,11 +1230,13 @@ const ConfigEditor = () => {
                                 step={0.01}
                                 value={resolveAgentTemperature(entry.agent.temperature)}
                                 onChange={(e) => {
+                                  const current = entry.agent;
+                                  if (current.type !== 'llm') return;
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
                                     kind: 'inline',
                                     agent: {
-                                      ...entry.agent,
+                                        ...current,
                                       temperature:
                                         Number(e.target.value) || DEFAULT_AGENT_TEMPERATURE
                                     }
@@ -1247,10 +1251,12 @@ const ConfigEditor = () => {
                               <Textarea
                                 value={entry.agent.systemPrompt || ''}
                                 onChange={(e) => {
+                                  const current = entry.agent;
+                                  if (current.type !== 'llm') return;
                                   const nextEntries = [...agentEntries];
                                   nextEntries[index] = {
                                     kind: 'inline',
-                                    agent: { ...entry.agent, systemPrompt: e.target.value }
+                                    agent: { ...current, systemPrompt: e.target.value }
                                   };
                                   setAgentEntries(nextEntries);
                                 }}
@@ -1343,9 +1349,11 @@ const ConfigEditor = () => {
                             <Badge variant="outline" className="text-xs font-mono">
                               max_tokens: {row.agent.maxTokens}
                             </Badge>
-                            <Badge variant="outline" className="text-xs font-mono">
-                              temperature: {resolveAgentTemperature(row.agent.temperature)}
-                            </Badge>
+                            {row.agent.type === 'llm' && (
+                              <Badge variant="outline" className="text-xs font-mono">
+                                temperature: {resolveAgentTemperature(row.agent.temperature)}
+                              </Badge>
+                            )}
                           </div>
                         )}
                       </div>

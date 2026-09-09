@@ -1,3 +1,5 @@
+import type { RoverAgentRef } from './types.js';
+
 interface QueueRunParamsBase {
   evaluationRunId?: string;
   evaluationName?: string;
@@ -18,7 +20,7 @@ export interface McplabQueueRunParams extends QueueRunParamsBase {
 
 export interface RoverQueueRunParams extends QueueRunParamsBase {
   executionType: 'rover';
-  roverAgent: { name: string; provider: 'claude' | 'trendminer'; url: string };
+  roverAgent: RoverAgentRef;
   roverNewConversationBetweenScenarios?: boolean;
 }
 

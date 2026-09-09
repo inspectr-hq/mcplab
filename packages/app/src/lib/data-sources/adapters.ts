@@ -645,16 +645,27 @@ export function fromCoreLibraries(libraries: CoreLibraryBundle): LibraryBundle {
         url: server.url,
         auth: server.auth
       })) as unknown as CoreSourceEvalConfig['servers'],
-      agents: Object.entries(libraries.agents).map(([name, agent]) => ({
-        id: name,
-        name: normalizeText(agent.name) || name,
-        provider: agent.provider,
-        model: agent.model,
-        temperature: agent.temperature,
-        max_tokens: agent.max_tokens,
-        max_turns: agent.max_turns,
-        system: agent.system
-      })) as unknown as CoreSourceEvalConfig['agents'],
+      agents: Object.entries(libraries.agents).map(([name, agent]) =>
+        agent.type === 'browser'
+          ? {
+              id: name,
+              name: normalizeText(agent.name) || name,
+              type: 'browser' as const,
+              provider: agent.provider,
+              url: agent.url
+            }
+          : {
+              id: name,
+              name: normalizeText(agent.name) || name,
+              type: 'llm' as const,
+              provider: agent.provider,
+              model: agent.model,
+              temperature: agent.temperature,
+              max_tokens: agent.max_tokens,
+              max_turns: agent.max_turns,
+              system: agent.system
+            }
+      ) as unknown as CoreSourceEvalConfig['agents'],
       scenarios: libraries.scenarios.map((scenario, index) => ({
         ...scenario,
         name: normalizeText(scenario.name) || scenario.id || `Scenario ${index + 1}`

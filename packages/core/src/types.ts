@@ -77,6 +77,14 @@ export interface BrowserAgentConfig {
   url: string;
 }
 
+export type RoverAgentProvider = 'claude' | 'trendminer';
+
+export interface RoverAgentRef {
+  name: string;
+  provider: RoverAgentProvider;
+  url: string;
+}
+
 export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;
 
 export type AgentInlineEntry = (LlmAgentConfig | BrowserAgentConfig) & {

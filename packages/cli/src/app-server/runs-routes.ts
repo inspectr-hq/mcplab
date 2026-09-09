@@ -10,6 +10,7 @@ import {
   runAll,
   applyRuntimeServerOverrides,
   type EvalConfig,
+  type BrowserAgentConfig,
   type ScenarioAttachment,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
@@ -402,7 +403,9 @@ export async function handleRunsRoutes(params: {
       asJson(res, 400, { error: `Unknown agents: ${missingAgents.join(', ')}` });
       return true;
     }
-    const browserAgents = selectedAgents.filter((entry) => entry.agent?.type === 'browser');
+    const browserAgents = selectedAgents.filter(
+      (entry): entry is { name: string; agent: BrowserAgentConfig } => entry.agent?.type === 'browser'
+    );
     const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
     const evaluationRunId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -426,10 +429,7 @@ export async function handleRunsRoutes(params: {
             ...baseRunParams,
             requestedAgents: [name],
             executionType: 'rover' as const,
-            roverAgent:
-              agent && agent.type === 'browser'
-                ? { name, provider: agent.provider, url: agent.url }
-                : undefined,
+            roverAgent: { name, provider: agent.provider, url: agent.url },
             roverScenarios: structuredClone(selectedConfig.scenarios),
             roverNewConversationBetweenScenarios: newConversationBetweenScenarios
           }))
