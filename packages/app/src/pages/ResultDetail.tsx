@@ -809,6 +809,19 @@ const ResultDetail = () => {
                     Config: <span className="ml-1 font-mono">{resultConfigLabel}</span>
                   </span>
                 ) : null}
+                {result.childRunIds && result.childRunIds.length > 0 ? (
+                  <span className="inline-flex items-center align-middle">
+                    Child runs:
+                    {result.childRunIds.map((childRunId, index) => (
+                      <span key={childRunId}>
+                        {index > 0 ? ', ' : ' '}
+                        <Link className="ml-1 font-mono underline" to={`/results/${encodeURIComponent(childRunId)}`}>
+                          {childRunId}
+                        </Link>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </p>
             </div>
           </div>

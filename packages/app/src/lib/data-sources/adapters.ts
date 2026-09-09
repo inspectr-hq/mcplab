@@ -1481,7 +1481,9 @@ export function fromCoreResultsJson(
         : 0,
     outcomes: results.summary.outcomes,
     executionSource: results.metadata.execution_source,
-    executionClient: results.metadata.execution_client
+    executionClient: results.metadata.execution_client,
+    evaluationGroupId: results.metadata.evaluation_group_id,
+    childRunIds: results.metadata.child_run_ids
   };
 }
 
