@@ -241,6 +241,7 @@ export async function startAppServer(options: AppServerOptions) {
         groupId,
         runId: parentRunId,
         children: childResults,
+        evaluationName: groupJobs.find((job) => job.runParams.evaluationName)?.runParams.evaluationName,
         failedChildren: groupJobs.filter((job) => job.status === 'error').length,
         stoppedChildren: groupJobs.filter((job) => job.status === 'stopped').length
       });

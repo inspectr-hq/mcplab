@@ -5,6 +5,7 @@ export function aggregateEvaluationGroupResults(params: {
   groupId: string;
   runId: string;
   children: ResultsJson[];
+  evaluationName?: string;
   failedChildren?: number;
   stoppedChildren?: number;
 }): ResultsJson {
@@ -31,7 +32,8 @@ export function aggregateEvaluationGroupResults(params: {
       cli_version: children[0]?.metadata.cli_version ?? 'unknown',
       mcp_server_versions: {},
       execution_client: 'mixed',
-      run_note: `Evaluation group ${params.groupId}`,
+      config_name: params.evaluationName || `Evaluation group ${params.groupId}`,
+      run_note: params.evaluationName ? `Combined evaluation: ${params.evaluationName}` : `Evaluation group ${params.groupId}`,
       rerun_agents: children.flatMap((result) => result.metadata.rerun_agents ?? []),
       child_run_ids: children.map((result) => result.metadata.run_id),
       evaluation_group_id: params.groupId
