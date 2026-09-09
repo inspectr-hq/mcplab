@@ -219,6 +219,7 @@ export async function startAppServer(options: AppServerOptions) {
     deps: routeDeps,
     jobs: jobs as any,
     state: runQueueState,
+    sendRoverMessage: (message) => roverConnection.send(message),
     onEvaluationGroupComplete: (groupId, groupJobs) => {
       if (completedEvaluationGroups.has(groupId)) return;
       const childResults = groupJobs
