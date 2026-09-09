@@ -2376,7 +2376,6 @@ export const docsNavSections = [
       appGettingStarted,
       appConfigurations,
       appRunning,
-      appRover,
       appLangSmith,
       appResults,
       appAssistants,
@@ -2386,6 +2385,10 @@ export const docsNavSections = [
       appToolAnalysis,
       appLibrary
     ]
+  },
+  {
+    title: 'Rover',
+    items: [appRover]
   },
   {
     title: 'Reference',

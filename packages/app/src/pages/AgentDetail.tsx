@@ -231,6 +231,8 @@ const AgentDetail = () => {
     );
   }
 
+  const roverConnected = roverStatus.connected && roverStatus.provider === form.provider;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -245,14 +247,22 @@ const AgentDetail = () => {
           <h1 className="text-2xl font-bold">{isNew ? 'New Agent' : form.name}</h1>
         </div>
         {!isNew && form.type === 'browser' ? (
-          <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-            <span className={`h-2.5 w-2.5 rounded-full ${roverStatus.connected && roverStatus.provider === form.provider ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
-            <span>{roverStatus.connected && roverStatus.provider === form.provider ? 'Rover connected' : 'Rover not connected'}</span>
-            {roverStatus.connected && roverStatus.provider === form.provider && roverStatus.pageUrl ? (
-              <span className="max-w-48 truncate text-xs text-muted-foreground" title={roverStatus.pageUrl}>
-                {roverStatus.pageUrl}
-              </span>
+          <div className="flex items-center gap-2">
+            {roverConnected && roverStatus.pageUrl ? (
+              <a
+                href={roverStatus.pageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="max-w-xs rounded-md border px-3 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                title={`Open ${roverStatus.pageUrl}`}
+              >
+                <span className="block truncate">{roverStatus.pageUrl}</span>
+              </a>
             ) : null}
+            <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <span className={`h-2.5 w-2.5 rounded-full ${roverConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+              <span>{roverConnected ? 'Rover connected' : 'Rover not connected'}</span>
+            </div>
           </div>
         ) : !isNew && (
           <Button type="button" onClick={() => void handleConnect()}>
