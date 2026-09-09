@@ -68,6 +68,24 @@ describe('LiveTestService', () => {
     expect((service.get(session.id) as LiveTestSession).testCase.prompt).toBe('Find Antwerp');
   });
 
+  it('persists the evaluation group ID for Rover child results', async () => {
+    let persistedResults: any;
+    const service = new LiveTestService({
+      runsDir: '/tmp',
+      cliVersion: 'test',
+      readScenarios: () => scenarios,
+      persist: (params) => { persistedResults = params.results; }
+    });
+    const session = service.start({ testCaseId: 'plain', client: 'claude', evaluationGroupId: 'group-7' });
+    await service.complete(session.id, {
+      finalText: 'Antwerp is in Belgium.',
+      startedAt: '2026-09-08T10:00:00.000Z',
+      completedAt: '2026-09-08T10:00:01.000Z'
+    });
+    expect(session.evaluationGroupId).toBe('group-7');
+    expect(persistedResults.metadata.evaluation_group_id).toBe('group-7');
+  });
+
   it('rejects conflicting completion data', async () => {
     const service = new LiveTestService({
       runsDir: '/tmp',
