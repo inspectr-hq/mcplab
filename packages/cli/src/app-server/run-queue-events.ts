@@ -6,9 +6,7 @@ import type { RunJob, RunQueueState } from './run-queue-state.js';
 export function toQueueEntry(job: RunJob): QueueEntry {
   return {
     jobId: job.id,
-    resultRunId: job.resultRunId,
     roverProgress: job.roverProgress,
-    evaluationId: job.runParams.evaluationId,
     evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     status: job.status,
@@ -24,7 +22,6 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     roverAgent: job.runParams.roverAgent,
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
     runParams: {
-      evaluationId: job.runParams.evaluationId,
       evaluationRunId: job.runParams.evaluationRunId,
       evaluationName: job.runParams.evaluationName,
       configPath: job.runParams.configPath,
@@ -69,13 +66,13 @@ export function buildQueueState(
   const allJobs = Array.from(jobs.values());
   const evaluations = new Map<string, QueueEntry[]>();
   for (const job of allJobs) {
-    const evaluationId = job.runParams.evaluationId;
-    if (!evaluationId) continue;
-    const entries = evaluations.get(evaluationId) ?? [];
+    const evaluationRunId = job.runParams.evaluationRunId;
+    if (!evaluationRunId) continue;
+    const entries = evaluations.get(evaluationRunId) ?? [];
     entries.push(toQueueEntry(job));
-    evaluations.set(evaluationId, entries);
+    evaluations.set(evaluationRunId, entries);
   }
-  const evaluationItems: EvaluationQueueItem[] = Array.from(evaluations, ([evaluationId, entries]) => {
+  const evaluationItems: EvaluationQueueItem[] = Array.from(evaluations, ([evaluationRunId, entries]) => {
     const completedJobs = entries.filter((entry) => entry.status === 'completed').length;
     const failedJobs = entries.filter((entry) => entry.status === 'error' || entry.status === 'stopped').length;
     const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
@@ -87,14 +84,13 @@ export function buildQueueState(
       : hasPending ? 'queued'
       : 'completed';
     return {
-      evaluationId,
+      evaluationRunId,
       evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,
       status,
       totalJobs: entries.length,
       completedJobs,
       failedJobs,
       pausedJobs,
-      resultRunId: entries.find((entry) => entry.resultRunId)?.resultRunId,
       jobs: entries
     };
   });

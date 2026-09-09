@@ -192,7 +192,6 @@ export function createRunQueueService(params: {
     }
     state.blockedJobIds.delete(job.id);
     job.status = outcome.status;
-    if (outcome.status === 'completed' && outcome.runId) job.resultRunId = outcome.runId;
     closeJobClients(job);
     emit();
     pruneOldJobs();
@@ -410,7 +409,6 @@ export function createRunQueueService(params: {
             type: 'evaluation_started',
             ts: new Date().toISOString(),
             evaluationRunId: runParams.evaluationRunId,
-            evaluationId: runParams.evaluationId,
             evaluationName: runParams.evaluationName
           });
         }
@@ -429,7 +427,7 @@ export function createRunQueueService(params: {
           type: 'queued',
           ts: new Date().toISOString(),
           payload: {
-            evaluationId: runParams.evaluationId,
+            evaluationRunId: runParams.evaluationRunId,
             configPath: runParams.configPath,
             runsPerScenario: runParams.runsPerScenario,
             scenarioId: runParams.scenarioId ?? null,
@@ -539,7 +537,6 @@ export function createRunQueueService(params: {
       send({
         type: 'assignment',
         jobId: job.id,
-        evaluationId: job.runParams.evaluationId,
         evaluationRunId: job.runParams.evaluationRunId,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
@@ -577,8 +574,6 @@ export function createRunQueueService(params: {
       const index = state.queue.indexOf(jobId);
       if (index !== -1) state.queue.splice(index, 1);
       job.status = 'completed';
-      if (job.runParams.evaluationRunId) job.resultRunId = job.runParams.evaluationRunId;
-      else if (typeof payload.runId === 'string' && payload.runId.trim()) job.resultRunId = payload.runId;
       deps.addJobEvent(job, { type: 'completed', ts: new Date().toISOString(), payload: { ...payload, executionType: 'rover' } });
       closeJobClients(job);
       emit();

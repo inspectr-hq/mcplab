@@ -229,8 +229,7 @@ export interface EvalResult {
   outcomes?: Partial<Record<'passed' | 'failed' | 'incomplete' | 'error', number>>;
   executionSource?: 'mcplab' | 'rover';
   executionClient?: string;
-  evaluationGroupId?: string;
-  childRunIds?: string[];
+  evaluationRunId?: string;
   checkCounts?: CheckCounts;
 }
 

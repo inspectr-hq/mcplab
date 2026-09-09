@@ -405,10 +405,8 @@ export async function handleRunsRoutes(params: {
     const browserAgents = selectedAgents.filter((entry) => entry.agent?.type === 'browser');
     const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
-    const evaluationId = randomUUID();
-    const evaluationRunId = `run-${Date.now()}-${evaluationId.slice(0, 8)}`;
+    const evaluationRunId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const baseRunParams = {
-      evaluationId,
       evaluationRunId,
       evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,

@@ -497,8 +497,10 @@ export interface ResultsJson {
     mcp_server_versions: Record<string, string | null>;
     execution_source?: ExecutionSource;
     execution_client?: string;
+    /** @deprecated Read legacy results only. New evaluations use evaluation_run_id. */
     evaluation_group_id?: string;
     evaluation_run_id?: string;
+    /** @deprecated Read legacy parent-result projections only. */
     child_run_ids?: string[];
     execution_status?: 'stopped';
   };

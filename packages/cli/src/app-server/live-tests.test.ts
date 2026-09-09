@@ -68,7 +68,7 @@ describe('LiveTestService', () => {
     expect((service.get(session.id) as LiveTestSession).testCase.prompt).toBe('Find Antwerp');
   });
 
-  it('persists the evaluation group ID for Rover child results', async () => {
+  it('persists a standalone Rover result without queue identity metadata', async () => {
     let persistedResults: any;
     const service = new LiveTestService({
       runsDir: '/tmp',
@@ -76,14 +76,14 @@ describe('LiveTestService', () => {
       readScenarios: () => scenarios,
       persist: (params) => { persistedResults = params.results; }
     });
-    const session = service.start({ testCaseId: 'plain', client: 'claude', evaluationGroupId: 'group-7' });
+    const session = service.start({ testCaseId: 'plain', client: 'claude' });
     await service.complete(session.id, {
       finalText: 'Antwerp is in Belgium.',
       startedAt: '2026-09-08T10:00:00.000Z',
       completedAt: '2026-09-08T10:00:01.000Z'
     });
-    expect(session.evaluationGroupId).toBe('group-7');
-    expect(persistedResults.metadata.evaluation_group_id).toBe('group-7');
+    expect(session.evaluationRunId).toBeUndefined();
+    expect(persistedResults.metadata.evaluation_run_id).toBeUndefined();
   });
 
   it('projects grouped Rover completion into the canonical evaluation result', async () => {
@@ -98,7 +98,6 @@ describe('LiveTestService', () => {
     const session = service.start({
       testCaseId: 'plain',
       client: 'claude',
-      evaluationGroupId: 'group-8',
       evaluationRunId: 'evaluation-8'
     });
 
@@ -113,9 +112,7 @@ describe('LiveTestService', () => {
     expect(existsSync(join(runsDir, 'evaluation-8', 'results.json'))).toBe(true);
     const results = JSON.parse(readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8'));
     expect(results.metadata.run_id).toBe('evaluation-8');
-    expect(results.metadata.evaluation_group_id).toBe('group-8');
     expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
-    expect(results.metadata.child_run_ids).toHaveLength(1);
   });
 
   it('rejects conflicting completion data', async () => {

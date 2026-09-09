@@ -29,7 +29,7 @@ import {
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
-import type { EvaluationGroup, QueueEntry } from '@/lib/data-sources/types';
+import type { EvaluationQueueItem, QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
@@ -76,7 +76,7 @@ const RunEvaluation = () => {
   const [queuedJobs, setQueuedJobs] = useState<QueueEntry[]>([]);
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
-  const [evaluationGroups, setEvaluationGroups] = useState<EvaluationGroup[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationQueueItem[]>([]);
   const [roverStatus, setRoverStatus] = useState<{ connected: boolean; provider?: string; activeJobId?: string | null }>({ connected: false });
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
@@ -425,7 +425,7 @@ const RunEvaluation = () => {
       setQueuedJobs(q.queued);
       setActiveQueueEntries(q.active_jobs ?? (q.active ? [q.active] : []));
       setAdmittingQueueEntries(q.admitting_jobs ?? []);
-      setEvaluationGroups(q.evaluation_groups ?? []);
+      setEvaluations(q.evaluations ?? []);
       // Restore blocked-auth state for the currently attached job on page-load / reconnect
       // scenarios where SSE was missed. Do not surface a global OAuth banner for unrelated
       // queued jobs; those keep their own per-job queue action.
@@ -1083,30 +1083,30 @@ const RunEvaluation = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {!activeQueueEntry && admittingQueueEntries.length === 0 && queuedJobs.length === 0 && evaluationGroups.length === 0 ? (
+          {!activeQueueEntry && admittingQueueEntries.length === 0 && queuedJobs.length === 0 && evaluations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No active or queued runs. Start a run above.
             </p>
           ) : (
             <div className="space-y-2">
-              {evaluationGroups.map((group) => (
-                <div key={group.evaluationGroupId} className={`rounded-md border p-3 text-sm ${group.status === 'failed' ? 'border-destructive/40 bg-destructive/5' : group.status === 'partial' ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'}`}>
+              {evaluations.map((evaluation) => (
+                <div key={evaluation.evaluationRunId} className={`rounded-md border p-3 text-sm ${evaluation.status === 'failed' ? 'border-destructive/40 bg-destructive/5' : evaluation.status === 'partial' ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">{group.evaluationName || 'Evaluation group'}</span>
-                      <Badge variant="outline" className="capitalize">{group.status}</Badge>
+                      <span className="font-semibold">{evaluation.evaluationName || 'Evaluation'}</span>
+                      <Badge variant="outline" className="capitalize">{evaluation.status}</Badge>
                       <span className="text-xs text-muted-foreground">
-                        {group.completedJobs}/{group.totalJobs} agents complete
+                        {evaluation.completedJobs}/{evaluation.totalJobs} agents complete
                       </span>
                     </div>
-                    {group.parentRunId && (
+                    {evaluation.evaluationRunId && (
                       <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                        <Link to={`/results/${encodeURIComponent(group.parentRunId)}`}>View combined result</Link>
+                        <Link to={`/results/${encodeURIComponent(evaluation.evaluationRunId)}`}>View result</Link>
                       </Button>
                     )}
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    {group.jobs.map((job) => (
+                    {evaluation.jobs.map((job) => (
                       <span key={job.jobId} className="inline-flex items-center gap-1 rounded bg-background px-2 py-1">
                         {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: {job.status === 'waiting_for_rover' ? 'waiting for Rover' : job.status === 'paused_rover' ? 'paused' : job.status.replaceAll('_', ' ')}
                         {job.roverProgress && ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}

@@ -4,7 +4,6 @@ import type { SseEvent } from './jobs.js';
 
 export type RunParams = {
   evaluationRunId?: string;
-  evaluationId?: string;
   evaluationName?: string;
   configPath: string;
   runsPerScenario: number;
@@ -39,7 +38,6 @@ export type RunJob = {
   abortController: AbortController;
   runParams: RunParams;
   blockedAuthServers?: string[];
-  resultRunId?: string;
   roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
 };
 

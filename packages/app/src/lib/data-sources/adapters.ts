@@ -1482,8 +1482,7 @@ export function fromCoreResultsJson(
     outcomes: results.summary.outcomes,
     executionSource: results.metadata.execution_source,
     executionClient: results.metadata.execution_client,
-    evaluationGroupId: results.metadata.evaluation_group_id,
-    childRunIds: results.metadata.child_run_ids
+    evaluationRunId: results.metadata.evaluation_run_id ?? results.metadata.evaluation_group_id
   };
 }
 

@@ -40,7 +40,6 @@ export interface LiveTestSession {
   status: 'ready' | 'completed' | 'cancelled';
   createdAt: string;
   expiresAt: string;
-  evaluationId?: string;
   evaluationRunId?: string;
   completionInput?: CompleteLiveTestInput;
   completion?: LiveTestCompletion;
@@ -112,7 +111,7 @@ export class LiveTestService {
     return listLiveTestCases(this.options.readScenarios());
   }
 
-  start(input: { testCaseId: string; client: string; evaluationId?: string; evaluationRunId?: string }): LiveTestSession {
+  start(input: { testCaseId: string; client: string; evaluationRunId?: string }): LiveTestSession {
     this.cleanup();
     const scenario = this.options.readScenarios().find((candidate) => candidate.id === input.testCaseId);
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
@@ -127,7 +126,6 @@ export class LiveTestService {
       status: 'ready',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
-      evaluationId: input.evaluationId,
       evaluationRunId: input.evaluationRunId
     };
     this.sessions.set(session.id, session);
