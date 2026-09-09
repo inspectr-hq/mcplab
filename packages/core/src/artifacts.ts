@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type { PersistedTraceRecord, ResultsJson } from './types.js';
@@ -18,16 +18,21 @@ export function persistEvaluationArtifacts({
   traceRecords
 }: PersistEvaluationArtifactsParams): void {
   mkdirSync(runDir, { recursive: true });
-  writeFileSync(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`, 'utf8');
-  writeFileSync(join(runDir, 'summary.md'), renderSummaryMarkdown(results), 'utf8');
+  writeAtomic(join(runDir, 'results.json'), `${JSON.stringify(results, null, 2)}\n`);
+  writeAtomic(join(runDir, 'summary.md'), renderSummaryMarkdown(results));
   if (resolvedConfig !== undefined) {
-    writeFileSync(join(runDir, 'resolved-config.yaml'), `${stringifyYaml(resolvedConfig)}\n`, 'utf8');
+    writeAtomic(join(runDir, 'resolved-config.yaml'), `${stringifyYaml(resolvedConfig)}\n`);
   }
   if (traceRecords !== undefined) {
     writeFileSync(
       join(runDir, 'trace.jsonl'),
-      traceRecords.map((record) => JSON.stringify(record)).join('\n') + (traceRecords.length ? '\n' : ''),
-      'utf8'
+      traceRecords.map((record) => JSON.stringify(record)).join('\n') + (traceRecords.length ? '\n' : '')
     );
   }
+}
+
+function writeAtomic(path: string, content: string): void {
+  const temporaryPath = `${path}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(temporaryPath, content, 'utf8');
+  renameSync(temporaryPath, path);
 }

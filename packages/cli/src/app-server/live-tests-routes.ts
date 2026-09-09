@@ -18,6 +18,7 @@ function sessionView(session: LiveTestSession) {
     status: session.status,
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
+    evaluationGroupId: session.evaluationGroupId,
     completion: session.completion
   };
 }

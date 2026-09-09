@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   persistEvaluationArtifacts,
@@ -8,5 +8,8 @@ import { renderReport } from '@inspectr/mcplab-reporting';
 
 export function persistAppRunArtifacts(params: PersistEvaluationArtifactsParams): void {
   persistEvaluationArtifacts(params);
-  writeFileSync(join(params.runDir, 'report.html'), renderReport(params.results), 'utf8');
+  const reportPath = join(params.runDir, 'report.html');
+  const temporaryPath = `${reportPath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(temporaryPath, renderReport(params.results), 'utf8');
+  renameSync(temporaryPath, reportPath);
 }
