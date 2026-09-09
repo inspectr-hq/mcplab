@@ -118,6 +118,11 @@ const AgentDetail = () => {
 
   const handleConnect = async () => {
     setShowConnectPanel(true);
+    if (form.type === 'browser') {
+      setConnectState({ status: 'unsupported' });
+      toast({ title: 'Browser Agent connection is handled by Rover', description: 'Open Rover and connect the configured browser provider.' });
+      return;
+    }
     if (form.provider === 'google' || form.provider === 'custom') {
       setConnectState({ status: 'unsupported' });
       return;
