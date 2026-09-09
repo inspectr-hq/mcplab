@@ -46,7 +46,8 @@ export async function handleLiveTestRoutes(params: {
       if (!testCaseId) throw new LiveTestError('testCaseId is required.', 400);
       const session = service.start({
         testCaseId,
-        client: String(body.client ?? 'unknown')
+        client: String(body.client ?? 'unknown'),
+        evaluationGroupId: typeof body.evaluationGroupId === 'string' ? body.evaluationGroupId : undefined
       });
       log(`[mcplab-app] Rover Live Test started: ${session.id} (${session.testCase.id}, ${session.client})`);
       deps.asJson(res, 201, sessionView(session));

@@ -38,6 +38,7 @@ export interface LiveTestSession {
   status: 'ready' | 'completed' | 'cancelled';
   createdAt: string;
   expiresAt: string;
+  evaluationGroupId?: string;
   completionInput?: CompleteLiveTestInput;
   completion?: LiveTestCompletion;
 }
@@ -107,7 +108,7 @@ export class LiveTestService {
     return listLiveTestCases(this.options.readScenarios());
   }
 
-  start(input: { testCaseId: string; client: string }): LiveTestSession {
+  start(input: { testCaseId: string; client: string; evaluationGroupId?: string }): LiveTestSession {
     this.cleanup();
     const scenario = this.options.readScenarios().find((candidate) => candidate.id === input.testCaseId);
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
@@ -122,6 +123,7 @@ export class LiveTestService {
       status: 'ready',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString()
+      ,evaluationGroupId: input.evaluationGroupId
     };
     this.sessions.set(session.id, session);
     return structuredClone(session);
@@ -218,6 +220,7 @@ export class LiveTestService {
         }
       ]
     });
+    results.metadata.evaluation_group_id = session.evaluationGroupId;
     const traceRecord: ScenarioRunTraceRecord = {
       type: 'scenario_run',
       trace_version: 3,
