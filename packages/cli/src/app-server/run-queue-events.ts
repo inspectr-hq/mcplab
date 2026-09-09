@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { QueueEntry, QueueResponse } from '@inspectr/mcplab-core';
+import type { EvaluationGroup, QueueEntry, QueueResponse } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 import type { RunJob, RunQueueState } from './run-queue-state.js';
 
@@ -60,11 +60,34 @@ export function buildQueueState(
         j.status === 'paused_rover')
     )
     .map((job) => toQueueEntry(job));
+  const allJobs = Array.from(jobs.values());
+  const groups = new Map<string, QueueEntry[]>();
+  for (const job of allJobs) {
+    const groupId = job.runParams.evaluationGroupId;
+    if (!groupId) continue;
+    const entries = groups.get(groupId) ?? [];
+    entries.push(toQueueEntry(job));
+    groups.set(groupId, entries);
+  }
+  const evaluation_groups: EvaluationGroup[] = Array.from(groups, ([evaluationGroupId, entries]) => {
+    const completedJobs = entries.filter((entry) => entry.status === 'completed').length;
+    const failedJobs = entries.filter((entry) => entry.status === 'error' || entry.status === 'stopped').length;
+    const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
+    const hasPending = entries.some((entry) => ['queued', 'waiting_for_rover', 'blocked_auth', 'running'].includes(entry.status));
+    const status: EvaluationGroup['status'] = failedJobs > 0 && !hasPending
+      ? completedJobs > 0 ? 'partial' : 'failed'
+      : pausedJobs > 0 ? 'paused'
+      : hasPending && entries.some((entry) => entry.status === 'running') ? 'running'
+      : hasPending ? 'queued'
+      : 'completed';
+    return { evaluationGroupId, status, totalJobs: entries.length, completedJobs, failedJobs, pausedJobs, jobs: entries };
+  });
   return {
     active: activeJobs[0] ?? null,
     active_jobs: activeJobs,
     admitting_jobs: admittingJobs,
-    queued: queuedEntries
+    queued: queuedEntries,
+    evaluation_groups
   };
 }
 

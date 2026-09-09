@@ -132,7 +132,8 @@ describe('queue event emission', () => {
         requestedAgents: undefined,
         runNote: undefined,
         serverOverrideAll: undefined,
-        scenarioServerOverrides: undefined
+        scenarioServerOverrides: undefined,
+        evaluationGroupId: 'group-1'
       }
     } as any;
     const queuedJob = { ...runningJob, id: 'job-2', status: 'queued' } as any;
@@ -170,6 +171,9 @@ describe('queue event emission', () => {
       admitting_jobs: [],
       queued: [expect.objectContaining({ jobId: 'job-2' })]
     });
+    expect((res.__body as any).evaluation_groups).toEqual([
+      expect.objectContaining({ evaluationGroupId: 'group-1', totalJobs: 2, completedJobs: 0 })
+    ]);
   });
 
   it('queue payload keeps retrying blocked jobs only in admitting_jobs', async () => {

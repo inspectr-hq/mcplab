@@ -20,7 +20,8 @@ function normalizeQueueState(value: Partial<QueueResponse> | undefined): QueueRe
     active,
     active_jobs: activeJobs,
     admitting_jobs: admittingJobs,
-    queued
+    queued,
+    evaluation_groups: Array.isArray(value?.evaluation_groups) ? value.evaluation_groups : []
   };
 }
 
@@ -30,7 +31,8 @@ export function useRunQueueStatus() {
     active: null,
     active_jobs: [],
     admitting_jobs: [],
-    queued: []
+    queued: [],
+    evaluation_groups: []
   });
   const [streamStatus, setStreamStatus] = useState<'connected' | 'connecting' | 'disconnected'>(
     'connecting'

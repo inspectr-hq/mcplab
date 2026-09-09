@@ -28,6 +28,17 @@ export interface QueueResponse {
   active_jobs: QueueEntry[];
   admitting_jobs: QueueEntry[];
   queued: QueueEntry[];
+  evaluation_groups?: EvaluationGroup[];
+}
+
+export interface EvaluationGroup {
+  evaluationGroupId: string;
+  status: 'queued' | 'running' | 'paused' | 'completed' | 'partial' | 'failed';
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  pausedJobs: number;
+  jobs: QueueEntry[];
 }
 
 export interface RunQueueEvent {
