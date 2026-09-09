@@ -497,6 +497,8 @@ export interface ResultsJson {
     mcp_server_versions: Record<string, string | null>;
     execution_source?: ExecutionSource;
     execution_client?: string;
+    evaluation_group_id?: string;
+    child_run_ids?: string[];
   };
   summary: {
     total_scenarios: number;

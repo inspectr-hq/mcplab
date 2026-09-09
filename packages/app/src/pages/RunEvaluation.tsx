@@ -1090,7 +1090,7 @@ const RunEvaluation = () => {
           ) : (
             <div className="space-y-2">
               {evaluationGroups.map((group) => (
-                <div key={group.evaluationGroupId} className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                <div key={group.evaluationGroupId} className={`rounded-md border p-3 text-sm ${group.status === 'failed' ? 'border-destructive/40 bg-destructive/5' : group.status === 'partial' ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-primary/20 bg-primary/5'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">Evaluation group</span>

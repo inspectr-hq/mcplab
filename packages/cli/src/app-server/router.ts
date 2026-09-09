@@ -237,7 +237,13 @@ export async function startAppServer(options: AppServerOptions) {
         .map((runId) => getRunResults(runId, settings.runsDir));
       completedEvaluationGroups.add(groupId);
       const parentRunId = `group-${Date.now()}-${groupId.slice(0, 8)}`;
-      const results = aggregateEvaluationGroupResults({ groupId, runId: parentRunId, children: childResults });
+      const results = aggregateEvaluationGroupResults({
+        groupId,
+        runId: parentRunId,
+        children: childResults,
+        failedChildren: groupJobs.filter((job) => job.status === 'error').length,
+        stoppedChildren: groupJobs.filter((job) => job.status === 'stopped').length
+      });
       persistAppRunArtifacts({ runDir: join(settings.runsDir, parentRunId), results });
       console.log(`[mcplab-app] Evaluation group completed: ${groupId} (${parentRunId})`);
       return parentRunId;
