@@ -59,6 +59,7 @@ export function createRunQueueService(params: {
   state?: RunQueueState;
   onEvaluationGroupComplete?: (groupId: string, jobs: RunJob[]) => Promise<string | void> | string | void;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
+  assignRoverJob?: (provider: 'claude' | 'trendminer') => RunJob | null;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);
@@ -394,6 +395,10 @@ export function createRunQueueService(params: {
       const queuedPosition = state.queue.length;
       const shouldAttemptAdvance = !isRover && currentWorkerUsage(state) < state.queueWorkerCount;
       const shouldStartImmediately = shouldStartQueuedJobImmediately(jobId);
+
+      if (isRover && params.assignRoverJob) {
+        params.assignRoverJob(runParams.roverAgent?.provider ?? 'claude');
+      }
 
       if (!shouldStartImmediately || isRover) {
         deps.addJobEvent(job, {
