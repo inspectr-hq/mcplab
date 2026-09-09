@@ -13,6 +13,7 @@ import {
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import type { PersistEvaluationArtifactsParams } from '@inspectr/mcplab-core';
+import { appendExecutionEvent } from './execution-journal.js';
 
 export interface LiveTestCatalogItem {
   id: string;
@@ -39,6 +40,7 @@ export interface LiveTestSession {
   createdAt: string;
   expiresAt: string;
   evaluationGroupId?: string;
+  evaluationRunId?: string;
   completionInput?: CompleteLiveTestInput;
   completion?: LiveTestCompletion;
 }
@@ -96,6 +98,7 @@ export interface LiveTestServiceOptions {
   getEvaluationJudge?: () => { name: string; agent: AgentConfig } | undefined;
   ttlMs?: number;
   now?: () => Date;
+  appendJournalEvent?: typeof appendExecutionEvent;
 }
 
 export class LiveTestService {
@@ -108,7 +111,7 @@ export class LiveTestService {
     return listLiveTestCases(this.options.readScenarios());
   }
 
-  start(input: { testCaseId: string; client: string; evaluationGroupId?: string }): LiveTestSession {
+  start(input: { testCaseId: string; client: string; evaluationGroupId?: string; evaluationRunId?: string }): LiveTestSession {
     this.cleanup();
     const scenario = this.options.readScenarios().find((candidate) => candidate.id === input.testCaseId);
     if (!scenario) throw new LiveTestError(`Test case not found: ${input.testCaseId}`, 404);
@@ -124,6 +127,7 @@ export class LiveTestService {
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
       evaluationGroupId: input.evaluationGroupId
+      ,evaluationRunId: input.evaluationRunId
     };
     this.sessions.set(session.id, session);
     return structuredClone(session);
@@ -249,6 +253,17 @@ export class LiveTestService {
         traceRecord
       ]
     });
+    if (session.evaluationRunId) {
+      (this.options.appendJournalEvent ?? appendExecutionEvent)(join(this.options.runsDir, session.evaluationRunId), {
+        eventId: `rover-result-${runId}`,
+        type: 'child_result_completed',
+        ts: now.toISOString(),
+        evaluationRunId: session.evaluationRunId,
+        executionId: runId,
+        executionSource: 'rover',
+        results
+      });
+    }
     const completion: LiveTestCompletion = {
       runId,
       outcome: run.outcome ?? 'failed',

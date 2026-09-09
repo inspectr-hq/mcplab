@@ -9,6 +9,7 @@ import {
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
 import { persistAppRunArtifacts } from './app-run-artifacts.js';
+import { appendExecutionEvent } from './execution-journal.js';
 import type { RunsRouteDeps } from './runs-routes.js';
 import {
   OAuthAuthorizationRequiredError,
@@ -398,6 +399,17 @@ export async function executeRunJob(params: {
     ) as ScenarioRunTraceRecord[];
     results.metadata.tool_tokens_total = estimateRunToolTokensTotal(traceRecords);
     persistAppRunArtifacts({ runDir, results });
+    if (job.runParams.evaluationRunId) {
+      appendExecutionEvent(join(settings.runsDir, job.runParams.evaluationRunId), {
+        eventId: `llm-result-${results.metadata.run_id}`,
+        type: 'child_result_completed',
+        ts: new Date().toISOString(),
+        evaluationRunId: job.runParams.evaluationRunId,
+        executionId: results.metadata.run_id,
+        executionSource: 'mcplab',
+        results
+      });
+    }
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
