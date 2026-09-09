@@ -9,6 +9,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     resultRunId: job.resultRunId,
     roverProgress: job.roverProgress,
     evaluationGroupId: job.runParams.evaluationGroupId,
+    evaluationRunId: job.runParams.evaluationRunId,
     evaluationName: job.runParams.evaluationName,
     status: job.status,
     blockedReason:
@@ -24,6 +25,7 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined,
     runParams: {
       evaluationGroupId: job.runParams.evaluationGroupId,
+      evaluationRunId: job.runParams.evaluationRunId,
       evaluationName: job.runParams.evaluationName,
       configPath: job.runParams.configPath,
       runsPerScenario: job.runParams.runsPerScenario,

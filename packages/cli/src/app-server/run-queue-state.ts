@@ -3,6 +3,7 @@ import type { Scenario } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
 export type RunParams = {
+  evaluationRunId?: string;
   evaluationGroupId?: string;
   evaluationName?: string;
   configPath: string;

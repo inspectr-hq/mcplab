@@ -498,6 +498,7 @@ export interface ResultsJson {
     execution_source?: ExecutionSource;
     execution_client?: string;
     evaluation_group_id?: string;
+    evaluation_run_id?: string;
     child_run_ids?: string[];
   };
   summary: {

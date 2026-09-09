@@ -362,6 +362,9 @@ export async function executeRunJob(params: {
     if (job.runParams.evaluationGroupId) {
       results.metadata.evaluation_group_id = job.runParams.evaluationGroupId;
     }
+    if (job.runParams.evaluationRunId) {
+      results.metadata.evaluation_run_id = job.runParams.evaluationRunId;
+    }
     if (serverOverrideAll && serverOverrideAll.length > 0) {
       results.metadata.rerun_server_override_all = [...serverOverrideAll];
     } else {

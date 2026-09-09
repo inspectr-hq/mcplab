@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppRouteDeps, AppRouteRequestContext } from './app-context.js';
 import { emitQueueEvent, buildQueueState, closeJobClients } from './run-queue-events.js';
@@ -14,6 +15,7 @@ import {
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
+import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
 
 export type QueueServiceDeps = Pick<
   AppRouteDeps,
@@ -392,6 +394,19 @@ export function createRunQueueService(params: {
         runParams
       };
       jobs.set(jobId, job);
+      if (runParams.evaluationRunId) {
+        const journalDir = join(settings.runsDir, runParams.evaluationRunId);
+        if (!readExecutionEvents(journalDir).some((event) => event.type === 'evaluation_started')) {
+          appendExecutionEvent(journalDir, {
+            eventId: `evaluation-started-${runParams.evaluationRunId}`,
+            type: 'evaluation_started',
+            ts: new Date().toISOString(),
+            evaluationRunId: runParams.evaluationRunId,
+            evaluationGroupId: runParams.evaluationGroupId,
+            evaluationName: runParams.evaluationName
+          });
+        }
+      }
       state.queue.push(jobId);
       const queuedPosition = state.queue.length;
       const shouldAttemptAdvance = !isRover && currentWorkerUsage(state) < state.queueWorkerCount;

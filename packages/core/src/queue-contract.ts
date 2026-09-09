@@ -1,4 +1,5 @@
 export interface QueueRunParams {
+  evaluationRunId?: string;
   evaluationGroupId?: string;
   evaluationName?: string;
   configPath: string;
@@ -15,6 +16,7 @@ export interface QueueRunParams {
 
 export interface QueueEntry {
   jobId: string;
+  evaluationRunId?: string;
   resultRunId?: string;
   roverProgress?: { completed: number; total: number; currentScenarioId?: string; lastDurationMs?: number; error?: string };
   evaluationGroupId?: string;

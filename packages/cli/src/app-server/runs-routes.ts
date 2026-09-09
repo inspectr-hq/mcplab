@@ -406,8 +406,10 @@ export async function handleRunsRoutes(params: {
     const llmAgentNames = selectedAgents.filter((entry) => entry.agent?.type !== 'browser').map((entry) => entry.name);
     const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
     const evaluationGroupId = randomUUID();
+    const evaluationRunId = `run-${Date.now()}-${evaluationGroupId.slice(0, 8)}`;
     const baseRunParams = {
       evaluationGroupId,
+      evaluationRunId,
       evaluationName: selectedConfig.name?.trim() || undefined,
       configPath,
       runsPerScenario,
