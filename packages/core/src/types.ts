@@ -79,14 +79,11 @@ export interface BrowserAgentConfig {
 
 export type RoverAgentProvider = string;
 
-import type { BrowserProviderProfile } from './browser-providers.js';
-
 export interface RoverAgentRef {
   name: string;
   provider: RoverAgentProvider;
   url: string;
   providerRevision?: string;
-  providerProfile?: BrowserProviderProfile;
 }
 
 export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;

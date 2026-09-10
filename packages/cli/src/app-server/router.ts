@@ -483,9 +483,11 @@ export async function startAppServer(options: AppServerOptions) {
             : undefined;
           if (agent) {
             const created = writeBrowserProviderAndAgent(settings.librariesDir, profile, agent);
+            roverConnection.send({ type: 'provider_updated', provider: created.profile });
             asJson(res, 201, { provider: created.profile, agent: created.agent, revision: profile.learned.updatedAt });
           } else {
             writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [profile.id]: profile });
+            roverConnection.send({ type: 'provider_updated', provider: profile });
             asJson(res, 201, { provider: profile, revision: profile.learned.updatedAt });
           }
         } catch (error: unknown) {
@@ -510,6 +512,7 @@ export async function startAppServer(options: AppServerOptions) {
           }
           const profile = validateBrowserProviderProfile({ ...(body.profile ?? body), id: providerId });
           writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [providerId]: profile });
+          roverConnection.send({ type: 'provider_updated', provider: profile });
           asJson(res, 200, { provider: profile, revision: profile.learned.updatedAt });
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });

@@ -447,8 +447,7 @@ export async function handleRunsRoutes(params: {
                 url: agent.url,
                 ...(browserProviders[agent.provider]
                   ? {
-                      providerRevision: browserProviders[agent.provider].learned.updatedAt,
-                      providerProfile: structuredClone(browserProviders[agent.provider])
+                      providerRevision: browserProviders[agent.provider].learned.updatedAt
                     }
                   : {})
               },
