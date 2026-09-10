@@ -142,6 +142,7 @@ export function parseBrowserProviderProfiles(value: unknown): Record<string, Bro
         idleLocator: completion.idle_locator,
         stabilityMs: completion.stability_ms
       },
+      newConversation: profile.new_conversation,
       learned: {
         sourceOrigin: learned.source_origin,
         createdAt: learned.created_at,

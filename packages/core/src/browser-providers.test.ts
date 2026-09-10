@@ -12,6 +12,7 @@ describe('browser provider profiles', () => {
         submit: { action: 'click', locator: { segments: ['button[aria-label="Submit"]'] } },
         assistant_messages: { locator: { segments: ['.assistant'] } },
         completion: { stability_ms: 2500 },
+        new_conversation: { action: 'click', locator: { segments: ['button[aria-label="New chat"]'] } },
         learned: { source_origin: 'https://tm-pipeline-aa01.trendminer.net', confidence: { composer: 'high' } }
       }
     });
@@ -20,7 +21,8 @@ describe('browser provider profiles', () => {
       id: 'trendminer',
       name: 'TrendMiner',
       composer: { inputMode: 'contenteditable' },
-      submit: { action: 'click' }
+      submit: { action: 'click' },
+      newConversation: { action: 'click' }
     });
   });
 
