@@ -687,8 +687,13 @@ export function createRunQueueService(params: {
           deps.addJobEvent(job, {
             type: 'log',
             ts: new Date().toISOString(),
-            payload: { message: String(message.message ?? 'Rover progress') }
+            payload: { message: String(message.message ?? (message.error ? `Rover error: ${message.error}` : 'Rover progress')) }
           });
+          if (typeof message.error === 'string' && job.status === 'running') {
+            state.activeJobIds.delete(job.id);
+            job.status = 'paused_rover';
+            state.queue.unshift(job.id);
+          }
           emit();
         }
       }

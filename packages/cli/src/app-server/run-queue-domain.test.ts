@@ -100,4 +100,23 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(first.jobId)?.status).toBe('completed');
     expect(service.jobs.get(second.jobId)?.status).toBe('running');
   });
+
+  it('pauses a running Rover job when Rover reports an assignment error', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send);
+
+    service.handleRoverMessage({
+      type: 'progress',
+      jobId: queued.jobId,
+      completed: 0,
+      total: 1,
+      error: 'Provider is unavailable',
+      message: 'Rover could not start the assignment'
+    }, 'claude', send);
+
+    expect(service.jobs.get(queued.jobId)?.status).toBe('paused_rover');
+    expect(service.state.queue).toContain(queued.jobId);
+  });
 });
