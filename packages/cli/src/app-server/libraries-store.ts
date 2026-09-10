@@ -110,10 +110,14 @@ export function writeBrowserProviderAndAgent(
   if (existingAgent && (existingAgent.type !== 'browser' || existingAgent.provider !== profile.id)) {
     throw new Error(`Agent '${agent.id}' already exists with a different configuration.`);
   }
+  const existingProfile = current.browserProviders[profile.id];
+  const storedProfile = existingProfile
+    ? { ...profile, learned: { ...profile.learned, createdAt: existingProfile.learned.createdAt } }
+    : profile;
   const browserAgent = { id: agent.id, type: 'browser' as const, name: agent.name, provider: profile.id, url: agent.url };
-  writeBrowserProviderProfiles(librariesDir, { ...current.browserProviders, [profile.id]: profile });
+  writeBrowserProviderProfiles(librariesDir, { ...current.browserProviders, [profile.id]: storedProfile });
   writeLibraries(librariesDir, { servers: current.servers, agents: { ...current.agents, [agent.id]: browserAgent }, scenarios: current.scenarios });
-  return { profile, agent: browserAgent };
+  return { profile: storedProfile, agent: browserAgent };
 }
 
 export function writeLibraries(

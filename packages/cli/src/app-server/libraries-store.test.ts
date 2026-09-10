@@ -54,6 +54,7 @@ describe('libraries-store test-case directory migration', () => {
     }, { ...next, name: 'Claude learned browser v2' });
     expect(updated.agent.name).toBe('Claude learned browser v2');
     expect(readLibraries(librariesDir).browserProviders['claude-learned'].name).toBe('Claude learned v2');
+    expect(readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt).toBe('2026-09-10T00:00:00.000Z');
     expect(profile).toEqual({});
   });
 
