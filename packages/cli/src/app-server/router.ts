@@ -448,20 +448,6 @@ export async function startAppServer(options: AppServerOptions) {
         return;
       }
 
-      if (pathname === '/api/browser-providers' && method === 'GET') {
-        const profiles = readLibraries(settings.librariesDir).browserProviders;
-        asJson(res, 200, {
-          providers: Object.values(profiles).map((profile) => ({
-            id: profile.id,
-            name: profile.name,
-            origins: profile.match.origins,
-            learned: profile.learned,
-            revision: profile.learned.updatedAt
-          }))
-        });
-        return;
-      }
-
       if (pathname === '/api/rover/providers' && method === 'GET') {
         asJson(res, 200, { providers: Object.values(readLibraries(settings.librariesDir).browserProviders) });
         return;
