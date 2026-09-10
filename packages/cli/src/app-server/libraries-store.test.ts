@@ -2,13 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readLibraries, writeLibraries } from './libraries-store.js';
+import { readLibraries, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
 
 function makeTempLibrariesDir(): string {
   return mkdtempSync(join(tmpdir(), 'mcplab-libs-'));
 }
 
 describe('libraries-store test-case directory migration', () => {
+  it('loads and atomically writes declarative browser provider profiles', () => {
+    const librariesDir = makeTempLibrariesDir();
+    writeFileSync(join(librariesDir, 'browser-providers.yaml'), `trendminer:\n  schema_version: 1\n  name: TrendMiner\n  match:\n    origins:\n      - https://tm-pipeline-aa01.trendminer.net\n  composer:\n    locator:\n      segments:\n        - '[data-test="composer"]'\n    input_mode: contenteditable\n  submit:\n    action: enter\n  assistant_messages:\n    locator:\n      segments:\n        - '.assistant'\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://tm-pipeline-aa01.trendminer.net\n    confidence:\n      composer: high\n`, 'utf8');
+
+    expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
+    writeBrowserProviderProfiles(librariesDir, readLibraries(librariesDir).browserProviders);
+    expect(readLibraries(librariesDir).browserProviders.trendminer.composer.inputMode).toBe('contenteditable');
+  });
+
   it('loads servers and agents from library yaml files', () => {
     const librariesDir = makeTempLibrariesDir();
     writeFileSync(

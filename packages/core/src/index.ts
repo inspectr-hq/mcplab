@@ -66,3 +66,10 @@ export {
   type TraceSpan
 } from './langsmith-tracing.js';
 export * from './queue-contract.js';
+export {
+  parseBrowserProviderProfiles,
+  validateBrowserProviderProfile,
+  type BrowserProviderProfile,
+  type BrowserProviderConfidence,
+  type ShadowLocator
+} from './browser-providers.js';

@@ -73,11 +73,11 @@ export interface LlmAgentConfig {
 export interface BrowserAgentConfig {
   type: 'browser';
   name?: string;
-  provider: 'claude' | 'trendminer';
+  provider: string;
   url: string;
 }
 
-export type RoverAgentProvider = 'claude' | 'trendminer';
+export type RoverAgentProvider = string;
 
 export interface RoverAgentRef {
   name: string;

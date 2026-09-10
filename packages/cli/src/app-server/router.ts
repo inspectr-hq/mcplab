@@ -26,6 +26,7 @@ import {
   expandConfigForAgents,
   loadConfig,
   McpClientManager,
+  validateBrowserProviderProfile,
   runAll
 } from '@inspectr/mcplab-core';
 import { renderReport } from '@inspectr/mcplab-reporting';
@@ -41,7 +42,7 @@ import {
 } from './settings-store.js';
 import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
-import { readLibraries, writeLibraries } from './libraries-store.js';
+import { readLibraries, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
 import {
   listRuns,
   getRunResults,
@@ -444,6 +445,66 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/libraries' && method === 'GET') {
         asJson(res, 200, readLibraries(settings.librariesDir));
+        return;
+      }
+
+      if (pathname === '/api/browser-providers' && method === 'GET') {
+        const profiles = readLibraries(settings.librariesDir).browserProviders;
+        asJson(res, 200, {
+          providers: Object.values(profiles).map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            origins: profile.match.origins,
+            learned: profile.learned,
+            revision: profile.learned.updatedAt
+          }))
+        });
+        return;
+      }
+
+      if (pathname === '/api/rover/providers' && method === 'GET') {
+        asJson(res, 200, { providers: Object.values(readLibraries(settings.librariesDir).browserProviders) });
+        return;
+      }
+
+      if (pathname === '/api/browser-providers/learned' && method === 'POST') {
+        const body = await parseBody(req);
+        const rawProfile = body.profile ?? body;
+        try {
+          const profile = validateBrowserProviderProfile(rawProfile);
+          const existing = readLibraries(settings.librariesDir).browserProviders;
+          if (existing[profile.id]) {
+            asJson(res, 409, { error: `Browser provider '${profile.id}' already exists.` });
+            return;
+          }
+          writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [profile.id]: profile });
+          asJson(res, 201, { provider: profile, revision: profile.learned.updatedAt });
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
+        return;
+      }
+
+      const browserProviderUpdate = pathname.match(/^\/api\/browser-providers\/([^/]+)$/);
+      if (browserProviderUpdate && method === 'PUT') {
+        const providerId = decodeURIComponent(browserProviderUpdate[1]!);
+        const body = await parseBody(req);
+        try {
+          const existing = readLibraries(settings.librariesDir).browserProviders;
+          if (!existing[providerId]) {
+            asJson(res, 404, { error: 'Browser provider not found.' });
+            return;
+          }
+          if (body.revision && body.revision !== existing[providerId].learned.updatedAt) {
+            asJson(res, 409, { error: 'Browser provider was changed by another client.' });
+            return;
+          }
+          const profile = validateBrowserProviderProfile({ ...(body.profile ?? body), id: providerId });
+          writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [providerId]: profile });
+          asJson(res, 200, { provider: profile, revision: profile.learned.updatedAt });
+        } catch (error: unknown) {
+          asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
 

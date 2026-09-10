@@ -50,7 +50,7 @@ export interface RunQueueService {
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
   closeSubscribers(): void;
   assignRoverJob(
-    provider: 'claude' | 'trendminer',
+    provider: string,
     send: (message: RoverSocketMessage) => boolean
   ): RunJob | null;
   pauseRoverJob(jobId: string): void;
@@ -58,7 +58,7 @@ export interface RunQueueService {
   completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
   handleRoverMessage(
     message: RoverSocketMessage,
-    provider: 'claude' | 'trendminer',
+    provider: string,
     send: (message: RoverSocketMessage) => boolean
   ): string | null;
 }
@@ -70,8 +70,8 @@ export function createRunQueueService(params: {
   jobs?: Map<string, RunJob>;
   state?: RunQueueState;
   sendRoverMessage?: (message: RoverSocketMessage) => boolean;
-  assignRoverJob?: (provider: 'claude' | 'trendminer') => RunJob | null;
-  onRoverJobReleased?: (provider: 'claude' | 'trendminer') => void;
+  assignRoverJob?: (provider: string) => RunJob | null;
+  onRoverJobReleased?: (provider: string) => void;
 }): RunQueueService {
   const jobs = params.jobs ?? new Map<string, RunJob>();
   const state = params.state ?? createRunQueueState(params.settings.defaultQueueWorkers);

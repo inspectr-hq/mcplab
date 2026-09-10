@@ -9,8 +9,8 @@ import {
   readFileSync
 } from 'node:fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { EvalConfig } from '@inspectr/mcplab-core';
-import { readLibraryAgentsAndServers } from '@inspectr/mcplab-core';
+import type { BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
+import { parseBrowserProviderProfiles, readLibraryAgentsAndServers } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 
 const TEST_CASES_DIR_NAME = 'test-cases';
@@ -31,6 +31,7 @@ export function readLibraries(librariesDir: string): {
   servers: EvalConfig['servers'];
   agents: EvalConfig['agents'];
   scenarios: EvalConfig['scenarios'];
+  browserProviders: Record<string, BrowserProviderProfile>;
 } {
   const root = resolve(librariesDir);
   const { testCasesDir, legacyScenariosDir } = ensureTestCasesDir(root);
@@ -53,7 +54,50 @@ export function readLibraries(librariesDir: string): {
       scenarios.push({ ...parsed, id });
     }
   }
-  return { servers, agents, scenarios };
+  const browserProviders = parseBrowserProviderProfiles(
+    readYamlFile<Record<string, unknown>>(join(root, 'browser-providers.yaml'), {})
+  );
+  return { servers, agents, scenarios, browserProviders };
+}
+
+export function writeBrowserProviderProfiles(
+  librariesDir: string,
+  profiles: Record<string, BrowserProviderProfile>
+): void {
+  const root = resolve(librariesDir);
+  mkdirSync(root, { recursive: true });
+  const target = join(root, 'browser-providers.yaml');
+  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
+  const yamlProfiles = Object.fromEntries(
+    Object.entries(profiles).map(([id, profile]) => [id, {
+      schema_version: profile.schemaVersion,
+      name: profile.name,
+      match: profile.match,
+      composer: {
+        locator: profile.composer.locator,
+        input_mode: profile.composer.inputMode
+      },
+      submit: profile.submit,
+      assistant_messages: {
+        locator: profile.assistantMessages.locator,
+        text_locator: profile.assistantMessages.textLocator
+      },
+      completion: {
+        generating_locator: profile.completion.generatingLocator,
+        idle_locator: profile.completion.idleLocator,
+        stability_ms: profile.completion.stabilityMs
+      },
+      new_conversation: profile.newConversation,
+      learned: {
+        source_origin: profile.learned.sourceOrigin,
+        created_at: profile.learned.createdAt,
+        updated_at: profile.learned.updatedAt,
+        confidence: profile.learned.confidence
+      }
+    }])
+  );
+  writeFileSync(temporary, `${stringifyYaml(yamlProfiles)}\n`, 'utf8');
+  renameSync(temporary, target);
 }
 
 export function writeLibraries(
