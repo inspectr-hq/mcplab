@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 
-export type RoverProvider = 'claude' | 'trendminer';
+export type RoverProvider = string;
 
 export interface RoverRegistration {
   protocolVersion: 1;
@@ -83,7 +83,7 @@ export function createRoverConnectionService(
         if (
           message.type !== 'register' ||
           message.protocolVersion !== 1 ||
-          (message.provider !== 'claude' && message.provider !== 'trendminer') ||
+          typeof message.provider !== 'string' ||
           typeof message.pageUrl !== 'string' ||
           typeof message.extensionVersion !== 'string'
         ) {
@@ -115,7 +115,7 @@ export function createRoverConnectionService(
       }
       connection.lastSeenAt = new Date().toISOString();
       if (message.type === 'register_update') {
-        if (message.provider !== 'claude' && message.provider !== 'trendminer') return;
+        if (typeof message.provider !== 'string' || !message.provider.trim()) return;
         connection.registration = {
           ...connection.registration,
           provider: message.provider,

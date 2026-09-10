@@ -371,9 +371,11 @@ export async function handleRunsRoutes(params: {
       return true;
     }
     let selectedConfig: EvalConfig;
+    let browserProviders: ReturnType<RunsRouteDeps['readLibraries']>['browserProviders'] = {};
     try {
       const loaded = loadConfig(configPath, { bundleRoot: settings.librariesDir });
       const libraries = readLibraries(settings.librariesDir);
+      browserProviders = libraries.browserProviders;
       applyLibraryEntries(loaded, libraries.agents, libraries.servers);
       const selected = scenarioIds?.length
         ? deps.selectScenarioIds(loaded.config, scenarioIds)
@@ -439,7 +441,17 @@ export async function handleRunsRoutes(params: {
               ...baseRunParams,
               requestedAgents: [name],
               executionType: 'rover' as const,
-              roverAgent: { name, provider: agent.provider, url: agent.url },
+              roverAgent: {
+                name,
+                provider: agent.provider,
+                url: agent.url,
+                ...(browserProviders[agent.provider]
+                  ? {
+                      providerRevision: browserProviders[agent.provider].learned.updatedAt,
+                      providerProfile: structuredClone(browserProviders[agent.provider])
+                    }
+                  : {})
+              },
               roverScenarios: structuredClone(selectedConfig.scenarios),
               roverNewConversationBetweenScenarios: newConversationBetweenScenarios
             }))

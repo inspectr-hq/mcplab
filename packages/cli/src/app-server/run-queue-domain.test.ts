@@ -27,6 +27,32 @@ describe('Rover run queue domain', () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'assignment', jobId }));
   });
 
+  it('includes the frozen provider profile on a Rover assignment', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const profile = {
+      schemaVersion: 1 as const,
+      id: 'custom',
+      name: 'Custom',
+      match: { origins: ['https://custom.example'] },
+      composer: { locator: { segments: ['textarea'] }, inputMode: 'textarea' as const },
+      submit: { action: 'enter' as const },
+      assistantMessages: { locator: { segments: ['.assistant'] } },
+      completion: { stabilityMs: 1000 },
+      learned: { sourceOrigin: 'https://custom.example', createdAt: '2026-09-10', updatedAt: 'rev-1', confidence: {} }
+    };
+    const { jobId } = service.enqueueRun({
+      ...roverParams('custom' as 'claude'),
+      roverAgent: { name: 'custom', provider: 'custom', url: 'https://custom.example', providerRevision: 'rev-1', providerProfile: profile }
+    });
+    service.assignRoverJob('custom', send);
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'assignment',
+      jobId,
+      agent: expect.objectContaining({ providerProfile: profile, providerRevision: 'rev-1' })
+    }));
+  });
+
   it('does not consume a waiting job when the Rover assignment cannot be delivered', () => {
     const service = createRunQueueServiceForTest();
     const { jobId } = service.enqueueRun(roverParams());
