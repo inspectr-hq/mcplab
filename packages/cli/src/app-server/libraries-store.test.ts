@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readLibraries, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
+import { readLibraries, writeBrowserProviderAndAgent, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
 
 function makeTempLibrariesDir(): string {
   return mkdtempSync(join(tmpdir(), 'mcplab-libs-'));
@@ -16,6 +16,32 @@ describe('libraries-store test-case directory migration', () => {
     expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
     writeBrowserProviderProfiles(librariesDir, readLibraries(librariesDir).browserProviders);
     expect(readLibraries(librariesDir).browserProviders.trendminer.composer.inputMode).toBe('contenteditable');
+  });
+
+  it('links a learned provider to a browser agent', () => {
+    const librariesDir = makeTempLibrariesDir();
+    const profile = readLibraries(librariesDir).browserProviders;
+    const next = {
+      id: 'claude-learned',
+      name: 'Claude learned',
+      provider: 'claude-learned',
+      url: 'https://claude.ai'
+    };
+    const created = writeBrowserProviderAndAgent(librariesDir, {
+      id: 'claude-learned',
+      name: 'Claude learned',
+      match: { origins: ['https://claude.ai'] },
+      composer: { locator: { segments: ['[contenteditable="true"]'] }, inputMode: 'contenteditable' },
+      submit: { action: 'enter' },
+      assistantMessages: { locator: { segments: ['.assistant'] } },
+      completion: { stabilityMs: 1000 },
+      learned: { sourceOrigin: 'https://claude.ai', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z', confidence: {} },
+      schemaVersion: 1
+    }, next);
+    expect(created.agent.provider).toBe('claude-learned');
+    expect(readLibraries(librariesDir).agents['claude-learned']).toMatchObject({ type: 'browser', provider: 'claude-learned' });
+    expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
+    expect(profile).toEqual({});
   });
 
   it('loads servers and agents from library yaml files', () => {

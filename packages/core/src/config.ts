@@ -672,8 +672,8 @@ function normalizeAgentDefinition(
 ): EvalConfig['agents'][string] {
   if (raw.type === 'browser') {
     if (!raw.url) throw new Error(`Browser agent ${id} requires a url`);
-    if (raw.provider !== 'claude' && raw.provider !== 'trendminer') {
-      throw new Error(`Browser agent ${id} has unsupported provider: ${String(raw.provider)}`);
+    if (typeof raw.provider !== 'string' || !raw.provider.trim()) {
+      throw new Error(`Browser agent ${id} requires a provider`);
     }
     return {
       type: 'browser',

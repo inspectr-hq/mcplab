@@ -42,7 +42,7 @@ import {
 } from './settings-store.js';
 import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
-import { readLibraries, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
+import { readLibraries, writeBrowserProviderAndAgent, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
 import {
   listRuns,
   getRunResults,
@@ -477,8 +477,17 @@ export async function startAppServer(options: AppServerOptions) {
             asJson(res, 409, { error: `Browser provider '${profile.id}' already exists.` });
             return;
           }
-          writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [profile.id]: profile });
-          asJson(res, 201, { provider: profile, revision: profile.learned.updatedAt });
+          const agentBody = body.agent as { id?: unknown; name?: unknown; url?: unknown } | undefined;
+          const agent = agentBody?.id && agentBody.name && agentBody.url
+            ? { id: String(agentBody.id), name: String(agentBody.name), provider: profile.id, url: String(agentBody.url) }
+            : undefined;
+          if (agent) {
+            const created = writeBrowserProviderAndAgent(settings.librariesDir, profile, agent);
+            asJson(res, 201, { provider: created.profile, agent: created.agent, revision: profile.learned.updatedAt });
+          } else {
+            writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [profile.id]: profile });
+            asJson(res, 201, { provider: profile, revision: profile.learned.updatedAt });
+          }
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
         }

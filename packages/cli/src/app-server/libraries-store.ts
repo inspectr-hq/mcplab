@@ -9,7 +9,7 @@ import {
   readFileSync
 } from 'node:fs';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
+import type { BrowserAgentConfig, BrowserProviderProfile, EvalConfig } from '@inspectr/mcplab-core';
 import { parseBrowserProviderProfiles, readLibraryAgentsAndServers } from '@inspectr/mcplab-core';
 import { ensureInsideRoot, safeFileName } from './store-utils.js';
 
@@ -98,6 +98,20 @@ export function writeBrowserProviderProfiles(
   );
   writeFileSync(temporary, `${stringifyYaml(yamlProfiles)}\n`, 'utf8');
   renameSync(temporary, target);
+}
+
+export function writeBrowserProviderAndAgent(
+  librariesDir: string,
+  profile: BrowserProviderProfile,
+  agent: { id: string; name: string; provider: string; url: string }
+): { profile: BrowserProviderProfile; agent: BrowserAgentConfig & { id: string } } {
+  const current = readLibraries(librariesDir);
+  if (current.browserProviders[profile.id]) throw new Error(`Browser provider '${profile.id}' already exists.`);
+  if (current.agents[agent.id]) throw new Error(`Agent '${agent.id}' already exists.`);
+  const browserAgent = { id: agent.id, type: 'browser' as const, name: agent.name, provider: profile.id, url: agent.url };
+  writeBrowserProviderProfiles(librariesDir, { ...current.browserProviders, [profile.id]: profile });
+  writeLibraries(librariesDir, { servers: current.servers, agents: { ...current.agents, [agent.id]: browserAgent }, scenarios: current.scenarios });
+  return { profile, agent: browserAgent };
 }
 
 export function writeLibraries(
