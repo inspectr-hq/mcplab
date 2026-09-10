@@ -455,14 +455,11 @@ export async function startAppServer(options: AppServerOptions) {
 
       if (pathname === '/api/browser-providers/learned' && method === 'POST') {
         const body = await parseBody(req);
-        const rawProfile = body.profile ?? body;
+          const rawProfile = body.profile ?? body;
         try {
           const profile = validateBrowserProviderProfile(rawProfile);
           const existing = readLibraries(settings.librariesDir).browserProviders;
-          if (existing[profile.id]) {
-            asJson(res, 409, { error: `Browser provider '${profile.id}' already exists.` });
-            return;
-          }
+          const wasExisting = Boolean(existing[profile.id]);
           const agentBody = body.agent as { id?: unknown; name?: unknown; url?: unknown } | undefined;
           const agent = agentBody?.id && agentBody.name && agentBody.url
             ? { id: String(agentBody.id), name: String(agentBody.name), provider: profile.id, url: String(agentBody.url) }
@@ -470,11 +467,11 @@ export async function startAppServer(options: AppServerOptions) {
           if (agent) {
             const created = writeBrowserProviderAndAgent(settings.librariesDir, profile, agent);
             roverConnection.send({ type: 'provider_updated', provider: created.profile });
-            asJson(res, 201, { provider: created.profile, agent: created.agent, revision: profile.learned.updatedAt });
+            asJson(res, wasExisting ? 200 : 201, { provider: created.profile, agent: created.agent, revision: profile.learned.updatedAt, operation: wasExisting ? 'updated' : 'created' });
           } else {
             writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [profile.id]: profile });
             roverConnection.send({ type: 'provider_updated', provider: profile });
-            asJson(res, 201, { provider: profile, revision: profile.learned.updatedAt });
+            asJson(res, wasExisting ? 200 : 201, { provider: profile, revision: profile.learned.updatedAt, operation: wasExisting ? 'updated' : 'created' });
           }
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });

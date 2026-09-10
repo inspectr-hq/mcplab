@@ -41,6 +41,19 @@ describe('libraries-store test-case directory migration', () => {
     expect(created.agent.provider).toBe('claude-learned');
     expect(readLibraries(librariesDir).agents['claude-learned']).toMatchObject({ type: 'browser', provider: 'claude-learned' });
     expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
+    const updated = writeBrowserProviderAndAgent(librariesDir, {
+      id: 'claude-learned',
+      name: 'Claude learned v2',
+      match: { origins: ['https://claude.ai'] },
+      composer: { locator: { segments: ['[contenteditable="true"]'] }, inputMode: 'contenteditable' },
+      submit: { action: 'enter' },
+      assistantMessages: { locator: { segments: ['[data-testid="assistant"]'] } },
+      completion: { stabilityMs: 1500 },
+      learned: { sourceOrigin: 'https://claude.ai', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:01:00.000Z', confidence: {} },
+      schemaVersion: 1
+    }, { ...next, name: 'Claude learned browser v2' });
+    expect(updated.agent.name).toBe('Claude learned browser v2');
+    expect(readLibraries(librariesDir).browserProviders['claude-learned'].name).toBe('Claude learned v2');
     expect(profile).toEqual({});
   });
 

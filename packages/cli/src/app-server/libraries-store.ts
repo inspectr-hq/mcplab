@@ -106,8 +106,10 @@ export function writeBrowserProviderAndAgent(
   agent: { id: string; name: string; provider: string; url: string }
 ): { profile: BrowserProviderProfile; agent: BrowserAgentConfig & { id: string } } {
   const current = readLibraries(librariesDir);
-  if (current.browserProviders[profile.id]) throw new Error(`Browser provider '${profile.id}' already exists.`);
-  if (current.agents[agent.id]) throw new Error(`Agent '${agent.id}' already exists.`);
+  const existingAgent = current.agents[agent.id];
+  if (existingAgent && (existingAgent.type !== 'browser' || existingAgent.provider !== profile.id)) {
+    throw new Error(`Agent '${agent.id}' already exists with a different configuration.`);
+  }
   const browserAgent = { id: agent.id, type: 'browser' as const, name: agent.name, provider: profile.id, url: agent.url };
   writeBrowserProviderProfiles(librariesDir, { ...current.browserProviders, [profile.id]: profile });
   writeLibraries(librariesDir, { servers: current.servers, agents: { ...current.agents, [agent.id]: browserAgent }, scenarios: current.scenarios });
