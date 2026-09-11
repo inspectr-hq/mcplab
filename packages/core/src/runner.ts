@@ -220,7 +220,6 @@ export async function runAll(
         const runSignal = options.scenarioSignal?.(scenario, runIndex) ?? scenarioSignal;
         if (runSignal?.aborted && !options.signal?.aborted) break;
         throwIfAborted(options.signal);
-        throwIfAborted(runSignal);
         let requestId: string;
         try {
           requestId = buildScenarioRequestId({

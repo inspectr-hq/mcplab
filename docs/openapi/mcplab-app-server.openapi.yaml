@@ -438,17 +438,21 @@ paths:
         "404":
           $ref: "#/components/responses/Error404"
 
-  /api/runs/jobs/{jobId}/scenarios/{scenarioId}/stop:
+  /api/runs/jobs/{jobId}/scenarios/{scenarioId}/agents/{agentName}/stop:
     parameters:
       - $ref: "#/components/parameters/JobId"
       - name: scenarioId
         in: path
         required: true
         schema: { type: string }
+      - name: agentName
+        in: path
+        required: true
+        schema: { type: string }
     post:
       tags: [Runs]
-      summary: Stop one Rover scenario child
-      operationId: stopRoverScenario
+      summary: Stop one scenario-agent child
+      operationId: stopScenarioAgent
       responses:
         "200":
           description: Scenario stop acknowledgement

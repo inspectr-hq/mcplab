@@ -252,9 +252,37 @@ describe('Rover run queue domain', () => {
     job.childAbortControllers = new Map([['s1:agent', controller]]);
     service.jobs.set(job.id, job);
 
-    expect(service.stopScenario(job.id, 's1')).toMatchObject({ ok: true, status: 'stopped' });
+    expect(service.stopScenario(job.id, 's1', 'agent')).toMatchObject({
+      ok: true,
+      status: 'stopped'
+    });
     expect(controller.signal.aborted).toBe(true);
     expect(job.childProgress?.[0]?.status).toBe('stopped');
     expect(job.childProgress?.[1]?.status).toBe('queued');
+  });
+
+  it('stops the requested agent when two agents share a scenario id', () => {
+    const service = createRunQueueServiceForTest();
+    const job = createQueuedJob('/tmp/eval.yaml', 'multi-agent-job');
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    job.childProgress = [
+      { scenarioId: 's1', agentName: 'agent-a', completed: 0, total: 1, status: 'running' },
+      { scenarioId: 's1', agentName: 'agent-b', completed: 0, total: 1, status: 'running' }
+    ];
+    job.childAbortControllers = new Map([
+      ['s1:agent-a', firstController],
+      ['s1:agent-b', secondController]
+    ]);
+    service.jobs.set(job.id, job);
+
+    expect(service.stopScenario(job.id, 's1', 'agent-b')).toMatchObject({
+      ok: true,
+      status: 'stopped'
+    });
+    expect(firstController.signal.aborted).toBe(false);
+    expect(secondController.signal.aborted).toBe(true);
+    expect(job.childProgress?.[0]?.status).toBe('running');
+    expect(job.childProgress?.[1]?.status).toBe('stopped');
   });
 });

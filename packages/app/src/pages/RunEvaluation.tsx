@@ -1206,7 +1206,9 @@ const RunEvaluation = () => {
                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                       {queueChildRows(evaluation).map(({ job, child }) => (
                         <div
-                          key={`${job.jobId}:${child?.scenarioId ?? 'job'}`}
+                          key={`${job.jobId}:${child?.scenarioId ?? 'job'}:${
+                            child?.agentName ?? 'job'
+                          }`}
                           className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1"
                         >
                           <span className="min-w-0 truncate">
@@ -1291,7 +1293,11 @@ const RunEvaluation = () => {
                                 onClick={() => {
                                   void (
                                     child
-                                      ? source.stopScenario(job.jobId, child.scenarioId)
+                                      ? source.stopScenario(
+                                          job.jobId,
+                                          child.scenarioId,
+                                          child.agentName
+                                        )
                                       : source.stopRun(job.jobId)
                                   ).then(() => void refreshQueue());
                                 }}

@@ -5,6 +5,7 @@ import {
   hashConfig,
   loadConfig,
   runAll,
+  upsertQueueChildProgress,
   type EvalConfig,
   type QueueChildProgress,
   type RunProgressEvent,
@@ -590,9 +591,7 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
           completed: Math.min(event.runsPerScenario, current.completed + 1)
         })
   };
-  if (index >= 0) existing[index] = next;
-  else existing.push(next);
-  job.childProgress = existing;
+  job.childProgress = upsertQueueChildProgress(existing, next);
 }
 
 function formatRunProgressMessage(event: RunProgressEvent): string | null {

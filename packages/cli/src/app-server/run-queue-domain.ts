@@ -15,6 +15,7 @@ import {
 } from './run-queue-state.js';
 import type { OAuthSessionManager } from './oauth-session-manager.js';
 import type { RoverSocketMessage } from './rover-connection.js';
+import { upsertQueueChildProgress } from '@inspectr/mcplab-core';
 import { appendExecutionEvent, readExecutionEvents } from './execution-journal.js';
 import { recordEvaluationTerminalExecution } from './evaluation-journal-writer.js';
 import { projectEvaluationJournal } from './evaluation-journal-projection.js';
@@ -67,7 +68,8 @@ export interface RunQueueService {
   ): { ok: true; status: 'stopped' } | { error: string; statusCode: number } | null;
   stopScenario(
     jobId: string,
-    scenarioId: string
+    scenarioId: string,
+    agentName?: string
   ): { ok: true; status: 'stopped' } | { error: string; statusCode: number } | null;
   handleRoverMessage(
     message: RoverSocketMessage,
@@ -727,36 +729,41 @@ export function createRunQueueService(params: {
         total: child?.total ?? 1,
         status: 'stopped' as const
       };
-      const index = progress.findIndex((entry) => entry.scenarioId === scenarioId);
-      if (index >= 0) progress[index] = { ...progress[index], ...next };
-      else progress.push(next);
-      job.childProgress = progress;
+      job.childProgress = upsertQueueChildProgress(progress, { ...next });
       emit();
       return { ok: true, status: 'stopped' };
     },
-    stopScenario(jobId, scenarioId) {
+    stopScenario(jobId, scenarioId, agentName) {
       const job = jobs.get(jobId);
       if (!job || !scenarioId.trim()) return null;
-      const child = (job.childProgress ?? []).find((entry) => entry.scenarioId === scenarioId);
+      const matches = (job.childProgress ?? []).filter((entry) => entry.scenarioId === scenarioId);
+      if (matches.length > 1 && !agentName) {
+        return {
+          error: 'Agent name is required when multiple agents run this scenario',
+          statusCode: 400
+        };
+      }
+      const child = matches.find((entry) => !agentName || entry.agentName === agentName);
+      if (matches.length > 0 && !child)
+        return { error: 'Scenario-agent child not found', statusCode: 404 };
       if (child?.status === 'completed' || child?.status === 'stopped') {
         return { ok: true, status: 'stopped' };
       }
-      const agentName =
+      const resolvedAgentName =
         child?.agentName ??
         (job.runParams.executionType === 'rover' ? job.runParams.roverAgent.name : undefined);
       if (job.runParams.executionType === 'rover') {
         return this.stopRoverScenario(jobId, scenarioId);
       }
-      if (!agentName) return { error: 'Scenario is not initialized', statusCode: 409 };
-      const controller = job.childAbortControllers?.get(`${scenarioId}:${agentName}`);
+      if (!resolvedAgentName) return { error: 'Scenario is not initialized', statusCode: 409 };
+      const controller = job.childAbortControllers?.get(`${scenarioId}:${resolvedAgentName}`);
       if (!controller) return { error: 'Scenario is not running', statusCode: 409 };
       controller.abort();
       const progress = job.childProgress ?? [];
-      const index = progress.findIndex(
-        (entry) => entry.scenarioId === scenarioId && entry.agentName === agentName
-      );
-      if (index >= 0) progress[index] = { ...progress[index]!, status: 'stopped' };
-      job.childProgress = progress;
+      job.childProgress = upsertQueueChildProgress(progress, {
+        ...child!,
+        status: 'stopped'
+      });
       emit();
       return { ok: true, status: 'stopped' };
     },
@@ -774,10 +781,6 @@ export function createRunQueueService(params: {
           const allowed = new Set(['queued', 'running', 'completed', 'error', 'stopped']);
           if (!allowed.has(status)) return null;
           const existing = job.childProgress ?? [];
-          const index = existing.findIndex(
-            (child) =>
-              child.scenarioId === message.scenarioId && child.agentName === roverAgent.name
-          );
           const next = {
             scenarioId: message.scenarioId,
             agentName: roverAgent.name,
@@ -789,9 +792,7 @@ export function createRunQueueService(params: {
               : {}),
             ...(typeof message.error === 'string' ? { error: message.error } : {})
           };
-          if (index >= 0) existing[index] = next;
-          else existing.push(next);
-          job.childProgress = existing;
+          job.childProgress = upsertQueueChildProgress(existing, next);
           emit();
         }
         return null;

@@ -23,6 +23,19 @@ export interface QueueChildProgress {
   error?: string;
 }
 
+export function upsertQueueChildProgress(
+  entries: QueueChildProgress[],
+  child: QueueChildProgress
+): QueueChildProgress[] {
+  const index = entries.findIndex(
+    (entry) => entry.scenarioId === child.scenarioId && entry.agentName === child.agentName
+  );
+  if (index < 0) return [...entries, child];
+  const next = [...entries];
+  next[index] = child;
+  return next;
+}
+
 export interface McplabQueueRunParams extends QueueRunParamsBase {
   executionType: 'mcplab';
   roverAgent?: never;

@@ -12,6 +12,7 @@ export {
   resolveScenarioLibraryDir
 } from './config.js';
 export { createRunId, judgeAgentAssertions, runAll, type RunProgressEvent } from './runner.js';
+export { upsertQueueChildProgress, type QueueChildProgress } from './queue-contract.js';
 export { aggregateResults, renderSummaryMarkdown } from './results.js';
 export { persistEvaluationArtifacts, type PersistEvaluationArtifactsParams } from './artifacts.js';
 export {

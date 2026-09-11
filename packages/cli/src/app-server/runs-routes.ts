@@ -263,12 +263,13 @@ export async function handleRunsRoutes(params: {
   }
 
   const roverScenarioStopMatch = pathname.match(
-    /^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)\/stop$/
+    /^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)(?:\/agents\/([^/]+))?\/stop$/
   );
   if (roverScenarioStopMatch && method === 'POST') {
     const result = runQueueService.stopScenario(
       decodeURIComponent(roverScenarioStopMatch[1]!),
-      decodeURIComponent(roverScenarioStopMatch[2]!)
+      decodeURIComponent(roverScenarioStopMatch[2]!),
+      roverScenarioStopMatch[3] ? decodeURIComponent(roverScenarioStopMatch[3]) : undefined
     );
     if (!result) {
       asJson(res, 404, { error: 'Rover job not found' });
