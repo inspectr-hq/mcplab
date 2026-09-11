@@ -235,7 +235,13 @@ export async function handleRunsRoutes(params: {
       res.flushHeaders();
     }
     for (const event of job.events) sendSseEvent(res, event);
-    if (job.status !== 'running' && job.status !== 'queued' && job.status !== 'blocked_auth') {
+    const keepsSubscriptionOpen =
+      job.status === 'running' ||
+      job.status === 'queued' ||
+      job.status === 'blocked_auth' ||
+      job.status === 'waiting_for_rover' ||
+      job.status === 'paused_rover';
+    if (!keepsSubscriptionOpen) {
       res.end();
       return true;
     }

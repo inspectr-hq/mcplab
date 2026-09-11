@@ -60,6 +60,75 @@ describe('run queue SSE endpoint', () => {
     expect(writes.join('')).toContain('event: queue_event');
     closeHandler?.();
   });
+
+  it.each(['waiting_for_rover', 'paused_rover'] as const)(
+    'keeps the job event stream open while a Rover job is %s',
+    async (status) => {
+      const writes: string[] = [];
+      let ended = false;
+      const res = {
+        statusCode: 0,
+        headers: {} as Record<string, string>,
+        setHeader(key: string, value: string) {
+          this.headers[key] = value;
+        },
+        write(chunk: string) {
+          writes.push(chunk);
+        },
+        flushHeaders() {
+          return undefined;
+        },
+        end() {
+          ended = true;
+        }
+      } as any;
+      const job = {
+        id: 'rover-job',
+        status,
+        clients: new Set(),
+        events: [],
+        abortController: new AbortController(),
+        runParams: {
+          executionType: 'rover',
+          configPath: '/tmp/eval.yaml',
+          runsPerScenario: 1,
+          roverAgent: { id: 'claude', provider: 'claude' }
+        }
+      } as any;
+      let closeHandler: (() => void) | undefined;
+      const deps = makeRunsRouteDeps();
+
+      const handled = await handleRunsRoutes({
+        req: {
+          url: `/api/runs/jobs/${job.id}/events`,
+          headers: {},
+          on: (event: string, cb: () => void) => {
+            if (event === 'close') closeHandler = cb;
+          }
+        } as any,
+        res,
+        pathname: `/api/runs/jobs/${job.id}/events`,
+        method: 'GET',
+        settings: {
+          evalsDir: '/tmp',
+          runsDir: '/tmp',
+          librariesDir: '/tmp',
+          workspaceRoot: '/tmp',
+          toolAnalysisResultsDir: '/tmp'
+        } as any,
+        runQueueService: createRunQueueServiceForTest({ jobs: new Map([[job.id, job]]), deps }),
+        oauthSessionManager: {} as any,
+        deps: deps as any
+      });
+
+      expect(handled).toBe(true);
+      expect(ended).toBe(false);
+      expect(job.clients.has(res)).toBe(true);
+      closeHandler?.();
+      expect(job.clients.has(res)).toBe(false);
+      expect(writes).toEqual([]);
+    }
+  );
 });
 
 describe('queue event emission', () => {
