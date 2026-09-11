@@ -229,6 +229,60 @@ describe('Rover run queue domain', () => {
     ]);
   });
 
+  it('does not let a stale Rover status move a completed child backwards', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun({ ...roverParams(), evaluationRunId: 'evaluation-stale' });
+    service.assignRoverJob('claude', send);
+
+    service.handleRoverMessage(
+      {
+        type: 'scenario_status',
+        jobId: queued.jobId,
+        scenarioId: 's1',
+        status: 'completed',
+        completed: 1,
+        total: 1
+      },
+      'claude',
+      send
+    );
+    service.handleRoverMessage(
+      {
+        type: 'scenario_status',
+        jobId: queued.jobId,
+        scenarioId: 's1',
+        status: 'running',
+        completed: 0,
+        total: 1
+      },
+      'claude',
+      send
+    );
+
+    expect(service.jobs.get(queued.jobId)?.childProgress?.[0]?.status).toBe('completed');
+  });
+
+  it('labels Rover progress logs with the agent name', () => {
+    const events: any[] = [];
+    const service = createRunQueueServiceForTest({
+      deps: { addJobEvent: (_job: any, event: any) => events.push(event) }
+    });
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun({ ...roverParams(), evaluationRunId: 'evaluation-logs' });
+    service.assignRoverJob('claude', send);
+
+    service.handleRoverMessage(
+      { type: 'stage', jobId: queued.jobId, scenarioId: 's1', stage: 'prompt_sent' },
+      'claude',
+      send
+    );
+
+    expect(events.at(-1)).toMatchObject({
+      payload: { message: expect.stringContaining('[agent=claude]') }
+    });
+  });
+
   it('sends a scenario-specific stop command for a Rover child', () => {
     const sendRoverMessage = vi.fn(() => true);
     const service = createRunQueueServiceForTest();

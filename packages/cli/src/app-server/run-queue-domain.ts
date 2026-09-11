@@ -781,6 +781,10 @@ export function createRunQueueService(params: {
           const allowed = new Set(['queued', 'running', 'completed', 'error', 'stopped']);
           if (!allowed.has(status)) return null;
           const existing = job.childProgress ?? [];
+          const current = existing.find(
+            (child) =>
+              child.scenarioId === message.scenarioId && child.agentName === roverAgent.name
+          );
           const next = {
             scenarioId: message.scenarioId,
             agentName: roverAgent.name,
@@ -792,6 +796,11 @@ export function createRunQueueService(params: {
               : {}),
             ...(typeof message.error === 'string' ? { error: message.error } : {})
           };
+          const terminal = new Set(['completed', 'error', 'stopped']);
+          if (current && terminal.has(current.status) && !terminal.has(next.status)) {
+            return null;
+          }
+          if (current && next.completed < current.completed) return null;
           job.childProgress = upsertQueueChildProgress(existing, next);
           emit();
         }
@@ -813,7 +822,11 @@ export function createRunQueueService(params: {
             type: 'log',
             ts: new Date().toISOString(),
             payload: {
-              message: `${labels[stage] ?? String(message.message ?? 'Rover progress')}${scenario}`
+              message: `${
+                labels[stage] ?? String(message.message ?? 'Rover progress')
+              }${scenario} [agent=${
+                job.runParams.executionType === 'rover' ? job.runParams.roverAgent.name : 'unknown'
+              }]`
             }
           });
           emit();
