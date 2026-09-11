@@ -483,9 +483,14 @@ const RunEvaluation = () => {
       refreshConfigAndLibraries();
       void refreshQueue();
     };
+    const handleQueueChanged = () => {
+      void refreshQueue();
+    };
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('mcplab:run-queue-changed', handleQueueChanged);
     return () => {
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('mcplab:run-queue-changed', handleQueueChanged);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload, reloadLibraries]);
