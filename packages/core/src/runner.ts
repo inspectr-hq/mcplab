@@ -52,6 +52,8 @@ export interface RunOptions {
     agent: AgentConfig;
   };
   signal?: AbortSignal;
+  /** Optional signal per executable scenario-agent pair. A child abort skips only that pair. */
+  scenarioSignal?: (scenario: ExecutableScenario, runIndex: number) => AbortSignal | undefined;
   onProgress?: (event: RunProgressEvent) => void | Promise<void>;
   traceExporter?: TraceExporter;
   /** Skip standard result projections when a caller owns shared persistence. */
@@ -212,9 +214,13 @@ export async function runAll(
       }
       const runs: ScenarioRunResult[] = [];
       let effectiveScenarioEval = scenario.eval;
+      const scenarioSignal = options.scenarioSignal?.(scenario, 0) ?? options.signal;
 
       for (let runIndex = 0; runIndex < options.runsPerScenario; runIndex += 1) {
+        const runSignal = options.scenarioSignal?.(scenario, runIndex) ?? scenarioSignal;
+        if (runSignal?.aborted && !options.signal?.aborted) break;
         throwIfAborted(options.signal);
+        throwIfAborted(runSignal);
         let requestId: string;
         try {
           requestId = buildScenarioRequestId({
@@ -267,14 +273,14 @@ export async function runAll(
             requestId,
             resolveServerRequestHeaders: async (serverNames) => {
               const [clientCredentialsHeaders, externalHeaders] = await Promise.all([
-                mcp.getRequestHeadersForServers(serverNames, options.signal),
-                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: options.signal }) ??
+                mcp.getRequestHeadersForServers(serverNames, runSignal),
+                options.resolveMcpServerAuthHeaders?.(serverNames, { signal: runSignal }) ??
                   Promise.resolve({})
               ]);
               return { ...clientCredentialsHeaders, ...externalHeaders };
             },
             maxTurns: agent.max_turns,
-            signal: options.signal,
+            signal: runSignal,
             trace: scenarioTrace,
             onProgress: async (event) => {
               await emitProgress({
@@ -309,7 +315,7 @@ export async function runAll(
                     context: input.context,
                     finalText: runResult.finalText,
                     judge: options.evaluationJudge!,
-                    signal: options.signal
+                    signal: runSignal
                   })
               : undefined
           });
@@ -357,11 +363,19 @@ export async function runAll(
             toolCallCount: runResult.toolSequence.length
           });
         } catch (scenarioErr: any) {
-          if (options.signal?.aborted || isAbortError(scenarioErr)) {
+          if (options.signal?.aborted) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
               outputs: { pass: false }
             });
+            throw scenarioErr;
+          }
+          if (runSignal?.aborted || isAbortError(scenarioErr)) {
+            await scenarioTrace.end({
+              error: String(scenarioErr?.message ?? scenarioErr),
+              outputs: { pass: false }
+            });
+            if (runSignal?.aborted) break;
             throw scenarioErr;
           }
           const errorMessage = scenarioErr?.message ?? String(scenarioErr);
@@ -417,15 +431,17 @@ export async function runAll(
         }
       }
 
-      scenarioRuns.push({
-        scenario_id: scenario.id,
-        scenario_name: scenario.name,
-        agent: scenario.agent,
-        provider: agent.provider,
-        model: agent.model,
-        eval: effectiveScenarioEval,
-        runs
-      });
+      if (runs.length > 0) {
+        scenarioRuns.push({
+          scenario_id: scenario.id,
+          scenario_name: scenario.name,
+          agent: scenario.agent,
+          provider: agent.provider,
+          model: agent.model,
+          eval: effectiveScenarioEval,
+          runs
+        });
+      }
     }
 
     const traceExport = await traceExporter.flush();

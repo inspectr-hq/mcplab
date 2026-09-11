@@ -57,14 +57,15 @@ export interface RunQueueService {
   advance(options?: QueueAdvanceOptions): Promise<void>;
   setWorkerCount(workerCount: number, options?: { hostHeader?: string }): void;
   closeSubscribers(): void;
-  assignRoverJob(
-    provider: string,
-    send: (message: RoverSocketMessage) => boolean
-  ): RunJob | null;
+  assignRoverJob(provider: string, send: (message: RoverSocketMessage) => boolean): RunJob | null;
   pauseRoverJob(jobId: string): void;
   resumeRoverJob(jobId: string): boolean;
   completeRoverJob(jobId: string, payload?: Record<string, unknown>): void;
   stopRoverScenario(
+    jobId: string,
+    scenarioId: string
+  ): { ok: true; status: 'stopped' } | { error: string; statusCode: number } | null;
+  stopScenario(
     jobId: string,
     scenarioId: string
   ): { ok: true; status: 'stopped' } | { error: string; statusCode: number } | null;
@@ -439,7 +440,18 @@ export function createRunQueueService(params: {
         events: [],
         clients: new Set(),
         abortController: new AbortController(),
-        runParams
+        runParams,
+        ...(runParams.executionType === 'rover'
+          ? {
+              childProgress: (runParams.roverScenarios ?? []).map((scenario) => ({
+                scenarioId: scenario.id,
+                agentName: runParams.roverAgent.name,
+                completed: 0,
+                total: 1,
+                status: 'queued' as const
+              }))
+            }
+          : {})
       };
       jobs.set(jobId, job);
       if (runParams.evaluationRunId) {
@@ -526,7 +538,11 @@ export function createRunQueueService(params: {
       if (jobsForEvaluation.length === 0) return null;
       let stopped = 0;
       for (const job of jobsForEvaluation) {
-        if (['queued', 'blocked_auth', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)) {
+        if (
+          ['queued', 'blocked_auth', 'waiting_for_rover', 'paused_rover', 'running'].includes(
+            job.status
+          )
+        ) {
           if (this.stopJob(job.id, options)?.status === 'stopped') stopped += 1;
         }
       }
@@ -538,8 +554,13 @@ export function createRunQueueService(params: {
         (job) => job.runParams.evaluationRunId === evaluationRunId
       );
       if (jobsForEvaluation.length === 0) return null;
-      if (jobsForEvaluation.some((job) => job.status !== 'queued' && job.status !== 'blocked_auth')) {
-        return { error: 'Evaluation run has already started. Use the stop action instead.', statusCode: 400 };
+      if (
+        jobsForEvaluation.some((job) => job.status !== 'queued' && job.status !== 'blocked_auth')
+      ) {
+        return {
+          error: 'Evaluation run has already started. Use the stop action instead.',
+          statusCode: 400
+        };
       }
       let removed = 0;
       for (const job of jobsForEvaluation) {
@@ -688,9 +709,7 @@ export function createRunQueueService(params: {
       const job = jobs.get(jobId);
       if (!job || job.runParams.executionType !== 'rover') return null;
       if (!scenarioId.trim()) return { error: 'Scenario ID is required', statusCode: 400 };
-      const child = (job.childProgress ?? []).find(
-        (entry) => entry.scenarioId === scenarioId
-      );
+      const child = (job.childProgress ?? []).find((entry) => entry.scenarioId === scenarioId);
       if (child?.status === 'completed' || child?.status === 'stopped') {
         return { ok: true, status: 'stopped' };
       }
@@ -715,19 +734,49 @@ export function createRunQueueService(params: {
       emit();
       return { ok: true, status: 'stopped' };
     },
+    stopScenario(jobId, scenarioId) {
+      const job = jobs.get(jobId);
+      if (!job || !scenarioId.trim()) return null;
+      const child = (job.childProgress ?? []).find((entry) => entry.scenarioId === scenarioId);
+      if (child?.status === 'completed' || child?.status === 'stopped') {
+        return { ok: true, status: 'stopped' };
+      }
+      const agentName =
+        child?.agentName ??
+        (job.runParams.executionType === 'rover' ? job.runParams.roverAgent.name : undefined);
+      if (job.runParams.executionType === 'rover') {
+        return this.stopRoverScenario(jobId, scenarioId);
+      }
+      if (!agentName) return { error: 'Scenario is not initialized', statusCode: 409 };
+      const controller = job.childAbortControllers?.get(`${scenarioId}:${agentName}`);
+      if (!controller) return { error: 'Scenario is not running', statusCode: 409 };
+      controller.abort();
+      const progress = job.childProgress ?? [];
+      const index = progress.findIndex(
+        (entry) => entry.scenarioId === scenarioId && entry.agentName === agentName
+      );
+      if (index >= 0) progress[index] = { ...progress[index]!, status: 'stopped' };
+      job.childProgress = progress;
+      emit();
+      return { ok: true, status: 'stopped' };
+    },
     handleRoverMessage(message, provider, send) {
       if (message.type === 'scenario_status' && typeof message.jobId === 'string') {
         const job = jobs.get(message.jobId);
-        const roverAgent = job?.runParams.executionType === 'rover' ? job.runParams.roverAgent : undefined;
-        if (job?.runParams.executionType === 'rover' && roverAgent && typeof message.scenarioId === 'string') {
+        const roverAgent =
+          job?.runParams.executionType === 'rover' ? job.runParams.roverAgent : undefined;
+        if (
+          job?.runParams.executionType === 'rover' &&
+          roverAgent &&
+          typeof message.scenarioId === 'string'
+        ) {
           const status = String(message.status ?? 'running');
           const allowed = new Set(['queued', 'running', 'completed', 'error', 'stopped']);
           if (!allowed.has(status)) return null;
           const existing = job.childProgress ?? [];
           const index = existing.findIndex(
             (child) =>
-              child.scenarioId === message.scenarioId &&
-              child.agentName === roverAgent.name
+              child.scenarioId === message.scenarioId && child.agentName === roverAgent.name
           );
           const next = {
             scenarioId: message.scenarioId,
@@ -790,7 +839,12 @@ export function createRunQueueService(params: {
           deps.addJobEvent(job, {
             type: 'log',
             ts: new Date().toISOString(),
-            payload: { message: String(message.message ?? (message.error ? `Rover error: ${message.error}` : 'Rover progress')) }
+            payload: {
+              message: String(
+                message.message ??
+                  (message.error ? `Rover error: ${message.error}` : 'Rover progress')
+              )
+            }
           });
           if (typeof message.error === 'string' && job.status === 'running') {
             state.activeJobIds.delete(job.id);

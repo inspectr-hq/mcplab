@@ -262,9 +262,11 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
-  const roverScenarioStopMatch = pathname.match(/^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)\/stop$/);
+  const roverScenarioStopMatch = pathname.match(
+    /^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)\/stop$/
+  );
   if (roverScenarioStopMatch && method === 'POST') {
-    const result = runQueueService.stopRoverScenario(
+    const result = runQueueService.stopScenario(
       decodeURIComponent(roverScenarioStopMatch[1]!),
       decodeURIComponent(roverScenarioStopMatch[2]!)
     );
@@ -280,7 +282,11 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
-  if (pathname.startsWith('/api/runs/evaluations/') && pathname.endsWith('/stop') && method === 'POST') {
+  if (
+    pathname.startsWith('/api/runs/evaluations/') &&
+    pathname.endsWith('/stop') &&
+    method === 'POST'
+  ) {
     const evaluationRunId = pathname.split('/')[4];
     const result = runQueueService.stopEvaluationRun(evaluationRunId, {
       hostHeader: req.headers.host
@@ -329,10 +335,7 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
-  if (
-    pathname.startsWith('/api/runs/queue/evaluations/') &&
-    method === 'DELETE'
-  ) {
+  if (pathname.startsWith('/api/runs/queue/evaluations/') && method === 'DELETE') {
     const evaluationRunId = pathname.split('/')[5];
     const result = runQueueService.removeEvaluationRun(evaluationRunId, {
       hostHeader: req.headers.host

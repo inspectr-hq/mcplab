@@ -81,19 +81,43 @@ describe('Rover run queue domain', () => {
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ type: 'assignment', jobId }));
   });
 
+  it('initializes Rover child progress before the assignment starts', () => {
+    const service = createRunQueueServiceForTest();
+    const { jobId } = service.enqueueRun({
+      ...roverParams(),
+      evaluationRunId: 'evaluation-children'
+    });
+    expect(service.jobs.get(jobId)?.childProgress).toEqual([
+      expect.objectContaining({
+        scenarioId: 's1',
+        agentName: 'claude',
+        completed: 0,
+        total: 1,
+        status: 'queued'
+      })
+    ]);
+  });
+
   it('includes only the provider revision on a Rover assignment', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
     const { jobId } = service.enqueueRun({
       ...roverParams('custom' as 'claude'),
-      roverAgent: { name: 'custom', provider: 'custom', url: 'https://custom.example', providerRevision: 'rev-1' }
+      roverAgent: {
+        name: 'custom',
+        provider: 'custom',
+        url: 'https://custom.example',
+        providerRevision: 'rev-1'
+      }
     });
     service.assignRoverJob('custom', send);
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      type: 'assignment',
-      jobId,
-      agent: expect.objectContaining({ providerRevision: 'rev-1' })
-    }));
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'assignment',
+        jobId,
+        agent: expect.objectContaining({ providerRevision: 'rev-1' })
+      })
+    );
   });
 
   it('does not consume a waiting job when the Rover assignment cannot be delivered', () => {
@@ -161,14 +185,18 @@ describe('Rover run queue domain', () => {
     const queued = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send);
 
-    service.handleRoverMessage({
-      type: 'progress',
-      jobId: queued.jobId,
-      completed: 0,
-      total: 1,
-      error: 'Provider is unavailable',
-      message: 'Rover could not start the assignment'
-    }, 'claude', send);
+    service.handleRoverMessage(
+      {
+        type: 'progress',
+        jobId: queued.jobId,
+        completed: 0,
+        total: 1,
+        error: 'Provider is unavailable',
+        message: 'Rover could not start the assignment'
+      },
+      'claude',
+      send
+    );
 
     expect(service.jobs.get(queued.jobId)?.status).toBe('paused_rover');
     expect(service.state.queue).toContain(queued.jobId);
@@ -183,14 +211,18 @@ describe('Rover run queue domain', () => {
     });
     service.assignRoverJob('claude', send);
 
-    service.handleRoverMessage({
-      type: 'scenario_status',
-      jobId: queued.jobId,
-      scenarioId: 's1',
-      status: 'running',
-      completed: 0,
-      total: 1
-    }, 'claude', send);
+    service.handleRoverMessage(
+      {
+        type: 'scenario_status',
+        jobId: queued.jobId,
+        scenarioId: 's1',
+        status: 'running',
+        completed: 0,
+        total: 1
+      },
+      'claude',
+      send
+    );
 
     expect(service.jobs.get(queued.jobId)?.childProgress).toEqual([
       expect.objectContaining({ scenarioId: 's1', agentName: 'claude', status: 'running' })
@@ -201,8 +233,28 @@ describe('Rover run queue domain', () => {
     const sendRoverMessage = vi.fn(() => true);
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
-    const { jobId } = service.enqueueRun({ ...roverParams(), evaluationRunId: 'evaluation-rover-2' });
+    const { jobId } = service.enqueueRun({
+      ...roverParams(),
+      evaluationRunId: 'evaluation-rover-2'
+    });
     service.assignRoverJob('claude', send);
     expect(service.stopRoverScenario(jobId, 's1')).toMatchObject({ ok: true, status: 'stopped' });
+  });
+
+  it('aborts only the selected LLM child', () => {
+    const service = createRunQueueServiceForTest();
+    const job = createQueuedJob('/tmp/eval.yaml', 'llm-job');
+    job.childProgress = [
+      { scenarioId: 's1', agentName: 'agent', completed: 0, total: 1, status: 'running' },
+      { scenarioId: 's2', agentName: 'agent', completed: 0, total: 1, status: 'queued' }
+    ];
+    const controller = new AbortController();
+    job.childAbortControllers = new Map([['s1:agent', controller]]);
+    service.jobs.set(job.id, job);
+
+    expect(service.stopScenario(job.id, 's1')).toMatchObject({ ok: true, status: 'stopped' });
+    expect(controller.signal.aborted).toBe(true);
+    expect(job.childProgress?.[0]?.status).toBe('stopped');
+    expect(job.childProgress?.[1]?.status).toBe('queued');
   });
 });

@@ -58,6 +58,7 @@ export type RunJob = {
     error?: string;
   };
   childProgress?: QueueChildProgress[];
+  childAbortControllers?: Map<string, AbortController>;
 };
 
 export interface RunQueueState {

@@ -152,8 +152,8 @@ export const workspaceSource: EvalDataSource = {
   async stopRun(jobId) {
     await workspaceApiClient.stopRun(jobId);
   },
-  async stopRoverScenario(jobId, scenarioId) {
-    return workspaceApiClient.stopRoverScenario(jobId, scenarioId);
+  async stopScenario(jobId, scenarioId) {
+    return workspaceApiClient.stopScenario(jobId, scenarioId);
   },
   async stopEvaluationRun(evaluationRunId) {
     await workspaceApiClient.stopEvaluationRun(evaluationRunId);

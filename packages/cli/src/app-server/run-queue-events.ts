@@ -92,28 +92,33 @@ export function buildQueueState(
       const children = entries.flatMap((entry) =>
         entry.childProgress?.length
           ? entry.childProgress
-          : [{
-              scenarioId: entry.runParams.scenarioIds?.[0] ?? entry.jobId,
-              agentName: entry.roverAgent?.name ?? entry.runParams.agents?.[0] ?? 'Agent',
-              completed: entry.status === 'completed' ? 1 : 0,
-              total: 1,
-              status: entry.status === 'completed'
-                ? ('completed' as const)
-                : entry.status === 'error'
-                ? ('error' as const)
-                : entry.status === 'stopped'
-                ? ('stopped' as const)
-                : ('running' as const)
-            }]
+          : [
+              {
+                scenarioId: entry.runParams.scenarioIds?.[0] ?? entry.jobId,
+                agentName: entry.roverAgent?.name ?? entry.runParams.agents?.[0] ?? 'Agent',
+                completed: entry.status === 'completed' ? 1 : 0,
+                total: 1,
+                status:
+                  entry.status === 'completed'
+                    ? ('completed' as const)
+                    : entry.status === 'error'
+                    ? ('error' as const)
+                    : entry.status === 'stopped'
+                    ? ('stopped' as const)
+                    : ('running' as const)
+              }
+            ]
       );
       const completedJobs = children.filter((child) => child.status === 'completed').length;
       const failedJobs = children.filter(
         (child) => child.status === 'error' || child.status === 'stopped'
       ).length;
       const pausedJobs = entries.filter((entry) => entry.status === 'paused_rover').length;
-      const hasPending = children.some((child) =>
-        ['queued', 'running'].includes(child.status)
-      ) || entries.some((entry) => ['waiting_for_rover', 'blocked_auth', 'paused_rover'].includes(entry.status));
+      const hasPending =
+        children.some((child) => ['queued', 'running'].includes(child.status)) ||
+        entries.some((entry) =>
+          ['waiting_for_rover', 'blocked_auth', 'paused_rover'].includes(entry.status)
+        );
       const status: EvaluationQueueItem['status'] =
         failedJobs > 0 && !hasPending
           ? completedJobs > 0
@@ -143,8 +148,8 @@ export function buildQueueState(
     active_jobs: activeJobs,
     admitting_jobs: admittingJobs,
     queued: queuedEntries,
-    evaluations: evaluationItems.filter((item) =>
-      item.status === 'queued' || item.status === 'running' || item.status === 'paused'
+    evaluations: evaluationItems.filter(
+      (item) => item.status === 'queued' || item.status === 'running' || item.status === 'paused'
     )
   };
 }

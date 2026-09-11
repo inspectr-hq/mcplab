@@ -755,7 +755,7 @@ export interface EvalDataSource {
     scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
-  stopRoverScenario: (jobId: string, scenarioId: string) => Promise<{ ok: boolean; status: string }>;
+  stopScenario: (jobId: string, scenarioId: string) => Promise<{ ok: boolean; status: string }>;
   stopEvaluationRun: (evaluationRunId: string) => Promise<void>;
   removeEvaluationRun: (evaluationRunId: string) => Promise<void>;
   openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;

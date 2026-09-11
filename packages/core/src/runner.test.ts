@@ -20,6 +20,33 @@ afterEach(() => {
 });
 
 describe('runAll agent dispatch', () => {
+  it('omits a child scenario-agent result when its child signal is already stopped', async () => {
+    const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-child-stop-'));
+    temporaryRunDirs.push(runsDir);
+    const childController = new AbortController();
+    childController.abort();
+    const result = await runAll(
+      {
+        name: 'child stop',
+        servers: {},
+        agents: { agent: { type: 'llm', provider: 'openai', model: 'test' } },
+        scenarios: [{ id: 's1', prompt: 'test', agent: 'agent', servers: [] }]
+      } as any,
+      {
+        runsPerScenario: 1,
+        configHash: 'test',
+        cliVersion: 'test',
+        runsDir,
+        scenarioSignal: () => childController.signal,
+        traceExporter: {
+          startScenario: () => ({ end: async () => undefined }),
+          flush: async () => ({ traceUrls: {} })
+        }
+      }
+    );
+    expect(result.results.scenarios).toEqual([]);
+  });
+
   it('rejects browser agents instead of sending them through the LLM runner', async () => {
     const runsDir = mkdtempSync(join(tmpdir(), 'mcplab-runner-test-'));
     temporaryRunDirs.push(runsDir);

@@ -276,6 +276,19 @@ export async function executeRunJob(params: {
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
+    job.childAbortControllers = new Map(
+      expandedConfig.scenarios.map((scenario) => [
+        `${scenario.id}:${scenario.agent}`,
+        new AbortController()
+      ])
+    );
+    job.childProgress = expandedConfig.scenarios.map((scenario) => ({
+      scenarioId: scenario.id,
+      agentName: scenario.agent,
+      completed: 0,
+      total: runsPerScenario,
+      status: 'queued' as const
+    }));
     addJobEvent(job, {
       type: 'log',
       ts: new Date().toISOString(),
@@ -341,6 +354,8 @@ export async function executeRunJob(params: {
             }
           : undefined,
       signal: job.abortController.signal,
+      scenarioSignal: (scenario) =>
+        job.childAbortControllers?.get(`${scenario.id}:${scenario.agent}`)?.signal,
       persistArtifacts: !job.runParams.evaluationRunId,
       onProgress: async (event: RunProgressEvent) => {
         updateChildProgress(job, event);
@@ -555,13 +570,16 @@ function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
   const index = existing.findIndex(
     (child) => child.scenarioId === event.scenarioId && child.agentName === event.agentName
   );
-  const current = index >= 0 ? existing[index]! : {
-    scenarioId: event.scenarioId,
-    agentName: event.agentName,
-    completed: 0,
-    total: event.runsPerScenario,
-    status: 'queued' as const
-  };
+  const current =
+    index >= 0
+      ? existing[index]!
+      : {
+          scenarioId: event.scenarioId,
+          agentName: event.agentName,
+          completed: 0,
+          total: event.runsPerScenario,
+          status: 'queued' as const
+        };
   const next: QueueChildProgress = {
     ...current,
     total: event.runsPerScenario,

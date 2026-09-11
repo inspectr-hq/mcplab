@@ -671,9 +671,11 @@ export const workspaceApiClient = {
       `/api/runs/evaluations/${encodeURIComponent(evaluationRunId)}/stop`,
       { method: 'POST' }
     ),
-  stopRoverScenario: (jobId: string, scenarioId: string) =>
+  stopScenario: (jobId: string, scenarioId: string) =>
     request<{ ok: boolean; status: string }>(
-      `/api/runs/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(scenarioId)}/stop`,
+      `/api/runs/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(
+        scenarioId
+      )}/stop`,
       { method: 'POST' }
     ),
   removeEvaluationRun: (evaluationRunId: string) =>

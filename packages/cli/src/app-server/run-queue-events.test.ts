@@ -81,8 +81,14 @@ describe('queue event projections', () => {
       ]
     };
     const state = buildQueueState(new Map([[job.id, job as any]]), {
-      activeJobIds: new Set(), admittingJobIds: new Set(), blockedJobIds: new Set(), queue: [],
-      queueWorkerCount: 1, isAdvancingQueue: false, needsAdvanceQueue: false, clients: new Set()
+      activeJobIds: new Set(),
+      admittingJobIds: new Set(),
+      blockedJobIds: new Set(),
+      queue: [],
+      queueWorkerCount: 1,
+      isAdvancingQueue: false,
+      needsAdvanceQueue: false,
+      clients: new Set()
     });
     expect(state.evaluations).toEqual([]);
   });
