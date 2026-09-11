@@ -147,9 +147,12 @@ describe('Rover run queue domain', () => {
   });
 
   it('clamps Rover progress and completes the job before assigning the next one', () => {
-    const service = createRunQueueServiceForTest();
+    const events: any[] = [];
+    const service = createRunQueueServiceForTest({
+      deps: { addJobEvent: (_job: any, event: any) => events.push(event) }
+    });
     const send = vi.fn(() => true);
-    const first = service.enqueueRun(roverParams());
+    const first = service.enqueueRun({ ...roverParams(), evaluationRunId: 'evaluation-rover' });
     const second = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send);
 
@@ -176,6 +179,10 @@ describe('Rover run queue domain', () => {
       )
     ).toBe(second.jobId);
     expect(service.jobs.get(first.jobId)?.status).toBe('completed');
+    expect(events.find((event) => event.type === 'completed')).toMatchObject({
+      type: 'completed',
+      payload: { runId: 'evaluation-rover' }
+    });
     expect(service.jobs.get(second.jobId)?.status).toBe('running');
   });
 

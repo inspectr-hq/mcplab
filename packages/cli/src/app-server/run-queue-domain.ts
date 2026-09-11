@@ -872,8 +872,9 @@ export function createRunQueueService(params: {
         }
       }
       if (message.type !== 'complete' || typeof message.jobId !== 'string') return null;
+      const completedJob = jobs.get(message.jobId);
       this.completeRoverJob(message.jobId, {
-        runId: message.runId,
+        runId: completedJob?.runParams.evaluationRunId ?? message.runId,
         outcome: message.outcome,
         provider
       });
