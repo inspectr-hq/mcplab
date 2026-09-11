@@ -31,6 +31,10 @@ export interface RoverConnectionService {
   close(): void;
 }
 
+function timestampedLog(message: string): string {
+  return `[mcplab-app] [${new Date().toISOString()}] ${message}`;
+}
+
 export function createRoverConnectionService(
   options: {
     log?: (message: string) => void;
@@ -109,7 +113,7 @@ export function createRoverConnectionService(
         };
         current = connection;
         send(socket, { type: 'registered', connectedAt: now });
-        log(`[mcplab-app] Rover connected: ${connection.registration.provider}`);
+        log(timestampedLog(`Rover connected: ${connection.registration.provider}`));
         void options.onRegister?.(connection);
         return;
       }
@@ -122,9 +126,9 @@ export function createRoverConnectionService(
           pageUrl: String(message.pageUrl ?? connection.registration.pageUrl)
         };
         send(socket, { type: 'registered', connectedAt: connection.connectedAt });
-        log(
-          `[mcplab-app] Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`
-        );
+        log(timestampedLog(
+          `Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`
+        ));
       }
       void options.onMessage?.(connection, message);
     });
@@ -132,7 +136,7 @@ export function createRoverConnectionService(
       if (current?.socket !== socket) return;
       const disconnected = current;
       current = null;
-      log(`[mcplab-app] Rover disconnected: ${disconnected.registration.provider}`);
+      log(timestampedLog(`Rover disconnected: ${disconnected.registration.provider}`));
       void options.onDisconnect?.(disconnected);
     });
     socket.on('pong', () => {

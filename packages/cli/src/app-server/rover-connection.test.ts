@@ -52,7 +52,7 @@ describe('Rover connection protocol', () => {
     const [raw] = await once(socket, 'message');
     expect(JSON.parse(raw.toString()).type).toBe('registered');
     expect(service.connection()?.registration.provider).toBe('claude');
-    expect(log).toHaveBeenCalledWith('[mcplab-app] Rover connected: claude');
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[mcplab-app\] \[\d{4}-\d{2}-\d{2}T[^\]]+Z\] Rover connected: claude$/));
     expect(onRegister).toHaveBeenCalledTimes(1);
 
     socket.send(JSON.stringify({ type: 'progress', jobId: 'job-1' }));
