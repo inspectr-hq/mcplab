@@ -42,7 +42,12 @@ import {
 } from './settings-store.js';
 import { proxyToVite, serveStatic } from './static-serving.js';
 import { readConfigRecord, readConfigRecordOrInvalid, listConfigs } from './config-store.js';
-import { readLibraries, writeBrowserProviderAndAgent, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
+import {
+  readLibraries,
+  writeBrowserProviderAndAgent,
+  writeBrowserProviderProfiles,
+  writeLibraries
+} from './libraries-store.js';
 import {
   listRuns,
   getRunResults,
@@ -256,7 +261,12 @@ export async function startAppServer(options: AppServerOptions) {
         );
         activeRoverJobId = assigned?.id ?? null;
       }
-      if (message.type === 'progress' || message.type === 'complete') {
+      if (
+        message.type === 'progress' ||
+        message.type === 'complete' ||
+        message.type === 'stage' ||
+        message.type === 'scenario_status'
+      ) {
         const nextJobId = runQueueService.handleRoverMessage(
           message,
           connection.registration.provider,
@@ -449,32 +459,61 @@ export async function startAppServer(options: AppServerOptions) {
       }
 
       if (pathname === '/api/rover/providers' && method === 'GET') {
-        asJson(res, 200, { providers: Object.values(readLibraries(settings.librariesDir).browserProviders) });
+        asJson(res, 200, {
+          providers: Object.values(readLibraries(settings.librariesDir).browserProviders)
+        });
         return;
       }
 
       if (pathname === '/api/browser-providers/learned' && method === 'POST') {
         const body = await parseBody(req);
-          const rawProfile = body.profile ?? body;
+        const rawProfile = body.profile ?? body;
         try {
           const profile = validateBrowserProviderProfile(rawProfile);
           const existing = readLibraries(settings.librariesDir).browserProviders;
           const wasExisting = Boolean(existing[profile.id]);
           const storedProfile = existing[profile.id]
-            ? { ...profile, learned: { ...profile.learned, createdAt: existing[profile.id].learned.createdAt } }
+            ? {
+                ...profile,
+                learned: { ...profile.learned, createdAt: existing[profile.id].learned.createdAt }
+              }
             : profile;
-          const agentBody = body.agent as { id?: unknown; name?: unknown; url?: unknown } | undefined;
-          const agent = agentBody?.id && agentBody.name && agentBody.url
-            ? { id: String(agentBody.id), name: String(agentBody.name), provider: profile.id, url: String(agentBody.url) }
-            : undefined;
+          const agentBody = body.agent as
+            | { id?: unknown; name?: unknown; url?: unknown }
+            | undefined;
+          const agent =
+            agentBody?.id && agentBody.name && agentBody.url
+              ? {
+                  id: String(agentBody.id),
+                  name: String(agentBody.name),
+                  provider: profile.id,
+                  url: String(agentBody.url)
+                }
+              : undefined;
           if (agent) {
-            const created = writeBrowserProviderAndAgent(settings.librariesDir, storedProfile, agent);
+            const created = writeBrowserProviderAndAgent(
+              settings.librariesDir,
+              storedProfile,
+              agent
+            );
             roverConnection.send({ type: 'provider_updated', provider: created.profile });
-            asJson(res, wasExisting ? 200 : 201, { provider: created.profile, agent: created.agent, revision: profile.learned.updatedAt, operation: wasExisting ? 'updated' : 'created' });
+            asJson(res, wasExisting ? 200 : 201, {
+              provider: created.profile,
+              agent: created.agent,
+              revision: profile.learned.updatedAt,
+              operation: wasExisting ? 'updated' : 'created'
+            });
           } else {
-            writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [storedProfile.id]: storedProfile });
+            writeBrowserProviderProfiles(settings.librariesDir, {
+              ...existing,
+              [storedProfile.id]: storedProfile
+            });
             roverConnection.send({ type: 'provider_updated', provider: storedProfile });
-            asJson(res, wasExisting ? 200 : 201, { provider: storedProfile, revision: storedProfile.learned.updatedAt, operation: wasExisting ? 'updated' : 'created' });
+            asJson(res, wasExisting ? 200 : 201, {
+              provider: storedProfile,
+              revision: storedProfile.learned.updatedAt,
+              operation: wasExisting ? 'updated' : 'created'
+            });
           }
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
@@ -496,8 +535,14 @@ export async function startAppServer(options: AppServerOptions) {
             asJson(res, 409, { error: 'Browser provider was changed by another client.' });
             return;
           }
-          const profile = validateBrowserProviderProfile({ ...(body.profile ?? body), id: providerId });
-          writeBrowserProviderProfiles(settings.librariesDir, { ...existing, [providerId]: profile });
+          const profile = validateBrowserProviderProfile({
+            ...(body.profile ?? body),
+            id: providerId
+          });
+          writeBrowserProviderProfiles(settings.librariesDir, {
+            ...existing,
+            [providerId]: profile
+          });
           roverConnection.send({ type: 'provider_updated', provider: profile });
           asJson(res, 200, { provider: profile, revision: profile.learned.updatedAt });
         } catch (error: unknown) {

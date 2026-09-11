@@ -652,6 +652,18 @@ const RunEvaluation = () => {
     });
   };
 
+  const selectQueueJob = (jobId: string) => {
+    if (activeJobId === jobId && unsubscribeRef.current) return;
+    setActiveJobId(jobId);
+    setActiveRunJob(jobId);
+    setRunning(true);
+    setDone(false);
+    setStopped(false);
+    setLogs([`[${nowTime()}] Attached to running job ${jobId}...`]);
+    setProgress(10);
+    attachRunJob(jobId);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -1104,6 +1116,15 @@ const RunEvaluation = () => {
               {evaluations.map((evaluation) => (
                 <div
                   key={evaluation.evaluationRunId}
+                  onClick={() => {
+                    const selectedJob = evaluation.jobs.find(
+                      (job) =>
+                        job.status === 'running' ||
+                        job.status === 'waiting_for_rover' ||
+                        job.status === 'paused_rover'
+                    );
+                    if (selectedJob) selectQueueJob(selectedJob.jobId);
+                  }}
                   className={`rounded-md border p-3 text-sm ${
                     evaluation.status === 'failed'
                       ? 'border-destructive/40 bg-destructive/5'
@@ -1125,7 +1146,10 @@ const RunEvaluation = () => {
                         complete
                       </span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div
+                      className="flex items-center gap-1"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       {evaluation.jobs.some((job) => job.status === 'blocked_auth') && (
                         <Button
                           size="sm"
@@ -1210,6 +1234,7 @@ const RunEvaluation = () => {
                             child?.agentName ?? 'job'
                           }`}
                           className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1"
+                          onClick={() => selectQueueJob(job.jobId)}
                         >
                           <span className="min-w-0 truncate">
                             {child
@@ -1244,7 +1269,10 @@ const RunEvaluation = () => {
                             {child?.error && ` · ${child.error}`}
                             {!child && job.roverProgress?.error && ` · ${job.roverProgress.error}`}
                           </span>
-                          <span className="flex shrink-0 items-center gap-1">
+                          <span
+                            className="flex shrink-0 items-center gap-1"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             {!child &&
                               job.executionType === 'rover' &&
                               job.status === 'waiting_for_rover' && (
