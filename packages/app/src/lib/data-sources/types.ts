@@ -18,6 +18,7 @@ import type {
   HealthMcpConnectionInfo,
   QueueEntry,
   QueueResponse,
+  QueueChildProgress,
   EvaluationQueueItem,
   RunQueueEvent,
   ToolDefinitionTokenEstimates,
@@ -56,6 +57,7 @@ export type {
 };
 export type { RunOutcome, ExecutionSource, RoverAgentProvider };
 export type { EvaluationQueueItem };
+export type { QueueChildProgress };
 
 export type TraceMessageContentBlock = CoreTraceMessageContentBlock;
 export type ScenarioRunTraceMessage = CoreTraceMessage;
@@ -753,6 +755,9 @@ export interface EvalDataSource {
     scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<StartRunResponse>;
   stopRun: (jobId: string) => Promise<void>;
+  stopRoverScenario: (jobId: string, scenarioId: string) => Promise<{ ok: boolean; status: string }>;
+  stopEvaluationRun: (evaluationRunId: string) => Promise<void>;
+  removeEvaluationRun: (evaluationRunId: string) => Promise<void>;
   openRover: (jobId: string) => Promise<{ ok: boolean; url?: string }>;
   resumeRover: (jobId: string) => Promise<{ ok: boolean }>;
   getRoverStatus: () => Promise<{

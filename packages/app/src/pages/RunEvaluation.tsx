@@ -29,9 +29,8 @@ import {
   formatQueueScenarioLabel
 } from '@/lib/run-queue-display';
 import { resolveConfigRunAgents } from '@/lib/config-run-agents';
-import type { EvaluationQueueItem, QueueEntry } from '@/lib/data-sources/types';
+import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/data-sources/types';
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
-import { useRoverStatus } from '@/hooks/use-rover-status';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
 
@@ -50,6 +49,15 @@ function configSuiteLabel(config: { suitePath?: string; relativePath?: string })
 
 function nowTime(): string {
   return new Date().toLocaleTimeString();
+}
+
+function queueChildRows(evaluation: EvaluationQueueItem): Array<{
+  job: QueueEntry;
+  child?: QueueChildProgress;
+}> {
+  return evaluation.jobs.flatMap((job) =>
+    job.childProgress?.length ? job.childProgress.map((child) => ({ job, child })) : [{ job }]
+  );
 }
 
 const RunEvaluation = () => {
@@ -78,6 +86,7 @@ const RunEvaluation = () => {
   const [activeQueueEntries, setActiveQueueEntries] = useState<QueueEntry[]>([]);
   const [admittingQueueEntries, setAdmittingQueueEntries] = useState<QueueEntry[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationQueueItem[]>([]);
+  const [expandedEvaluationRunId, setExpandedEvaluationRunId] = useState<string | null>(null);
   const [oauthAuthInProgress, setOauthAuthInProgress] = useState(false);
   const [oauthRequired, setOauthRequired] = useState<{ jobId: string; servers: string[] } | null>(
     null
@@ -87,7 +96,6 @@ const RunEvaluation = () => {
   const oauthConnectingRef = useRef(false);
   const { configs, reload } = useConfigs();
   const { source } = useDataSource();
-  const roverStatus = useRoverStatus();
   const {
     agents: libraryAgents,
     scenarios: libraryScenarios,
@@ -504,6 +512,29 @@ const RunEvaluation = () => {
       }
     }
     void refreshQueue();
+  };
+
+  const connectEvaluationOAuth = async (evaluation: EvaluationQueueItem) => {
+    const servers = Array.from(
+      new Set(evaluation.jobs.flatMap((job) => job.requiredServers ?? []))
+    );
+    if (servers.length === 0 || oauthConnectingRef.current) return;
+    oauthConnectingRef.current = true;
+    setOauthAuthInProgress(true);
+    try {
+      await ensureOAuthForServers({ serverNames: servers, source });
+      await source.resumeQueue();
+    } catch (error: unknown) {
+      toast({
+        title: 'Could not connect OAuth',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive'
+      });
+    } finally {
+      oauthConnectingRef.current = false;
+      setOauthAuthInProgress(false);
+      void refreshQueue();
+    }
   };
 
   const attachRunJob = (jobId: string) => {
@@ -1055,23 +1086,9 @@ const RunEvaluation = () => {
               <Clock className="h-4 w-4" />
               Run Queue
             </CardTitle>
-            <div className="flex items-center gap-2">
-              <span
-                className={`text-xs ${
-                  roverStatus.connected ? 'text-emerald-600' : 'text-muted-foreground'
-                }`}
-              >
-                <span className="mr-1">●</span>
-                {roverStatus.connected
-                  ? `${roverStatus.provider ?? 'Rover'}${
-                      roverStatus.activeJobId ? ' assigned' : ' connected'
-                    }`
-                  : 'Rover disconnected'}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={() => void refreshQueue()}>
+              <RefreshCw className="h-3 w-3" />
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -1104,35 +1121,102 @@ const RunEvaluation = () => {
                         {evaluation.status}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {evaluation.completedJobs}/{evaluation.totalJobs} agents complete
+                        {evaluation.completedJobs}/{evaluation.totalJobs} scenario-agent runs complete
                       </span>
                     </div>
-                    {evaluation.evaluationRunId && (
-                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                        <Link to={`/results/${encodeURIComponent(evaluation.evaluationRunId)}`}>
-                          View result
-                        </Link>
-                      </Button>
-                    )}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    {evaluation.jobs.map((job) => (
-                      <span
-                        key={job.jobId}
-                        className="inline-flex items-center gap-1 rounded bg-background px-2 py-1"
+                    <div className="flex items-center gap-1">
+                      {evaluation.jobs.some((job) => job.status === 'blocked_auth') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-yellow-500/50 text-yellow-700 dark:text-yellow-400"
+                          disabled={oauthAuthInProgress}
+                          onClick={() => void connectEvaluationOAuth(evaluation)}
+                        >
+                          {oauthAuthInProgress ? 'Connecting...' : 'Connect OAuth'}
+                        </Button>
+                      )}
+                      {evaluation.jobs.length > 0 && evaluation.jobs.every((job) =>
+                        job.status === 'queued' || job.status === 'blocked_auth'
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            void source.removeEvaluationRun(evaluation.evaluationRunId).then(() => void refreshQueue());
+                          }}
+                          title="Remove evaluation from queue"
+                          aria-label="Remove evaluation from queue"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {evaluation.jobs.some((job) =>
+                        ['queued', 'blocked_auth', 'waiting_for_rover', 'paused_rover', 'running'].includes(job.status)
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            void source.stopEvaluationRun(evaluation.evaluationRunId).then(() => void refreshQueue());
+                          }}
+                        >
+                          <Square className="mr-1 h-3 w-3" />
+                          Stop
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => setExpandedEvaluationRunId((current) =>
+                          current === evaluation.evaluationRunId ? null : evaluation.evaluationRunId
+                        )}
+                        aria-label={`${expandedEvaluationRunId === evaluation.evaluationRunId ? 'Collapse' : 'Expand'} evaluation details`}
                       >
-                        {job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}:{' '}
-                        {job.status === 'waiting_for_rover'
-                          ? 'waiting for Rover'
-                          : job.status === 'paused_rover'
-                          ? 'paused'
-                          : job.status.replaceAll('_', ' ')}
-                        {job.roverProgress &&
-                          ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
-                        {job.roverProgress?.lastDurationMs != null &&
+                        {expandedEvaluationRunId === evaluation.evaluationRunId ? 'Hide' : 'Details'}
+                      </Button>
+                    </div>
+                  </div>
+                  {expandedEvaluationRunId === evaluation.evaluationRunId && (
+                  <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    {queueChildRows(evaluation).map(({ job, child }) => (
+                      <div
+                        key={`${job.jobId}:${child?.scenarioId ?? 'job'}`}
+                        className="flex items-center justify-between gap-2 rounded bg-background px-2 py-1"
+                      >
+                        <span className="min-w-0 truncate">
+                          {child
+                            ? `${child.scenarioId} · ${child.agentName}: `
+                            : `${job.roverAgent?.name ?? job.runParams.agents?.join(', ') ?? 'Agent'}: `}
+                          {child?.status === 'queued'
+                            ? 'queued'
+                            : child?.status === 'running'
+                            ? 'running'
+                            : child?.status === 'completed'
+                            ? 'completed'
+                            : child?.status === 'error'
+                            ? 'failed'
+                            : child?.status === 'stopped'
+                            ? 'stopped'
+                            : job.status === 'waiting_for_rover'
+                            ? 'waiting for Rover'
+                            : job.status === 'paused_rover'
+                            ? 'paused'
+                            : job.status.replaceAll('_', ' ')}
+                        {child
+                          ? ` (${child.completed}/${child.total} attempts)`
+                          : job.roverProgress &&
+                            ` (${job.roverProgress.completed}/${job.roverProgress.total} scenarios)`}
+                        {!child && job.roverProgress?.lastDurationMs != null &&
                           ` · ${Math.round(job.roverProgress.lastDurationMs / 1000)}s`}
-                        {job.roverProgress?.error && ` · ${job.roverProgress.error}`}
-                        {job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
+                        {child?.error && ` · ${child.error}`}
+                        {!child && job.roverProgress?.error && ` · ${job.roverProgress.error}`}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1">
+                        {!child && job.executionType === 'rover' && job.status === 'waiting_for_rover' && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1148,7 +1232,7 @@ const RunEvaluation = () => {
                             Connect to Rover
                           </Button>
                         )}
-                        {job.executionType === 'rover' && job.status === 'paused_rover' && (
+                        {!child && job.executionType === 'rover' && job.status === 'paused_rover' && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -1161,26 +1245,33 @@ const RunEvaluation = () => {
                           </Button>
                         )}
                         {job.executionType === 'rover' &&
-                          (job.status === 'waiting_for_rover' ||
-                            job.status === 'paused_rover' ||
-                            job.status === 'running') && (
+                          ((child && child.status === 'running') ||
+                            (!child &&
+                              (job.status === 'waiting_for_rover' ||
+                                job.status === 'paused_rover' ||
+                                job.status === 'running'))) && (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-6 px-1.5 text-[11px] text-destructive"
                               onClick={() => {
-                                void source.stopRun(job.jobId).then(() => void refreshQueue());
+                                void (child
+                                  ? source.stopRoverScenario(job.jobId, child.scenarioId)
+                                  : source.stopRun(job.jobId)
+                                ).then(() => void refreshQueue());
                               }}
                             >
                               Stop
                             </Button>
                           )}
-                      </span>
+                        </span>
+                      </div>
                     ))}
                   </div>
+                  )}
                 </div>
               ))}
-              {activeQueueEntries.map((entry) => (
+              {activeQueueEntries.filter((entry) => !entry.evaluationRunId).map((entry) => (
                 <div
                   key={entry.jobId}
                   role="button"
@@ -1259,7 +1350,7 @@ const RunEvaluation = () => {
                   </Button>
                 </div>
               ))}
-              {admittingQueueEntries.map((entry) => {
+              {admittingQueueEntries.filter((entry) => !entry.evaluationRunId).map((entry) => {
                 const configName = formatQueueConfigPath(
                   entry.runParams.configPath,
                   queueRelativePathBySourcePath
@@ -1302,7 +1393,7 @@ const RunEvaluation = () => {
                   </div>
                 );
               })}
-              {queuedJobs.map((entry, i) => {
+              {queuedJobs.filter((entry) => !entry.evaluationRunId).map((entry, i) => {
                 const configName = formatQueueConfigPath(
                   entry.runParams.configPath,
                   queueRelativePathBySourcePath

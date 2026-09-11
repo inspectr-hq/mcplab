@@ -666,6 +666,21 @@ export const workspaceApiClient = {
     request<{ ok: boolean }>(`/api/runs/jobs/${jobId}/stop`, {
       method: 'POST'
     }),
+  stopEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; stopped: number }>(
+      `/api/runs/evaluations/${encodeURIComponent(evaluationRunId)}/stop`,
+      { method: 'POST' }
+    ),
+  stopRoverScenario: (jobId: string, scenarioId: string) =>
+    request<{ ok: boolean; status: string }>(
+      `/api/runs/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(scenarioId)}/stop`,
+      { method: 'POST' }
+    ),
+  removeEvaluationRun: (evaluationRunId: string) =>
+    request<{ ok: boolean; removed: number }>(
+      `/api/runs/queue/evaluations/${encodeURIComponent(evaluationRunId)}`,
+      { method: 'DELETE' }
+    ),
   openRover: (jobId: string) =>
     request<{ ok: boolean; url?: string }>('/api/rover/open', {
       method: 'POST',

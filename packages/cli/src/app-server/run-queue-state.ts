@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { RoverAgentRef, Scenario } from '@inspectr/mcplab-core';
+import type { QueueChildProgress, RoverAgentRef, Scenario } from '@inspectr/mcplab-core';
 import type { SseEvent } from './jobs.js';
 
 type RunParamsBase = {
@@ -57,6 +57,7 @@ export type RunJob = {
     lastDurationMs?: number;
     error?: string;
   };
+  childProgress?: QueueChildProgress[];
 };
 
 export interface RunQueueState {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createRunQueueServiceForTest } from './runs-routes.test-helpers.js';
+import { createRunQueueServiceForTest, createQueuedJob } from './runs-routes.test-helpers.js';
 
 function roverParams(provider: 'claude' | 'trendminer' = 'claude') {
   return {
@@ -12,6 +12,60 @@ function roverParams(provider: 'claude' | 'trendminer' = 'claude') {
 }
 
 describe('Rover run queue domain', () => {
+  it('stops every unfinished child when stopping an evaluation run', () => {
+    const first = createQueuedJob('/tmp/eval.yaml', 'job-1');
+    const second = createQueuedJob('/tmp/eval.yaml', 'job-2');
+    first.runParams.evaluationRunId = 'evaluation-1';
+    second.runParams.evaluationRunId = 'evaluation-1';
+    const service = createRunQueueServiceForTest({
+      jobs: new Map([
+        [first.id, first],
+        [second.id, second]
+      ]),
+      runQueueState: {
+        queue: [first.id, second.id],
+        activeJobIds: new Set(),
+        admittingJobIds: new Set(),
+        blockedJobIds: new Set(),
+        queueWorkerCount: 1,
+        isAdvancingQueue: false,
+        needsAdvanceQueue: false,
+        clients: new Set()
+      }
+    });
+
+    expect(service.stopEvaluationRun('evaluation-1')).toMatchObject({ ok: true, stopped: 2 });
+    expect(first.status).toBe('stopped');
+    expect(second.status).toBe('stopped');
+  });
+
+  it('removes an evaluation run only when every child is still queued', () => {
+    const first = createQueuedJob('/tmp/eval.yaml', 'job-1');
+    const second = createQueuedJob('/tmp/eval.yaml', 'job-2');
+    first.runParams.evaluationRunId = 'evaluation-2';
+    second.runParams.evaluationRunId = 'evaluation-2';
+    const service = createRunQueueServiceForTest({
+      jobs: new Map([
+        [first.id, first],
+        [second.id, second]
+      ]),
+      runQueueState: {
+        queue: [first.id, second.id],
+        activeJobIds: new Set(),
+        admittingJobIds: new Set(),
+        blockedJobIds: new Set(),
+        queueWorkerCount: 1,
+        isAdvancingQueue: false,
+        needsAdvanceQueue: false,
+        clients: new Set()
+      }
+    });
+
+    expect(service.removeEvaluationRun('evaluation-2')).toMatchObject({ ok: true, removed: 2 });
+    expect(first.status).toBe('stopped');
+    expect(second.status).toBe('stopped');
+  });
+
   it('keeps Rover jobs waiting until a matching provider connects, then assigns them', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
@@ -118,5 +172,37 @@ describe('Rover run queue domain', () => {
 
     expect(service.jobs.get(queued.jobId)?.status).toBe('paused_rover');
     expect(service.state.queue).toContain(queued.jobId);
+  });
+
+  it('tracks scenario-level Rover status updates', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const queued = service.enqueueRun({
+      ...roverParams(),
+      evaluationRunId: 'evaluation-rover'
+    });
+    service.assignRoverJob('claude', send);
+
+    service.handleRoverMessage({
+      type: 'scenario_status',
+      jobId: queued.jobId,
+      scenarioId: 's1',
+      status: 'running',
+      completed: 0,
+      total: 1
+    }, 'claude', send);
+
+    expect(service.jobs.get(queued.jobId)?.childProgress).toEqual([
+      expect.objectContaining({ scenarioId: 's1', agentName: 'claude', status: 'running' })
+    ]);
+  });
+
+  it('sends a scenario-specific stop command for a Rover child', () => {
+    const sendRoverMessage = vi.fn(() => true);
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const { jobId } = service.enqueueRun({ ...roverParams(), evaluationRunId: 'evaluation-rover-2' });
+    service.assignRoverJob('claude', send);
+    expect(service.stopRoverScenario(jobId, 's1')).toMatchObject({ ok: true, status: 'stopped' });
   });
 });

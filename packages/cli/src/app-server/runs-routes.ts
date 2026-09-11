@@ -246,11 +246,47 @@ export async function handleRunsRoutes(params: {
     return true;
   }
 
-  if (pathname.startsWith('/api/runs/jobs/') && pathname.endsWith('/stop') && method === 'POST') {
+  if (
+    pathname.startsWith('/api/runs/jobs/') &&
+    pathname.endsWith('/stop') &&
+    pathname.split('/').length === 6 &&
+    method === 'POST'
+  ) {
     const jobId = pathname.split('/')[4];
     const result = runQueueService.stopJob(jobId, { hostHeader: req.headers.host });
     if (!result) {
       asJson(res, 404, { error: 'Job not found' });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  const roverScenarioStopMatch = pathname.match(/^\/api\/runs\/jobs\/([^/]+)\/scenarios\/([^/]+)\/stop$/);
+  if (roverScenarioStopMatch && method === 'POST') {
+    const result = runQueueService.stopRoverScenario(
+      decodeURIComponent(roverScenarioStopMatch[1]!),
+      decodeURIComponent(roverScenarioStopMatch[2]!)
+    );
+    if (!result) {
+      asJson(res, 404, { error: 'Rover job not found' });
+      return true;
+    }
+    if ('error' in result) {
+      asJson(res, result.statusCode, { error: result.error });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  if (pathname.startsWith('/api/runs/evaluations/') && pathname.endsWith('/stop') && method === 'POST') {
+    const evaluationRunId = pathname.split('/')[4];
+    const result = runQueueService.stopEvaluationRun(evaluationRunId, {
+      hostHeader: req.headers.host
+    });
+    if (!result) {
+      asJson(res, 404, { error: 'Evaluation run not found' });
       return true;
     }
     asJson(res, 200, result);
@@ -283,6 +319,26 @@ export async function handleRunsRoutes(params: {
     const result = runQueueService.removeQueuedJob(jobId, { hostHeader: req.headers.host });
     if (!result) {
       asJson(res, 404, { error: 'Job not found' });
+      return true;
+    }
+    if ('error' in result) {
+      asJson(res, result.statusCode, { error: result.error });
+      return true;
+    }
+    asJson(res, 200, result);
+    return true;
+  }
+
+  if (
+    pathname.startsWith('/api/runs/queue/evaluations/') &&
+    method === 'DELETE'
+  ) {
+    const evaluationRunId = pathname.split('/')[5];
+    const result = runQueueService.removeEvaluationRun(evaluationRunId, {
+      hostHeader: req.headers.host
+    });
+    if (!result) {
+      asJson(res, 404, { error: 'Evaluation run not found' });
       return true;
     }
     if ('error' in result) {

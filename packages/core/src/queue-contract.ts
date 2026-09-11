@@ -12,6 +12,17 @@ interface QueueRunParamsBase {
   scenarioServerOverrides: Record<string, string[]> | null;
 }
 
+export interface QueueChildProgress {
+  scenarioId: string;
+  agentName: string;
+  completed: number;
+  total: number;
+  status: 'queued' | 'running' | 'completed' | 'error' | 'stopped';
+  currentRunIndex?: number;
+  lastDurationMs?: number;
+  error?: string;
+}
+
 export interface McplabQueueRunParams extends QueueRunParamsBase {
   executionType: 'mcplab';
   roverAgent?: never;
@@ -36,6 +47,7 @@ interface QueueEntryBase {
     lastDurationMs?: number;
     error?: string;
   };
+  childProgress?: QueueChildProgress[];
   evaluationName?: string;
   status:
     | 'queued'

@@ -6,6 +6,7 @@ import {
   loadConfig,
   runAll,
   type EvalConfig,
+  type QueueChildProgress,
   type RunProgressEvent,
   type ScenarioRunTraceRecord
 } from '@inspectr/mcplab-core';
@@ -342,6 +343,7 @@ export async function executeRunJob(params: {
       signal: job.abortController.signal,
       persistArtifacts: !job.runParams.evaluationRunId,
       onProgress: async (event: RunProgressEvent) => {
+        updateChildProgress(job, event);
         const message = formatRunProgressMessage(event);
         if (!message) return;
         addJobEvent(job, {
@@ -545,6 +547,34 @@ function estimateRunToolTokensTotal(records: ScenarioRunTraceRecord[]): number |
     }
   }
   return hasAny ? total : null;
+}
+
+function updateChildProgress(job: RunJob, event: RunProgressEvent): void {
+  if (event.type !== 'scenario_run_started' && event.type !== 'scenario_run_finished') return;
+  const existing = job.childProgress ?? [];
+  const index = existing.findIndex(
+    (child) => child.scenarioId === event.scenarioId && child.agentName === event.agentName
+  );
+  const current = index >= 0 ? existing[index]! : {
+    scenarioId: event.scenarioId,
+    agentName: event.agentName,
+    completed: 0,
+    total: event.runsPerScenario,
+    status: 'queued' as const
+  };
+  const next: QueueChildProgress = {
+    ...current,
+    total: event.runsPerScenario,
+    ...(event.type === 'scenario_run_started'
+      ? { status: 'running' as const, currentRunIndex: event.runIndex }
+      : {
+          status: current.completed + 1 >= event.runsPerScenario ? 'completed' : 'running',
+          completed: Math.min(event.runsPerScenario, current.completed + 1)
+        })
+  };
+  if (index >= 0) existing[index] = next;
+  else existing.push(next);
+  job.childProgress = existing;
 }
 
 function formatRunProgressMessage(event: RunProgressEvent): string | null {
