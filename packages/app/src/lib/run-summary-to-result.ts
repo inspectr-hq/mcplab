@@ -22,8 +22,8 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
     scenarios: (summary.scenarioIds ?? []).map((scenarioId, index) => ({
       scenarioId,
       scenarioName: summary.scenarioNames?.[index] ?? scenarioId,
-      agentId: '',
-      agentName: '',
+      agentId: summary.agentIds?.[index] ?? '',
+      agentName: summary.agentNames?.[index] ?? summary.agentIds?.[index] ?? '',
       runs: [],
       passRate: 0,
       avgToolCalls: 0,

@@ -25,6 +25,8 @@ export interface RunSummary {
   toolTokensTotal?: number | null;
   scenarioIds?: string[];
   scenarioNames?: string[];
+  agentIds?: string[];
+  agentNames?: string[];
   rerunAgents?: string[];
   rerunScenarioIds?: string[];
   rerunServerOverrideAll?: string[];
@@ -118,6 +120,8 @@ export function listRuns(runsDir: string, filter?: ListRunsFilter): RunSummary[]
         scenarioNames: scenarioItems
           .map((scenario) => String(scenario.scenario_name ?? ''))
           .filter(Boolean),
+        agentIds: scenarioItems.map((scenario) => String(scenario.agent ?? '')).filter(Boolean),
+        agentNames: scenarioItems.map((scenario) => String(scenario.agent ?? '')).filter(Boolean),
         rerunAgents: results.metadata.rerun_agents,
         rerunScenarioIds: results.metadata.rerun_scenario_ids,
         rerunServerOverrideAll: results.metadata.rerun_server_override_all,

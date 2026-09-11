@@ -42,19 +42,44 @@ export function projectEvaluationResult(params: {
       outcomes[outcome] += result.summary.outcomes?.[outcome] ?? 0;
     }
   }
+  const sourceMetadata = executions[0]?.metadata;
+  const configPaths = Array.from(
+    new Set(executions.map((result) => result.metadata.config_path).filter(Boolean))
+  );
+  const rerunAgents = Array.from(
+    new Set(executions.flatMap((result) => result.metadata.rerun_agents ?? []))
+  );
+  const rerunScenarioIds = Array.from(
+    new Set(executions.flatMap((result) => result.metadata.rerun_scenario_ids ?? []))
+  );
+  const executionSources = new Set(
+    executions.map((result) => result.metadata.execution_source).filter(Boolean)
+  );
+  const executionClients = new Set(
+    executions.map((result) => result.metadata.execution_client).filter(Boolean)
+  );
   return {
     metadata: {
       run_id: params.runId,
       timestamp: new Date().toISOString(),
-      config_hash: executions[0]?.metadata.config_hash ?? params.evaluationRunId,
-      cli_version: executions[0]?.metadata.cli_version ?? 'unknown',
+      config_hash: sourceMetadata?.config_hash ?? params.evaluationRunId,
+      config_path: configPaths.length === 1 ? configPaths[0] : undefined,
+      cli_version: sourceMetadata?.cli_version ?? 'unknown',
       mcp_server_versions: {},
-      execution_client: 'mixed',
-      config_name: params.evaluationName || `Evaluation ${params.evaluationRunId}`,
+      execution_client: executionClients.size === 1 ? executions[0]?.metadata.execution_client : 'mixed',
+      ...(executionSources.size === 1
+        ? { execution_source: executions[0]?.metadata.execution_source }
+        : {}),
+      ...(executionClients.size === 1
+        ? { execution_client: executions[0]?.metadata.execution_client }
+        : {}),
+      config_name:
+        params.evaluationName || sourceMetadata?.config_name || `Evaluation ${params.evaluationRunId}`,
       run_note: params.evaluationName
         ? `Evaluation: ${params.evaluationName}`
         : `Evaluation ${params.evaluationRunId}`,
-      rerun_agents: executions.flatMap((result) => result.metadata.rerun_agents ?? []),
+      ...(rerunAgents.length > 0 ? { rerun_agents: rerunAgents } : {}),
+      ...(rerunScenarioIds.length > 0 ? { rerun_scenario_ids: rerunScenarioIds } : {}),
       evaluation_run_id: params.runId
     },
     summary: {

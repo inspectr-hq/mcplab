@@ -19,6 +19,9 @@ function sessionView(session: LiveTestSession) {
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
     evaluationRunId: session.evaluationRunId,
+    configPath: session.configPath,
+    configName: session.configName,
+    agentName: session.agentName,
     completion: session.completion
   };
 }
@@ -47,7 +50,10 @@ export async function handleLiveTestRoutes(params: {
       const session = service.start({
         testCaseId,
         client: String(body.client ?? 'unknown'),
-        evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined
+        evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined,
+        configPath: typeof body.configPath === 'string' ? body.configPath : undefined,
+        configName: typeof body.configName === 'string' ? body.configName : undefined,
+        agentName: typeof body.agentName === 'string' ? body.agentName : undefined
       });
       log(
         `[mcplab-app] Rover Live Test started: ${session.id} (${session.testCase.id}, ${session.client})`

@@ -633,6 +633,9 @@ export function createRunQueueService(params: {
         type: 'assignment',
         jobId: job.id,
         evaluationRunId: job.runParams.evaluationRunId,
+        configPath: job.runParams.configPath,
+        evaluationName: job.runParams.evaluationName,
+        agentName: job.runParams.roverAgent!.name,
         agent: job.runParams.roverAgent,
         scenarios: job.runParams.roverScenarios ?? [],
         newConversationBetweenScenarios:

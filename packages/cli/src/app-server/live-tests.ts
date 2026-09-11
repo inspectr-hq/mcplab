@@ -41,6 +41,9 @@ export interface LiveTestSession {
   createdAt: string;
   expiresAt: string;
   evaluationRunId?: string;
+  configPath?: string;
+  configName?: string;
+  agentName?: string;
   completionInput?: CompleteLiveTestInput;
   completion?: LiveTestCompletion;
 }
@@ -120,7 +123,14 @@ export class LiveTestService {
     return listLiveTestCases(this.options.readScenarios());
   }
 
-  start(input: { testCaseId: string; client: string; evaluationRunId?: string }): LiveTestSession {
+  start(input: {
+    testCaseId: string;
+    client: string;
+    evaluationRunId?: string;
+    configPath?: string;
+    configName?: string;
+    agentName?: string;
+  }): LiveTestSession {
     this.cleanup();
     const scenario = this.options
       .readScenarios()
@@ -137,7 +147,10 @@ export class LiveTestService {
       status: 'ready',
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + (this.options.ttlMs ?? 30 * 60_000)).toISOString(),
-      evaluationRunId: input.evaluationRunId
+      evaluationRunId: input.evaluationRunId,
+      ...(input.configPath?.trim() ? { configPath: input.configPath.trim() } : {}),
+      ...(input.configName?.trim() ? { configName: input.configName.trim() } : {}),
+      ...(input.agentName?.trim() ? { agentName: input.agentName.trim() } : {})
     };
     this.sessions.set(session.id, session);
     return structuredClone(session);
@@ -252,7 +265,7 @@ export class LiveTestService {
         {
           scenario_id: session.testCase.id,
           scenario_name: session.testCase.name,
-          agent: 'rover',
+          agent: session.agentName ?? 'rover',
           provider: session.client,
           model: 'external',
           eval: session.testCase.eval,
@@ -261,13 +274,17 @@ export class LiveTestService {
       ]
     });
     results.metadata.evaluation_run_id = session.evaluationRunId;
+    if (session.configPath) results.metadata.config_path = session.configPath;
+    if (session.configName) results.metadata.config_name = session.configName;
+    if (session.agentName) results.metadata.rerun_agents = [session.agentName];
+    results.metadata.rerun_scenario_ids = [session.testCase.id];
     const traceRecord: ScenarioRunTraceRecord = {
       type: 'scenario_run',
       trace_version: 3,
       run_index: 0,
       request_id: requestId,
       scenario_id: session.testCase.id,
-      agent: 'rover',
+      agent: session.agentName ?? 'rover',
       provider: session.client,
       model: 'external',
       ts_start: normalized.startedAt,
@@ -295,7 +312,8 @@ export class LiveTestService {
       recordEvaluationExecution({
         runsDir: this.options.runsDir,
         evaluationRunId: session.evaluationRunId,
-        evaluationName: `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`,
+        evaluationName:
+          session.configName ?? `Rover Live Test: ${session.testCase.name ?? session.testCase.id}`,
         executionId: runId,
         executionSource: 'rover',
         results,

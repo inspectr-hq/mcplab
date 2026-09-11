@@ -27,6 +27,7 @@ function writeRun(runsDir: string, runId: string, timestamp: string, evaluationR
         {
           scenario_id: 'scn-default',
           scenario_name: 'Default Scenario',
+          agent: 'm365.cloud.microsoft',
           runs: [
             {
               check_results: [
@@ -66,6 +67,17 @@ describe('listRuns filters', () => {
     writeFileSync(resultsPath, JSON.stringify(results), 'utf8');
 
     expect(listRuns(runsDir)[0]?.mcpServerVersions).toEqual({ api: '1.2.3', docs: null });
+  });
+
+  it('includes agents in run summaries for list views', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mcplab-runs-store-'));
+    const runsDir = join(root, 'runs');
+    mkdirSync(runsDir, { recursive: true });
+
+    writeRun(runsDir, 'run-agent', '2026-03-10T10:00:00.000Z');
+
+    expect(listRuns(runsDir)[0]?.agentIds).toEqual(['m365.cloud.microsoft']);
+    expect(listRuns(runsDir)[0]?.agentNames).toEqual(['m365.cloud.microsoft']);
   });
 
   it('aggregates check counts for dashboard summaries', () => {

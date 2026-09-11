@@ -102,7 +102,10 @@ describe('LiveTestService', () => {
     const session = service.start({
       testCaseId: 'plain',
       client: 'claude',
-      evaluationRunId: 'evaluation-8'
+      evaluationRunId: 'evaluation-8',
+      configPath: 'evals/plain.yaml',
+      configName: 'Plain evaluation',
+      agentName: 'claude-browser'
     });
 
     const completion = await service.complete(session.id, {
@@ -117,6 +120,10 @@ describe('LiveTestService', () => {
     const results = JSON.parse(readFileSync(join(runsDir, 'evaluation-8', 'results.json'), 'utf8'));
     expect(results.metadata.run_id).toBe('evaluation-8');
     expect(results.metadata.evaluation_run_id).toBe('evaluation-8');
+    expect(results.metadata.config_path).toBe('evals/plain.yaml');
+    expect(results.metadata.config_name).toBe('Plain evaluation');
+    expect(results.metadata.rerun_agents).toEqual(['claude-browser']);
+    expect(results.scenarios[0].agent).toBe('claude-browser');
   });
 
   it('rejects conflicting completion data', async () => {

@@ -37,6 +37,31 @@ describe('projectEvaluationResult', () => {
     expect(result.metadata).not.toHaveProperty('child_run_ids');
   });
 
+  it('preserves rerun metadata needed to identify and rerun a queued Rover execution', () => {
+    const source = execution('rover-1', 1, 1);
+    source.metadata.config_path = 'evals/hi-there.yaml';
+    source.metadata.config_name = 'Hi There';
+    source.metadata.rerun_agents = ['m365.cloud.microsoft'];
+    source.metadata.rerun_scenario_ids = ['scn-1'];
+    source.metadata.execution_source = 'rover';
+    source.metadata.execution_client = 'm365.cloud.microsoft';
+
+    const result = projectEvaluationResult({
+      evaluationRunId: 'evaluation-rover',
+      runId: 'evaluation-rover',
+      executions: [source]
+    });
+
+    expect(result.metadata).toMatchObject({
+      config_path: 'evals/hi-there.yaml',
+      config_name: 'Hi There',
+      rerun_agents: ['m365.cloud.microsoft'],
+      rerun_scenario_ids: ['scn-1'],
+      execution_source: 'rover',
+      execution_client: 'm365.cloud.microsoft'
+    });
+  });
+
   it('creates an empty result when executions fail before producing snapshots', () => {
     const result = projectEvaluationResult({
       evaluationRunId: 'evaluation-failed',
