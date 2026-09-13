@@ -77,7 +77,6 @@ describe('listRuns filters', () => {
     writeRun(runsDir, 'run-agent', '2026-03-10T10:00:00.000Z');
 
     expect(listRuns(runsDir)[0]?.agentIds).toEqual(['m365.cloud.microsoft']);
-    expect(listRuns(runsDir)[0]?.agentNames).toEqual(['m365.cloud.microsoft']);
   });
 
   it('aggregates check counts for dashboard summaries', () => {

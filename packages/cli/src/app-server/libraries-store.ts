@@ -40,8 +40,8 @@ export function readLibraries(librariesDir: string): {
   const sourceDir = existsSync(testCasesDir)
     ? testCasesDir
     : existsSync(legacyScenariosDir)
-    ? legacyScenariosDir
-    : null;
+      ? legacyScenariosDir
+      : null;
   if (sourceDir) {
     const files = readdirSync(sourceDir)
       .filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'))
@@ -69,32 +69,35 @@ export function writeBrowserProviderProfiles(
   const target = join(root, 'browser-providers.yaml');
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
   const yamlProfiles = Object.fromEntries(
-    Object.entries(profiles).map(([id, profile]) => [id, {
-      schema_version: profile.schemaVersion,
-      name: profile.name,
-      match: profile.match,
-      composer: {
-        locator: profile.composer.locator,
-        input_mode: profile.composer.inputMode
-      },
-      submit: profile.submit,
-      assistant_messages: {
-        locator: profile.assistantMessages.locator,
-        text_locator: profile.assistantMessages.textLocator
-      },
-      completion: {
-        generating_locator: profile.completion.generatingLocator,
-        idle_locator: profile.completion.idleLocator,
-        stability_ms: profile.completion.stabilityMs
-      },
-      new_conversation: profile.newConversation,
-      learned: {
-        source_origin: profile.learned.sourceOrigin,
-        created_at: profile.learned.createdAt,
-        updated_at: profile.learned.updatedAt,
-        confidence: profile.learned.confidence
+    Object.entries(profiles).map(([id, profile]) => [
+      id,
+      {
+        schema_version: profile.schemaVersion,
+        name: profile.name,
+        match: profile.match,
+        composer: {
+          locator: profile.composer.locator,
+          input_mode: profile.composer.inputMode
+        },
+        submit: profile.submit,
+        assistant_messages: {
+          locator: profile.assistantMessages.locator,
+          text_locator: profile.assistantMessages.textLocator
+        },
+        completion: {
+          generating_locator: profile.completion.generatingLocator,
+          idle_locator: profile.completion.idleLocator,
+          stability_ms: profile.completion.stabilityMs
+        },
+        new_conversation: profile.newConversation,
+        learned: {
+          source_origin: profile.learned.sourceOrigin,
+          created_at: profile.learned.createdAt,
+          updated_at: profile.learned.updatedAt,
+          confidence: profile.learned.confidence
+        }
       }
-    }])
+    ])
   );
   writeFileSync(temporary, `${stringifyYaml(yamlProfiles)}\n`, 'utf8');
   renameSync(temporary, target);
@@ -107,16 +110,32 @@ export function writeBrowserProviderAndAgent(
 ): { profile: BrowserProviderProfile; agent: BrowserAgentConfig & { id: string } } {
   const current = readLibraries(librariesDir);
   const existingAgent = current.agents[agent.id];
-  if (existingAgent && (existingAgent.type !== 'browser' || existingAgent.provider !== profile.id)) {
+  if (
+    existingAgent &&
+    (existingAgent.type !== 'browser' || existingAgent.provider !== profile.id)
+  ) {
     throw new Error(`Agent '${agent.id}' already exists with a different configuration.`);
   }
   const existingProfile = current.browserProviders[profile.id];
   const storedProfile = existingProfile
     ? { ...profile, learned: { ...profile.learned, createdAt: existingProfile.learned.createdAt } }
     : profile;
-  const browserAgent = { id: agent.id, type: 'browser' as const, name: agent.name, provider: profile.id, url: agent.url };
-  writeBrowserProviderProfiles(librariesDir, { ...current.browserProviders, [profile.id]: storedProfile });
-  writeLibraries(librariesDir, { servers: current.servers, agents: { ...current.agents, [agent.id]: browserAgent }, scenarios: current.scenarios });
+  const browserAgent = {
+    id: agent.id,
+    type: 'browser' as const,
+    name: agent.name,
+    provider: profile.id,
+    url: agent.url
+  };
+  writeBrowserProviderProfiles(librariesDir, {
+    ...current.browserProviders,
+    [profile.id]: storedProfile
+  });
+  writeLibraries(librariesDir, {
+    servers: current.servers,
+    agents: { ...current.agents, [agent.id]: browserAgent },
+    scenarios: current.scenarios
+  });
   return { profile: storedProfile, agent: browserAgent };
 }
 

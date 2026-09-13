@@ -591,10 +591,10 @@ program
               cwd: process.cwd()
             })
         : options.input
-        ? resolve(String(options.input))
-        : (() => {
-            throw new Error('input is required');
-          })();
+          ? resolve(String(options.input))
+          : (() => {
+              throw new Error('input is required');
+            })();
       const resultsPath = join(runDir, 'results.json');
       const reportPath = join(runDir, 'report.html');
       const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
@@ -778,8 +778,8 @@ async function executeSingleConfigRun(params: {
   const requestedAgents = resolvedOptions.agentsAll
     ? Object.keys(config.agents)
     : requestedAgentsFromCsv.length > 0
-    ? requestedAgentsFromCsv
-    : undefined;
+      ? requestedAgentsFromCsv
+      : undefined;
   const runtimeOverrides = parseRuntimeServerOverrides(options);
   const selectedBaseConfig = options.scenario ? selectScenarios(config, options.scenario) : config;
   const selectedOverrides = filterRuntimeOverridesToSelectedScenarios(

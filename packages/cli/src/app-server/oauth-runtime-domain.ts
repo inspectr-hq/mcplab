@@ -107,8 +107,8 @@ export function oauthRuntimeSessionView(params: {
   const status = debuggerSession
     ? toRuntimeStatus(debuggerSession.status)
     : runtimeSession.status === 'completed'
-    ? 'completed'
-    : 'error';
+      ? 'completed'
+      : 'error';
   const accessToken = getAccessToken(debuggerSession);
 
   return {

@@ -231,7 +231,7 @@ const Results = () => {
   const [initialTimeFilter] = useState<TimeFilterQueryState>(() =>
     hasExplicitTimeFilterQuery(searchParams)
       ? getTimeFilterQueryState(searchParams)
-      : readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams)
+      : (readStoredTimeFilter() ?? getTimeFilterQueryState(searchParams))
   );
   const [results, setResults] = useState<EvalResult[]>([]);
   const [dashboardRuns, setDashboardRuns] = useState<EvalResult[]>([]);
@@ -370,21 +370,21 @@ const Results = () => {
             return page.data.map(summaryToResult);
           })
       : source.listRunSummaries
-      ? source
-          .listRunSummaries({
-            ...timeFilter,
-            scenario: apiScenarioFilter,
-            limit: PAGE_LIMIT,
-            offset
-          })
-          .then((summaries) => {
-            if (active) {
-              pagination.setTotalCount(summaries.length);
-              pagination.setHasMore(false);
-            }
-            return summaries.map(summaryToResult);
-          })
-      : source.listResults();
+        ? source
+            .listRunSummaries({
+              ...timeFilter,
+              scenario: apiScenarioFilter,
+              limit: PAGE_LIMIT,
+              offset
+            })
+            .then((summaries) => {
+              if (active) {
+                pagination.setTotalCount(summaries.length);
+                pagination.setHasMore(false);
+              }
+              return summaries.map(summaryToResult);
+            })
+        : source.listResults();
     loadPromise
       .then((next) => {
         if (active) setResults(next);
@@ -575,8 +575,8 @@ const Results = () => {
 
     const start = parseLocalDateTime(timeFilterStart)?.getTime() ?? null;
     const end = parseLocalDateTime(timeFilterEnd)?.getTime() ?? null;
-    const rangeStart = start !== null && end !== null ? Math.min(start, end) : start ?? null;
-    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : end ?? null;
+    const rangeStart = start !== null && end !== null ? Math.min(start, end) : (start ?? null);
+    const rangeEnd = start !== null && end !== null ? Math.max(start, end) : (end ?? null);
 
     return scenarioFiltered.filter((run) => {
       const timestamp = new Date(run.timestamp).getTime();
@@ -1406,10 +1406,10 @@ const Results = () => {
                       isUser
                         ? 'border-primary/20 bg-primary/10'
                         : isSystem
-                        ? 'border-amber-400/30 bg-amber-50/70'
-                        : isTool
-                        ? 'border-blue-300/30 bg-blue-50/50'
-                        : 'border-border/80 bg-background shadow-sm'
+                          ? 'border-amber-400/30 bg-amber-50/70'
+                          : isTool
+                            ? 'border-blue-300/30 bg-blue-50/50'
+                            : 'border-border/80 bg-background shadow-sm'
                     }`}
                   >
                     {isUser ? (

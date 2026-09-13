@@ -91,8 +91,8 @@ export async function evaluateScenarioObservation({
   const outcome: RunOutcome = evaluated.failures.length
     ? 'failed'
     : checkResults.some((check) => check.status === 'not_evaluated')
-    ? 'incomplete'
-    : 'passed';
+      ? 'incomplete'
+      : 'passed';
   const toolUsage: Record<string, number> = {};
   for (const tool of toolSequence) toolUsage[tool] = (toolUsage[tool] ?? 0) + 1;
 

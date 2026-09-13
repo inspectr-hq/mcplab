@@ -23,7 +23,7 @@ export function summaryToResult(summary: WorkspaceRunSummary): EvalResult {
       scenarioId,
       scenarioName: summary.scenarioNames?.[index] ?? scenarioId,
       agentId: summary.agentIds?.[index] ?? '',
-      agentName: summary.agentNames?.[index] ?? summary.agentIds?.[index] ?? '',
+      agentName: summary.agentIds?.[index] ?? '',
       runs: [],
       passRate: 0,
       avgToolCalls: 0,

@@ -24,7 +24,7 @@
     "publish:cli": "npm publish -w packages/cli",
     "publish:all": "npm publish -w packages/core -w packages/reporting -w packages/mcp-server -w packages/cli",
     "clean": "rm -rf dist packages/*/dist packages/*/*.tsbuildinfo",
-    "format": "npx prettier --write \"packages/**/*.{ts,tsx,jsx,css, astro}\" --config ./.prettierrc",
+    "format": "oxfmt \"packages/**/*.{ts,tsx,jsx,css}\"",
     "test": "npm run test --workspaces --if-present",
     "changeset": "changeset",
     "version": "changeset version",
@@ -36,6 +36,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   }

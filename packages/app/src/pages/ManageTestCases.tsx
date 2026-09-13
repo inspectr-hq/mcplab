@@ -602,23 +602,23 @@ const ManageTestCases = () => {
                       saveStatus === 'saving'
                         ? 'border-amber-300 text-amber-700'
                         : saveStatus === 'saved'
-                        ? 'border-emerald-300 text-emerald-700'
-                        : saveStatus === 'error'
-                        ? 'border-destructive/40 text-destructive'
-                        : saveStatus === 'dirty'
-                        ? 'border-sky-300 text-sky-700'
-                        : ''
+                          ? 'border-emerald-300 text-emerald-700'
+                          : saveStatus === 'error'
+                            ? 'border-destructive/40 text-destructive'
+                            : saveStatus === 'dirty'
+                              ? 'border-sky-300 text-sky-700'
+                              : ''
                     }`}
                   >
                     {saveStatus === 'saving'
                       ? 'Saving...'
                       : saveStatus === 'saved'
-                      ? 'Saved'
-                      : saveStatus === 'error'
-                      ? 'Save failed'
-                      : saveStatus === 'dirty'
-                      ? 'Unsaved changes'
-                      : 'Ready'}
+                        ? 'Saved'
+                        : saveStatus === 'error'
+                          ? 'Save failed'
+                          : saveStatus === 'dirty'
+                            ? 'Unsaved changes'
+                            : 'Ready'}
                   </Badge>
                 </div>
                 {saveStatus === 'error' && saveError && (

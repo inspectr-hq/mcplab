@@ -52,22 +52,47 @@ describe('Rover connection protocol', () => {
     const [raw] = await once(socket, 'message');
     expect(JSON.parse(raw.toString()).type).toBe('registered');
     expect(service.connection()?.registration.provider).toBe('claude');
-    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[mcplab-app\] \[\d{4}-\d{2}-\d{2}T[^\]]+Z\] Rover connected: claude$/));
+    expect(log).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^\[mcplab-app\] \[\d{4}-\d{2}-\d{2}T[^\]]+Z\] Rover connected: claude$/
+      )
+    );
     expect(onRegister).toHaveBeenCalledTimes(1);
 
     socket.send(JSON.stringify({ type: 'progress', jobId: 'job-1' }));
-    await vi.waitFor(() => expect(onMessage).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ type: 'progress' })));
+    await vi.waitFor(() =>
+      expect(onMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ type: 'progress' })
+      )
+    );
     socket.close();
   });
 
   it('rejects malformed registrations and a second Rover connection', async () => {
     const service = createRoverConnectionService();
     const first = await connectRover(service);
-    first.send(JSON.stringify({ type: 'register', protocolVersion: 1, provider: 'claude', pageUrl: 'https://claude.ai', extensionVersion: '1' }));
+    first.send(
+      JSON.stringify({
+        type: 'register',
+        protocolVersion: 1,
+        provider: 'claude',
+        pageUrl: 'https://claude.ai',
+        extensionVersion: '1'
+      })
+    );
     await once(first, 'message');
 
     const second = await connectRover(service);
-    second.send(JSON.stringify({ type: 'register', protocolVersion: 1, provider: 'trendminer', pageUrl: 'https://tm.example', extensionVersion: '1' }));
+    second.send(
+      JSON.stringify({
+        type: 'register',
+        protocolVersion: 1,
+        provider: 'trendminer',
+        pageUrl: 'https://tm.example',
+        extensionVersion: '1'
+      })
+    );
     const [raw] = await once(second, 'message');
     expect(JSON.parse(raw.toString())).toMatchObject({ type: 'rejected' });
     await once(second, 'close');

@@ -1404,8 +1404,8 @@ const ResultDetail = () => {
                                                               check.status === 'failed'
                                                                 ? 'border-destructive/20 bg-destructive/5'
                                                                 : check.status === 'not_evaluated'
-                                                                ? 'border-muted-foreground/20 bg-muted/40'
-                                                                : 'border-success/20 bg-success/5'
+                                                                  ? 'border-muted-foreground/20 bg-muted/40'
+                                                                  : 'border-success/20 bg-success/5'
                                                             }`}
                                                           >
                                                             <div className="min-w-0">
@@ -1436,8 +1436,8 @@ const ResultDetail = () => {
                                                                 check.status === 'failed'
                                                                   ? 'border-destructive/30 text-destructive'
                                                                   : check.status === 'not_evaluated'
-                                                                  ? 'border-muted-foreground/30 text-muted-foreground'
-                                                                  : 'border-success/30 text-success'
+                                                                    ? 'border-muted-foreground/30 text-muted-foreground'
+                                                                    : 'border-success/30 text-success'
                                                               }`}
                                                             >
                                                               {check.status}
@@ -2067,10 +2067,10 @@ const ResultDetail = () => {
                             isUser
                               ? 'border-primary/20 bg-primary/10'
                               : isSystem
-                              ? 'border-amber-400/30 bg-amber-50/70'
-                              : isTool
-                              ? 'border-blue-300/30 bg-blue-50/50'
-                              : 'border-border/80 bg-background shadow-sm'
+                                ? 'border-amber-400/30 bg-amber-50/70'
+                                : isTool
+                                  ? 'border-blue-300/30 bg-blue-50/50'
+                                  : 'border-border/80 bg-background shadow-sm'
                           }`}
                         >
                           {!(isUser || isSystem) && (
@@ -2509,8 +2509,8 @@ const ResultDetail = () => {
                 {applyReportPending
                   ? 'Writing...'
                   : applyReportIsManual
-                  ? 'Save Report'
-                  : 'Approve & Write'}
+                    ? 'Save Report'
+                    : 'Approve & Write'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

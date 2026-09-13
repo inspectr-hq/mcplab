@@ -24,6 +24,8 @@ export function createRunQueueServiceForTest(
     settings?: Record<string, unknown>;
     oauthSessionManager?: any;
     deps?: Record<string, unknown>;
+    assignRoverJob?: (provider: string) => any;
+    onRoverJobReleased?: (provider: string) => void;
   } = {}
 ) {
   const deps = makeRunsRouteDeps(overrides.deps ?? {});
@@ -41,7 +43,9 @@ export function createRunQueueServiceForTest(
     oauthSessionManager: (overrides.oauthSessionManager ?? {}) as any,
     deps: deps as any,
     jobs: (overrides.jobs ?? new Map()) as any,
-    state: (overrides.runQueueState ?? createRunQueueState()) as any
+    state: (overrides.runQueueState ?? createRunQueueState()) as any,
+    assignRoverJob: overrides.assignRoverJob,
+    onRoverJobReleased: overrides.onRoverJobReleased
   });
 }
 

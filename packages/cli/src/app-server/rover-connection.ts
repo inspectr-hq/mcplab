@@ -126,9 +126,11 @@ export function createRoverConnectionService(
           pageUrl: String(message.pageUrl ?? connection.registration.pageUrl)
         };
         send(socket, { type: 'registered', connectedAt: connection.connectedAt });
-        log(timestampedLog(
-          `Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`
-        ));
+        log(
+          timestampedLog(
+            `Rover provider updated: ${connection.registration.provider} (${connection.registration.pageUrl})`
+          )
+        );
       }
       void options.onMessage?.(connection, message);
     });

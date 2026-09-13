@@ -539,12 +539,16 @@ export async function startAppServer(options: AppServerOptions) {
             ...(body.profile ?? body),
             id: providerId
           });
+          const storedProfile = {
+            ...profile,
+            learned: { ...profile.learned, createdAt: existing[providerId].learned.createdAt }
+          };
           writeBrowserProviderProfiles(settings.librariesDir, {
             ...existing,
-            [providerId]: profile
+            [providerId]: storedProfile
           });
-          roverConnection.send({ type: 'provider_updated', provider: profile });
-          asJson(res, 200, { provider: profile, revision: profile.learned.updatedAt });
+          roverConnection.send({ type: 'provider_updated', provider: storedProfile });
+          asJson(res, 200, { provider: storedProfile, revision: storedProfile.learned.updatedAt });
         } catch (error: unknown) {
           asJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
         }

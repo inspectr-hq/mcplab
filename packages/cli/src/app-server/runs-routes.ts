@@ -446,8 +446,8 @@ export async function handleRunsRoutes(params: {
       const selected = scenarioIds?.length
         ? deps.selectScenarioIds(loaded.config, scenarioIds)
         : scenarioId
-        ? deps.selectScenarioIds(loaded.config, [scenarioId])
-        : loaded.config;
+          ? deps.selectScenarioIds(loaded.config, [scenarioId])
+          : loaded.config;
       const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
         selected,
         scenarioServerOverrides

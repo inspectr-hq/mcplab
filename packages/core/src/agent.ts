@@ -218,7 +218,7 @@ export async function runAgentScenario(params: {
     throw new Error(`Browser agent cannot run in the MCPLab LLM runner: ${scenario.agent}`);
   const serverRequestHeaders =
     typeof params.resolveServerRequestHeaders === 'function'
-      ? (await params.resolveServerRequestHeaders(scenario.servers)) ?? {}
+      ? ((await params.resolveServerRequestHeaders(scenario.servers)) ?? {})
       : {};
   const toolsByName = new Map<string, { server: string; tool: ToolDef }>();
   for (const serverName of scenario.servers) {
@@ -886,17 +886,19 @@ function toOpenAiMessage(message: LlmMessage) {
                 image_url: { url: att.url || `data:${att.media_type};base64,${att.data}` }
               }
             : att.media_type === 'application/pdf'
-            ? {
-                type: 'file' as const,
-                file: {
-                  filename: att.name ?? 'document.pdf',
-                  file_data: att.data ? `data:${att.media_type};base64,${att.data}` : att.url ?? ''
+              ? {
+                  type: 'file' as const,
+                  file: {
+                    filename: att.name ?? 'document.pdf',
+                    file_data: att.data
+                      ? `data:${att.media_type};base64,${att.data}`
+                      : (att.url ?? '')
+                  }
                 }
-              }
-            : {
-                type: 'text' as const,
-                text: attachmentToText(att)
-              }
+              : {
+                  type: 'text' as const,
+                  text: attachmentToText(att)
+                }
         )
       ]
     };

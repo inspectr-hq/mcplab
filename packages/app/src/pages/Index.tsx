@@ -133,15 +133,15 @@ const Dashboard = () => {
     ? passRateDeltaPp > 0
       ? ('up' as const)
       : passRateDeltaPp < 0
-      ? ('down' as const)
-      : ('neutral' as const)
+        ? ('down' as const)
+        : ('neutral' as const)
     : ('neutral' as const);
   const latencyTrend = hasPreviousWeekBaseline
     ? latencyDeltaMs < 0
       ? ('up' as const)
       : latencyDeltaMs > 0
-      ? ('down' as const)
-      : ('neutral' as const)
+        ? ('down' as const)
+        : ('neutral' as const)
     : ('neutral' as const);
 
   const recentRuns = useMemo(() => {

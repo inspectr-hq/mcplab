@@ -120,8 +120,8 @@ canvas{max-height:220px}
     result.overallPassRate >= 0.8
       ? 'badge-pass'
       : result.overallPassRate >= 0.5
-      ? 'badge-warn'
-      : 'badge-fail'
+        ? 'badge-warn'
+        : 'badge-fail'
   }">${Math.round(result.overallPassRate * 100)}% pass</span>
 </div>
 <p class="sub">${new Date(

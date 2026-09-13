@@ -162,8 +162,8 @@ describe('buildCheckItems', () => {
           input.type === 'tool_input_contains'
             ? `contains ${input.value}`
             : input.type === 'tool_input_regex'
-            ? `regex ${input.value}`
-            : `JSONPath ${input.path} == ${String(input.equals)}`
+              ? `regex ${input.value}`
+              : `JSONPath ${input.path} == ${String(input.equals)}`
         })`
       ]
     });

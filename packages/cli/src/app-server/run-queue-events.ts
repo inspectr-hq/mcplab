@@ -25,11 +25,11 @@ export function toQueueEntry(job: RunJob): QueueEntry {
     blockedReason: (job.status === 'blocked_auth'
       ? 'oauth_required'
       : job.status === 'waiting_for_rover'
-      ? 'rover_required'
-      : job.status === 'paused_rover'
-      ? 'rover_interrupted'
-      : undefined) as 'oauth_required' | 'rover_required' | 'rover_interrupted' | undefined,
-    requiredServers: job.status === 'blocked_auth' ? job.blockedAuthServers ?? [] : undefined
+        ? 'rover_required'
+        : job.status === 'paused_rover'
+          ? 'rover_interrupted'
+          : undefined) as 'oauth_required' | 'rover_required' | 'rover_interrupted' | undefined,
+    requiredServers: job.status === 'blocked_auth' ? (job.blockedAuthServers ?? []) : undefined
   };
   if (job.runParams.executionType === 'rover') {
     return {
@@ -102,10 +102,10 @@ export function buildQueueState(
                   entry.status === 'completed'
                     ? ('completed' as const)
                     : entry.status === 'error'
-                    ? ('error' as const)
-                    : entry.status === 'stopped'
-                    ? ('stopped' as const)
-                    : ('running' as const)
+                      ? ('error' as const)
+                      : entry.status === 'stopped'
+                        ? ('stopped' as const)
+                        : ('running' as const)
               }
             ]
       );
@@ -125,12 +125,12 @@ export function buildQueueState(
             ? 'partial'
             : 'failed'
           : pausedJobs > 0
-          ? 'paused'
-          : hasPending && entries.some((entry) => entry.status === 'running')
-          ? 'running'
-          : hasPending
-          ? 'queued'
-          : 'completed';
+            ? 'paused'
+            : hasPending && entries.some((entry) => entry.status === 'running')
+              ? 'running'
+              : hasPending
+                ? 'queued'
+                : 'completed';
       return {
         evaluationRunId,
         evaluationName: entries.find((entry) => entry.evaluationName)?.evaluationName,

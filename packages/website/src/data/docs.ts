@@ -1312,21 +1312,154 @@ const appRunning: DocPage = {
 };
 
 const appRover: DocPage = {
-  slug: 'app-rover', label: 'Rover Browser Agents', href: '/docs/app/rover/',
+  slug: 'app-rover',
+  label: 'Rover Browser Agents',
+  href: '/docs/app/rover/',
   description: 'Run and queue evaluations in supported browser chat applications.',
   keywords: ['rover', 'browser agent', 'claude', 'trendminer', 'queue', 'chrome extension'],
-  seoTitle: 'App | Rover Browser Agents', track: 'app',
+  seoTitle: 'App | Rover Browser Agents',
+  track: 'app',
   sections: [
-    { id: 'what-rover-is', title: 'What Rover Is', paragraphs: ['MCPLab Rover is a Chrome extension that connects a supported browser chat to MCPLab. It lets you evaluate responses from Claude and TrendMiner using the same assertions and result pipeline as normal MCPLab runs.', 'Use Rover when the agent runs in a browser interface instead of through an API that MCPLab can call directly.'], bullets: ['LLM agents call provider APIs directly from MCPLab.', 'Browser agents run through Rover in an active browser chat.', 'Both agent types produce the same MCPLab result format.', 'Rover currently supports Claude and TrendMiner providers.'] },
-    { id: 'boundaries', title: 'What Rover Does Not Do', bullets: ['Rover is not an MCP proxy or replacement for the MCPLab MCP server.', 'Rover does not currently provide Inspectr tool telemetry.', 'Rover does not support arbitrary browser providers without an adapter.', 'Tool-dependent checks are not evaluated when Rover has no tool observations.'] },
-    { id: 'start-mcplab', title: '1. Start MCPLab', paragraphs: ['Start the App with the directory that contains your shared agents and evaluations.'], codeBlocks: [{ title: 'start MCPLab with Rover support', language: 'bash', code: 'npx @inspectr/mcplab app \\\n  --libraries-dir ./mcplab \\\n  --evals-dir ./mcplab/evals \\\n  --runs-dir ./mcplab/results/evaluation-runs \\\n  --port 8787 \\\n  --open' }] },
-    { id: 'configure-browser-agent', title: '2. Configure a Browser Agent', paragraphs: ['Add browser agents to agents.yaml. Browser agents require type, provider, and url. They do not use model, temperature, max_tokens, or system settings.'], codeBlocks: [{ title: 'mcplab/agents.yaml', language: 'yaml', code: 'claude-browser:\n  type: browser\n  name: Claude browser\n  provider: claude\n  url: https://claude.ai\n\ntrendminer-browser:\n  type: browser\n  name: TrendMiner browser\n  provider: trendminer\n  url: https://tm-pipeline-aa01.trendminer.net/' }], bullets: ['Use provider: claude for Claude browser chats.', 'Use provider: trendminer for TrendMiner browser chats.', 'Restart MCPLab after changing library files.'] },
-    { id: 'install-rover', title: '3. Install Rover', paragraphs: ['When Rover is published, install it from the Chrome Web Store. Until then, install the local development build from the Rover repository.'], codeBlocks: [{ title: 'build Rover locally', language: 'bash', code: 'cd /path/to/mcp-lab-rover\nnpm install\nnpm run build' }], bullets: ['Open chrome://extensions in Chrome.', 'Enable Developer mode.', 'Choose Load unpacked.', 'Select the Rover dist directory.', 'Reload the extension after rebuilding it.'] },
-    { id: 'connect-rover', title: '4. Connect Rover to MCPLab', paragraphs: ['Open a supported Claude or TrendMiner page, then open Rover from the Chrome toolbar. Rover connects to http://127.0.0.1:8787 by default and shows a green connected indicator when MCPLab is reachable.', 'Use Rover settings only when you need to change the MCPLab origin. V1 accepts loopback HTTP origins such as 127.0.0.1 and localhost.'], bullets: ['A connection error usually means MCPLab is not running or the origin is incorrect.', 'Unsupported pages can use the manual fallback to copy the prompt and paste the final response.'] },
-    { id: 'run-manual', title: '5. Run a Browser Evaluation Manually', paragraphs: ['Open Run Evaluation, select an evaluation that references a browser agent, and start it. Rover receives the assignment, runs the prompt in the active chat, and captures the newly created or changed assistant response.', 'MCPLab evaluates response assertions, judge assertions, and extraction rules, then saves the result through the normal pipeline.'] },
-    { id: 'queue-rover', title: '6. Queue Evaluations for Rover', paragraphs: ['Select a browser agent when starting an evaluation. MCPLab places the Rover job in its queue. The job waits when Rover is disconnected and is assigned when a matching provider connects.'], bullets: ['Use Connect to Rover to open the configured browser URL.', 'Open or enable Rover in the target chat.', 'Waiting assignments are received automatically after connection.', 'Paused Rover jobs require an explicit Resume action.', 'Stop is available for waiting, running, and paused Rover jobs.'] },
-    { id: 'read-results', title: '7. Read Rover Results', paragraphs: ['Rover results use the same result layout as normal MCPLab evaluations. Browser runs include Rover provenance, and outcomes are passed, failed, incomplete, or error.', 'Tool-dependent assertions are marked not evaluated because Rover does not currently report MCP tool observations.'], codeBlocks: [{ title: 'canonical result layout', language: 'text', code: 'results/\n  evaluation-run-id/\n    results.json\n    trace.jsonl\n    summary.md\n    resolved-config.yaml\n    report.html' }] },
-    { id: 'troubleshooting', title: 'Troubleshooting', bullets: ['Connection refused: start MCPLab and verify the Rover origin is http://127.0.0.1:8787.', 'Disconnected indicator: reload Rover and confirm the MCPLab App is running.', 'Unsupported page: use the manual fallback or switch to Claude or TrendMiner.', 'Provider not detected: navigate to the configured provider URL and reload the page.', 'Missing URL: add a valid url and restart MCPLab.', 'Waiting for Rover: connect Rover using the same provider as the queued job.', 'Stale local build: run npm run build and reload the unpacked extension.'] }
+    {
+      id: 'what-rover-is',
+      title: 'What Rover Is',
+      paragraphs: [
+        'MCPLab Rover is a Chrome extension that connects a supported browser chat to MCPLab. It lets you evaluate responses from Claude and TrendMiner using the same assertions and result pipeline as normal MCPLab runs.',
+        'Use Rover when the agent runs in a browser interface instead of through an API that MCPLab can call directly.'
+      ],
+      bullets: [
+        'LLM agents call provider APIs directly from MCPLab.',
+        'Browser agents run through Rover in an active browser chat.',
+        'Both agent types produce the same MCPLab result format.',
+        'Rover currently supports Claude and TrendMiner providers.'
+      ]
+    },
+    {
+      id: 'boundaries',
+      title: 'What Rover Does Not Do',
+      bullets: [
+        'Rover is not an MCP proxy or replacement for the MCPLab MCP server.',
+        'Rover does not currently provide Inspectr tool telemetry.',
+        'Rover does not support arbitrary browser providers without an adapter.',
+        'Tool-dependent checks are not evaluated when Rover has no tool observations.'
+      ]
+    },
+    {
+      id: 'start-mcplab',
+      title: '1. Start MCPLab',
+      paragraphs: [
+        'Start the App with the directory that contains your shared agents and evaluations.'
+      ],
+      codeBlocks: [
+        {
+          title: 'start MCPLab with Rover support',
+          language: 'bash',
+          code: 'npx @inspectr/mcplab app \\\n  --libraries-dir ./mcplab \\\n  --evals-dir ./mcplab/evals \\\n  --runs-dir ./mcplab/results/evaluation-runs \\\n  --port 8787 \\\n  --open'
+        }
+      ]
+    },
+    {
+      id: 'configure-browser-agent',
+      title: '2. Configure a Browser Agent',
+      paragraphs: [
+        'Add browser agents to agents.yaml. Browser agents require type, provider, and url. They do not use model, temperature, max_tokens, or system settings.'
+      ],
+      codeBlocks: [
+        {
+          title: 'mcplab/agents.yaml',
+          language: 'yaml',
+          code: 'claude-browser:\n  type: browser\n  name: Claude browser\n  provider: claude\n  url: https://claude.ai\n\ntrendminer-browser:\n  type: browser\n  name: TrendMiner browser\n  provider: trendminer\n  url: https://tm-pipeline-aa01.trendminer.net/'
+        }
+      ],
+      bullets: [
+        'Use provider: claude for Claude browser chats.',
+        'Use provider: trendminer for TrendMiner browser chats.',
+        'Restart MCPLab after changing library files.'
+      ]
+    },
+    {
+      id: 'install-rover',
+      title: '3. Install Rover',
+      paragraphs: [
+        'When Rover is published, install it from the Chrome Web Store. Until then, install the local development build from the Rover repository.'
+      ],
+      codeBlocks: [
+        {
+          title: 'build Rover locally',
+          language: 'bash',
+          code: 'cd /path/to/mcp-lab-rover\nnpm install\nnpm run build'
+        }
+      ],
+      bullets: [
+        'Open chrome://extensions in Chrome.',
+        'Enable Developer mode.',
+        'Choose Load unpacked.',
+        'Select the Rover dist directory.',
+        'Reload the extension after rebuilding it.'
+      ]
+    },
+    {
+      id: 'connect-rover',
+      title: '4. Connect Rover to MCPLab',
+      paragraphs: [
+        'Open a supported Claude or TrendMiner page, then open Rover from the Chrome toolbar. Rover connects to http://127.0.0.1:8787 by default and shows a green connected indicator when MCPLab is reachable.',
+        'Use Rover settings only when you need to change the MCPLab origin. V1 accepts loopback HTTP origins such as 127.0.0.1 and localhost.'
+      ],
+      bullets: [
+        'A connection error usually means MCPLab is not running or the origin is incorrect.',
+        'Unsupported pages can use the manual fallback to copy the prompt and paste the final response.'
+      ]
+    },
+    {
+      id: 'run-manual',
+      title: '5. Run a Browser Evaluation Manually',
+      paragraphs: [
+        'Open Run Evaluation, select an evaluation that references a browser agent, and start it. Rover receives the assignment, runs the prompt in the active chat, and captures the newly created or changed assistant response.',
+        'MCPLab evaluates response assertions, judge assertions, and extraction rules, then saves the result through the normal pipeline.'
+      ]
+    },
+    {
+      id: 'queue-rover',
+      title: '6. Queue Evaluations for Rover',
+      paragraphs: [
+        'Select a browser agent when starting an evaluation. MCPLab places the Rover job in its queue. The job waits when Rover is disconnected and is assigned when a matching provider connects.'
+      ],
+      bullets: [
+        'Use Connect to Rover to open the configured browser URL.',
+        'Open or enable Rover in the target chat.',
+        'Waiting assignments are received automatically after connection.',
+        'Paused Rover jobs require an explicit Resume action.',
+        'Stop is available for waiting, running, and paused Rover jobs.'
+      ]
+    },
+    {
+      id: 'read-results',
+      title: '7. Read Rover Results',
+      paragraphs: [
+        'Rover results use the same result layout as normal MCPLab evaluations. Browser runs include Rover provenance, and outcomes are passed, failed, incomplete, or error.',
+        'Tool-dependent assertions are marked not evaluated because Rover does not currently report MCP tool observations.'
+      ],
+      codeBlocks: [
+        {
+          title: 'canonical result layout',
+          language: 'text',
+          code: 'results/\n  evaluation-run-id/\n    results.json\n    trace.jsonl\n    summary.md\n    resolved-config.yaml\n    report.html'
+        }
+      ]
+    },
+    {
+      id: 'troubleshooting',
+      title: 'Troubleshooting',
+      bullets: [
+        'Connection refused: start MCPLab and verify the Rover origin is http://127.0.0.1:8787.',
+        'Disconnected indicator: reload Rover and confirm the MCPLab App is running.',
+        'Unsupported page: use the manual fallback or switch to Claude or TrendMiner.',
+        'Provider not detected: navigate to the configured provider URL and reload the page.',
+        'Missing URL: add a valid url and restart MCPLab.',
+        'Waiting for Rover: connect Rover using the same provider as the queued job.',
+        'Stale local build: run npm run build and reload the unpacked extension.'
+      ]
+    }
   ]
 };
 

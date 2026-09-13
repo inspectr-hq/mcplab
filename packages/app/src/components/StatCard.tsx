@@ -33,8 +33,8 @@ export function StatCard({
                   trend === 'up'
                     ? 'text-success'
                     : trend === 'down'
-                    ? 'text-destructive'
-                    : 'text-muted-foreground'
+                      ? 'text-destructive'
+                      : 'text-muted-foreground'
                 }`}
               >
                 {trend === 'up' && '↑ '}

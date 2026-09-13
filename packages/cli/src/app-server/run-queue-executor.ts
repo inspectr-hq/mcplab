@@ -80,8 +80,8 @@ export function resolveOAuthServersForJob(job: RunJob, librariesDir: string): st
     const selected = job.runParams.scenarioIds?.length
       ? selectScenarioIdsFromParams(loaded.config, job.runParams)
       : job.runParams.scenarioId
-      ? selectScenarioIdsFromParams(loaded.config, job.runParams)
-      : loaded.config;
+        ? selectScenarioIdsFromParams(loaded.config, job.runParams)
+        : loaded.config;
     const filteredScenarioOverrides = filterScenarioOverridesToSelectedScenarios(
       selected,
       job.runParams.scenarioServerOverrides
@@ -118,8 +118,8 @@ function selectScenarioIdsFromParams(config: EvalConfig, runParams: RunParams): 
     runParams.scenarioIds && runParams.scenarioIds.length > 0
       ? runParams.scenarioIds
       : runParams.scenarioId
-      ? [runParams.scenarioId]
-      : undefined;
+        ? [runParams.scenarioId]
+        : undefined;
   if (!ids || ids.length === 0) return config;
   return {
     ...config,
@@ -219,8 +219,8 @@ export async function executeRunJob(params: {
           scenarioIds && scenarioIds.length > 0
             ? `Selecting requested scenarios: ${scenarioIds.join(', ')}`
             : scenarioId
-            ? `Selecting requested scenario: ${scenarioId}`
-            : 'Using all scenarios from config'
+              ? `Selecting requested scenario: ${scenarioId}`
+              : 'Using all scenarios from config'
       }
     });
     const selectedBaseScenarios = selectScenarioIds(
@@ -271,9 +271,9 @@ export async function executeRunJob(params: {
           requestedAgents && requestedAgents.length > 0
             ? `Using requested agents: ${resolvedAgents.join(', ')}`
             : runtimeOverriddenConfig.run_defaults?.selected_agents &&
-              runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
-            ? `Using run default agents: ${resolvedAgents.join(', ')}`
-            : `Using config-declared agents: ${resolvedAgents.join(', ')}`
+                runtimeOverriddenConfig.run_defaults.selected_agents.length > 0
+              ? `Using run default agents: ${resolvedAgents.join(', ')}`
+              : `Using config-declared agents: ${resolvedAgents.join(', ')}`
       }
     });
     const expandedConfig = expandConfigForAgents(runtimeOverriddenConfig, resolvedAgents);
@@ -486,8 +486,8 @@ export async function executeRunJob(params: {
         message: aborted
           ? 'Run aborted by user'
           : normalizedError instanceof Error
-          ? normalizedError.message
-          : String(normalizedError)
+            ? normalizedError.message
+            : String(normalizedError)
       }
     });
     return { status: aborted ? 'stopped' : 'error' };

@@ -283,8 +283,8 @@ const ConfigEditor = () => {
   const title = isNew
     ? 'New MCP Evaluation'
     : editing
-    ? `Editing: ${displayConfigName}`
-    : displayConfigName;
+      ? `Editing: ${displayConfigName}`
+      : displayConfigName;
   const configBasePath = isNew
     ? '/mcp-evaluations/new'
     : `/mcp-evaluations/${encodeURIComponent(config.id || id || '')}`;

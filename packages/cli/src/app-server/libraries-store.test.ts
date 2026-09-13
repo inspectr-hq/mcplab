@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readLibraries, writeBrowserProviderAndAgent, writeBrowserProviderProfiles, writeLibraries } from './libraries-store.js';
+import {
+  readLibraries,
+  writeBrowserProviderAndAgent,
+  writeBrowserProviderProfiles,
+  writeLibraries
+} from './libraries-store.js';
 
 function makeTempLibrariesDir(): string {
   return mkdtempSync(join(tmpdir(), 'mcplab-libs-'));
@@ -11,11 +16,17 @@ function makeTempLibrariesDir(): string {
 describe('libraries-store test-case directory migration', () => {
   it('loads and atomically writes declarative browser provider profiles', () => {
     const librariesDir = makeTempLibrariesDir();
-    writeFileSync(join(librariesDir, 'browser-providers.yaml'), `trendminer:\n  schema_version: 1\n  name: TrendMiner\n  match:\n    origins:\n      - https://tm-pipeline-aa01.trendminer.net\n  composer:\n    locator:\n      segments:\n        - '[data-test="composer"]'\n    input_mode: contenteditable\n  submit:\n    action: enter\n  assistant_messages:\n    locator:\n      segments:\n        - '.assistant'\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://tm-pipeline-aa01.trendminer.net\n    confidence:\n      composer: high\n`, 'utf8');
+    writeFileSync(
+      join(librariesDir, 'browser-providers.yaml'),
+      `trendminer:\n  schema_version: 1\n  name: TrendMiner\n  match:\n    origins:\n      - https://tm-pipeline-aa01.trendminer.net\n  composer:\n    locator:\n      segments:\n        - '[data-test="composer"]'\n    input_mode: contenteditable\n  submit:\n    action: enter\n  assistant_messages:\n    locator:\n      segments:\n        - '.assistant'\n  completion:\n    stability_ms: 1000\n  learned:\n    source_origin: https://tm-pipeline-aa01.trendminer.net\n    confidence:\n      composer: high\n`,
+      'utf8'
+    );
 
     expect(readLibraries(librariesDir).browserProviders.trendminer.name).toBe('TrendMiner');
     writeBrowserProviderProfiles(librariesDir, readLibraries(librariesDir).browserProviders);
-    expect(readLibraries(librariesDir).browserProviders.trendminer.composer.inputMode).toBe('contenteditable');
+    expect(readLibraries(librariesDir).browserProviders.trendminer.composer.inputMode).toBe(
+      'contenteditable'
+    );
   });
 
   it('links a learned provider to a browser agent', () => {
@@ -27,34 +38,65 @@ describe('libraries-store test-case directory migration', () => {
       provider: 'claude-learned',
       url: 'https://claude.ai'
     };
-    const created = writeBrowserProviderAndAgent(librariesDir, {
-      id: 'claude-learned',
-      name: 'Claude learned',
-      match: { origins: ['https://claude.ai'] },
-      composer: { locator: { segments: ['[contenteditable="true"]'] }, inputMode: 'contenteditable' },
-      submit: { action: 'enter' },
-      assistantMessages: { locator: { segments: ['.assistant'] } },
-      completion: { stabilityMs: 1000 },
-      learned: { sourceOrigin: 'https://claude.ai', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:00:00.000Z', confidence: {} },
-      schemaVersion: 1
-    }, next);
+    const created = writeBrowserProviderAndAgent(
+      librariesDir,
+      {
+        id: 'claude-learned',
+        name: 'Claude learned',
+        match: { origins: ['https://claude.ai'] },
+        composer: {
+          locator: { segments: ['[contenteditable="true"]'] },
+          inputMode: 'contenteditable'
+        },
+        submit: { action: 'enter' },
+        assistantMessages: { locator: { segments: ['.assistant'] } },
+        completion: { stabilityMs: 1000 },
+        learned: {
+          sourceOrigin: 'https://claude.ai',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          updatedAt: '2026-09-10T00:00:00.000Z',
+          confidence: {}
+        },
+        schemaVersion: 1
+      },
+      next
+    );
     expect(created.agent.provider).toBe('claude-learned');
-    expect(readLibraries(librariesDir).agents['claude-learned']).toMatchObject({ type: 'browser', provider: 'claude-learned' });
+    expect(readLibraries(librariesDir).agents['claude-learned']).toMatchObject({
+      type: 'browser',
+      provider: 'claude-learned'
+    });
     expect(readLibraries(librariesDir).browserProviders['claude-learned']).toBeDefined();
-    const updated = writeBrowserProviderAndAgent(librariesDir, {
-      id: 'claude-learned',
-      name: 'Claude learned v2',
-      match: { origins: ['https://claude.ai'] },
-      composer: { locator: { segments: ['[contenteditable="true"]'] }, inputMode: 'contenteditable' },
-      submit: { action: 'enter' },
-      assistantMessages: { locator: { segments: ['[data-testid="assistant"]'] } },
-      completion: { stabilityMs: 1500 },
-      learned: { sourceOrigin: 'https://claude.ai', createdAt: '2026-09-10T00:00:00.000Z', updatedAt: '2026-09-10T00:01:00.000Z', confidence: {} },
-      schemaVersion: 1
-    }, { ...next, name: 'Claude learned browser v2' });
+    const updated = writeBrowserProviderAndAgent(
+      librariesDir,
+      {
+        id: 'claude-learned',
+        name: 'Claude learned v2',
+        match: { origins: ['https://claude.ai'] },
+        composer: {
+          locator: { segments: ['[contenteditable="true"]'] },
+          inputMode: 'contenteditable'
+        },
+        submit: { action: 'enter' },
+        assistantMessages: { locator: { segments: ['[data-testid="assistant"]'] } },
+        completion: { stabilityMs: 1500 },
+        learned: {
+          sourceOrigin: 'https://claude.ai',
+          createdAt: '2026-09-10T00:00:00.000Z',
+          updatedAt: '2026-09-10T00:01:00.000Z',
+          confidence: {}
+        },
+        schemaVersion: 1
+      },
+      { ...next, name: 'Claude learned browser v2' }
+    );
     expect(updated.agent.name).toBe('Claude learned browser v2');
-    expect(readLibraries(librariesDir).browserProviders['claude-learned'].name).toBe('Claude learned v2');
-    expect(readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt).toBe('2026-09-10T00:00:00.000Z');
+    expect(readLibraries(librariesDir).browserProviders['claude-learned'].name).toBe(
+      'Claude learned v2'
+    );
+    expect(readLibraries(librariesDir).browserProviders['claude-learned'].learned.createdAt).toBe(
+      '2026-09-10T00:00:00.000Z'
+    );
     expect(profile).toEqual({});
   });
 

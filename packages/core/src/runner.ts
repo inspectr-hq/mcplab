@@ -369,7 +369,7 @@ export async function runAll(
             });
             throw scenarioErr;
           }
-          if (runSignal?.aborted || isAbortError(scenarioErr)) {
+          if (isAbortError(scenarioErr)) {
             await scenarioTrace.end({
               error: String(scenarioErr?.message ?? scenarioErr),
               outputs: { pass: false }
@@ -550,8 +550,8 @@ export function mapJudgeBatchResults(params: {
         trimmedReason.length > 0
           ? trimmedReason
           : matched.pass
-          ? `Agent check passed: ${check.label}`
-          : `Agent check failed: ${check.label}`,
+            ? `Agent check passed: ${check.label}`
+            : `Agent check failed: ${check.label}`,
       metadata: buildJudgeCheckMetadata(params.judgeName, params.judgeAgent, check.id)
     };
   });

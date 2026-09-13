@@ -482,7 +482,7 @@ function ScenarioCard({
   const toolSequenceRule =
     toolSequenceRuleIndex >= 0 ? scenario.evalRules[toolSequenceRuleIndex] : undefined;
   const toolSequence =
-    toolSequenceRule?.type === 'tool_sequence' ? toolSequenceRule.sequence ?? [] : [];
+    toolSequenceRule?.type === 'tool_sequence' ? (toolSequenceRule.sequence ?? []) : [];
   const hasToolSequenceRule = toolSequenceRuleIndex >= 0;
 
   const updateToolSequence = (nextSequence: string[]) => {
@@ -867,8 +867,8 @@ function ScenarioCard({
                     agents.length === 0
                       ? 'Add at least one agent in the config'
                       : scenario.serverIds.length === 0
-                      ? 'Select at least one server for this scenario'
-                      : 'Open Scenario Assistant'
+                        ? 'Select at least one server for this scenario'
+                        : 'Open Scenario Assistant'
                   }
                 >
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -1354,12 +1354,12 @@ function ScenarioCard({
                                     {rule.type === 'tool_input_contains'
                                       ? `${rule.tool} contains ${String(rule.value)}`
                                       : rule.type === 'tool_input_regex'
-                                      ? `${rule.tool} matches ${String(rule.value)}`
-                                      : `${rule.tool} · ${rule.path} · ${
-                                          rule.equals !== undefined
-                                            ? `== ${String(rule.equals)}`
-                                            : 'exists'
-                                        }`}
+                                        ? `${rule.tool} matches ${String(rule.value)}`
+                                        : `${rule.tool} · ${rule.path} · ${
+                                            rule.equals !== undefined
+                                              ? `== ${String(rule.equals)}`
+                                              : 'exists'
+                                          }`}
                                   </span>
                                 ) : (
                                   <span className="font-mono break-all">
@@ -1703,8 +1703,8 @@ function ScenarioCard({
                                         toolNamesLoading
                                           ? 'Loading tools...'
                                           : availableToolNames && availableToolNames.length > 0
-                                          ? 'Select tool to insert in value field'
-                                          : 'Load tools first'
+                                            ? 'Select tool to insert in value field'
+                                            : 'Load tools first'
                                       }
                                     />
                                   </SelectTrigger>
@@ -1728,8 +1728,8 @@ function ScenarioCard({
                                 {toolNamesLoading
                                   ? 'Loading...'
                                   : availableToolNames
-                                  ? 'Refresh tools'
-                                  : 'Load tools'}
+                                    ? 'Refresh tools'
+                                    : 'Load tools'}
                               </Button>
                             </div>
                             {!canLoadToolNames && (

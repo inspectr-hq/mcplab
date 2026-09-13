@@ -91,7 +91,6 @@ export interface WorkspaceRunSummary {
   scenarioIds?: string[];
   scenarioNames?: string[];
   agentIds?: string[];
-  agentNames?: string[];
   // Exact resolved agent set used by the original run; reruns should reuse this verbatim.
   rerunAgents?: string[];
   rerunScenarioIds?: string[];

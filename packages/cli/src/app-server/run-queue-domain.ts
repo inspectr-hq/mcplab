@@ -523,6 +523,7 @@ export function createRunQueueService(params: {
         return { ok: true, status: job.status };
       }
       job.abortController.abort();
+      state.activeJobIds.delete(jobId);
       if (job.runParams.executionType === 'rover') {
         params.sendRoverMessage?.({ type: 'stop', jobId: job.id });
       }
@@ -557,7 +558,12 @@ export function createRunQueueService(params: {
       );
       if (jobsForEvaluation.length === 0) return null;
       if (
-        jobsForEvaluation.some((job) => job.status !== 'queued' && job.status !== 'blocked_auth')
+        jobsForEvaluation.some(
+          (job) =>
+            job.status !== 'queued' &&
+            job.status !== 'blocked_auth' &&
+            job.status !== 'waiting_for_rover'
+        )
       ) {
         return {
           error: 'Evaluation run has already started. Use the stop action instead.',
@@ -580,7 +586,11 @@ export function createRunQueueService(params: {
           statusCode: 400
         };
       }
-      if (job.status !== 'queued' && job.status !== 'blocked_auth') {
+      if (
+        job.status !== 'queued' &&
+        job.status !== 'blocked_auth' &&
+        job.status !== 'waiting_for_rover'
+      ) {
         return { error: 'Job is not queued', statusCode: 404 };
       }
       stopQueuedJob(job, 'Removed from queue by user');
@@ -688,6 +698,7 @@ export function createRunQueueService(params: {
         payload: { message: 'Rover job resumed and waiting for Rover connection.' }
       });
       emit();
+      params.assignRoverJob?.(job.runParams.roverAgent.provider);
       return true;
     },
     completeRoverJob(jobId, payload = {}) {

@@ -31,8 +31,8 @@ function isEmptyQueueEvent(data: unknown): boolean {
     'active_jobs' in event && Array.isArray(event.active_jobs)
       ? event.active_jobs
       : 'active' in event && event.active
-      ? [event.active]
-      : [];
+        ? [event.active]
+        : [];
   const admittingJobs =
     'admitting_jobs' in event && Array.isArray(event.admitting_jobs) ? event.admitting_jobs : [];
   const queued = 'queued' in event && Array.isArray(event.queued) ? event.queued : [];

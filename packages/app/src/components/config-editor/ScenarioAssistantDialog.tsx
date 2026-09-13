@@ -781,8 +781,8 @@ export function ScenarioAssistantDialog({
                             const notes = Array.isArray(rawNotes)
                               ? rawNotes
                               : typeof rawNotes === 'string'
-                              ? [rawNotes]
-                              : [];
+                                ? [rawNotes]
+                                : [];
                             if (notes.length === 0) return null;
                             return (
                               <div className="space-y-2 rounded-md border p-3">

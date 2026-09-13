@@ -904,8 +904,8 @@ export function registerTools(server: McpServer): void {
       args: InputArgs extends ZodRawShapeCompat
         ? ShapeOutput<InputArgs>
         : InputArgs extends AnySchema
-        ? SchemaOutput<InputArgs>
-        : never
+          ? SchemaOutput<InputArgs>
+          : never
     ) => unknown
   ): void => {
     const resolvedTitle = resolveToolTitle(name, config.title, config.annotations?.title);
@@ -2075,7 +2075,7 @@ export function registerTools(server: McpServer): void {
         const matching = listRunsWithFallback(resolveRunsDir(), undefined, true).filter((entry) => {
           const timestamp = String(
             entry.metadata && typeof entry.metadata === 'object'
-              ? (entry.metadata as any).timestamp ?? ''
+              ? ((entry.metadata as any).timestamp ?? '')
               : ''
           );
           const time = new Date(timestamp).getTime();
@@ -3331,20 +3331,20 @@ function inferToolAnnotations(
         openWorldHint: openWorld
       }
     : DESTRUCTIVE_TOOLS.has(toolName)
-    ? {
-        title,
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      }
-    : {
-        title,
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: openWorld
-      };
+      ? {
+          title,
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        }
+      : {
+          title,
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: openWorld
+        };
   return {
     ...baseHints,
     ...override,
@@ -3411,10 +3411,10 @@ function readLibrary(
   const scenariosDir = resolveScenarioLibraryDir(bundleRoot).path;
 
   const servers = existsSync(serversPath)
-    ? (parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(serversPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
   const agents = existsSync(agentsPath)
-    ? (parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {}
+    ? ((parseYaml(readFileSync(agentsPath, 'utf8')) as Record<string, unknown>) ?? {})
     : {};
 
   const scenarioEntries: z.infer<typeof LibraryScenarioEntrySchema>[] = [];
@@ -3573,18 +3573,18 @@ function listEvaluationConfigs(params: {
       sortBy === 'scenarios'
         ? a.scenario_count
         : sortBy === 'agents'
-        ? a.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(a.updated_at)
-        : a.name;
+          ? a.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(a.updated_at)
+            : a.name;
     const right =
       sortBy === 'scenarios'
         ? b.scenario_count
         : sortBy === 'agents'
-        ? b.agent_count
-        : sortBy === 'updated_at'
-        ? Date.parse(b.updated_at)
-        : b.name;
+          ? b.agent_count
+          : sortBy === 'updated_at'
+            ? Date.parse(b.updated_at)
+            : b.name;
     const comparison =
       typeof left === 'number' && typeof right === 'number'
         ? left - right
@@ -4334,8 +4334,8 @@ function buildConversationTimeline(
             message.role === 'assistant'
               ? 'agent_message'
               : message.role === 'user'
-              ? 'user_message'
-              : 'tool_text',
+                ? 'user_message'
+                : 'tool_text',
           role: message.role,
           ts: message.ts,
           message_index: messageIndex,

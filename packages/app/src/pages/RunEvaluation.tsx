@@ -1084,8 +1084,8 @@ const RunEvaluation = () => {
                     log.includes('✓')
                       ? 'text-success'
                       : log.includes('aborted')
-                      ? 'text-destructive'
-                      : 'text-foreground'
+                        ? 'text-destructive'
+                        : 'text-foreground'
                   }
                 >
                   {log}
@@ -1134,8 +1134,8 @@ const RunEvaluation = () => {
                     evaluation.status === 'failed'
                       ? 'border-destructive/40 bg-destructive/5'
                       : evaluation.status === 'partial'
-                      ? 'border-yellow-500/40 bg-yellow-500/5'
-                      : 'border-primary/20 bg-primary/5'
+                        ? 'border-yellow-500/40 bg-yellow-500/5'
+                        : 'border-primary/20 bg-primary/5'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -1252,18 +1252,18 @@ const RunEvaluation = () => {
                             {child?.status === 'queued'
                               ? 'queued'
                               : child?.status === 'running'
-                              ? 'running'
-                              : child?.status === 'completed'
-                              ? 'completed'
-                              : child?.status === 'error'
-                              ? 'failed'
-                              : child?.status === 'stopped'
-                              ? 'stopped'
-                              : job.status === 'waiting_for_rover'
-                              ? 'waiting for Rover'
-                              : job.status === 'paused_rover'
-                              ? 'paused'
-                              : job.status.replaceAll('_', ' ')}
+                                ? 'running'
+                                : child?.status === 'completed'
+                                  ? 'completed'
+                                  : child?.status === 'error'
+                                    ? 'failed'
+                                    : child?.status === 'stopped'
+                                      ? 'stopped'
+                                      : job.status === 'waiting_for_rover'
+                                        ? 'waiting for Rover'
+                                        : job.status === 'paused_rover'
+                                          ? 'paused'
+                                          : job.status.replaceAll('_', ' ')}
                             {child
                               ? ` (${child.completed}/${child.total} attempts)`
                               : job.roverProgress &&
@@ -1314,6 +1314,7 @@ const RunEvaluation = () => {
                               )}
                             {((child &&
                               (child.status === 'running' || child.status === 'queued')) ||
+                              (!child && job.status === 'queued') ||
                               (!child &&
                                 job.executionType === 'rover' &&
                                 (job.status === 'waiting_for_rover' ||

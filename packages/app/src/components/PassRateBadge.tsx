@@ -16,8 +16,8 @@ export function PassRateBadge({ rate, className }: PassRateBadgeProps) {
         pct >= 80
           ? 'bg-success/15 text-success hover:bg-success/20 border-0'
           : pct >= 50
-          ? 'bg-warning/15 text-warning hover:bg-warning/20 border-0'
-          : 'bg-destructive/15 text-destructive hover:bg-destructive/20 border-0'
+            ? 'bg-warning/15 text-warning hover:bg-warning/20 border-0'
+            : 'bg-destructive/15 text-destructive hover:bg-destructive/20 border-0'
       } ${className ?? ''}`}
     >
       {pct}%

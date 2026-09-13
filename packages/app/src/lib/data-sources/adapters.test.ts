@@ -751,6 +751,7 @@ describe('config adapters round-trip', () => {
     const uiConfig = fromCoreConfigYaml(sourceRecord);
     const roundTripped = toCoreConfigYaml(uiConfig);
 
+    expect(uiConfig.agents[0]?.type).toBe('llm');
     expect(uiConfig.agents[0]).not.toHaveProperty('temperature');
     expect(roundTripped.agents?.[0]).not.toHaveProperty('temperature');
   });

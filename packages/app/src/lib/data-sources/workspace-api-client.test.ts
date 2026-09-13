@@ -86,14 +86,12 @@ describe('workspaceApiClient SSE subscriptions', () => {
   });
 
   it('closes terminal assistant subscriptions when the session endpoint returns 404', async () => {
-    const fetchMock = vi.fn(
-      async (): Promise<FetchResponse> => ({
-        status: 404,
-        ok: false,
-        text: async () => 'not found',
-        json: async () => ({})
-      })
-    );
+    const fetchMock = vi.fn(async (): Promise<FetchResponse> => ({
+      status: 404,
+      ok: false,
+      text: async () => 'not found',
+      json: async () => ({})
+    }));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
 
@@ -187,28 +185,26 @@ describe('workspaceApiClient assistant request cancellation', () => {
   });
 
   it('forwards AbortSignal to assistant turn requests', async () => {
-    const fetchMock = vi.fn(
-      async (): Promise<FetchResponse> => ({
-        status: 200,
-        ok: true,
-        text: async () => '',
-        json: async () => ({
-          sessionId: 'ras-1',
-          session: {
-            id: 'ras-1',
-            scope: 'run',
-            runId: 'run-1',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            selectedAssistantAgentName: 'assistant-1',
-            model: 'gpt-4o-mini',
-            provider: 'openai',
-            messages: [],
-            pendingToolCalls: []
-          }
-        })
+    const fetchMock = vi.fn(async (): Promise<FetchResponse> => ({
+      status: 200,
+      ok: true,
+      text: async () => '',
+      json: async () => ({
+        sessionId: 'ras-1',
+        session: {
+          id: 'ras-1',
+          scope: 'run',
+          runId: 'run-1',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          selectedAssistantAgentName: 'assistant-1',
+          model: 'gpt-4o-mini',
+          provider: 'openai',
+          messages: [],
+          pendingToolCalls: []
+        }
       })
-    );
+    }));
     vi.stubGlobal('fetch', fetchMock);
 
     const controller = new AbortController();

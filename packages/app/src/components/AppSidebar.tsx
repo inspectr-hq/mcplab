@@ -130,8 +130,8 @@ export function AppSidebar(props: AppSidebarProps = { version: null }) {
                           item.url === '/'
                             ? location.pathname === '/'
                             : item.url === '/settings'
-                            ? location.pathname === '/settings'
-                            : location.pathname.startsWith(item.url)
+                              ? location.pathname === '/settings'
+                              : location.pathname.startsWith(item.url)
                         }
                         tooltip={item.title}
                       >

@@ -55,7 +55,10 @@ export interface CompleteLiveTestInput {
 }
 
 export class LiveTestError extends Error {
-  constructor(message: string, readonly statusCode: number) {
+  constructor(
+    message: string,
+    readonly statusCode: number
+  ) {
     super(message);
   }
 }

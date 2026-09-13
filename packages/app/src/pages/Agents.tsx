@@ -43,13 +43,14 @@ const Agents = () => {
   const [agentTypeFilter, setAgentTypeFilter] = useState<'all' | 'llm' | 'browser'>('all');
   const normalizedAgentFilter = agentFilter.trim().toLowerCase();
   const filteredAgents = useMemo(
-    () => agents.filter((agent) => {
-      if (agentTypeFilter !== 'all' && (agent.type ?? 'llm') !== agentTypeFilter) return false;
-      if (normalizedAgentFilter.length === 0) return true;
-      const name = agent.name.toLowerCase();
-      const model = agent.model.toLowerCase();
-      return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
-    }),
+    () =>
+      agents.filter((agent) => {
+        if (agentTypeFilter !== 'all' && (agent.type ?? 'llm') !== agentTypeFilter) return false;
+        if (normalizedAgentFilter.length === 0) return true;
+        const name = agent.name.toLowerCase();
+        const model = agent.model.toLowerCase();
+        return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
+      }),
     [agents, normalizedAgentFilter, agentTypeFilter]
   );
 
@@ -94,7 +95,10 @@ const Agents = () => {
             onValueChange={setAgentFilter}
             placeholder="Search agents..."
           />
-          <Select value={agentTypeFilter} onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}>
+          <Select
+            value={agentTypeFilter}
+            onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}
+          >
             <SelectTrigger className="w-32" aria-label="Filter agents by type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
@@ -162,7 +166,10 @@ const Agents = () => {
                     onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
                   >
                     <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-2" title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}>
+                      <span
+                        className="inline-flex items-center gap-2"
+                        title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
+                      >
                         {agent.type === 'browser' ? (
                           <Globe2 className="h-4 w-4 text-sky-600" aria-hidden="true" />
                         ) : (

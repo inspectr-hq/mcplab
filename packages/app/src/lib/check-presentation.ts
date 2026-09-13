@@ -108,13 +108,13 @@ export function matchFailureReasonForRule(
       rule.type === 'tool_input_contains'
         ? { type: 'contains', tool: String(rule.tool ?? ''), value: String(rule.value ?? '') }
         : rule.type === 'tool_input_regex'
-        ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
-        : {
-            type: 'jsonpath',
-            tool: String(rule.tool ?? ''),
-            path: String(rule.path ?? ''),
-            ...(rule.equals !== undefined ? { equals: rule.equals } : {})
-          };
+          ? { type: 'regex', tool: String(rule.tool ?? ''), pattern: String(rule.value ?? '') }
+          : {
+              type: 'jsonpath',
+              tool: String(rule.tool ?? ''),
+              path: String(rule.path ?? ''),
+              ...(rule.equals !== undefined ? { equals: rule.equals } : {})
+            };
     const expectedReasons = [
       formatToolInputAssertionFailureReason(assertion, 'tool_not_used'),
       formatToolInputAssertionFailureReason(assertion, 'input_mismatch'),

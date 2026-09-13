@@ -66,6 +66,20 @@ describe('Rover run queue domain', () => {
     expect(second.status).toBe('stopped');
   });
 
+  it('removes an evaluation containing a Rover job that is waiting for Rover', () => {
+    const service = createRunQueueServiceForTest();
+    const queued = service.enqueueRun({
+      ...roverParams(),
+      evaluationRunId: 'evaluation-waiting-rover'
+    });
+
+    expect(service.removeEvaluationRun('evaluation-waiting-rover')).toMatchObject({
+      ok: true,
+      removed: 1
+    });
+    expect(service.jobs.get(queued.jobId)?.status).toBe('stopped');
+  });
+
   it('keeps Rover jobs waiting until a matching provider connects, then assigns them', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);
@@ -132,7 +146,8 @@ describe('Rover run queue domain', () => {
   });
 
   it('pauses disconnected jobs and requires an explicit resume before reassignment', () => {
-    const service = createRunQueueServiceForTest();
+    const assignRoverJob = vi.fn(() => null);
+    const service = createRunQueueServiceForTest({ assignRoverJob });
     const send = vi.fn(() => true);
     const { jobId } = service.enqueueRun(roverParams());
     service.assignRoverJob('claude', send);
@@ -143,7 +158,20 @@ describe('Rover run queue domain', () => {
 
     expect(service.resumeRoverJob(jobId)).toBe(true);
     expect(service.jobs.get(jobId)?.status).toBe('waiting_for_rover');
+    expect(assignRoverJob).toHaveBeenCalledWith('claude');
     expect(service.assignRoverJob('claude', send)?.id).toBe(jobId);
+  });
+
+  it('releases a running Rover job when it is stopped', () => {
+    const service = createRunQueueServiceForTest();
+    const send = vi.fn(() => true);
+    const { jobId } = service.enqueueRun(roverParams());
+    service.assignRoverJob('claude', send);
+
+    expect(service.state.activeJobIds.has(jobId)).toBe(true);
+    expect(service.stopJob(jobId)).toMatchObject({ ok: true, status: 'stopped' });
+    expect(service.jobs.get(jobId)?.status).toBe('stopped');
+    expect(service.state.activeJobIds.has(jobId)).toBe(false);
   });
 
   it('clamps Rover progress and completes the job before assigning the next one', () => {

@@ -1,6 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bot, Check, ChevronDown, Globe2, Loader2, RefreshCw, Wifi, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  Check,
+  ChevronDown,
+  Globe2,
+  Loader2,
+  RefreshCw,
+  Wifi,
+  X
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,7 +92,7 @@ const AgentDetail = () => {
   const decodedParam = agentName ? decodeURIComponent(agentName) : '';
   const existingAgent = isNew
     ? null
-    : agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam);
+    : (agents.find((a) => a.id === decodedParam) ?? agents.find((a) => a.name === decodedParam));
 
   const [form, setForm] = useState<AgentConfig>(() => existingAgent ?? emptyAgent());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -267,15 +277,19 @@ const AgentDetail = () => {
               </a>
             ) : null}
             <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <span className={`h-2.5 w-2.5 rounded-full ${roverConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${roverConnected ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`}
+              />
               <span>{roverConnected ? 'Rover connected' : 'Rover not connected'}</span>
             </div>
           </div>
-        ) : !isNew && (
-          <Button type="button" onClick={() => void handleConnect()}>
-            <Wifi className="mr-2 h-4 w-4" />
-            Test Connection
-          </Button>
+        ) : (
+          !isNew && (
+            <Button type="button" onClick={() => void handleConnect()}>
+              <Wifi className="mr-2 h-4 w-4" />
+              Test Connection
+            </Button>
+          )
         )}
       </div>
 

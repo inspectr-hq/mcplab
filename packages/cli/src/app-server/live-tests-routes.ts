@@ -50,7 +50,8 @@ export async function handleLiveTestRoutes(params: {
       const session = service.start({
         testCaseId,
         client: String(body.client ?? 'unknown'),
-        evaluationRunId: typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined,
+        evaluationRunId:
+          typeof body.evaluationRunId === 'string' ? body.evaluationRunId : undefined,
         configPath: typeof body.configPath === 'string' ? body.configPath : undefined,
         configName: typeof body.configName === 'string' ? body.configName : undefined,
         agentName: typeof body.agentName === 'string' ? body.agentName : undefined

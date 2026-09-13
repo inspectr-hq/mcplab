@@ -66,15 +66,15 @@ export function projectEvaluationResult(params: {
       config_path: configPaths.length === 1 ? configPaths[0] : undefined,
       cli_version: sourceMetadata?.cli_version ?? 'unknown',
       mcp_server_versions: {},
-      execution_client: executionClients.size === 1 ? executions[0]?.metadata.execution_client : 'mixed',
+      execution_client:
+        executionClients.size === 1 ? executions[0]?.metadata.execution_client : 'mixed',
       ...(executionSources.size === 1
         ? { execution_source: executions[0]?.metadata.execution_source }
         : {}),
-      ...(executionClients.size === 1
-        ? { execution_client: executions[0]?.metadata.execution_client }
-        : {}),
       config_name:
-        params.evaluationName || sourceMetadata?.config_name || `Evaluation ${params.evaluationRunId}`,
+        params.evaluationName ||
+        sourceMetadata?.config_name ||
+        `Evaluation ${params.evaluationRunId}`,
       run_note: params.evaluationName
         ? `Evaluation: ${params.evaluationName}`
         : `Evaluation ${params.evaluationRunId}`,

@@ -262,8 +262,8 @@ function evaluateToolConstraints(
             ? `Forbidden tool used: ${template.tool}`
             : undefined
           : !unique.has(template.tool)
-          ? `Required tool not used: ${template.tool}`
-          : undefined;
+            ? `Required tool not used: ${template.tool}`
+            : undefined;
       if (reason) failures.push(reason);
       return {
         type: template.type,
@@ -340,10 +340,10 @@ export function formatToolInputAssertionLabel(assertion: ToolInputAssertion): st
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
       : assertion.type === 'regex'
-      ? `matches regex ${assertion.pattern}`
-      : assertion.equals !== undefined
-      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
-      : `JSONPath ${assertion.path} exists`;
+        ? `matches regex ${assertion.pattern}`
+        : assertion.equals !== undefined
+          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath ${assertion.path} exists`;
   return `Tool input · ${assertion.tool} ${operator}`;
 }
 
@@ -374,10 +374,10 @@ export function formatToolInputAssertionFailureReason(
     assertion.type === 'contains'
       ? `contains ${assertion.value}`
       : assertion.type === 'regex'
-      ? `regex ${assertion.pattern}`
-      : assertion.equals !== undefined
-      ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
-      : `JSONPath ${assertion.path} exists`;
+        ? `regex ${assertion.pattern}`
+        : assertion.equals !== undefined
+          ? `JSONPath ${assertion.path} == ${String(assertion.equals)}`
+          : `JSONPath ${assertion.path} exists`;
   if (kind === 'invalid_jsonpath' && assertion.type === 'jsonpath') {
     return `Tool input assertion failed: invalid JSONPath ${assertion.path} (expected: ${expectation})`;
   }
@@ -424,10 +424,10 @@ function evaluateToolInputAssertions(
         matchingCalls.length === 0
           ? formatToolInputAssertionFailureReason(assertion, 'tool_not_used')
           : inputErrorCount === matchingCalls.length && assertion.type === 'jsonpath'
-          ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
-          : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
-          ? formatToolInputAssertionFailureReason(assertion, 'serialization')
-          : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
+            ? formatToolInputAssertionFailureReason(assertion, 'invalid_jsonpath')
+            : inputErrorCount === matchingCalls.length && usesSerializedToolInput(assertion)
+              ? formatToolInputAssertionFailureReason(assertion, 'serialization')
+              : formatToolInputAssertionFailureReason(assertion, 'input_mismatch');
     }
     if (reason) failures.push(reason);
     return {
