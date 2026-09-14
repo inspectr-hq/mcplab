@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, Pencil, Copy, Trash2, Bot, Globe2 } from 'lucide-react';
 import { useLibraries } from '@/contexts/LibraryContext';
@@ -29,13 +29,28 @@ import { resolveAgentTemperature } from '@/lib/agent-temperature';
 import type { AgentConfig } from '@/types/eval';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-const Agents = () => {
+type AgentType = 'llm' | 'browser';
+
+interface AgentsProps {
+  defaultType?: AgentType;
+}
+
+const Agents = ({ defaultType = 'llm' }: AgentsProps) => {
   const { agents, setAgents, reload, loading } = useLibraries();
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<AgentConfig | null>(null);
   const [agentFilter, setAgentFilter] = useState('');
-  const [agentTypeFilter, setAgentTypeFilter] = useState<'llm' | 'browser'>('llm');
+  const [agentTypeFilter, setAgentTypeFilter] = useState<AgentType>(defaultType);
   const normalizedAgentFilter = agentFilter.trim().toLowerCase();
+  useEffect(() => {
+    setAgentTypeFilter(defaultType);
+  }, [defaultType]);
+
+  const handleTypeChange = (value: string) => {
+    const nextType = value as AgentType;
+    setAgentTypeFilter(nextType);
+    navigate(`/libraries/agents/${nextType}`);
+  };
   const agentCounts = useMemo(
     () => ({
       llm: agents.filter((agent) => (agent.type ?? 'llm') === 'llm').length,
@@ -48,9 +63,16 @@ const Agents = () => {
       agents.filter((agent) => {
         if ((agent.type ?? 'llm') !== agentTypeFilter) return false;
         if (normalizedAgentFilter.length === 0) return true;
-        const name = agent.name.toLowerCase();
-        const model = agent.model.toLowerCase();
-        return name.includes(normalizedAgentFilter) || model.includes(normalizedAgentFilter);
+        const searchableText = [
+          agent.name,
+          agent.provider,
+          agent.model,
+          agent.type === 'browser' ? agent.url : undefined
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return searchableText.includes(normalizedAgentFilter);
       }),
     [agents, normalizedAgentFilter, agentTypeFilter]
   );
@@ -131,7 +153,7 @@ const Agents = () => {
       ) : (
         <Tabs
           value={agentTypeFilter}
-          onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}
+          onValueChange={handleTypeChange}
           className="space-y-4"
         >
           <TabsList className="grid w-full max-w-md grid-cols-2" aria-label="Agent type">
@@ -151,9 +173,18 @@ const Agents = () => {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Provider</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Max Tokens</TableHead>
-                      <TableHead>Temperature</TableHead>
+                      {agentTypeFilter === 'browser' ? (
+                        <>
+                          <TableHead>URL</TableHead>
+                          <TableHead>Conversation</TableHead>
+                        </>
+                      ) : (
+                        <>
+                          <TableHead>Model</TableHead>
+                          <TableHead>Max Tokens</TableHead>
+                          <TableHead>Temperature</TableHead>
+                        </>
+                      )}
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -180,15 +211,33 @@ const Agents = () => {
                         <TableCell>
                           <ProviderBadge provider={agent.provider} />
                         </TableCell>
-                        <TableCell>
-                          <span className="font-mono text-xs">{agent.model}</span>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {agent.type === 'llm'
-                            ? resolveAgentTemperature(agent.temperature).toFixed(2)
-                            : 'n/a'}
-                        </TableCell>
+                        {agent.type === 'browser' ? (
+                          <>
+                            <TableCell>
+                              <span
+                                className="max-w-xs truncate font-mono text-xs"
+                                title={agent.url}
+                              >
+                                {agent.url || 'Not configured'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {agent.newConversationBetweenScenarios === false
+                                ? 'Continue same conversation'
+                                : 'New conversation per scenario'}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell>
+                              <span className="font-mono text-xs">{agent.model}</span>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {resolveAgentTemperature(agent.temperature).toFixed(2)}
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-2">
                             <Button
