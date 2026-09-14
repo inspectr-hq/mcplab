@@ -562,7 +562,8 @@ export function createRunQueueService(params: {
           (job) =>
             job.status !== 'queued' &&
             job.status !== 'blocked_auth' &&
-            job.status !== 'waiting_for_rover'
+            job.status !== 'waiting_for_rover' &&
+            job.status !== 'stopped'
         )
       ) {
         return {
@@ -572,7 +573,12 @@ export function createRunQueueService(params: {
       }
       let removed = 0;
       for (const job of jobsForEvaluation) {
-        if (this.removeQueuedJob(job.id, options)) removed += 1;
+        if (job.status === 'stopped') {
+          jobs.delete(job.id);
+          removed += 1;
+        } else if (this.removeQueuedJob(job.id, options)) {
+          removed += 1;
+        }
       }
       void advance({ emitWhenIdle: true, hostHeader: options?.hostHeader });
       return { ok: true, removed };

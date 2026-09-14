@@ -110,6 +110,8 @@ export function buildQueueState(
             ]
       );
       const completedJobs = children.filter((child) => child.status === 'completed').length;
+      const stoppedJobs = children.filter((child) => child.status === 'stopped').length;
+      const errorJobs = children.filter((child) => child.status === 'error').length;
       const failedJobs = children.filter(
         (child) => child.status === 'error' || child.status === 'stopped'
       ).length;
@@ -120,7 +122,9 @@ export function buildQueueState(
           ['waiting_for_rover', 'blocked_auth', 'paused_rover'].includes(entry.status)
         );
       const status: EvaluationQueueItem['status'] =
-        failedJobs > 0 && !hasPending
+        stoppedJobs > 0 && errorJobs === 0 && !hasPending
+          ? 'stopped'
+          : failedJobs > 0 && !hasPending
           ? completedJobs > 0
             ? 'partial'
             : 'failed'
@@ -138,6 +142,7 @@ export function buildQueueState(
         totalJobs: children.length,
         completedJobs,
         failedJobs,
+        stoppedJobs,
         pausedJobs,
         jobs: entries
       };
@@ -149,7 +154,11 @@ export function buildQueueState(
     admitting_jobs: admittingJobs,
     queued: queuedEntries,
     evaluations: evaluationItems.filter(
-      (item) => item.status === 'queued' || item.status === 'running' || item.status === 'paused'
+      (item) =>
+        item.status === 'queued' ||
+        item.status === 'running' ||
+        item.status === 'paused' ||
+        item.status === 'stopped'
     )
   };
 }

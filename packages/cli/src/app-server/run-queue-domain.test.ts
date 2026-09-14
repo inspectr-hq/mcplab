@@ -80,6 +80,21 @@ describe('Rover run queue domain', () => {
     expect(service.jobs.get(queued.jobId)?.status).toBe('stopped');
   });
 
+  it('removes a stopped evaluation run without touching its result artifacts', () => {
+    const stopped = createQueuedJob('/tmp/eval.yaml', 'job-stopped');
+    stopped.status = 'stopped';
+    stopped.runParams.evaluationRunId = 'evaluation-stopped';
+    const service = createRunQueueServiceForTest({
+      jobs: new Map([[stopped.id, stopped]])
+    });
+
+    expect(service.removeEvaluationRun('evaluation-stopped')).toMatchObject({
+      ok: true,
+      removed: 1
+    });
+    expect(service.jobs.has(stopped.id)).toBe(false);
+  });
+
   it('keeps Rover jobs waiting until a matching provider connects, then assigns them', () => {
     const service = createRunQueueServiceForTest();
     const send = vi.fn(() => true);

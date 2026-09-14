@@ -98,10 +98,11 @@ export interface QueueResponse {
 export interface EvaluationQueueItem {
   evaluationRunId: string;
   evaluationName?: string;
-  status: 'queued' | 'running' | 'paused' | 'completed' | 'partial' | 'failed';
+  status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'partial' | 'failed';
   totalJobs: number;
   completedJobs: number;
   failedJobs: number;
+  stoppedJobs: number;
   pausedJobs: number;
   jobs: QueueEntry[];
 }

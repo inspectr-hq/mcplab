@@ -92,4 +92,34 @@ describe('queue event projections', () => {
     });
     expect(state.evaluations).toEqual([]);
   });
+
+  it('keeps stopped evaluation groups visible until they are removed', async () => {
+    const { buildQueueState } = await import('./run-queue-events.js');
+    const job = {
+      id: 'job-stopped',
+      status: 'stopped',
+      events: [],
+      clients: new Set(),
+      abortController: new AbortController(),
+      runParams: { configPath: '/tmp/eval.yaml', evaluationRunId: 'evaluation-stopped' },
+      childProgress: [
+        { scenarioId: 's1', agentName: 'a1', completed: 0, total: 1, status: 'stopped' }
+      ]
+    };
+    const state = buildQueueState(new Map([[job.id, job as any]]), {
+      activeJobIds: new Set(),
+      admittingJobIds: new Set(),
+      blockedJobIds: new Set(),
+      queue: [],
+      queueWorkerCount: 1,
+      isAdvancingQueue: false,
+      needsAdvanceQueue: false,
+      clients: new Set()
+    });
+    expect(state.evaluations?.[0]).toMatchObject({
+      evaluationRunId: 'evaluation-stopped',
+      status: 'stopped',
+      stoppedJobs: 1
+    });
+  });
 });
