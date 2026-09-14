@@ -61,6 +61,7 @@ export interface BrowserAgentConfig {
   model: string;
   maxTokens: number;
   url: string;
+  newConversationBetweenScenarios?: boolean;
 }
 
 export type AgentConfig = LlmAgentConfig | BrowserAgentConfig;

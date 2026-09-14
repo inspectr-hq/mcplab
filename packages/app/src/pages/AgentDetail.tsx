@@ -405,7 +405,9 @@ const AgentDetail = () => {
                           provider: 'claude',
                           model: '',
                           maxTokens: 0,
-                          url: f.type === 'browser' ? f.url : ''
+                          url: f.type === 'browser' ? f.url : '',
+                          newConversationBetweenScenarios:
+                            f.type === 'browser' ? f.newConversationBetweenScenarios : true
                         }
                       : {
                           id: f.id,
@@ -479,6 +481,36 @@ const AgentDetail = () => {
               />
               <p className="text-[11px] text-muted-foreground">
                 Rover opens this URL when the queued Browser Agent needs attention.
+              </p>
+            </div>
+          )}
+
+          {form.type === 'browser' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="agent-conversation-behavior">Conversation behavior</Label>
+              <Select
+                value={form.newConversationBetweenScenarios === false ? 'same' : 'new'}
+                onValueChange={(value) =>
+                  setForm((current) =>
+                    current.type === 'browser'
+                      ? {
+                          ...current,
+                          newConversationBetweenScenarios: value !== 'same'
+                        }
+                      : current
+                  )
+                }
+              >
+                <SelectTrigger id="agent-conversation-behavior">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Start a new conversation between scenarios</SelectItem>
+                  <SelectItem value="same">Continue the same conversation</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                This is the default for queue runs. It can be overridden when starting an evaluation.
               </p>
             </div>
           )}

@@ -75,6 +75,7 @@ export interface BrowserAgentConfig {
   name?: string;
   provider: string;
   url: string;
+  newConversationBetweenScenarios?: boolean;
 }
 
 export type RoverAgentProvider = string;

@@ -679,7 +679,10 @@ function normalizeAgentDefinition(
       type: 'browser',
       name: typeof raw.name === 'string' ? raw.name : undefined,
       provider: raw.provider,
-      url: String(raw.url)
+      url: String(raw.url),
+      ...(typeof raw.new_conversation_between_scenarios === 'boolean'
+        ? { newConversationBetweenScenarios: raw.new_conversation_between_scenarios }
+        : {})
     };
   }
   if (!raw.provider || !raw.model) throw new Error(`LLM agent ${id} requires a provider and model`);

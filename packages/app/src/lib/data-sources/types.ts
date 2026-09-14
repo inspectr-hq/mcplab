@@ -752,6 +752,7 @@ export interface EvalDataSource {
     scenarioIds?: string[];
     agents?: string[];
     runNote?: string;
+    newConversationBetweenScenarios?: boolean;
     serverOverrideAll?: string[];
     scenarioServerOverrides?: Record<string, string[]>;
   }) => Promise<StartRunResponse>;

@@ -33,6 +33,7 @@ import type { EvaluationQueueItem, QueueChildProgress, QueueEntry } from '@/lib/
 import { ensureOAuthForServers } from '@/lib/oauth-session-utils';
 
 const RUN_EVAL_ACTIVE_JOB_KEY = 'mcplab.runEvaluation.activeJobId';
+type ConversationMode = 'agent_default' | 'new' | 'same';
 
 function displayConfigName(config: { configName?: string; name: string }): string {
   return config.configName?.trim() || config.name;
@@ -72,6 +73,7 @@ const RunEvaluation = () => {
   const [runId, setRunId] = useState<string>('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [conversationMode, setConversationMode] = useState<ConversationMode>('agent_default');
   const [selectedScenarioIds, setSelectedScenarioIds] = useState<string[]>([]);
   const [globalServerOverrideEnabled, setGlobalServerOverrideEnabled] = useState(false);
   const [globalServerOverrideIds, setGlobalServerOverrideIds] = useState<string[]>([]);
@@ -160,6 +162,17 @@ const RunEvaluation = () => {
     }
     return Array.from(byId.values());
   }, [selectedConfig, libraryScenarios]);
+  const selectedBrowserAgents = useMemo(
+    () => availableAgents.filter((agent) => agent.type === 'browser' && selectedAgentIds.includes(agent.id)),
+    [availableAgents, selectedAgentIds]
+  );
+  const agentGroups = useMemo(
+    () => [
+      { label: 'LLM Agents', agents: availableAgents.filter((agent) => agent.type !== 'browser') },
+      { label: 'Browser Agents', agents: availableAgents.filter((agent) => agent.type === 'browser') }
+    ],
+    [availableAgents]
+  );
   const availableServers = useMemo(() => {
     const byId = new Map<string, { id: string; name?: string }>();
     for (const server of libraryServers) {
@@ -185,6 +198,7 @@ const RunEvaluation = () => {
     prevConfigKeyRef.current = configKey;
     if (!selectedConfig) {
       setSelectedAgentIds([]);
+      setConversationMode('agent_default');
       setSelectedScenarioIds([]);
       setGlobalServerOverrideEnabled(false);
       setGlobalServerOverrideIds([]);
@@ -196,6 +210,7 @@ const RunEvaluation = () => {
     setSelectedAgentIds(
       configuredAgentIds.length > 0 ? configuredAgentIds : availableAgents.map((agent) => agent.id)
     );
+    setConversationMode('agent_default');
     setSelectedScenarioIds(availableScenarios.map((scenario) => scenario.id));
     setGlobalServerOverrideEnabled(false);
     setGlobalServerOverrideIds([]);
@@ -334,6 +349,9 @@ const RunEvaluation = () => {
         runsPerScenario: Number(varianceRuns),
         agents: selectedAgents.map((agent) => agent.id),
         scenarioIds: selectedScenarios.map((scenario) => scenario.id),
+        ...(selectedBrowserAgents.length > 0 && conversationMode !== 'agent_default'
+          ? { newConversationBetweenScenarios: conversationMode === 'new' }
+          : {}),
         ...(runtimeOverridesEnabled && globalServerOverrideEnabled
           ? { serverOverrideAll: globalServerOverrideIds }
           : {}),
@@ -763,28 +781,60 @@ const RunEvaluation = () => {
                   </button>
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {availableAgents.map((agent) => {
-                  const checked = selectedAgentIds.includes(agent.id);
-                  return (
-                    <label
-                      key={agent.id}
-                      className="flex items-center gap-2 text-sm rounded-md border p-2"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(value) => {
-                          const isChecked = value === true;
-                          setSelectedAgentIds((prev) =>
-                            isChecked ? [...prev, agent.id] : prev.filter((id) => id !== agent.id)
+              <div className="space-y-3">
+                {agentGroups.map((group) =>
+                  group.agents.length > 0 ? (
+                    <div key={group.label} className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">{group.label}</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {group.agents.map((agent) => {
+                          const checked = selectedAgentIds.includes(agent.id);
+                          return (
+                            <label
+                              key={agent.id}
+                              className="flex items-center gap-2 rounded-md border p-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(value) => {
+                                  const isChecked = value === true;
+                                  setSelectedAgentIds((prev) =>
+                                    isChecked
+                                      ? [...prev, agent.id]
+                                      : prev.filter((id) => id !== agent.id)
+                                  );
+                                }}
+                              />
+                              <span>{agent.name || agent.id}</span>
+                            </label>
                           );
-                        }}
-                      />
-                      <span>{agent.name || agent.id}</span>
-                    </label>
-                  );
-                })}
+                        })}
+                      </div>
+                    </div>
+                  ) : null
+                )}
               </div>
+              {selectedBrowserAgents.length > 0 && (
+                <div className="space-y-1.5 rounded-md border bg-muted/20 p-3">
+                  <Label htmlFor="conversation-behavior">Conversation behavior</Label>
+                  <Select
+                    value={conversationMode}
+                    onValueChange={(value) => setConversationMode(value as ConversationMode)}
+                  >
+                    <SelectTrigger id="conversation-behavior">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="agent_default">Use agent default</SelectItem>
+                      <SelectItem value="new">Start a new conversation</SelectItem>
+                      <SelectItem value="same">Continue the same conversation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    This setting is frozen into the Rover job. Rover cannot change it locally.
+                  </p>
+                </div>
+              )}
               {availableAgents.length === 0 && (
                 <p className="text-xs text-muted-foreground">
                   No agents available. Add agents to your workspace library, or define inline agents

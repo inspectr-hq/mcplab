@@ -57,7 +57,8 @@ function fromCoreAgent(id: string, agent: CoreAgentConfig): AgentConfig {
       provider: agent.provider,
       model: '',
       maxTokens: 0,
-      url: agent.url
+      url: agent.url,
+      newConversationBetweenScenarios: agent.newConversationBetweenScenarios
     };
   }
   return {
@@ -80,7 +81,10 @@ function toCoreAgent(agent: AgentConfig): CoreAgentConfig & { id?: string } {
       name: agent.name,
       type: 'browser',
       provider: agent.provider,
-      url: agent.url
+      url: agent.url,
+      ...(agent.newConversationBetweenScenarios === undefined
+        ? {}
+        : { new_conversation_between_scenarios: agent.newConversationBetweenScenarios })
     };
   return {
     id: agent.id,

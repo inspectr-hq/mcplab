@@ -756,6 +756,41 @@ describe('config adapters round-trip', () => {
     expect(roundTripped.agents?.[0]).not.toHaveProperty('temperature');
   });
 
+  it('round-trips the Browser Agent conversation default', () => {
+    const sourceRecord: WorkspaceConfigRecord = {
+      id: 'cfg-browser-conversation',
+      name: 'browser-conversation',
+      path: '/tmp/browser-conversation.yaml',
+      mtime: '2026-03-01T10:00:00.000Z',
+      hash: 'hash-browser-conversation',
+      config: {
+        servers: [],
+        agents: [
+          {
+            id: 'chatgpt-browser',
+            type: 'browser',
+            provider: 'chatgpt-com',
+            url: 'https://chatgpt.com',
+            newConversationBetweenScenarios: false
+          }
+        ],
+        scenarios: []
+      }
+    };
+
+    const uiConfig = fromCoreConfigYaml(sourceRecord);
+    const roundTripped = toCoreConfigYaml(uiConfig);
+
+    expect(uiConfig.agents[0]).toMatchObject({
+      type: 'browser',
+      newConversationBetweenScenarios: false
+    });
+    expect(roundTripped.agents?.[0]).toMatchObject({
+      type: 'browser',
+      new_conversation_between_scenarios: false
+    });
+  });
+
   it('round-trips mixed inline/reference entries in stable order', () => {
     const sourceRecord: WorkspaceConfigRecord = {
       id: 'cfg-1',

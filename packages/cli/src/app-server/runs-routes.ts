@@ -69,9 +69,9 @@ type RunRequestBody = {
   scenarioIds?: unknown;
   agents?: unknown;
   runNote?: unknown;
+  newConversationBetweenScenarios?: unknown;
   serverOverrideAll?: unknown;
   scenarioServerOverrides?: unknown;
-  newConversationBetweenScenarios?: unknown;
 };
 
 type PreviewRunRequestBody = {
@@ -482,7 +482,10 @@ export async function handleRunsRoutes(params: {
     const llmAgentNames = selectedAgents
       .filter((entry) => entry.agent?.type !== 'browser')
       .map((entry) => entry.name);
-    const newConversationBetweenScenarios = body.newConversationBetweenScenarios !== false;
+    const conversationOverride =
+      typeof body.newConversationBetweenScenarios === 'boolean'
+        ? body.newConversationBetweenScenarios
+        : undefined;
     const evaluationRunId = createRunId();
     const baseRunParams = {
       evaluationRunId,
@@ -518,7 +521,8 @@ export async function handleRunsRoutes(params: {
                   : {})
               },
               roverScenarios: structuredClone(selectedConfig.scenarios),
-              roverNewConversationBetweenScenarios: newConversationBetweenScenarios
+              roverNewConversationBetweenScenarios:
+                conversationOverride ?? agent.newConversationBetweenScenarios ?? true
             }))
           ];
     const responses = runParamsList.map((runParams) =>

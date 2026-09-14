@@ -82,6 +82,28 @@ describe('browser agent normalization', () => {
       normalizeLibraryAgents({ trendminer: { type: 'browser', provider: 'trendminer' } })
     ).toThrow('Browser agent trendminer requires a url');
   });
+
+  it('preserves the browser agent conversation default', () => {
+    const agents = normalizeLibraryAgents({
+      separate: {
+        type: 'browser',
+        provider: 'chatgpt-com',
+        url: 'https://chatgpt.com',
+        new_conversation_between_scenarios: false
+      },
+      legacy: {
+        type: 'browser',
+        provider: 'claude',
+        url: 'https://claude.ai'
+      }
+    });
+
+    expect(agents.separate).toMatchObject({
+      type: 'browser',
+      newConversationBetweenScenarios: false
+    });
+    expect(agents.legacy).not.toHaveProperty('newConversationBetweenScenarios');
+  });
 });
 
 describe('loadConfig normalization', () => {

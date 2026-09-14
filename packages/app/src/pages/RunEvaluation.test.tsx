@@ -327,6 +327,72 @@ describe('RunEvaluation', () => {
     );
   });
 
+  it('groups Browser Agents and sends an explicit conversation override', async () => {
+    const llmAgent: AgentConfig = {
+      id: 'agent-llm',
+      name: 'LLM Agent',
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      temperature: 0,
+      maxTokens: 4096
+    };
+    const browserAgent: AgentConfig = {
+      id: 'agent-browser',
+      name: 'Browser Agent',
+      type: 'browser',
+      provider: 'chatgpt-com',
+      model: '',
+      maxTokens: 0,
+      url: 'https://chatgpt.com',
+      newConversationBetweenScenarios: false
+    };
+    const scenario = {
+      id: 'scenario-1',
+      name: 'Scenario 1',
+      prompt: 'Do thing',
+      serverIds: [],
+      evalRules: [],
+      extractRules: []
+    };
+    configsRef.value = [
+      {
+        id: 'test-config',
+        name: 'Test Config',
+        agents: [llmAgent, browserAgent],
+        scenarios: [scenario],
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        sourcePath: '/path/to/test.yaml'
+      }
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/run?configId=test-config']}>
+        <Routes>
+          <Route path="/run" element={<RunEvaluation />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('LLM Agents')).toBeInTheDocument();
+      expect(screen.getByText('Browser Agents')).toBeInTheDocument();
+      expect(screen.getByText('Conversation behavior')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Conversation behavior' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Start a new conversation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(sourceMock.startRun).toHaveBeenCalledTimes(1));
+    expect(sourceMock.startRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agents: ['agent-llm', 'agent-browser'],
+        newConversationBetweenScenarios: true
+      })
+    );
+  });
+
   it('advances progress for config-declared agent runs', async () => {
     const testConfig: EvalConfig = {
       id: 'test-config',
