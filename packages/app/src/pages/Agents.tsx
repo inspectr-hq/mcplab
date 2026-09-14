@@ -6,13 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { SearchInput } from '@/components/SearchInput';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import {
   Table,
   TableBody,
   TableCell,
@@ -34,18 +27,26 @@ import { ProviderBadge } from '@/components/ProviderBadge';
 import { toast } from '@/hooks/use-toast';
 import { resolveAgentTemperature } from '@/lib/agent-temperature';
 import type { AgentConfig } from '@/types/eval';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Agents = () => {
   const { agents, setAgents, reload, loading } = useLibraries();
   const navigate = useNavigate();
   const [pendingDelete, setPendingDelete] = useState<AgentConfig | null>(null);
   const [agentFilter, setAgentFilter] = useState('');
-  const [agentTypeFilter, setAgentTypeFilter] = useState<'all' | 'llm' | 'browser'>('all');
+  const [agentTypeFilter, setAgentTypeFilter] = useState<'llm' | 'browser'>('llm');
   const normalizedAgentFilter = agentFilter.trim().toLowerCase();
+  const agentCounts = useMemo(
+    () => ({
+      llm: agents.filter((agent) => (agent.type ?? 'llm') === 'llm').length,
+      browser: agents.filter((agent) => agent.type === 'browser').length
+    }),
+    [agents]
+  );
   const filteredAgents = useMemo(
     () =>
       agents.filter((agent) => {
-        if (agentTypeFilter !== 'all' && (agent.type ?? 'llm') !== agentTypeFilter) return false;
+        if ((agent.type ?? 'llm') !== agentTypeFilter) return false;
         if (normalizedAgentFilter.length === 0) return true;
         const name = agent.name.toLowerCase();
         const model = agent.model.toLowerCase();
@@ -95,19 +96,6 @@ const Agents = () => {
             onValueChange={setAgentFilter}
             placeholder="Search agents..."
           />
-          <Select
-            value={agentTypeFilter}
-            onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}
-          >
-            <SelectTrigger className="w-32" aria-label="Filter agents by type">
-              <SelectValue placeholder="Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="llm">LLM</SelectItem>
-              <SelectItem value="browser">Browser</SelectItem>
-            </SelectContent>
-          </Select>
           <Button
             type="button"
             size="sm"
@@ -140,96 +128,109 @@ const Agents = () => {
             Add Agent
           </Button>
         </div>
-      ) : filteredAgents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-          <p className="text-sm text-muted-foreground">No agents match this filter.</p>
-        </div>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Provider</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Max Tokens</TableHead>
-                  <TableHead>Temperature</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAgents.map((agent) => (
-                  <TableRow
-                    key={agent.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
-                  >
-                    <TableCell className="font-medium">
-                      <span
-                        className="inline-flex items-center gap-2"
-                        title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
+        <Tabs
+          value={agentTypeFilter}
+          onValueChange={(value) => setAgentTypeFilter(value as typeof agentTypeFilter)}
+          className="space-y-4"
+        >
+          <TabsList className="grid w-full max-w-md grid-cols-2" aria-label="Agent type">
+            <TabsTrigger value="llm">LLM ({agentCounts.llm})</TabsTrigger>
+            <TabsTrigger value="browser">Browser ({agentCounts.browser})</TabsTrigger>
+          </TabsList>
+
+          {filteredAgents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
+              <p className="text-sm text-muted-foreground">No agents match this filter.</p>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead>Max Tokens</TableHead>
+                      <TableHead>Temperature</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAgents.map((agent) => (
+                      <TableRow
+                        key={agent.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)}
                       >
-                        {agent.type === 'browser' ? (
-                          <Globe2 className="h-4 w-4 text-sky-600" aria-hidden="true" />
-                        ) : (
-                          <Bot className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                        )}
-                        {agent.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <ProviderBadge provider={agent.provider} />
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs">{agent.model}</span>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {agent.type === 'llm'
-                        ? resolveAgentTemperature(agent.temperature).toFixed(2)
-                        : 'n/a'}
-                    </TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setPendingDelete(agent)}
-                        >
-                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                          Delete
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleDuplicate(agent)}
-                        >
-                          <Copy className="mr-1.5 h-3.5 w-3.5" />
-                          Duplicate
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)
-                          }
-                        >
-                          <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                          Edit
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                        <TableCell className="font-medium">
+                          <span
+                            className="inline-flex items-center gap-2"
+                            title={agent.type === 'browser' ? 'Browser agent' : 'LLM agent'}
+                          >
+                            {agent.type === 'browser' ? (
+                              <Globe2 className="h-4 w-4 text-sky-600" aria-hidden="true" />
+                            ) : (
+                              <Bot className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                            )}
+                            {agent.name}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <ProviderBadge provider={agent.provider} />
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-xs">{agent.model}</span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{agent.maxTokens}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {agent.type === 'llm'
+                            ? resolveAgentTemperature(agent.temperature).toFixed(2)
+                            : 'n/a'}
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setPendingDelete(agent)}
+                            >
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleDuplicate(agent)}
+                            >
+                              <Copy className="mr-1.5 h-3.5 w-3.5" />
+                              Duplicate
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                navigate(`/libraries/agents/${encodeURIComponent(agent.id)}`)
+                              }
+                            >
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </Tabs>
       )}
 
       <AlertDialog
